@@ -1061,9 +1061,8 @@ language sql stable security definer set search_path = public, extensions, pg_te
   select case when p_board is null then null else jsonb_build_object(
     'id', p_board,
     'day', (select slaughter_day from animals_carry where board_id = p_board limit 1),
-    'pending', jsonb_build_object('legs', _proc_board_pending('legs', p_board),
-                                  'parts', _proc_board_pending('parts', p_board),
-                                  'stamps', _proc_board_pending('stamps', p_board))) end;
+    'pending', (select coalesce(jsonb_object_agg(st, _proc_board_pending(st, p_board)), '{}'::jsonb)
+                  from unnest(_proc_stations()) st)) end;            -- the stations this plant uses
 $$;
 revoke execute on function _proc_board_json(bigint) from public, anon, authenticated;
 
