@@ -3,9 +3,9 @@ Null display is "·".
 == 1. plant state =======================================================
     key     |     value     |          updated_at           
 ------------+---------------+-------------------------------
- boardEpoch | 1791211774593 | 2026-10-05 14:49:34.592331+00
- schemaStep | 46            | 2026-10-05 14:49:35.790657+00
- testMode   | off           | 2026-10-05 14:49:35.286686+00
+ boardEpoch | 1791213329020 | 2026-10-05 15:15:29.020341+00
+ schemaStep | 46            | 2026-10-05 15:15:30.093939+00
+ testMode   | off           | 2026-10-05 15:15:29.677717+00
 (3 rows)
 
 == 2. functions (public, gt_rls) ========================================
@@ -46,6 +46,7 @@ Null display is "·".
  public | manufacturer_set_billing(text,boolean,numeric,text,text)                  | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
  public | outer_open(integer,bigint,boolean,text)                                   | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
  public | outer_open(integer,bigint,boolean,text,uuid)                              | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
+ public | plant_setup_needed()                                                      | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
  public | plant_status_snapshot()                                                   | function | t                | public, extensions, pg_temp | postgres | t    | t             | t           | f
  public | processing_board(text)                                                    | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
  public | processing_day_close(text,bigint,text,text)                               | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
@@ -162,6 +163,7 @@ Null display is "·".
  public | _set_setup_code(text)                                                     | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _settings_hash_worker_codes()                                             | trigger  | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _settings_value_error(text,jsonb)                                         | function | f                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _setup_code_norm(text)                                                    | function | f                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _stage_allowed(text)                                                      | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _stage_order_error(text,animals_pilot,boolean)                            | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _stage_worker_role(text)                                                  | function | f                | public, extensions, pg_temp | postgres | f    | f             | f           | f
@@ -183,7 +185,7 @@ Null display is "·".
  public | animals_pilot_guard_corrections()                                         | trigger  | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | leader_device_recovery()                                                  | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | manufacturer_set_code(text,text)                                          | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
-(172 rows)
+(174 rows)
 
 == 2b. API surface: functions the app roles can run ======================
                        callable_by_app                       | security_definer 
@@ -223,6 +225,7 @@ Null display is "·".
  manufacturer_set_billing(text,boolean,numeric,text,text)    | t
  outer_open(integer,bigint,boolean,text)                     | t
  outer_open(integer,bigint,boolean,text,uuid)                | t
+ plant_setup_needed()                                        | t
  plant_status_snapshot()                                     | t
  processing_board(text)                                      | t
  processing_day_close(text,bigint,text,text)                 | t
@@ -244,7 +247,7 @@ Null display is "·".
  worker_login(text,text,text)                                | t
  worker_logout(text)                                         | t
  worker_session_check()                                      | t
-(56 rows)
+(57 rows)
 
 == 3. triggers on the key tables ========================================
         table        |               trigger               |               function                |                 fires                 |  state  | security_definer 

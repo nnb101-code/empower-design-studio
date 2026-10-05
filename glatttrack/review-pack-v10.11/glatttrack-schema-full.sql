@@ -12196,6 +12196,9 @@ notify pgrst, 'reload schema';
 --      only (when there is no owner); after that only an owner adds / removes
 --      owners. The last owner and the last team leader cannot be removed. Every
 --      account change is a security event.
+--  16. Installation: plant_setup_needed() tells a new device that the plant has no
+--      team leader yet (so the app shows "first installation" instead of a pairing
+--      code); the setup code is compared as printed (dashes / spaces / case ignored).
 -- Safe to run more than once. Run after step 45.
 -- ============================================================================
 
@@ -13886,6 +13889,25 @@ begin
 end $_$;
 
 -- ── 11. the first team leader: through the app only with the setup code ──────
+-- the setup code is stored and compared the same way: letters and digits only,
+-- upper case ('ABCD-1234-XY' = 'abcd 1234 xy' = 'ABCD1234XY')
+create or replace function _setup_code_norm(p text) returns text
+language sql immutable set search_path = public, extensions, pg_temp as $$
+  select upper(regexp_replace(coalesce(p, ''), '[^A-Za-z0-9]', '', 'g'));
+$$;
+revoke execute on function _setup_code_norm(text) from public, anon, authenticated;
+
+CREATE OR REPLACE FUNCTION public._set_setup_code(p_code text) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $$
+begin
+  if length(_setup_code_norm(p_code)) < 8 then raise exception 'setup code too short (at least 8 letters / digits)'; end if;
+  insert into plant_state (key, value) values ('setupCodeHash', crypt(_setup_code_norm(p_code), gen_salt('bf')))
+    on conflict (key) do update set value = excluded.value, updated_at = now();
+end $$;
+revoke execute on function _set_setup_code(text) from public, anon, authenticated;
+
 CREATE OR REPLACE FUNCTION public.create_first_manager(p_name text, p_code text, p_setup_code text DEFAULT NULL::text) RETURNS jsonb
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public', 'extensions', 'pg_temp'
@@ -13908,7 +13930,9 @@ begin
     if p_setup_code is null or p_setup_code = '' then
       return jsonb_build_object('ok', false, 'error', 'setup_code_required');
     end if;
-    if crypt(upper(regexp_replace(p_setup_code, '[^A-Za-z0-9]', '', 'g')), v_hash) <> v_hash then
+    -- the code as printed (dashes / spaces / case do not matter); a hash made by the
+    -- old _set_setup_code (dashes kept) is still accepted
+    if crypt(_setup_code_norm(p_setup_code), v_hash) <> v_hash and crypt(upper(p_setup_code), v_hash) <> v_hash then
       insert into login_attempts (ip, ok) values (v_ip, false);
       perform pg_sleep(0.4);
       return jsonb_build_object('ok', false, 'error', 'setup_code_wrong');
@@ -14472,6 +14496,18 @@ revoke execute on function manager_deactivate(text, uuid) from public;
 grant execute on function manager_add(text, text, text) to anon, authenticated;
 grant execute on function manager_add_owner(text, text, text) to anon, authenticated;
 grant execute on function manager_deactivate(text, uuid) to anon, authenticated;
+
+-- ── 16. installation: does this plant still need its first team leader? ──────
+-- (anyone may ask; the answer is only "yes / no" — manager_login says the same)
+create or replace function plant_setup_needed() returns jsonb
+language sql stable security definer set search_path = public, extensions, pg_temp as $$
+  select case when exists (select 1 from plant_managers where role = 'manager' and active)
+              then jsonb_build_object('ok', true, 'needed', false)
+              else jsonb_build_object('ok', true, 'needed', true,
+                                      'setupCode', exists (select 1 from plant_state where key = 'setupCodeHash')) end;
+$$;
+revoke execute on function plant_setup_needed() from public;
+grant execute on function plant_setup_needed() to anon, authenticated;
 
 -- ── system_health: processing boards waiting, rollover waiting, label mismatches ──
 create or replace function system_health(p_token text) returns jsonb

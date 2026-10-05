@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict PdEdrcz2Mz73msQWil7YAafM3D3C9e26gAO3fZ8ZScf4JVmHfDdkLvNFCwsAXNq
+\restrict UFzCZjBbrvv4cMZDOGzhMeaokhYZssNKNBF1TUJVkcaNzcu2jGPLCr0LryyQX2g
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -2302,8 +2302,8 @@ CREATE FUNCTION public._set_setup_code(p_code text) RETURNS void
     SET search_path TO 'public', 'extensions', 'pg_temp'
     AS $$
 begin
-  if p_code is null or length(p_code) < 8 then raise exception 'setup code too short'; end if;
-  insert into plant_state (key, value) values ('setupCodeHash', crypt(upper(p_code), gen_salt('bf')))
+  if length(_setup_code_norm(p_code)) < 8 then raise exception 'setup code too short (at least 8 letters / digits)'; end if;
+  insert into plant_state (key, value) values ('setupCodeHash', crypt(_setup_code_norm(p_code), gen_salt('bf')))
     on conflict (key) do update set value = excluded.value, updated_at = now();
 end $$;
 
@@ -2477,6 +2477,18 @@ begin
   end if;
   return null;
 end $_$;
+
+
+--
+-- Name: _setup_code_norm(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public._setup_code_norm(p text) RETURNS text
+    LANGUAGE sql IMMUTABLE
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $$
+  select upper(regexp_replace(coalesce(p, ''), '[^A-Za-z0-9]', '', 'g'));
+$$;
 
 
 --
@@ -3484,7 +3496,9 @@ begin
     if p_setup_code is null or p_setup_code = '' then
       return jsonb_build_object('ok', false, 'error', 'setup_code_required');
     end if;
-    if crypt(upper(regexp_replace(p_setup_code, '[^A-Za-z0-9]', '', 'g')), v_hash) <> v_hash then
+    -- the code as printed (dashes / spaces / case do not matter); a hash made by the
+    -- old _set_setup_code (dashes kept) is still accepted
+    if crypt(_setup_code_norm(p_setup_code), v_hash) <> v_hash and crypt(upper(p_setup_code), v_hash) <> v_hash then
       insert into login_attempts (ip, ok) values (v_ip, false);
       perform pg_sleep(0.4);
       return jsonb_build_object('ok', false, 'error', 'setup_code_wrong');
@@ -4485,6 +4499,21 @@ begin
   perform _cmd_put(p_command_id, v_dev, 'outer_open', v_res);
   return v_res;
 end $$;
+
+
+--
+-- Name: plant_setup_needed(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.plant_setup_needed() RETURNS jsonb
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $$
+  select case when exists (select 1 from plant_managers where role = 'manager' and active)
+              then jsonb_build_object('ok', true, 'needed', false)
+              else jsonb_build_object('ok', true, 'needed', true,
+                                      'setupCode', exists (select 1 from plant_state where key = 'setupCodeHash')) end;
+$$;
 
 
 --
@@ -7926,6 +7955,13 @@ REVOKE ALL ON FUNCTION public._settings_value_error(p_key text, v jsonb) FROM PU
 
 
 --
+-- Name: FUNCTION _setup_code_norm(p text); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public._setup_code_norm(p text) FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION _stage_allowed(p_stage text); Type: ACL; Schema: public; Owner: -
 --
 
@@ -8361,6 +8397,15 @@ GRANT ALL ON FUNCTION public.outer_open(p_id integer, p_epoch bigint, p_open boo
 
 
 --
+-- Name: FUNCTION plant_setup_needed(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.plant_setup_needed() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.plant_setup_needed() TO anon;
+GRANT ALL ON FUNCTION public.plant_setup_needed() TO authenticated;
+
+
+--
 -- Name: FUNCTION plant_status_snapshot(); Type: ACL; Schema: public; Owner: -
 --
 
@@ -8715,5 +8760,5 @@ GRANT ALL ON TABLE public.system_flags TO service_role;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict PdEdrcz2Mz73msQWil7YAafM3D3C9e26gAO3fZ8ZScf4JVmHfDdkLvNFCwsAXNq
+\unrestrict UFzCZjBbrvv4cMZDOGzhMeaokhYZssNKNBF1TUJVkcaNzcu2jGPLCr0LryyQX2g
 

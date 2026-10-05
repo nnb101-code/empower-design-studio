@@ -1674,11 +1674,15 @@ begin
   delete from plant_state where key = 'setupCodeHash';
   delete from login_attempts;
   r  := pg_temp.api('{}', 'select create_first_manager(''Intruder'', ''intruder-code-1'', null)');
-  perform _set_setup_code('SETUP46CODE');
+  r2 := pg_temp.api('{}', 'select plant_setup_needed()');
+  ok := (r2 ->> 'needed')::boolean and not (r2 ->> 'setupCode')::boolean;
+  perform _set_setup_code('ABCD-1234-XY');                                   -- as in the installation note
   r2 := pg_temp.api('{}', 'select create_first_manager(''Intruder'', ''intruder-code-1'', ''WRONGCODE1'')');
-  r3 := pg_temp.api('{}', 'select create_first_manager(''Plant leader'', ''12345'', ''SETUP46CODE'')');
-  r4 := pg_temp.api('{}', 'select create_first_manager(''Plant leader'', ''leader-46-code'', ''SETUP46CODE'')');
-  ok := r ->> 'error' = 'setup_code_not_configured' and r2 ->> 'error' = 'setup_code_wrong'
+  r3 := pg_temp.api('{}', 'select create_first_manager(''Plant leader'', ''12345'', ''ABCD-1234-XY'')');
+  r4 := pg_temp.api('{}', 'select create_first_manager(''Plant leader'', ''leader-46-code'', ''abcd-1234-xy'')');   -- typed in lower case
+  r  := r || jsonb_build_object('afterInstall', pg_temp.api('{}', 'select plant_setup_needed()'));
+  ok := ok and not (r #>> '{afterInstall,needed}')::boolean
+        and r ->> 'error' = 'setup_code_not_configured' and r2 ->> 'error' = 'setup_code_wrong'
         and r3 ->> 'error' like 'code too short%' and pg_temp.ok(r4)
         and not exists (select 1 from plant_managers where name = 'Intruder')
         and not exists (select 1 from plant_state where key = 'setupCodeHash');          -- one time only
@@ -1686,7 +1690,7 @@ begin
   update plant_managers set active = true where id = any(v_ids);
   if v_hash is not null then insert into plant_state (key, value) values ('setupCodeHash', v_hash) on conflict (key) do update set value = excluded.value; end if;
   delete from login_attempts;
-  perform pg_temp.rec('step 46 first team leader: through the app only with the setup code (none configured → refused); 6 characters; one time', ok,
+  perform pg_temp.rec('step 46 first team leader: through the app only with the setup code (none configured → refused; dashes / case do not matter); 6 characters; one time', ok,
     concat_ws(' | ', r::text, r2::text, r3::text, left(r4::text, 40)));
 
   -- new team-leader / owner codes: at least 6 characters
@@ -1921,7 +1925,7 @@ begin
                 'lung_drawing_get(integer)', 'lung_drawing_set(integer,bigint,text)', 'manager_add(text,text,text)',
                 'manager_add_owner(text,text,text)', 'manager_deactivate(text,uuid)', 'manager_list(text)', 'manager_login(text)',
                 'manager_logout(text)', 'manager_session_check(text)', 'manufacturer_set_billing(text,boolean,numeric,text,text)',
-                'outer_open(integer,bigint,boolean,text)', 'outer_open(integer,bigint,boolean,text,uuid)', 'plant_status_snapshot()',
+                'outer_open(integer,bigint,boolean,text)', 'outer_open(integer,bigint,boolean,text,uuid)', 'plant_status_snapshot()', 'plant_setup_needed()',
                 'push_settings(jsonb,text,text,text)', 'request_daily_rollover()', 'reset_daily_board(text,text)', 'security_summary(text)',
                 'processing_board(text)', 'carry_push(bigint,jsonb,uuid)', 'carry_claim(bigint,integer,text,uuid)',
                 'processing_day_close(text,bigint,text,text)', 'processing_status(text)',
