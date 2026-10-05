@@ -147,7 +147,7 @@ Changed rows:
 - `push_settings`: `customStatuses` with a duplicate key → `bad_settings`.
 - accounts (v10.11): `manager_add` owner only; `manager_add_owner` owner, or a team leader only while no owner exists; `manager_deactivate` owner only, never the last owner / team leader; `manager_list` team leader + owner; events `account_added` / `account_removed`.
 - `plant_setup_needed()` (anyone): `{needed}` — and `setupCode` only while no team leader exists. `_set_setup_code` / `create_first_manager` compare the setup code normalized (`_setup_code_norm`).
-- leader-device rule sticky (`plant_state.leaderDevicesRequired`); `leader_device_recovery()` server-only.
+- leader-device rule sticky (`plant_state.leaderDevicesRequired`); `leader_device_recovery(text)` server-only; disconnects every team-leader device (keys revoked, their sessions ended).
 - team-leader devices (v10.10): pairing role `'leader'` (slots 0..3); no stage (`_stage_allowed`), no station writes (`_device_write_allowed` excludes it); `manager_login` (role manager) only from such a device once one exists; `device_pair(…,'leader',…)` moves a device-less calling session onto the device it paired (bootstrap).
 - `archive_days`: returns each day's `statuses` (the status definitions it was ruled with; `daily_board_archive.statuses`).
 - `carry_push`, `carry_claim`, `processing_day_close`, `_proc_finalize`: one transaction at a time per kept board (`_proc_board_lock`, advisory).

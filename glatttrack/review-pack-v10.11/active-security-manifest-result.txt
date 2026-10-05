@@ -3,9 +3,9 @@ Null display is "·".
 == 1. plant state =======================================================
     key     |     value     |          updated_at           
 ------------+---------------+-------------------------------
- boardEpoch | 1791213329020 | 2026-10-05 15:15:29.020341+00
- schemaStep | 46            | 2026-10-05 15:15:30.093939+00
- testMode   | off           | 2026-10-05 15:15:29.677717+00
+ boardEpoch | 1791213442504 | 2026-10-05 15:17:22.503602+00
+ schemaStep | 46            | 2026-10-05 15:17:23.628213+00
+ testMode   | off           | 2026-10-05 15:17:23.170245+00
 (3 rows)
 
 == 2. functions (public, gt_rls) ========================================
@@ -183,7 +183,7 @@ Null display is "·".
  public | _worker_sessions_revoke_on_device()                                       | trigger  | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | animals_pilot_advance_cursor()                                            | trigger  | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | animals_pilot_guard_corrections()                                         | trigger  | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
- public | leader_device_recovery()                                                  | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | leader_device_recovery(text)                                              | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | manufacturer_set_code(text,text)                                          | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
 (174 rows)
 

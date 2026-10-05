@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict UFzCZjBbrvv4cMZDOGzhMeaokhYZssNKNBF1TUJVkcaNzcu2jGPLCr0LryyQX2g
+\restrict PgTjYcBirPHFi5oYcFHU7nSTeJCO2PVV6pp5KEFA72cumPTgy4PahnSH32L3kTC
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -4063,22 +4063,32 @@ end $_$;
 
 
 --
--- Name: leader_device_recovery(); Type: FUNCTION; Schema: public; Owner: -
+-- Name: leader_device_recovery(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.leader_device_recovery() RETURNS text
+CREATE FUNCTION public.leader_device_recovery(p_reason text DEFAULT 'team-leader device lost / broken'::text) RETURNS text
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public', 'extensions', 'pg_temp'
     AS $$
+declare d record; n int := 0; v_why text := left(coalesce(nullif(trim(p_reason), ''), 'team-leader device lost / broken'), 200);
 begin
   if _is_api_request() then raise exception 'server only'; end if;
-  if exists (select 1 from devices_pilot d join device_credentials c on c.device_id = d.id and not c.revoked
-              where d.assigned_role = 'leader' and coalesce(d.device_status, 'active') <> 'retired') then
-    return 'a team-leader device is still paired — a team leader logs in there and pairs the new device';
-  end if;
+  perform set_config('gt.audit_actor', 'server', true);
+  perform set_config('gt.audit_reason', v_why, true);
+  perform set_config('app.device_admin', 'on', true);
+  for d in select id, assigned_role, assigned_index from devices_pilot where assigned_role = 'leader' loop
+    update devices_pilot set assigned_role = null, assigned_index = null, paired_at = null, updated_at = now() where id = d.id;
+    update device_credentials set revoked = true, revoked_at = coalesce(revoked_at, now()) where device_id = d.id and not revoked;
+    delete from manager_sessions where device_id = d.id;
+    perform _audit_device_event(d.id, 'UNASSIGNED', d.assigned_role, d.assigned_index, v_why, null, null, 'server');
+    n := n + 1;
+  end loop;
+  perform set_config('app.device_admin', '', true);
+  perform set_config('gt.audit_actor', '', true);
+  perform set_config('gt.audit_reason', '', true);
   delete from plant_state where key = 'leaderDevicesRequired';
-  perform _security_event(null, 'leader_device_recovery', '{}'::jsonb, 'server', 'server');
-  return 'ok — the next team leader to log in registers his device as the team-leader device';
+  perform _security_event(null, 'leader_device_recovery', jsonb_build_object('disconnected', n, 'reason', v_why), 'server', 'server');
+  return format('ok — %s team-leader device(s) disconnected. The next team leader to log in registers his device as the team-leader device.', n);
 end $$;
 
 
@@ -8273,10 +8283,10 @@ GRANT ALL ON FUNCTION public.event_append(p_event jsonb) TO authenticated;
 
 
 --
--- Name: FUNCTION leader_device_recovery(); Type: ACL; Schema: public; Owner: -
+-- Name: FUNCTION leader_device_recovery(p_reason text); Type: ACL; Schema: public; Owner: -
 --
 
-REVOKE ALL ON FUNCTION public.leader_device_recovery() FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.leader_device_recovery(p_reason text) FROM PUBLIC;
 
 
 --
@@ -8760,5 +8770,5 @@ GRANT ALL ON TABLE public.system_flags TO service_role;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict UFzCZjBbrvv4cMZDOGzhMeaokhYZssNKNBF1TUJVkcaNzcu2jGPLCr0LryyQX2g
+\unrestrict PgTjYcBirPHFi5oYcFHU7nSTeJCO2PVV6pp5KEFA72cumPTgy4PahnSH32L3kTC
 

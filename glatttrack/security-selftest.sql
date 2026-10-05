@@ -1778,21 +1778,28 @@ begin
   perform pg_temp.rec('step 46 team-leader device: more than one may be paired; unpairing one ends the sessions made on it', ok,
     concat_ws(' | ', r::text, r2::text, r3::text));
 
-  -- every team-leader device removed: the rule stays; only the server reopens the first-device registration
+  -- removing every team-leader device does not reopen the door
   delete from login_attempts;
   perform set_config('app.device_admin', 'on', true);
-  update devices_pilot set assigned_role = null, assigned_index = null where assigned_role = 'leader';
+  update devices_pilot set assigned_role = null, assigned_index = null where assigned_role = 'leader' and id <> v_id2;
   perform set_config('app.device_admin', '', true);
+  -- the last one (v_id2, still paired, a session on it) is "lost": only the server recovers —
+  -- it disconnects it (key revoked, session ended) and reopens the first-device registration
+  r4 := pg_temp.api(jsonb_build_object('x-device-token', (select token_plain from device_pairing where device_id = v_id2 order by created_at desc limit 1)),
+                    format('select manager_login(%L)', pg_temp.v('mgr_code')));
   r  := pg_temp.api('{}', format('select manager_login(%L)', pg_temp.v('mgr_code')));
-  r2 := pg_temp.api('{}', 'select leader_device_recovery()');
-  v_s := leader_device_recovery();
+  r2 := pg_temp.api('{}', 'select leader_device_recovery(''phone lost'')');
+  v_s := leader_device_recovery('selftest: phone lost');
   delete from login_attempts;
   r3 := pg_temp.api('{}', format('select manager_login(%L)', pg_temp.v('mgr_code')));
-  ok := r ->> 'reason' = 'leader_device_required' and not pg_temp.ok(r2) and v_s like 'ok%'
+  ok := pg_temp.ok(r4) and r ->> 'reason' = 'leader_device_required' and not pg_temp.ok(r2) and v_s like 'ok — 1 %'
+        and (select assigned_role from devices_pilot where id = v_id2) is null
+        and not exists (select 1 from device_credentials where device_id = v_id2 and not revoked)
+        and not exists (select 1 from manager_sessions where token = r4 ->> 'token')
         and pg_temp.ok(r3) and (r3 ->> 'registerLeaderDevice')::boolean
         and exists (select 1 from events_pilot where stage = 'security' and action = 'leader_device_recovery');
-  perform pg_temp.rec('step 46 team-leader device: removing every one does not reopen the door; only leader_device_recovery() from the server does', ok,
-    concat_ws(' | ', r::text, r2::text, v_s, left(r3::text, 80)));
+  perform pg_temp.rec('step 46 team-leader device: removing every one does not reopen the door; the last one lost → only leader_device_recovery() from the server, which disconnects it (key, sessions)', ok,
+    concat_ws(' | ', left(r4::text, 60), r::text, r2::text, v_s, left(r3::text, 80)));
   delete from login_attempts;
   insert into plant_state (key, value) values ('leaderDevicesRequired', '1') on conflict (key) do update set value = '1';
 end $$;

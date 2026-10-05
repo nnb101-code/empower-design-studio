@@ -82,7 +82,8 @@
 --      installation from the device the first team leader logs in on. Once a plant
 --      had a team-leader device the rule stays on (plant_state leaderDevicesRequired),
 --      also if every such device is removed; only the server (SQL) can reopen the
---      first-device registration: select leader_device_recovery();
+--      first-device registration: select leader_device_recovery('reason'); — it also
+--      disconnects every team-leader device (a lost one cannot be used afterwards).
 --  15. Accounts: only the owner adds or removes team leaders (a team leader cannot
 --      add another team leader). A team leader may add the plant's FIRST owner
 --      only (when there is no owner); after that only an owner adds / removes
@@ -2263,20 +2264,34 @@ insert into plant_state (key, value)
   on conflict (key) do update set value = '1', updated_at = now();
 
 -- every team-leader device lost / broken: only from the server (SQL editor, by the
--- installer) — the next team leader to log in registers his device as the first one
-create or replace function leader_device_recovery() returns text
+-- installer). Every team-leader device is disconnected (key revoked, its team-leader
+-- sessions ended — a lost phone cannot be used afterwards), and the next team leader
+-- to log in registers his device as the first one again.
+drop function if exists leader_device_recovery();
+create or replace function leader_device_recovery(p_reason text default 'team-leader device lost / broken')
+returns text
 language plpgsql security definer set search_path = public, extensions, pg_temp as $$
+declare d record; n int := 0; v_why text := left(coalesce(nullif(trim(p_reason), ''), 'team-leader device lost / broken'), 200);
 begin
   if _is_api_request() then raise exception 'server only'; end if;
-  if exists (select 1 from devices_pilot d join device_credentials c on c.device_id = d.id and not c.revoked
-              where d.assigned_role = 'leader' and coalesce(d.device_status, 'active') <> 'retired') then
-    return 'a team-leader device is still paired — a team leader logs in there and pairs the new device';
-  end if;
+  perform set_config('gt.audit_actor', 'server', true);
+  perform set_config('gt.audit_reason', v_why, true);
+  perform set_config('app.device_admin', 'on', true);
+  for d in select id, assigned_role, assigned_index from devices_pilot where assigned_role = 'leader' loop
+    update devices_pilot set assigned_role = null, assigned_index = null, paired_at = null, updated_at = now() where id = d.id;
+    update device_credentials set revoked = true, revoked_at = coalesce(revoked_at, now()) where device_id = d.id and not revoked;
+    delete from manager_sessions where device_id = d.id;
+    perform _audit_device_event(d.id, 'UNASSIGNED', d.assigned_role, d.assigned_index, v_why, null, null, 'server');
+    n := n + 1;
+  end loop;
+  perform set_config('app.device_admin', '', true);
+  perform set_config('gt.audit_actor', '', true);
+  perform set_config('gt.audit_reason', '', true);
   delete from plant_state where key = 'leaderDevicesRequired';
-  perform _security_event(null, 'leader_device_recovery', '{}'::jsonb, 'server', 'server');
-  return 'ok — the next team leader to log in registers his device as the team-leader device';
+  perform _security_event(null, 'leader_device_recovery', jsonb_build_object('disconnected', n, 'reason', v_why), 'server', 'server');
+  return format('ok — %s team-leader device(s) disconnected. The next team leader to log in registers his device as the team-leader device.', n);
 end $$;
-revoke execute on function leader_device_recovery() from public, anon, authenticated;
+revoke execute on function leader_device_recovery(text) from public, anon, authenticated;
 
 -- ── 15. accounts: only the owner adds / removes team leaders ─────────────────
 CREATE OR REPLACE FUNCTION public.manager_add(p_token text, p_name text, p_code text) RETURNS jsonb
@@ -2526,7 +2541,7 @@ begin
     problems := problems || 'a board writer without the reset lock'::text; end if;
   if pg_get_functiondef('worker_login(text,text,text)'::regprocedure) ~ 'x \? ''code''' then
     problems := problems || 'worker_login still accepts a plain-text code'::text; end if;
-  if has_function_privilege('anon', 'leader_device_recovery()', 'execute') then
+  if has_function_privilege('anon', 'leader_device_recovery(text)', 'execute') then
     problems := problems || 'leader_device_recovery callable by the app'::text; end if;
   if pg_get_functiondef('manager_add(text,text,text)'::regprocedure) !~ 'owner_only' then
     problems := problems || 'manager_add still open to a team leader'::text; end if;
