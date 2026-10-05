@@ -1,0 +1,396 @@
+Pager usage is off.
+Null display is "·".
+== 1. plant state =======================================================
+    key     |     value     |          updated_at           
+------------+---------------+-------------------------------
+ boardEpoch | 1791211774593 | 2026-10-05 14:49:34.592331+00
+ schemaStep | 46            | 2026-10-05 14:49:35.790657+00
+ testMode   | off           | 2026-10-05 14:49:35.286686+00
+(3 rows)
+
+== 2. functions (public, gt_rls) ========================================
+ schema |                                 function                                  |   kind   | security_definer |         search_path         |  owner   | anon | authenticated | public_role | from_extension 
+--------+---------------------------------------------------------------------------+----------+------------------+-----------------------------+----------+------+---------------+-------------+----------------
+ gt_rls | gt_rls.devices_read_all()                                                 | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
+ gt_rls | gt_rls.devices_read_own_ids()                                             | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
+ gt_rls | gt_rls.events_reader_ok()                                                 | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
+ public | _reader_ok()                                                              | function | t                | public, extensions, pg_temp | postgres | t    | t             | t           | f
+ public | animal_push(jsonb,uuid)                                                   | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
+ public | archive_days(text,date,date)                                              | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
+ public | carry_claim(bigint,integer,text,uuid)                                     | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
+ public | carry_push(bigint,jsonb,uuid)                                             | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
+ public | claim_animal_stage(integer,text,text,text,text,bigint)                    | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
+ public | claim_animal_stage(integer,text,text,text,text,bigint,uuid)               | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
+ public | create_first_manager(text,text,text)                                      | function | t                | public, extensions, pg_temp | postgres | t    | t             | t           | f
+ public | device_auth_set(text,boolean)                                             | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
+ public | device_heartbeat(text,text,jsonb)                                         | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
+ public | device_manage(text,text,text,text)                                        | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
+ public | device_pair(text,text,text,integer,boolean,text,text)                     | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
+ public | device_paired_list(text)                                                  | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
+ public | device_pairing_status(text,text,text)                                     | function | t                | public, extensions, pg_temp | postgres | t    | t             | t           | f
+ public | device_request_pairing(text,text,text)                                    | function | t                | public, extensions, pg_temp | postgres | t    | t             | t           | f
+ public | device_unpair(text,text,text)                                             | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
+ public | device_whoami()                                                           | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
+ public | eso_change(integer,text,text,bigint)                                      | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
+ public | eso_change(integer,text,text,bigint,uuid)                                 | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
+ public | event_append(jsonb)                                                       | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
+ public | lung_drawing_get(integer)                                                 | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
+ public | lung_drawing_set(integer,bigint,text)                                     | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
+ public | manager_add(text,text,text)                                               | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
+ public | manager_add_owner(text,text,text)                                         | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
+ public | manager_deactivate(text,uuid)                                             | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
+ public | manager_list(text)                                                        | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
+ public | manager_login(text)                                                       | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
+ public | manager_logout(text)                                                      | function | t                | public, extensions, pg_temp | postgres | t    | t             | t           | f
+ public | manager_session_check(text)                                               | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
+ public | manufacturer_set_billing(text,boolean,numeric,text,text)                  | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
+ public | outer_open(integer,bigint,boolean,text)                                   | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
+ public | outer_open(integer,bigint,boolean,text,uuid)                              | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
+ public | plant_status_snapshot()                                                   | function | t                | public, extensions, pg_temp | postgres | t    | t             | t           | f
+ public | processing_board(text)                                                    | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
+ public | processing_day_close(text,bigint,text,text)                               | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
+ public | processing_status(text)                                                   | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
+ public | push_settings(jsonb,text,text,text)                                       | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
+ public | request_daily_rollover()                                                  | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
+ public | reset_daily_board(text,text)                                              | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
+ public | security_summary(text)                                                    | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
+ public | server_now_ms()                                                           | function | f                | — NONE —                    | postgres | t    | t             | t           | f
+ public | server_schema_step()                                                      | function | t                | public, extensions, pg_temp | postgres | t    | t             | t           | f
+ public | server_test_mode()                                                        | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
+ public | server_test_mode_info()                                                   | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
+ public | set_not_chalak_outer(integer,bigint,uuid)                                 | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
+ public | support_access_set(text,integer,text)                                     | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
+ public | support_diagnostics(text)                                                 | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
+ public | support_force_reload(text,text)                                           | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
+ public | system_health(text)                                                       | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
+ public | verify_event_chain()                                                      | function | t                | public, extensions, pg_temp | postgres | t    | t             | t           | f
+ public | worker_login(text,text,text)                                              | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
+ public | worker_logout(text)                                                       | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
+ public | worker_session_check()                                                    | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
+ public | _acting_device()                                                          | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _admin_audit(text,text,text,jsonb)                                        | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _animals_merge()                                                          | trigger  | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _animals_nc_outer_guard()                                                 | trigger  | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _animals_nc_outer_value()                                                 | trigger  | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _animals_outer_open_guard()                                               | trigger  | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _animals_stage_guard()                                                    | trigger  | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _archive_keep_intake()                                                    | trigger  | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _audit_device_event(text,text,text,integer,text,text,uuid,text)           | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _auth_uid_safe()                                                          | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _board_business_date()                                                    | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _board_epoch()                                                            | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _board_unfinished()                                                       | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _board_write_lock()                                                       | function | f                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _call_device(text)                                                        | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _caller_device_role()                                                     | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _carry_row(animals_carry)                                                 | function | f                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _cmd_get(uuid,text,text)                                                  | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _cmd_put(uuid,text,text,jsonb)                                            | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _code_in_use(text)                                                        | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _correction_braked(text)                                                  | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _correction_check(text,animals_pilot,text)                                | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _credential_audit()                                                       | trigger  | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _credential_revoked_at()                                                  | trigger  | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _current_device_id()                                                      | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _current_worker()                                                         | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _derive_actor(text,text)                                                  | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _device_auth_required()                                                   | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _device_write_allowed()                                                   | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _device_write_guard()                                                     | trigger  | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _devices_assignment_guard()                                               | trigger  | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _do_board_reset(text,date)                                                | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _eso_required(integer)                                                    | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _event_canonical(uuid,integer,text,text,jsonb,text,text,text,text,bigint) | function | f                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _event_chain_recent(integer)                                              | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _events_actor()                                                           | trigger  | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _events_append_only()                                                     | trigger  | f                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _events_chain_link()                                                      | trigger  | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _events_maker_guard()                                                     | trigger  | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _extend_maker_sessions()                                                  | trigger  | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _gt_flag(jsonb,text,boolean)                                              | function | f                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _gt_settings()                                                            | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _gt_value_ok(text,text)                                                   | function | f                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _is_api_request()                                                         | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _is_app_caller()                                                          | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _is_leader_device(text)                                                   | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _is_nc(animals_pilot)                                                     | function | f                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _is_real_manager(text)                                                    | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _jint_ok(jsonb,numeric,numeric)                                           | function | f                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _jnum_ok(jsonb,numeric,numeric)                                           | function | f                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _jstr_ok(jsonb,integer)                                                   | function | f                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _kosher_ready(animals_pilot)                                              | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _kosher_statuses()                                                        | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _leader_devices_exist()                                                   | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _log_correction_rejected(text,integer,text,text,jsonb)                    | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _log_device_event(text,text,text,integer,text,text)                       | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _maker_session_end()                                                      | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _manager_session_valid(text)                                              | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _manager_sessions_cleanup()                                               | trigger  | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _manufacturer_session_valid(text)                                         | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _merge_list(jsonb,jsonb)                                                  | function | f                | — NONE —                    | postgres | f    | f             | f           | f
+ public | _mgr_session_bound(text,uuid)                                             | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _my_plant()                                                               | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _my_role()                                                                | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _nc_outer_allowed()                                                       | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _no_device_error()                                                        | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _note_revoked_write(text)                                                 | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _plant_state_test_mode_trg()                                              | trigger  | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _printed_as_key(animals_pilot)                                            | function | f                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _proc_board_json(bigint)                                                  | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _proc_board_lock(bigint)                                                  | function | f                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _proc_board_pending(text,bigint)                                          | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _proc_caller_station(text)                                                | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _proc_finalize(bigint)                                                    | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _proc_open_board(text)                                                    | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _proc_pending(text,animals_pilot,boolean)                                 | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _proc_station_of_group(text)                                              | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _proc_stations()                                                          | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _push_is_correction(jsonb)                                                | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _raise_correction(text,text)                                              | function | f                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _rate_count(text,text,interval)                                           | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _rate_hit(text,text)                                                      | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _reason_ok(text)                                                          | function | f                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _request_has_manager()                                                    | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _request_has_manufacturer()                                               | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _request_headers()                                                        | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _request_ip()                                                             | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _request_is_service_role()                                                | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _request_privileged()                                                     | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _security_event(integer,text,jsonb,text,text)                             | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _session_name(text)                                                       | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _session_role(text)                                                       | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _set_setup_code(text)                                                     | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _settings_hash_worker_codes()                                             | trigger  | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _settings_value_error(text,jsonb)                                         | function | f                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _stage_allowed(text)                                                      | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _stage_order_error(text,animals_pilot,boolean)                            | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _stage_worker_role(text)                                                  | function | f                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _status_change_error(jsonb,jsonb)                                         | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _statuses_in_use()                                                        | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _support_access_open()                                                    | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _test_mode_active()                                                       | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _test_mode_autooff()                                                      | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _test_mode_flag()                                                         | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _test_mode_max()                                                          | function | f                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _test_mode_on()                                                           | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _test_mode_on_at()                                                        | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _ts_or_null(text)                                                         | function | f                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _worker_code_hash(text)                                                   | function | f                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _worker_role_norm(text)                                                   | function | f                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _worker_sessions_revoke_on_credential()                                   | trigger  | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _worker_sessions_revoke_on_device()                                       | trigger  | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | animals_pilot_advance_cursor()                                            | trigger  | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | animals_pilot_guard_corrections()                                         | trigger  | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | leader_device_recovery()                                                  | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | manufacturer_set_code(text,text)                                          | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+(172 rows)
+
+== 2b. API surface: functions the app roles can run ======================
+                       callable_by_app                       | security_definer 
+-------------------------------------------------------------+------------------
+ _reader_ok()                                                | t
+ animal_push(jsonb,uuid)                                     | t
+ archive_days(text,date,date)                                | t
+ carry_claim(bigint,integer,text,uuid)                       | t
+ carry_push(bigint,jsonb,uuid)                               | t
+ claim_animal_stage(integer,text,text,text,text,bigint)      | t
+ claim_animal_stage(integer,text,text,text,text,bigint,uuid) | t
+ create_first_manager(text,text,text)                        | t
+ device_auth_set(text,boolean)                               | t
+ device_heartbeat(text,text,jsonb)                           | t
+ device_manage(text,text,text,text)                          | t
+ device_pair(text,text,text,integer,boolean,text,text)       | t
+ device_paired_list(text)                                    | t
+ device_pairing_status(text,text,text)                       | t
+ device_request_pairing(text,text,text)                      | t
+ device_unpair(text,text,text)                               | t
+ device_whoami()                                             | t
+ eso_change(integer,text,text,bigint)                        | t
+ eso_change(integer,text,text,bigint,uuid)                   | t
+ event_append(jsonb)                                         | t
+ gt_rls.devices_read_all()                                   | t
+ gt_rls.devices_read_own_ids()                               | t
+ gt_rls.events_reader_ok()                                   | t
+ lung_drawing_get(integer)                                   | t
+ lung_drawing_set(integer,bigint,text)                       | t
+ manager_add(text,text,text)                                 | t
+ manager_add_owner(text,text,text)                           | t
+ manager_deactivate(text,uuid)                               | t
+ manager_list(text)                                          | t
+ manager_login(text)                                         | t
+ manager_logout(text)                                        | t
+ manager_session_check(text)                                 | t
+ manufacturer_set_billing(text,boolean,numeric,text,text)    | t
+ outer_open(integer,bigint,boolean,text)                     | t
+ outer_open(integer,bigint,boolean,text,uuid)                | t
+ plant_status_snapshot()                                     | t
+ processing_board(text)                                      | t
+ processing_day_close(text,bigint,text,text)                 | t
+ processing_status(text)                                     | t
+ push_settings(jsonb,text,text,text)                         | t
+ request_daily_rollover()                                    | t
+ reset_daily_board(text,text)                                | t
+ security_summary(text)                                      | t
+ server_now_ms()                                             | f
+ server_schema_step()                                        | t
+ server_test_mode()                                          | t
+ server_test_mode_info()                                     | t
+ set_not_chalak_outer(integer,bigint,uuid)                   | t
+ support_access_set(text,integer,text)                       | t
+ support_diagnostics(text)                                   | t
+ support_force_reload(text,text)                             | t
+ system_health(text)                                         | t
+ verify_event_chain()                                        | t
+ worker_login(text,text,text)                                | t
+ worker_logout(text)                                         | t
+ worker_session_check()                                      | t
+(56 rows)
+
+== 3. triggers on the key tables ========================================
+        table        |               trigger               |               function                |                 fires                 |  state  | security_definer 
+---------------------+-------------------------------------+---------------------------------------+---------------------------------------+---------+------------------
+ animals_pilot       | a_animals_merge                     | _animals_merge                        | BEFORE UPDATE ROW                     | enabled | t
+ animals_pilot       | a_animals_merge_ins                 | _animals_merge                        | BEFORE INSERT ROW                     | enabled | t
+ animals_pilot       | b_animals_stage_guard               | _animals_stage_guard                  | BEFORE UPDATE ROW                     | enabled | t
+ animals_pilot       | trg_animals_pilot_advance_cursor    | animals_pilot_advance_cursor          | AFTER INSERT/UPDATE ROW               | enabled | t
+ animals_pilot       | trg_animals_pilot_guard_corrections | animals_pilot_guard_corrections       | BEFORE UPDATE ROW                     | enabled | t
+ animals_pilot       | zz_device_write_guard               | _device_write_guard                   | BEFORE INSERT/UPDATE/DELETE STATEMENT | enabled | t
+ animals_pilot       | zzz_nc_outer_guard                  | _animals_nc_outer_guard               | BEFORE INSERT/UPDATE ROW              | enabled | t
+ animals_pilot       | zzz_outer_open_guard                | _animals_outer_open_guard             | BEFORE INSERT/UPDATE ROW              | enabled | t
+ animals_pilot       | zzzz_nc_outer_value                 | _animals_nc_outer_value               | BEFORE INSERT/UPDATE ROW              | enabled | t
+ daily_board_archive | a_archive_keep_intake               | _archive_keep_intake                  | BEFORE INSERT ROW                     | enabled | t
+ device_credentials  | credential_revoked_at               | _credential_revoked_at                | BEFORE UPDATE ROW                     | enabled | t
+ device_credentials  | zz_credential_audit                 | _credential_audit                     | AFTER UPDATE ROW                      | enabled | t
+ device_credentials  | zz_worker_sessions_revoke           | _worker_sessions_revoke_on_credential | AFTER UPDATE ROW                      | enabled | t
+ devices_pilot       | zz_devices_assignment_guard         | _devices_assignment_guard             | BEFORE INSERT/UPDATE/DELETE ROW       | enabled | t
+ devices_pilot       | zz_worker_sessions_revoke           | _worker_sessions_revoke_on_device     | AFTER UPDATE/DELETE ROW               | enabled | t
+ events_pilot        | a0_events_maker_guard               | _events_maker_guard                   | BEFORE INSERT ROW                     | enabled | t
+ events_pilot        | a1_events_actor                     | _events_actor                         | BEFORE INSERT ROW                     | enabled | t
+ events_pilot        | aa_events_chain_link                | _events_chain_link                    | BEFORE INSERT ROW                     | enabled | t
+ events_pilot        | ab_events_append_only               | _events_append_only                   | BEFORE UPDATE/DELETE ROW              | enabled | f
+ events_pilot        | zz_device_write_guard               | _device_write_guard                   | BEFORE INSERT/UPDATE/DELETE STATEMENT | enabled | t
+ manager_sessions    | zz_manager_sessions_cleanup         | _manager_sessions_cleanup             | AFTER INSERT STATEMENT                | enabled | t
+ plant_state         | extend_maker_sessions               | _extend_maker_sessions                | AFTER INSERT/UPDATE ROW               | enabled | t
+ plant_state         | zz_test_mode_audit                  | _plant_state_test_mode_trg            | AFTER INSERT/UPDATE ROW               | enabled | t
+ settings_pilot      | zz_settings_hash_worker_codes       | _settings_hash_worker_codes           | BEFORE INSERT/UPDATE ROW              | enabled | t
+(24 rows)
+
+== 4. row security and policies =========================================
+          table          | rls_on | rls_forced | policies 
+-------------------------+--------+------------+----------
+ admin_audit             | t      | f          |        0
+ animals                 | t      | f          |        2
+ animals_carry           | t      | f          |        0
+ animals_pilot           | t      | f          |        1
+ audit_log               | t      | f          |        2
+ batches                 | t      | f          |        3
+ custom_statuses         | t      | f          |        2
+ daily_board_archive     | t      | f          |        1
+ device_credentials      | t      | f          |        0
+ device_lifecycle_events | t      | f          |        1
+ device_pairing          | t      | f          |        0
+ device_stage_cursor     | t      | f          |        0
+ devices_pilot           | t      | f          |        1
+ events_chain_head       | t      | f          |        0
+ events_pilot            | t      | f          |        1
+ login_attempts          | t      | f          |        0
+ lung_drawings           | t      | f          |        0
+ manager_sessions        | t      | f          |        0
+ outer_status_pilot      | t      | f          |        0
+ pairing_requests        | t      | f          |        0
+ plant_managers          | t      | f          |        0
+ plant_state             | t      | f          |        0
+ plants                  | t      | f          |        1
+ problem_reports         | t      | f          |        2
+ processed_commands      | t      | f          |        0
+ processing_day_closed   | t      | f          |        0
+ profiles                | t      | f          |        3
+ rate_events             | t      | f          |        0
+ reprint_log             | t      | f          |        2
+ revoked_device_writes   | t      | f          |        0
+ settings_pilot          | t      | f          |        1
+ source_farms            | t      | f          |        2
+ system_flags            | t      | f          |        0
+ worker_sessions         | t      | f          |        0
+(34 rows)
+
+          table          |            policy            |  cmd   | permissive |        roles         |                                                                    using_expr                                                                     |                          check_expr                           
+-------------------------+------------------------------+--------+------------+----------------------+---------------------------------------------------------------------------------------------------------------------------------------------------+---------------------------------------------------------------
+ animals                 | animals_select               | SELECT | PERMISSIVE | {public}             | (plant_id = _my_plant())                                                                                                                          | 
+ animals                 | animals_write                | ALL    | PERMISSIVE | {public}             | (plant_id = _my_plant())                                                                                                                          | (plant_id = _my_plant())
+ animals_pilot           | read animals_pilot           | SELECT | PERMISSIVE | {anon,authenticated} | ( SELECT _reader_ok() AS _reader_ok)                                                                                                              | 
+ audit_log               | audit_insert                 | INSERT | PERMISSIVE | {public}             |                                                                                                                                                   | (plant_id = _my_plant())
+ audit_log               | audit_select                 | SELECT | PERMISSIVE | {public}             | (plant_id = _my_plant())                                                                                                                          | 
+ batches                 | batches_insert               | INSERT | PERMISSIVE | {public}             |                                                                                                                                                   | (plant_id = _my_plant())
+ batches                 | batches_select               | SELECT | PERMISSIVE | {public}             | (plant_id = _my_plant())                                                                                                                          | 
+ batches                 | batches_update               | UPDATE | PERMISSIVE | {public}             | ((plant_id = _my_plant()) AND ((_my_role() = 'manager'::text) OR (status = 'open'::text)))                                                        | 
+ custom_statuses         | statuses_select              | SELECT | PERMISSIVE | {public}             | (plant_id = _my_plant())                                                                                                                          | 
+ custom_statuses         | statuses_write               | ALL    | PERMISSIVE | {public}             | ((plant_id = _my_plant()) AND (_my_role() = 'manager'::text))                                                                                     | ((plant_id = _my_plant()) AND (_my_role() = 'manager'::text))
+ daily_board_archive     | read daily_board_archive     | SELECT | PERMISSIVE | {anon,authenticated} | ( SELECT _reader_ok() AS _reader_ok)                                                                                                              | 
+ device_lifecycle_events | read device_lifecycle_events | SELECT | PERMISSIVE | {anon,authenticated} | ( SELECT gt_rls.events_reader_ok() AS events_reader_ok)                                                                                           | 
+ devices_pilot           | read devices_pilot           | SELECT | PERMISSIVE | {anon,authenticated} | (( SELECT gt_rls.devices_read_all() AS devices_read_all) OR (id = ANY (( SELECT gt_rls.devices_read_own_ids() AS devices_read_own_ids)::text[]))) | 
+ events_pilot            | read events_pilot            | SELECT | PERMISSIVE | {anon,authenticated} | ( SELECT gt_rls.events_reader_ok() AS events_reader_ok)                                                                                           | 
+ plants                  | plants probe: no rows        | SELECT | PERMISSIVE | {anon,authenticated} | false                                                                                                                                             | 
+ problem_reports         | problems_select              | SELECT | PERMISSIVE | {public}             | (plant_id = _my_plant())                                                                                                                          | 
+ problem_reports         | problems_write               | ALL    | PERMISSIVE | {public}             | (plant_id = _my_plant())                                                                                                                          | (plant_id = _my_plant())
+ profiles                | profiles_manager_write       | INSERT | PERMISSIVE | {public}             |                                                                                                                                                   | ((_my_role() = 'manager'::text) AND (plant_id = _my_plant()))
+ profiles                | profiles_select              | SELECT | PERMISSIVE | {public}             | (plant_id = _my_plant())                                                                                                                          | 
+ profiles                | profiles_update_self         | UPDATE | PERMISSIVE | {public}             | (id = auth.uid())                                                                                                                                 | 
+ reprint_log             | reprint_insert               | INSERT | PERMISSIVE | {public}             |                                                                                                                                                   | (plant_id = _my_plant())
+ reprint_log             | reprint_select               | SELECT | PERMISSIVE | {public}             | (plant_id = _my_plant())                                                                                                                          | 
+ settings_pilot          | read settings_pilot          | SELECT | PERMISSIVE | {anon,authenticated} | ( SELECT _reader_ok() AS _reader_ok)                                                                                                              | 
+ source_farms            | farms_select                 | SELECT | PERMISSIVE | {public}             | (plant_id = _my_plant())                                                                                                                          | 
+ source_farms            | farms_write                  | ALL    | PERMISSIVE | {public}             | ((plant_id = _my_plant()) AND (_my_role() = 'manager'::text))                                                                                     | ((plant_id = _my_plant()) AND (_my_role() = 'manager'::text))
+(25 rows)
+
+== 5. table rights of the app roles (anything but these SELECTs is unexpected) ==
+          table          |     role      | privileges 
+-------------------------+---------------+------------
+ animals_pilot           | anon          | SELECT
+ animals_pilot           | authenticated | SELECT
+ daily_board_archive     | anon          | SELECT
+ daily_board_archive     | authenticated | SELECT
+ device_lifecycle_events | anon          | SELECT
+ device_lifecycle_events | authenticated | SELECT
+ devices_pilot           | anon          | SELECT
+ devices_pilot           | authenticated | SELECT
+ events_pilot            | anon          | SELECT
+ events_pilot            | authenticated | SELECT
+ plants                  | anon          | SELECT
+ plants                  | authenticated | SELECT
+ settings_pilot          | anon          | SELECT
+ settings_pilot          | authenticated | SELECT
+(14 rows)
+
+          sequence           | anon_usage | authenticated_usage 
+-----------------------------+------------+---------------------
+ admin_audit_id_seq          | f          | f
+ audit_log_id_seq            | f          | f
+ daily_board_archive_id_seq  | f          | f
+ events_pilot_server_seq_seq | f          | f
+ login_attempts_id_seq       | f          | f
+ rate_events_id_seq          | f          | f
+(6 rows)
+
+== 6. schema rights =====================================================
+   schema   | anon_usage | anon_create | authenticated_create 
+------------+------------+-------------+----------------------
+ auth       | t          | f           | f
+ extensions | t          | f           | f
+ gt_rls     | t          | f           | f
+ public     | t          | f           | f
+(4 rows)
+
+== 7. quick verdict (the full comparison: tools/security-selftest.sql) ==
+                               rule                                | ok 
+-------------------------------------------------------------------+----
+ direct board writes closed                                        | t
+ direct event inserts closed                                       | t
+ device reads narrowed                                             | t
+ event reads narrowed                                              | t
+ one device per slot                                               | t
+ test mode OFF                                                     | t
+ every security definer has a search_path                          | t
+ no internal (_*) function callable by the app (except _reader_ok) | t
+(8 rows)
+
