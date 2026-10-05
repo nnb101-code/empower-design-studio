@@ -378,6 +378,7 @@ body{padding-top:var(--gt-bar-h,0px);box-sizing:border-box;}
 .overlay{top:var(--gt-bar-h,0px)!important;}
 /* step43: a station screen opened by a team leader without a paired station device is view only */
 .screen.gt-view-only > *:not(.topbar):not(.gt-vo-note):not(.page-nav){pointer-events:none!important;opacity:.45;filter:grayscale(.5);}
+.screen.gt-view-only.gt-vo-watch > *:not(.topbar):not(.gt-vo-note):not(.page-nav){opacity:1;filter:none;}   /* the owner / plant view: watching, clearly */
 .gt-vo-note{margin:6px 10px;padding:10px 12px;border-radius:10px;background:rgba(255,176,32,.16);border:1px solid var(--amber);color:var(--amber);font:700 14px/1.5 'Rubik',sans-serif;text-align:center;}
 </style>
 </head>
@@ -500,6 +501,15 @@ const LUNG_B64="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICA
   <div class="login-wrap"><div class="login-card"><div class="login-title" id="tSlTitle" data-t="slTitle">מסך שחיטה</div><div class="login-sub" data-t="brand">מערכת ניהול שחיטה כשרה</div><button class="login-btn" onclick="slLogin()" data-t="loginBtn">כניסה למערכת</button><div class="divider"></div><div class="sys-info"><div class="sys-dot"></div><span data-t="sys">מחובר לרשת</span></div></div></div>
 </div>
 
+<!-- ════ PLANT VIEW: every station together, live (team leader + owner, view only) ════ -->
+<div class="screen" id="scPlant">
+  <div class="topbar">
+    <div class="icon-btn" onclick="goTo('scManager')" title="חזרה">&#8594;</div>
+    <div class="tb-mid"><span id="plTitle" style="font-size:15px;font-weight:700;color:var(--gold);">מבט על המפעל</span><span id="plClock" style="font-size:10px;color:var(--muted);"></span></div>
+    <div class="icon-btn" onclick="counterFullscreen()" title="מסך מלא">&#9974;</div>
+  </div>
+  <div id="plBody" style="padding:10px 12px 40px;"></div>
+</div>
 <div class="screen" id="scCounter" style="background:#03050a;">
   <style>
     #scCounter .cn-wrap{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2vh;padding:3vh 4vw;text-align:center;}
@@ -885,6 +895,7 @@ const LUNG_B64="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICA
     <div class="tb-mid"><span style="font-size:11px;color:var(--gold2)" id="mgrHeb"></span><span style="font-size:10px;color:var(--muted)" id="mgrTime"></span></div>
     <div class="icon-btn" id="mgrMakerBtn" onclick="goTo('scMaker');makerRender()" title="מסך יצרן" style="font-size:18px;display:none;">&#127981;</div>
     <div class="icon-btn" id="mgrMakerEnterBtn" onclick="mgrMakerLogin()" title="כניסת יצרן" style="font-size:12px;font-weight:700;white-space:nowrap;padding:0 8px;width:auto;color:var(--gold);">&#127981; יצרן</div>
+    <div class="icon-btn" id="mgrPlantBtn" onclick="gtPlantOpen()" title="מבט על המפעל — כל המסכים" style="font-size:12px;font-weight:700;white-space:nowrap;padding:0 8px;width:auto;color:var(--blue);">&#128065; <span id="mgrPlantBtnTxt">המפעל</span></div>
     <div class="icon-btn" onclick="mgrLogout()" id="mgrLogoutBtn" title="יציאה מהחשבון" style="font-size:18px;">&#128682;</div>
     <div class="icon-btn" id="mgrHomeBtn" onclick="goTo('scNav')" title="תחנות (מצב בדיקה)" style="display:none;">&#127968;</div>
   </div>
@@ -1527,6 +1538,7 @@ const LUNG_B64="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICA
   <!-- ════ SUMMARIES ════ -->
   <div id="mgr-summaries" class="mgr-panel" style="display:none;padding:12px;direction:rtl;">
     <button class="gt-print-btn" onclick="gtPrintPanel('mgr-summaries')" style="width:100%;margin-bottom:10px;padding:9px;border-radius:8px;background:transparent;border:1px solid var(--gold);color:var(--gold);font-weight:700;font-size:13px;cursor:pointer;">🖨 <span class="gt-print-lbl">הדפסה</span></button>
+    <div class="mgr-card" id="mgrWeightTableS" style="margin-bottom:12px;"></div>
     <!-- Period selector -->
     <div style="display:flex;gap:6px;margin-bottom:12px;">
       <button onclick="mgrSetPeriod('day')" id="mgrPD" class="mgr-period-btn active-period" style="flex:1;padding:9px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);font-size:12px;font-weight:600;cursor:pointer;">היום</button>
@@ -1609,6 +1621,7 @@ const LUNG_B64="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICA
       <canvas id="mgrBarCanvas" width="300" height="150" style="display:block;margin:0 auto;max-width:100%;"></canvas>
     </div>
 
+    <div class="mgr-card" id="mgrWeightTableR" style="margin-bottom:12px;"></div>
     <!-- WEIGHT REPORT -->
     <div class="mgr-sec">דוח שקילה</div>
     <div class="mgr-card" id="mgrWeightReport"></div>
@@ -8099,6 +8112,7 @@ function gtPrintPanel(id){
 function mgrTab(tab){
   if(tab==='settings' && typeof _isOwnerSession==='function' && _isOwnerSession()) tab='monitor';   // the owner only watches
   mgrCurrentTab=tab;
+  if(tab==='summaries'||tab==='reports') setTimeout(()=>{ try{ gtRenderWeightTables(); }catch(e){} }, 0);
   document.querySelectorAll('.mgr-tab').forEach(t=>t.classList.remove('active'));
   const tb=document.getElementById('tab-'+tab);if(tb)tb.classList.add('active');
   document.querySelectorAll('.mgr-panel').forEach(p=>p.style.display='none');
@@ -9143,6 +9157,7 @@ function mgrClearReprintLog(){KS.updateSettings({reprintLog:[]});mgrUpdateLog();
 function mgrClearErrors(){KS.updateSettings({errorLog:[]});mgrUpdateLog();}
 function mgrSetPeriod(p){
   mgrPeriod=p;
+  try{ gtRenderWeightTables(); }catch(e){}
   // Sync summary period buttons
   [['day','mgrPD'],['week','mgrPW'],['month','mgrPM'],['year','mgrPY']].forEach(([v,id])=>{const b=document.getElementById(id);if(b)b.classList.toggle('active-period',v===p);});
   // Sync report period buttons
@@ -9982,15 +9997,20 @@ function _gtApplyViewOnly(){
   });
   if(!cur || !vo || !_GT_RULING_SCREENS.includes(cur.id)) return;
   cur.classList.add('gt-view-only');
+  const watch=(typeof _isOwnerSession==='function' && _isOwnerSession()) || window._gtFromPlant===true;
+  cur.classList.toggle('gt-vo-watch', watch);
   let n=cur.querySelector('.gt-vo-note');
   if(!n){
     n=document.createElement('div'); n.className='gt-vo-note'; n.id='gtViewOnlyNote'; n.setAttribute('role','status');
     const tb=cur.querySelector('.topbar');
     if(tb && tb.nextSibling) cur.insertBefore(n, tb.nextSibling); else cur.appendChild(n);
   }
-  n.textContent=L('מסך תחנה — ראש הצוות מנהל ולא פוסק. פסיקה רק בטאבלט של התחנה.',
-                  'Station screen — the team leader manages and does not rule. Rulings only on the station\'s tablet.',
-                  'Pantalla de estación — el jefe de equipo dirige y no dictamina. Dictámenes solo en la tableta de la estación.');
+  n.innerHTML=escapeHtml(watch && typeof _isOwnerSession==='function' && _isOwnerSession()
+      ? L('👁 צפייה בלבד — המסך כמו שהוא בתחנה, בזמן אמת.','👁 View only — the screen as it is at the station, live.','👁 Solo ver — la pantalla como está en la estación, en vivo.')
+      : L('מסך תחנה — ראש הצוות מנהל ולא פוסק. פסיקה רק בטאבלט של התחנה.',
+          'Station screen — the team leader manages and does not rule. Rulings only on the station\'s tablet.',
+          'Pantalla de estación — el jefe de equipo dirige y no dictamina. Dictámenes solo en la tableta de la estación.'))
+    + (window._gtFromPlant ? ' <span onclick="gtPlantOpen()" style="pointer-events:auto;cursor:pointer;text-decoration:underline;margin-inline-start:8px;color:var(--gold);">'+escapeHtml(L('← חזרה למבט על המפעל','← Back to the plant view','← Volver a la vista de la planta'))+'</span>' : '');
 }
 async function gtToggleTestMode(){
   const on=_gtTestModeOn();
@@ -10751,6 +10771,135 @@ function _counterNumbers(){
   const rate=a.filter(x=>x.slaughterTime && x.slaughterTime>hourAgo && x.slaughter).length;
   return {count:alive.length, total:done.length, nev, target, left: target>0?Math.max(0,target-done.length):null, last:last>=0?last+1:null, rate};
 }
+
+// ── step 46: weight and charge, today / 7 days / month / year side by side ──
+// (team leader and owner; the price per kg is the manufacturer's setting — shown, never changed here)
+var _gtWT={at:0,days:null,busy:false};
+function _gtWeightOf(x){ const r=Number(x.weightRight!=null?x.weightRight:x.wr), l=Number(x.weightLeft!=null?x.weightLeft:x.wl);
+  return { kg:(r>0?r:0)+(l>0?l:0), w:(r>0||l>0) }; }
+function gtRenderWeightTables(){
+  const els=['mgrWeightTableS','mgrWeightTableR'].map(id=>document.getElementById(id)).filter(Boolean);
+  if(!els.length) return;
+  const now=new Date(), iso=d=>_gtIsoDate(d);
+  if(!_gtWT.busy && window.sb && KS.getManagerToken && KS.getManagerToken() && Date.now()-_gtWT.at>60000){
+    _gtWT.busy=true;
+    const from=new Date(now); from.setFullYear(now.getFullYear()-1);
+    Promise.resolve(window.sb.rpc('archive_days',{p_token:KS.getManagerToken(),p_from:iso(from),p_to:iso(now)})).then(r=>{
+      _gtWT.busy=false; _gtWT.at=Date.now();
+      if(r && !r.error && r.data && r.data.ok===true && Array.isArray(r.data.days)){ _gtWT.days=r.data.days; gtRenderWeightTables(); }
+    },()=>{ _gtWT.busy=false; _gtWT.at=Date.now(); });
+  }
+  const startOf=per=>{ const d=new Date(now); d.setHours(0,0,0,0);
+    if(per==='week') d.setDate(d.getDate()-6); else if(per==='month') d.setMonth(d.getMonth()-1); else if(per==='year') d.setFullYear(d.getFullYear()-1); return d; };
+  const today={n:0,kg:0}; KS.getAnimals().forEach(x=>{ const w=_gtWeightOf(x); if(w.w){ today.n++; today.kg+=w.kg; } });
+  const rows=['day','week','month','year'].map(per=>{
+    const acc={n:today.n,kg:today.kg};
+    if(per!=='day' && _gtWT.days){ const st=iso(startOf(per)), td=iso(now);
+      _gtWT.days.forEach(day=>{ const dd=String(day.date||'').slice(0,10); if(dd>=st && dd<td){ (day.animals||[]).forEach(x=>{ const w=_gtWeightOf(x); if(w.w){ acc.n++; acc.kg+=w.kg; } }); } }); }
+    return {per,...acc};
+  });
+  const b=KS.getSettings().billing||{}; const bill=!!(b.enabled && Number(b.price)>0); const cur=escapeHtml(b.currency||'₪'), price=Number(b.price)||0;
+  const lbl={day:L('היום','Today','Hoy'),week:L('7 ימים','7 days','7 días'),month:L('חודש','Month','Mes'),year:L('שנה','Year','Año')};
+  const th='padding:6px 4px;font-size:11px;color:var(--muted);font-weight:600;text-align:center;';
+  const td='padding:7px 4px;font-size:13px;color:var(--text);text-align:center;border-top:1px solid var(--border);';
+  const fmt=n=>Number(n).toLocaleString(lang==='he'?'he-IL':lang==='es'?'es':'en-US',{maximumFractionDigits:1});
+  const waiting=!_gtWT.days && window.sb;
+  const html=`<div style="font-size:14px;font-weight:700;color:var(--gold);margin-bottom:6px;">⚖️ ${bill?L('משקל וחיוב','Weight and charge','Peso y cargo'):L('משקל','Weight','Peso')}</div>
+    <table style="width:100%;border-collapse:collapse;"><tr><th style="${th}"></th><th style="${th}">${L('נשקלו','Weighed','Pesados')}</th><th style="${th}">${L('ק״ג','kg','kg')}</th>${bill?`<th style="${th}">${L('חיוב','Charge','Cargo')}</th>`:''}</tr>
+    ${rows.map(r=>`<tr><td style="${td}text-align:start;font-weight:700;">${lbl[r.per]}</td><td style="${td}">${r.n}</td><td style="${td}">${fmt(r.kg)}</td>${bill?`<td style="${td}color:var(--gold);font-weight:700;">${cur}${fmt(r.kg*price)}</td>`:''}</tr>`).join('')}
+    </table>
+    <div style="font-size:10px;color:var(--muted);margin-top:6px;">${bill?L('מחיר לק״ג: ','Price per kg: ','Precio por kg: ')+cur+price+' · ':''}${L('משקל = צד ימין + צד שמאל. ימים קודמים מהשרת','Weight = right + left side. Earlier days from the server','Peso = lado derecho + izquierdo. Días anteriores del servidor')}${waiting?' · '+L('טוען…','loading…','cargando…'):''}</div>`;
+  els.forEach(e=>e.innerHTML=html);
+}
+
+// ── step 46: PLANT VIEW — every station of the plant together, live (view only) ──
+var _gtPlantTimer=null;
+function _gtStatusInfo(key){
+  const st=(typeof getAllStatuses==='function'?getAllStatuses():[]).find(x=>x.key===key);
+  return st ? {color:st.color||'var(--gold)', name:(lang==='he'?st.he:lang==='es'?(st.es||st.en):st.en)||key} : {color:'var(--gold)', name:key};
+}
+function _gtPlantStations(){
+  const s=KS.getSettings(), a=KS.getAnimals();
+  const alive=x=>x.slaughter==='slaughtered'||x.slaughter==='notChalak';
+  const eso=s.esophagusEnabled===true;
+  const esoOk=x=>!eso || x.esoResult==='ok' || x.esoChecked===true;
+  const innerOk=x=>x.innerStatus==='confirmed';
+  const kosherOut=x=>x.outerStatus && x.outerStatus!=='treif';
+  const G='#28C76F', R='#E03030', Y='#F0A030', B='#4DA6FF', GR='rgba(255,255,255,.08)';
+  const L3=(h,e,es)=>L(h,e,es);
+  const list=[
+    {key:'slaughter', flag:'slaughterEnabled', name:L3('שחיטה','Slaughter','Matanza'),
+      cell:x=>x.slaughter==='slaughtered'?G:x.slaughter==='notChalak'?Y:(x.slaughter==='nevela'||x.slaughter==='shot')?R:null,
+      done:x=>x.slaughter!=null, wait:x=>false, time:x=>x.slaughterTime},
+    ...(eso?[{key:'esophagus', flag:'esoStationEnabled', name:L3('בדיקת וושט','Esophagus','Esófago'),
+      cell:x=>x.esoResult==='ok'?G:x.esoResult==='nevela'?R:(alive(x)?Y:null), done:x=>!!x.esoResult, wait:x=>alive(x)&&!x.esoResult}]:[]),
+    {key:'legs', flag:'legsEnabled', name:L3('רגלים / ראש','Legs / head','Patas / cabeza'),
+      cell:x=>(x.legsStickers||x.headStickers)?G:(alive(x)?Y:null), done:x=>!!(x.legsStickers||x.headStickers), wait:x=>alive(x)&&!(x.legsStickers||x.headStickers)},
+    {key:'inner', flag:'innerEnabled', name:L3('בודק פנים','Inner','Interior'),
+      cell:x=>x.innerStatus==='confirmed'?G:x.innerStatus==='treif'?R:x.innerStatus==='in_progress'?B:((alive(x)&&esoOk(x))?Y:null),
+      done:x=>x.innerStatus==='confirmed'||x.innerStatus==='treif', wait:x=>alive(x)&&esoOk(x)&&(!x.innerStatus||x.innerStatus==='in_progress'), time:x=>x.innerTime},
+    {key:'outer', flag:'outerEnabled', name:L3('בודק חוץ','Outer','Exterior'),
+      cell:x=>x.outerStatus?_gtStatusInfo(x.outerStatus).color:(alive(x)&&innerOk(x)?Y:null),
+      done:x=>!!x.outerStatus, wait:x=>alive(x)&&innerOk(x)&&!x.outerStatus, time:x=>x.outerTime},
+    {key:'parts', flag:'partsEnabled', name:L3('חלקים קטנים','Small parts','Partes pequeñas'),
+      cell:x=>(Number(x.partsPrintCount)>0||x.partsScanned)?G:(kosherOut(x)&&alive(x)?Y:null),
+      done:x=>Number(x.partsPrintCount)>0||!!x.partsScanned, wait:x=>alive(x)&&kosherOut(x)&&!(Number(x.partsPrintCount)>0||x.partsScanned)},
+    {key:'stamps', flag:'stampsEnabled', name:L3('חותמות ושקילה','Stamps & weight','Sellos y peso'),
+      cell:x=>x.stamped?G:(kosherOut(x)&&alive(x)?Y:null),
+      done:x=>!!x.stamped, wait:x=>alive(x)&&kosherOut(x)&&!x.stamped},
+  ];
+  return list.filter(st=>s[st.flag]!==false || a.some(st.done));
+}
+function gtPlantOpen(){ window._gtFromPlant=false; goTo('scPlant'); gtPlantRender(); }
+function gtPlantRender(){
+  const el=document.getElementById('plBody'); if(!el) return;
+  const set=(id,t)=>{const e=document.getElementById(id); if(e) e.textContent=t;};
+  set('plTitle', L('מבט על המפעל — חי','Plant view — live','Vista de la planta — en vivo'));
+  set('plClock', new Date().toLocaleTimeString(lang==='he'?'he-IL':lang==='es'?'es':'en-GB',{hour:'2-digit',minute:'2-digit',second:'2-digit'}));
+  const a=KS.getAnimals(), n=_counterNumbers();
+  let max=-1; a.forEach((x,i)=>{ if(x.slaughter!=null) max=i; });
+  const shown=Math.max(20, Math.min(a.length, Math.ceil((max+2)/10)*10));
+  const weighed=a.filter(x=>_gtWeightOf(x).w), kg=weighed.reduce((t,x)=>t+_gtWeightOf(x).kg,0);
+  const tile=(lbl,val,color)=>`<div style="background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:8px 6px;text-align:center;"><div style="font-size:22px;font-weight:800;color:${color};">${val}</div><div style="font-size:11px;color:var(--muted);">${lbl}</div></div>`;
+  const top=`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin-bottom:12px;">
+    ${tile(L('נשחטו','Slaughtered','Faenados')+(n.target>0?' / '+n.target:''), n.count, 'var(--green)')}
+    ${tile(L('נבלה / ירוי','Nevela / shot','Nevelá / baleado'), n.nev, 'var(--red-light)')}
+    ${tile(L('בשעה האחרונה','Last hour','Última hora'), n.rate, 'var(--blue)')}
+    ${tile(L('נשקלו','Weighed','Pesados'), weighed.length+' · '+Math.round(kg).toLocaleString()+' '+L('ק״ג','kg','kg'), 'var(--gold)')}
+  </div>`;
+  const cards=_gtPlantStations().map(st=>{
+    let last=-1, lastT=0, done=0, wait=0;
+    a.forEach((x,i)=>{ if(st.done(x)){ done++; const t=st.time?Number(st.time(x))||0:0; if(t>=lastT){ lastT=t; last=i; } } if(st.wait(x)) wait++; });
+    const cells=[]; for(let i=0;i<shown;i++){ const x=a[i]; const c=x?st.cell(x):null;
+      cells.push(`<div title="#${i+1}" style="aspect-ratio:1;border-radius:3px;background:${c||'rgba(255,255,255,.08)'};color:${c?'#07090F':'var(--muted)'};font-size:9px;display:flex;align-items:center;justify-content:center;font-weight:700;">${i+1}</div>`); }
+    return `<div onclick="gtPlantOpenStation('${st.key}')" style="cursor:pointer;background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:10px;">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;">
+        <span style="font-size:14px;font-weight:700;color:var(--text);">${escapeHtml(st.name)}</span>
+        <span style="font-size:11px;color:var(--muted);">${L('בוצעו','Done','Hechos')} <b style="color:var(--green);">${done}</b> · ${L('ממתינות','Waiting','En espera')} <b style="color:var(--amber);">${wait}</b>${last>=0?' · '+L('אחרון','Last','Último')+' <b style="color:var(--gold);">#'+(last+1)+'</b>':''}</span>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(10,1fr);gap:2px;">${cells.join('')}</div>
+      <div style="font-size:10px;color:var(--blue);margin-top:6px;text-align:center;">${L('לחץ לפתיחת המסך (צפייה בלבד)','Tap to open the screen (view only)','Toque para abrir la pantalla (solo ver)')}</div>
+    </div>`;
+  }).join('').replace(/\$\{GRc\}/g,'');
+  const legend=`<div style="font-size:11px;color:var(--muted);margin-top:10px;line-height:1.8;">
+    <span style="color:#28C76F;">■</span> ${L('בוצע','done','hecho')} &nbsp; <span style="color:#F0A030;">■</span> ${L('ממתין בתחנה','waiting at the station','en espera')} &nbsp; <span style="color:#4DA6FF;">■</span> ${L('בבדיקה','being checked','en revisión')} &nbsp; <span style="color:#E03030;">■</span> ${L('טרף / נבלה','treif / nevela','treif / nevelá')} &nbsp; ${L('בבודק חוץ: צבע הסטטוס','outer: the status colour','exterior: color del estado')}</div>`;
+  el.innerHTML = top + `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:10px;">${cards}</div>` + legend;
+}
+// open a station's real screen — always view only for the team leader / owner
+function gtPlantOpenStation(key){
+  window._gtFromPlant=true;
+  try{
+    if(key==='slaughter') goTo('scSlaughter');
+    else if(key==='esophagus') goTo('scEsophagus');
+    else if(key==='legs') goTo('scLegs');
+    else if(key==='inner'){ if(typeof inLogin==='function') inLogin(0); goTo('scInner'); }
+    else if(key==='outer'){ if(typeof outLogin==='function') outLogin(0); goTo('scOuter'); }
+    else if(key==='parts') goTo('scParts');
+    else if(key==='stamps') goTo('scStamps');
+  }catch(e){ gtLogError('plant.open', e); }
+}
+setInterval(()=>{ const a=document.querySelector('.screen.active'); if(a&&a.id==='scPlant') gtPlantRender(); }, 3000);
+
 function counterRender(){
   const el=document.getElementById('scCounter'); if(!el) return;
   const n=_counterNumbers();
