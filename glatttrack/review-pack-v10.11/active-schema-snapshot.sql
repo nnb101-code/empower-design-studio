@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict PgTjYcBirPHFi5oYcFHU7nSTeJCO2PVV6pp5KEFA72cumPTgy4PahnSH32L3kTC
+\restrict 52777umGi1EnEubSrngqJQHsLreE9G74tBoKvdqqHRQV0meavr8HfqAspSxdIZ2
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -4063,6 +4063,51 @@ end $_$;
 
 
 --
+-- Name: leader_account_add(text, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.leader_account_add(p_name text, p_code text) RETURNS text
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $$
+declare v_id uuid;
+begin
+  if _is_api_request() then raise exception 'server only'; end if;
+  if coalesce(trim(p_name), '') = '' then raise exception 'name required'; end if;
+  if p_code is null or length(p_code) < 6 then raise exception 'code too short (minimum 6 characters)'; end if;
+  if _code_in_use(p_code) then raise exception 'this code is already in use — choose another'; end if;
+  insert into plant_managers (name, code_hash, role) values (left(trim(p_name), 60), crypt(p_code, gen_salt('bf')), 'manager')
+    returning id into v_id;
+  perform _security_event(null, 'account_added', jsonb_build_object('role', 'manager', 'id', v_id, 'name', left(trim(p_name), 60)), 'server', 'server');
+  return 'ok — team leader "' || left(trim(p_name), 60) || '" added. He logs in only from a team-leader device (an existing team leader pairs one for him).';
+end $$;
+
+
+--
+-- Name: leader_account_remove(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.leader_account_remove(p_name text) RETURNS text
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $$
+declare v_id uuid; n int;
+begin
+  if _is_api_request() then raise exception 'server only'; end if;
+  select count(*), min(id::text)::uuid into n, v_id from plant_managers where role = 'manager' and active and name = trim(p_name);
+  if n = 0 then raise exception 'no active team leader named "%"', p_name; end if;
+  if n > 1 then raise exception 'more than one team leader named "%" — remove by id in plant_managers', p_name; end if;
+  if (select count(*) from plant_managers where role = 'manager' and active) <= 1 then
+    raise exception 'this is the last team leader — add another one first';
+  end if;
+  update plant_managers set active = false where id = v_id;
+  delete from manager_sessions where manager_id = v_id;
+  perform _security_event(null, 'account_removed', jsonb_build_object('role', 'manager', 'id', v_id, 'name', trim(p_name)), 'server', 'server');
+  return 'ok — team leader "' || trim(p_name) || '" removed; his sessions ended.';
+end $$;
+
+
+--
 -- Name: leader_device_recovery(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -4159,28 +4204,11 @@ CREATE FUNCTION public.manager_add(p_token text, p_name text, p_code text) RETUR
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public', 'extensions', 'pg_temp'
     AS $$
-declare v_id uuid; v_by text := coalesce(_session_role(p_token), '');
 begin
-  if v_by not in ('owner', 'manager') then
+  if _session_role(p_token) is null then
     return jsonb_build_object('ok', false, 'error', 'unauthorized');
   end if;
-  if v_by <> 'owner' then                                             -- a team leader cannot add a team leader
-    return jsonb_build_object('ok', false, 'error', 'owner_only');
-  end if;
-  if coalesce(trim(p_name), '') = '' then
-    return jsonb_build_object('ok', false, 'error', 'name required');
-  end if;
-  if p_code is null or length(p_code) < 6 then
-    return jsonb_build_object('ok', false, 'error', 'code too short (minimum 6 characters)');
-  end if;
-  if _code_in_use(p_code) then
-    return jsonb_build_object('ok', false, 'error', 'code_in_use');
-  end if;
-  insert into plant_managers (name, code_hash, role) values (left(trim(p_name), 60), crypt(p_code, gen_salt('bf')), 'manager')
-    returning id into v_id;
-  perform _security_event(null, 'account_added', jsonb_build_object('role', 'manager', 'id', v_id, 'name', left(trim(p_name), 60)),
-                          (select m.name from manager_sessions s join plant_managers m on m.id = s.manager_id where s.token = p_token), 'owner');
-  return jsonb_build_object('ok', true, 'id', v_id);
+  return jsonb_build_object('ok', false, 'error', 'server_only');   -- leader_account_add() on the server
 end $$;
 
 
@@ -4192,15 +4220,10 @@ CREATE FUNCTION public.manager_add_owner(p_token text, p_name text, p_code text)
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public', 'extensions', 'pg_temp'
     AS $$
-declare v_id uuid; v_by text := coalesce(_session_role(p_token), '');
+declare v_id uuid;
 begin
-  if v_by not in ('owner', 'manager') then
+  if not _is_real_manager(p_token) then                               -- the team leader only (never the owner)
     return jsonb_build_object('ok', false, 'error', 'unauthorized');
-  end if;
-  -- the first owner may be added by a team leader; after that only an owner adds owners
-  perform pg_advisory_xact_lock(hashtext('glatttrack_accounts'));
-  if v_by = 'manager' and exists (select 1 from plant_managers where role = 'owner' and active) then
-    return jsonb_build_object('ok', false, 'error', 'owner_only');
   end if;
   if coalesce(trim(p_name), '') = '' then
     return jsonb_build_object('ok', false, 'error', 'name required');
@@ -4214,7 +4237,7 @@ begin
   insert into plant_managers (name, code_hash, role) values (left(trim(p_name), 60), crypt(p_code, gen_salt('bf')), 'owner')
     returning id into v_id;
   perform _security_event(null, 'account_added', jsonb_build_object('role', 'owner', 'id', v_id, 'name', left(trim(p_name), 60)),
-                          (select m.name from manager_sessions s join plant_managers m on m.id = s.manager_id where s.token = p_token), v_by);
+                          _session_name(p_token), 'team-leader');
   return jsonb_build_object('ok', true, 'id', v_id);
 end $$;
 
@@ -4227,29 +4250,22 @@ CREATE FUNCTION public.manager_deactivate(p_token text, p_manager_id uuid) RETUR
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public', 'extensions', 'pg_temp'
     AS $$
-declare v_role text; v_name text; v_by text := coalesce(_session_role(p_token), '');
+declare v_role text; v_name text;
 begin
-  if v_by not in ('owner', 'manager') then
+  if not _is_real_manager(p_token) then
     return jsonb_build_object('ok', false, 'error', 'unauthorized');
   end if;
-  if v_by <> 'owner' then                                             -- step 46: accounts are the owner's
-    return jsonb_build_object('ok', false, 'error', 'owner_only');
-  end if;
-  perform pg_advisory_xact_lock(hashtext('glatttrack_accounts'));
   select role, name into v_role, v_name from plant_managers where id = p_manager_id and active;
-  if v_role is null or v_role not in ('manager', 'owner') then
+  if v_role is null or v_role = 'manufacturer' then
     return jsonb_build_object('ok', false, 'error', 'not_found');
   end if;
-  if v_role = 'manager' and (select count(*) from plant_managers where active and role = 'manager') <= 1 then
-    return jsonb_build_object('ok', false, 'error', 'last_manager');
-  end if;
-  if v_role = 'owner' and (select count(*) from plant_managers where active and role = 'owner') <= 1 then
-    return jsonb_build_object('ok', false, 'error', 'last_owner');
+  if v_role = 'manager' then                                          -- a team leader: leader_account_remove() on the server
+    return jsonb_build_object('ok', false, 'error', 'server_only');
   end if;
   update plant_managers set active = false where id = p_manager_id;
   delete from manager_sessions where manager_id = p_manager_id;
   perform _security_event(null, 'account_removed', jsonb_build_object('role', v_role, 'id', p_manager_id, 'name', v_name),
-                          (select m.name from manager_sessions s join plant_managers m on m.id = s.manager_id where s.token = p_token), 'owner');
+                          _session_name(p_token), 'team-leader');
   return jsonb_build_object('ok', true);
 end $$;
 
@@ -8283,6 +8299,20 @@ GRANT ALL ON FUNCTION public.event_append(p_event jsonb) TO authenticated;
 
 
 --
+-- Name: FUNCTION leader_account_add(p_name text, p_code text); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.leader_account_add(p_name text, p_code text) FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION leader_account_remove(p_name text); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.leader_account_remove(p_name text) FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION leader_device_recovery(p_reason text); Type: ACL; Schema: public; Owner: -
 --
 
@@ -8770,5 +8800,5 @@ GRANT ALL ON TABLE public.system_flags TO service_role;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict PgTjYcBirPHFi5oYcFHU7nSTeJCO2PVV6pp5KEFA72cumPTgy4PahnSH32L3kTC
+\unrestrict 52777umGi1EnEubSrngqJQHsLreE9G74tBoKvdqqHRQV0meavr8HfqAspSxdIZ2
 

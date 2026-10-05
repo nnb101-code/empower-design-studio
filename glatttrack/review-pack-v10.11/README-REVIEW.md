@@ -9,7 +9,7 @@ This pack is the CURRENT state. Review these files only.
 | `active-schema-snapshot.sql` | **Audit this first.** `pg_dump --schema-only` (public + gt_rls) of a clean database built from `glatttrack-schema-full.sql`. Exactly one ACTIVE definition of each function, trigger, RLS policy and grant. |
 | `setup-supabase-step46-order-and-processing-days.sql` | The new migration (run after step 45). |
 | `STEP46-CHANGES.md` | What step 46 / app v10.6 changed (Hebrew). |
-| `security-selftest.sql` + `security-selftest-result.txt` | Release gate, rolled-back transaction: **118 / 118** (90 earlier checks, adapted where step 46 changed the rules, + 28 step-46 checks). |
+| `security-selftest.sql` + `security-selftest-result.txt` | Release gate, rolled-back transaction: **120 / 120** (90 earlier checks, adapted where step 46 changed the rules, + 30 step-46 checks). |
 | `SECURITY-MANIFEST.md` | Permission map (step 45 observed table) + a step-46 section. |
 | `active-security-manifest.sql` + `-result.txt` | Prints the active security surface. |
 | `kosher-app-v10.11.html` | The app (UI, offline store, sync client). `GT_MIN_SCHEMA = 46`. |
@@ -17,20 +17,20 @@ This pack is the CURRENT state. Review these files only.
 | `glatttrack-schema-full.sql` | Full install script (base + steps 1–46, history included; last definition wins). |
 | `test-mode-on.sql` / `test-mode-off.sql` | The owner's SQL-only test switch. |
 
-## Changed in v10.11 (same step 46): team-leader powers and accounts
+## Changed in v10.11 (same step 46): team-leader powers, accounts, the owner only watches
 
-Owner's decisions: the team leader runs the plant (screens / functions, printers / scanners, daily intake, device pairing, workers, status definitions, manufacturer repair access, emergency reset with a reason, closing a processing day with a reason, reports / health) but **cannot add another team leader**. Owner and manufacturer do not need a paired device.
+Owner's decisions: the team leader runs the plant — every setting except changing a ruling already made (screens / functions, printers / scanners, daily intake, device pairing, workers, status definitions and colours, manufacturer repair access, emergency reset with a reason, closing a processing day with a reason, reports / health) — but **can never duplicate himself**: he cannot add or remove a team leader. **The owner only watches**: every screen, report, summary and log, and he may print; he changes, deletes, copies or creates nothing — accounts included. Owner and manufacturer do not need a paired device.
 
-- `manager_add` (new team leader): owner session only (`owner_only` for a team leader; manufacturer → unauthorized).
-- `manager_add_owner`: owner; a team leader only while the plant has no active owner (the first owner) — otherwise a team leader could create an owner account and add team leaders through it. Serialized with an advisory lock (`glatttrack_accounts`).
-- `manager_deactivate`: owner only; never the last owner (`last_owner`) or the last team leader (`last_manager`). Ends the account's sessions.
-- `manager_list`: also for the owner (he manages the accounts).
-- Every account change → security event `account_added` / `account_removed` (role, id, name, by whom).
+- `manager_add` (new team leader) through the API: refused for everyone (`server_only`). Team-leader accounts are added / removed only on the server (SQL, the installer): `leader_account_add(name, code)` / `leader_account_remove(name)` (both raise on API requests; never the last team leader; security events `account_added` / `account_removed`).
+- `manager_add_owner`: the team leader only (owner / manufacturer → unauthorized). `manager_deactivate`: the team leader, owner accounts only (a team-leader account → `server_only`); ends the account's sessions — this is how a lost owner phone is cut off (remove, add again with a new code).
+- `manager_list`: team leader, and the owner read-only.
+- New self-test: an owner session calls every changing RPC (push_settings, reset_daily_board, processing_day_close, support_access_set, device_unpair / manage / pair / auth_set, manager_add / add_owner / deactivate, support_force_reload, claim_animal_stage, animal_push) — every one refuses, settings and the board unchanged.
+- App, owner mode: "check the system" and "AI — analyse and fix" were still shown to the owner → hidden and no-ops for an owner session; the settings tab cannot be opened by an owner even when called directly. New "🖨 Print" button on summaries / reports / log (prints only that tab, dark on white) — for the team leader and the owner.
 - Leader-device rule is now sticky: `_leader_devices_exist()` is also true once `plant_state.leaderDevicesRequired = '1'` (set by `device_pair(…,'leader',…)` and by the migration when a leader device exists). Removing every team-leader device therefore does NOT reopen the "any device" bootstrap. Recovery only from the server: `leader_device_recovery(reason)` (SQL only — raises on API requests): disconnects EVERY team-leader device (assignment cleared, credentials revoked, manager sessions on those devices deleted, device-log entry), clears the flag, security event. (It no longer refuses while a leader device is paired — the lost device usually still is, and nobody can log in to remove it.)
 - `system_health`: `devices.leader` count, info `one_leader_device` (recommend a second one).
-- App: owner screen → Monitor → "Accounts" card (add / remove team leaders and owners). Team-leader settings: owners list read-only, "Add owner" only while there is none. Warning before removing / retiring the last team-leader device.
+- App: warning before removing / retiring the last team-leader device.
 - Installation (found by running a first installation on a clean server): `_set_setup_code` stored `upper(code)` with its dashes while `create_first_manager` compared the code with non-alphanumerics stripped, so a code like `ABCD-1234-XY` (the documented example) could never match. Both now use `_setup_code_norm()` (letters / digits, upper case); a hash made the old way is still accepted. New `plant_setup_needed()` (anyone; returns only whether the plant still has no team leader and, in that case, whether a setup code is configured — `manager_login` already reveals the first part via `no_managers`): a new device then shows "First installation" with one button instead of a pairing code; no dummy code has to be typed.
-- Tests: 3 new self-test checks (team leader / manufacturer refused; owner adds / removes, events, list, last owner kept, first owner by a team leader; sticky rule + recovery). Browser-tested.
+- Tests: self-test checks for all of the above (accounts through the app refused; server-side add / remove; owner accounts; owner view-only sweep; sticky rule + recovery of a lost, still-paired device). Browser-tested.
 
 ## Changed in v10.10 (same step 46): the team leader only from a paired team-leader device
 

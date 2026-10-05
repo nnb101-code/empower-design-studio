@@ -1694,8 +1694,10 @@ begin
     concat_ws(' | ', r::text, r2::text, r3::text, left(r4::text, 40)));
 
   -- new team-leader / owner codes: at least 6 characters
-  r  := pg_temp.api3('{}', '{"role":"authenticated","sub":"11111111-1111-1111-1111-111111111111"}', format('select manager_add(%L, ''Short'', ''12345'')', pg_temp.v('owner')));
-  r2 := pg_temp.api3('{}', '{"role":"authenticated","sub":"11111111-1111-1111-1111-111111111111"}', format('select manager_add_owner(%L, ''Short Owner'', ''abcde'')', pg_temp.v('owner')));
+  r  := pg_temp.api('{}', 'select 1');
+  begin perform leader_account_add('Short', '12345'); r := jsonb_build_object('error', 'accepted');
+  exception when others then r := jsonb_build_object('error', sqlerrm); end;
+  r2 := pg_temp.api('{}', format('select manager_add_owner(%L, ''Short Owner'', ''abcde'')', pg_temp.v('mgr')));
   perform pg_temp.rec('step 46 team-leader / owner codes: fewer than 6 characters refused',
     r ->> 'error' like 'code too short%' and r2 ->> 'error' like 'code too short%'
     and not exists (select 1 from plant_managers where name in ('Short', 'Short Owner')), concat_ws(' | ', r::text, r2::text));
@@ -1804,38 +1806,85 @@ begin
   insert into plant_state (key, value) values ('leaderDevicesRequired', '1') on conflict (key) do update set value = '1';
 end $$;
 
--- ── step 46: accounts — only the owner adds / removes team leaders ───────────
+-- ── step 46: accounts — team leaders only from the server; the owner changes nothing ──
 do $$
-declare r jsonb; r2 jsonb; r3 jsonb; r4 jsonb; ok boolean; v_new uuid; v_own uuid := (select id from plant_managers where name = 'selftest owner');
+declare r jsonb; r2 jsonb; r3 jsonb; r4 jsonb; r5 jsonb; ok boolean; v_s text; v_new uuid; v_own uuid := (select id from plant_managers where name = 'selftest owner');
 begin
+  -- a team leader cannot add or remove a team leader; nor can the owner / manufacturer
   r  := pg_temp.api('{}', format('select manager_add(%L, ''ST second leader'', ''st-lead-2-code'')', pg_temp.v('mgr')));
-  r2 := pg_temp.api('{}', format('select manager_add_owner(%L, ''ST owner by TL'', ''st-own-by-tl'')', pg_temp.v('mgr')));
-  r3 := pg_temp.api('{}', format('select manager_deactivate(%L, %L)', pg_temp.v('mgr'), v_own));
-  r4 := pg_temp.api('{}', format('select manager_add(%L, ''ST second leader'', ''st-lead-2-code'')', pg_temp.v('maker')));
-  ok := r ->> 'error' = 'owner_only' and r2 ->> 'error' = 'owner_only' and r3 ->> 'error' = 'owner_only' and not pg_temp.ok(r4)
-        and not exists (select 1 from plant_managers where name in ('ST second leader', 'ST owner by TL'))
-        and (select active from plant_managers where id = v_own);
-  perform pg_temp.rec('step 46 accounts: a team leader cannot add a team leader, add a second owner or remove an account; nor can the manufacturer', ok,
-    concat_ws(' | ', r::text, r2::text, r3::text, r4::text));
+  r2 := pg_temp.api3('{}', '{"role":"authenticated","sub":"11111111-1111-1111-1111-111111111111"}', format('select manager_add(%L, ''ST second leader'', ''st-lead-2-code'')', pg_temp.v('owner')));
+  r3 := pg_temp.api('{}', format('select manager_add(%L, ''ST second leader'', ''st-lead-2-code'')', pg_temp.v('maker')));
+  r4 := pg_temp.api('{}', format('select manager_deactivate(%L, %L)', pg_temp.v('mgr'), (pg_temp.v('mgr_id'))::uuid));
+  r5 := pg_temp.api('{}', 'select leader_account_add(''ST second leader'', ''st-lead-2-code'')');
+  ok := r ->> 'error' = 'server_only' and r2 ->> 'error' = 'server_only' and not pg_temp.ok(r3)
+        and r4 ->> 'error' = 'server_only' and not pg_temp.ok(r5)
+        and not exists (select 1 from plant_managers where name = 'ST second leader')
+        and (select active from plant_managers where id = (pg_temp.v('mgr_id'))::uuid);
+  perform pg_temp.rec('step 46 accounts: no team leader is added or removed through the app (team leader, owner, manufacturer)', ok,
+    concat_ws(' | ', r::text, r2::text, r3::text, r4::text, r5::text));
 
-  r  := pg_temp.api3('{}', '{"role":"authenticated","sub":"11111111-1111-1111-1111-111111111111"}', format('select manager_add(%L, ''ST second leader'', ''st-lead-2-code'')', pg_temp.v('owner')));
-  v_new := (r ->> 'id')::uuid;
-  r2 := pg_temp.api3('{}', '{"role":"authenticated","sub":"11111111-1111-1111-1111-111111111111"}', format('select manager_deactivate(%L, %L)', pg_temp.v('owner'), v_new));
-  r3 := pg_temp.api3('{}', '{"role":"authenticated","sub":"11111111-1111-1111-1111-111111111111"}', format('select manager_list(%L)', pg_temp.v('owner')));
-  ok := pg_temp.ok(r) and pg_temp.ok(r2) and not (select active from plant_managers where id = v_new)
-        and pg_temp.ok(r3) and jsonb_array_length(r3 -> 'accounts') >= 2
-        and exists (select 1 from events_pilot where stage = 'security' and action = 'account_added' and payload ->> 'id' = v_new::text)
+  -- on the server (installer): add / remove a team leader, recorded; never the last one
+  v_s := leader_account_add('ST second leader', 'st-lead-2-code');
+  v_new := (select id from plant_managers where name = 'ST second leader' and active);
+  ok := v_s like 'ok%' and v_new is not null
+        and exists (select 1 from events_pilot where stage = 'security' and action = 'account_added' and payload ->> 'id' = v_new::text);
+  v_s := leader_account_remove('ST second leader');
+  ok := ok and v_s like 'ok%' and not (select active from plant_managers where id = v_new)
         and exists (select 1 from events_pilot where stage = 'security' and action = 'account_removed' and payload ->> 'id' = v_new::text);
-  -- the last owner stays; with no owner at all a team leader may add the first one
-  update plant_managers set active = false where role = 'owner' and active and id <> v_own;
-  r3 := pg_temp.api3('{}', '{"role":"authenticated","sub":"11111111-1111-1111-1111-111111111111"}', format('select manager_deactivate(%L, %L)', pg_temp.v('owner'), v_own));
-  update plant_managers set active = false where id = v_own;
-  r4 := pg_temp.api('{}', format('select manager_add_owner(%L, ''ST first owner'', ''st-first-owner'')', pg_temp.v('mgr')));
-  ok := ok and r3 ->> 'error' = 'last_owner' and pg_temp.ok(r4);
-  update plant_managers set active = true where id = v_own;
-  delete from plant_managers where name = 'ST first owner';
-  perform pg_temp.rec('step 46 accounts: the owner adds / removes team leaders (recorded); the last owner stays; a team leader adds only the first owner', ok,
-    concat_ws(' | ', r::text, r2::text, r3::text, r4::text));
+  begin
+    update plant_managers set active = false where role = 'manager' and active and id <> (pg_temp.v('mgr_id'))::uuid;
+    perform leader_account_remove('selftest leader');
+    ok := false;                                                    -- must not get here
+  exception when others then
+    ok := ok and sqlerrm like '%last team leader%';
+  end;
+  perform pg_temp.rec('step 46 accounts: team leaders added / removed only on the server (recorded); never the last one', ok, v_s);
+  delete from plant_managers where name = 'ST second leader';
+
+  -- owner accounts: the team leader adds / removes them; the owner cannot
+  r  := pg_temp.api('{}', format('select manager_add_owner(%L, ''ST owner 2'', ''st-owner-2-code'')', pg_temp.v('mgr')));
+  v_new := (r ->> 'id')::uuid;
+  r2 := pg_temp.api3('{}', '{"role":"authenticated","sub":"11111111-1111-1111-1111-111111111111"}', format('select manager_add_owner(%L, ''ST owner 3'', ''st-owner-3-code'')', pg_temp.v('owner')));
+  r3 := pg_temp.api3('{}', '{"role":"authenticated","sub":"11111111-1111-1111-1111-111111111111"}', format('select manager_deactivate(%L, %L)', pg_temp.v('owner'), v_new));
+  r4 := pg_temp.api('{}', format('select manager_deactivate(%L, %L)', pg_temp.v('mgr'), v_new));
+  r5 := pg_temp.api3('{}', '{"role":"authenticated","sub":"11111111-1111-1111-1111-111111111111"}', format('select manager_list(%L)', pg_temp.v('owner')));
+  ok := pg_temp.ok(r) and r2 ->> 'error' = 'unauthorized' and r3 ->> 'error' = 'unauthorized' and pg_temp.ok(r4)
+        and not (select active from plant_managers where id = v_new)
+        and not exists (select 1 from plant_managers where name = 'ST owner 3')
+        and pg_temp.ok(r5);                                          -- he may see the list
+  perform pg_temp.rec('step 46 accounts: the team leader adds / removes owner accounts; the owner cannot (he only sees the list)', ok,
+    concat_ws(' | ', left(r::text, 60), r2::text, r3::text, r4::text, left(r5::text, 40)));
+  delete from plant_managers where name = 'ST owner 2';
+end $$;
+
+-- ── step 46: the owner only watches — every changing function refuses his session ──
+do $$
+declare q text; r jsonb; bad text[] := '{}'; v_set jsonb := (select settings from settings_pilot where id = 1);
+        o text := pg_temp.v('owner'); d text := pg_temp.devid('LEGS');
+begin
+  foreach q in array array[
+    format('select push_settings(%L::jsonb, ''x'', %L)', '{"dailyTarget":7}', o),
+    format('select reset_daily_board(%L, ''owner try'')', o),
+    format('select processing_day_close(%L, 1, ''parts'', ''owner try'')', o),
+    format('select support_access_set(%L, 2, ''owner try'')', o),
+    format('select device_unpair(%L, %L, ''owner try'')', o, d),
+    format('select device_manage(%L, %L, ''retire'', ''owner try'')', o, d),
+    format('select device_pair(%L, ''123456'', ''parts'', 0, false, ''x'')', o),
+    format('select device_auth_set(%L, true)', o),
+    format('select manager_add(%L, ''x'', ''xxxxxxxx'')', o),
+    format('select manager_add_owner(%L, ''x'', ''xxxxxxxx'')', o),
+    format('select manager_deactivate(%L, %L)', o, pg_temp.v('mgr_id')),
+    format('select support_force_reload(%L, ''owner try'')', o),
+    pg_temp.q_claim(977, 'slaughter', 'slaughtered', 'x', 'x'),
+    pg_temp.q_push(977, '{"slaughter":"slaughtered","slaughter_time":1}')]
+  loop
+    r := pg_temp.api3(jsonb_build_object('x-manager-token', o), '{"role":"authenticated","sub":"11111111-1111-1111-1111-111111111111"}', q);
+    if pg_temp.ok(r) then bad := bad || left(q, 60); end if;
+  end loop;
+  if (select settings from settings_pilot where id = 1) is distinct from v_set then bad := bad || 'settings changed'::text; end if;
+  if (pg_temp.ar(977)).slaughter is not null then bad := bad || 'animal 977 written'::text; end if;
+  perform pg_temp.rec('step 46 owner: view only — every changing function refuses an owner session (settings, reset, processing day, support access, devices, accounts, rulings)',
+    array_length(bad, 1) is null, array_to_string(bad, ' | '));
 end $$;
 
 -- ── the ACTIVE security surface against the expected manifest ───────────────
