@@ -83,6 +83,38 @@ html,body{direction:ltr!important;font-family:'Rubik',sans-serif;background:var(
 #lgGrid .num-cell.next-nev,#esoGrid .num-cell.next-nev{animation:nevPulse .8s ease-in-out infinite!important;border-width:3px;color:#fff;font-weight:900;will-change:transform,box-shadow,background,border-color;position:relative;z-index:3;}
 @keyframes nevPulse{0%,100%{background:#5a1212;border-color:#E04040;box-shadow:0 0 4px rgba(224,64,64,.4);transform:scale(1);}50%{background:#9a1a1a;border-color:#FF6060;box-shadow:0 0 20px 4px rgba(255,90,90,.95);transform:scale(1.06);}}
 @keyframes pendingPulse{0%,100%{background:#0A1E4A;border-color:#2A7FFF;box-shadow:0 0 4px rgba(42,127,255,.4);transform:scale(1);}50%{background:#1E55C0;border-color:#7AB8FF;box-shadow:0 0 20px 4px rgba(80,170,255,.95);transform:scale(1.06);}}
+/* the five team-leader tabs fit a phone */
+#scManager .mgr-tab{white-space:nowrap;}
+@media (max-width:480px){ #scManager .mgr-tab{padding-left:6px!important;padding-right:6px!important;font-size:13px!important;flex:1 1 auto;text-align:center;} }
+/* ── step 46 redesign: sections that open in place, chips, KPI tiles ── */
+.gt-acc{background:var(--panel);border:1px solid var(--border);border-radius:12px;margin-bottom:10px;overflow:hidden;}
+.gt-acc>summary{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:12px 14px;font-size:14px;font-weight:700;color:var(--text);}
+.gt-acc>summary::-webkit-details-marker{display:none;}
+.gt-acc>summary::after{content:'▾';color:var(--muted);font-size:14px;transition:transform .15s;}
+.gt-acc[open]>summary::after{transform:rotate(180deg);}
+.gt-acc[open]>summary{border-bottom:1px solid var(--border);}
+.gt-acc-t{flex:1;min-width:0;}
+.gt-acc-s{font-size:12px;font-weight:600;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:55%;}
+.gt-acc-b{padding:12px 14px;}
+.gt-chips{display:flex;flex-wrap:wrap;gap:6px;}
+.gt-chip{padding:7px 12px;border-radius:999px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;}
+.gt-chip.on{background:rgba(212,168,67,.18);border-color:var(--gold);color:var(--gold);}
+.gt-hint{font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:8px;}
+.gt-in{background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text);font-size:14px;}
+.gt-btn-main{width:100%;margin-top:10px;padding:11px;border-radius:10px;border:none;background:var(--gold);color:#07090F;font-size:15px;font-weight:800;cursor:pointer;}
+.gt-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-bottom:12px;}
+.gt-kpi{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:10px 8px;text-align:center;}
+.gt-kpi-v{font-size:22px;font-weight:800;}
+.gt-kpi-l{font-size:11px;color:var(--muted);margin-top:2px;}
+.gt-kpi-d{font-size:11px;margin-top:4px;line-height:1.5;}
+.gt-up{color:#3DDC84;} .gt-down{color:#FF6B6B;} .gt-flat{color:var(--muted);}
+.gt-tbl{width:100%;border-collapse:collapse;font-size:13px;}
+.gt-tbl th{font-size:11px;color:var(--muted);font-weight:600;padding:5px 4px;text-align:center;}
+.gt-tbl td{padding:7px 4px;border-top:1px solid var(--border);text-align:center;color:var(--text);}
+.gt-tbl td:first-child,.gt-tbl th:first-child{text-align:start;}
+.gt-row{display:flex;justify-content:space-between;gap:8px;padding:9px 4px;border-top:1px solid var(--border);font-size:13px;}
+.gt-field{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:8px;}
+.gt-field>label{font-size:12px;color:var(--muted);min-width:90px;}
 /* ── step 46: the number being worked on — a sharp, bright, many-coloured flash ──
    Hard colour changes (steps, no fading), bright colours with a white frame and a
    strong glow, the cell a little bigger, so it is found at a glance from far away.
@@ -936,11 +968,11 @@ const LUNG_B64="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICA
 
   <!-- MAIN TAB BAR -->
   <div style="background:var(--panel);border-bottom:2px solid var(--border);display:flex;flex-shrink:0;overflow-x:auto;scrollbar-width:none;">
-    <div class="mgr-tab active" id="tab-monitor"   onclick="mgrTab('monitor')"   data-t="mgrTabMonitor">ניטור</div>
-    <div class="mgr-tab owner-hide" id="tab-settings"  onclick="mgrTab('settings')"  data-t="mgrTabSettings">הגדרות</div>
-    <div class="mgr-tab"        id="tab-summaries" onclick="mgrTab('summaries')" data-t="mgrTabSummaries">סיכומים</div>
-    <div class="mgr-tab"        id="tab-reports"   onclick="mgrTab('reports')"   data-t="mgrTabReports">דוחות</div>
-    <div class="mgr-tab"        id="tab-log"       onclick="mgrTab('log')"       data-t="mgrTabLog">יומן</div>
+    <div class="mgr-tab active" id="tab-monitor"  onclick="mgrTab('monitor')">🏠 <span class="gt-tablbl" data-he="היום" data-en="Today" data-es="Hoy">היום</span></div>
+    <div class="mgr-tab"        id="tab-search"   onclick="mgrTab('search')">🔍 <span class="gt-tablbl" data-he="חיפוש" data-en="Search" data-es="Buscar">חיפוש</span></div>
+    <div class="mgr-tab"        id="tab-analysis" onclick="mgrTab('analysis')">📊 <span class="gt-tablbl" data-he="סיכומים" data-en="Summaries" data-es="Resúmenes">סיכומים</span></div>
+    <div class="mgr-tab owner-hide" id="tab-settings" onclick="mgrTab('settings')">⚙️ <span class="gt-tablbl" data-he="הגדרות" data-en="Settings" data-es="Ajustes">הגדרות</span></div>
+    <div class="mgr-tab"        id="tab-log"      onclick="mgrTab('log')">📋 <span class="gt-tablbl" data-he="תקלות" data-en="Issues" data-es="Fallos">תקלות</span></div>
   </div>
 
   <div style="flex:1;overflow-y:auto;" id="mgrContent">
@@ -955,33 +987,59 @@ const LUNG_B64="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICA
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px;" id="mgrMonitor"></div>
     <div class="mgr-sec" data-t="mgrSecProgress">התקדמות יומית</div>
     <div class="mgr-card" id="mgrProgress"></div>
-    <div class="mgr-sec" data-t="mgrSecSearch">חיפוש בהמה</div>
-    <div class="mgr-card">
-      <div style="display:flex;gap:8px;">
-        <input id="mgrSearch" type="number" min="1" placeholder="מספר..."
-          style="flex:1;background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text);font-size:15px;font-family:'Rubik',sans-serif;direction:ltr;text-align:center;"
-          oninput="mgrDoSearch(this.value)"/>
-        <button onclick="mgrDoSearch(document.getElementById('mgrSearch').value)"
-          data-t="mgrSearchBtn"
-          style="padding:8px 14px;border-radius:8px;background:var(--gold);border:none;color:#07090F;font-weight:700;font-size:13px;cursor:pointer;">חפש</button>
+    <details class="gt-acc owner-hide" id="todayIntakeAcc" open>
+      <summary><span class="gt-acc-t">🐄 <span class="gt-tablbl" data-he="קבלת בהמות היום" data-en="Today's intake" data-es="Ingreso de hoy">קבלת בהמות היום</span></span><span class="gt-acc-s" id="todayIntakeSum"></span></summary>
+      <div class="gt-acc-b">
+        <!-- Daily target + animal type -->
+        
+        <div class="mgr-card">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+            <span style="font-size:13px;color:var(--text)">יעד יומי</span>
+            <input id="mgrDailyInput" type="number" inputmode="numeric" min="0" onchange="mgrSetDailyTarget(this.value)"
+              style="width:110px;background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:9px;color:var(--gold);font-size:18px;font-weight:700;text-align:center;">
+          </div>
+          <div style="font-size:12px;color:var(--muted);">סוג בהמה: <strong style="color:var(--gold);">בקר</strong></div>
+        </div>
+
+          <!-- Daily intake entry -->
+          <div style="font-size:12px;color:var(--gold);font-weight:700;margin-bottom:6px;">קבלת בהמות היום</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">
+            <select id="intakeFarm" style="flex:1;min-width:90px;background:var(--panel2);border:1px solid var(--border);border-radius:7px;padding:8px;color:var(--text);font-size:13px;"></select>
+            <select id="intakeType" style="flex:1;min-width:90px;background:var(--panel2);border:1px solid var(--border);border-radius:7px;padding:8px;color:var(--text);font-size:13px;"></select>
+            <input id="intakeQty" type="number" inputmode="numeric" placeholder="כמות" style="width:70px;background:var(--panel2);border:1px solid var(--border);border-radius:7px;padding:8px;color:var(--text);font-size:13px;">
+            <button onclick="mgrAddIntake()" style="padding:8px 14px;border-radius:7px;border:none;background:var(--green);color:#fff;font-size:13px;font-weight:700;cursor:pointer;">+ הוסף</button>
+          </div>
+          <div id="mgrIntakeList" style="max-height:200px;overflow-y:auto;-webkit-overflow-scrolling:touch;background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:6px 10px;"></div>
+        <div style="font-size:11px;color:var(--muted);margin-top:8px;">רשימות המשקים וסוגי הבקר — בהגדרות ← עבודה יומית.</div>
       </div>
-      <div id="mgrSearchResult" style="margin-top:10px;font-size:12px;color:var(--muted);"></div>
+    </details>
+  </div>
+
+  <!-- ════ SEARCH (step 46 redesign) ════ -->
+  <div id="mgr-search" class="mgr-panel" style="display:none;padding:12px;direction:rtl;">
+    <details class="gt-acc" id="srchAcc" open>
+      <summary><span class="gt-acc-t">🔍 <span id="srchTitle">מה מחפשים?</span></span><span class="gt-acc-s" id="srchSum"></span></summary>
+      <div class="gt-acc-b">
+        <div class="gt-hint" id="srchHint">בחר סוג חיפוש — אפשר לסמן כמה יחד (למשל תאריך + מספר).</div>
+        <div class="gt-chips" id="srchChips"></div>
+        <div id="srchFields"></div>
+        <button class="gt-btn-main" id="srchGo" onclick="gtSearchRun()">חפש</button>
+      </div>
+    </details>
+    <div id="srchResults"></div>
+  </div>
+
+  <!-- ════ SUMMARIES & ANALYSIS (step 46 redesign: summaries + reports in one) ════ -->
+  <div id="mgr-analysis" class="mgr-panel" style="display:none;padding:12px;direction:rtl;">
+    <button class="gt-print-btn" onclick="gtPrintPanel('mgr-analysis')" style="width:100%;margin-bottom:10px;padding:9px;border-radius:8px;background:transparent;border:1px solid var(--gold);color:var(--gold);font-weight:700;font-size:13px;cursor:pointer;">🖨 <span class="gt-print-lbl">הדפסה</span></button>
+    <div class="gt-chips" id="anPeriods"></div>
+    <div id="anCustom" style="display:none;gap:6px;align-items:center;margin:6px 0;flex-wrap:wrap;">
+      <input type="date" id="anFrom" class="gt-in"> <span>—</span> <input type="date" id="anTo" class="gt-in">
+      <button class="gt-chip on" onclick="gtAnRender()" id="anCustomGo">הצג</button>
     </div>
-    <div class="mgr-sec owner-hide">גיבוי ושחזור</div>
-    <div class="mgr-card owner-hide" style="display:flex;gap:8px;">
-      <button onclick="mgrBackupNow()" style="flex:1;padding:9px;border-radius:8px;background:rgba(40,199,111,.15);border:1px solid var(--green);color:var(--green);font-weight:700;font-size:13px;cursor:pointer;">💾 גיבוי עכשיו</button>
-      <button class="maker-hide" onclick="mgrRestorePrompt()" style="flex:1;padding:9px;border-radius:8px;background:rgba(240,160,48,.15);border:1px solid var(--amber);color:var(--amber);font-weight:700;font-size:13px;cursor:pointer;">📂 שחזור מגיבוי</button>
-    </div>
-    <div class="mgr-sec owner-hide">בדיקת תקינות</div>
-    <div class="mgr-card owner-hide">
-      <button onclick="mgrHealthCheck()" style="width:100%;padding:9px;border-radius:8px;background:rgba(42,127,255,.15);border:1px solid var(--blue);color:var(--blue);font-weight:700;font-size:13px;cursor:pointer;">🩺 בדוק את המערכת עכשיו</button>
-    </div>
-    <div class="mgr-sec" data-t="mgrSecProblems">דיווח בעיה</div>
-    <div class="mgr-card">
-      <div id="mgrProblemsList" style="font-size:11px;color:var(--muted);max-height:100px;overflow-y:auto;margin-bottom:8px;" data-empty="mgrProblemsNone">אין בעיות פתוחות</div>
-      <button class="owner-hide" onclick="mgrAiAnalyzeProblems()" data-t="mgrAiBtn"
-        style="width:100%;padding:9px;border-radius:8px;background:rgba(155,111,255,.15);border:1px solid var(--purple);color:var(--purple);font-weight:700;font-size:13px;cursor:pointer;">AI — נתח ותקן בעיות</button>
-    </div>
+    <div class="gt-chips" id="anCompare" style="margin-top:4px;"></div>
+    <div id="anRanges" class="gt-hint" style="margin:6px 0 10px;"></div>
+    <div id="anBody"></div>
   </div>
 
   <!-- ════ SETTINGS ════ -->
@@ -1455,6 +1513,12 @@ const LUNG_B64="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICA
       </div>
 
       <div id="ss-system" style="display:none;">
+        <div class="mgr-sec owner-hide">גיבוי ושחזור</div>
+        <div class="mgr-card owner-hide" style="display:flex;gap:8px;">
+          <button onclick="mgrBackupNow()" style="flex:1;padding:9px;border-radius:8px;background:rgba(40,199,111,.15);border:1px solid var(--green);color:var(--green);font-weight:700;font-size:13px;cursor:pointer;">💾 גיבוי עכשיו</button>
+          <button class="maker-hide" onclick="mgrRestorePrompt()" style="flex:1;padding:9px;border-radius:8px;background:rgba(240,160,48,.15);border:1px solid var(--amber);color:var(--amber);font-weight:700;font-size:13px;cursor:pointer;">📂 שחזור מגיבוי</button>
+        </div>
+
         <div class="mgr-sec">רישוי</div>
         <div class="mgr-card" id="mgrLicenseCard">Loading...</div>
         <div class="mgr-sec owner-hide maker-hide" id="mgrTestSec">מצב בדיקה</div>
@@ -1483,17 +1547,6 @@ const LUNG_B64="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICA
           <div id="archiveList"></div>
         </div>
 
-        <!-- Daily target + animal type -->
-        <div class="mgr-sec">קבלת בהמות יומית</div>
-        <div class="mgr-card">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-            <span style="font-size:13px;color:var(--text)">יעד יומי</span>
-            <input id="mgrDailyInput" type="number" inputmode="numeric" min="0" onchange="mgrSetDailyTarget(this.value)"
-              style="width:110px;background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:9px;color:var(--gold);font-size:18px;font-weight:700;text-align:center;">
-          </div>
-          <div style="font-size:12px;color:var(--muted);">סוג בהמה: <strong style="color:var(--gold);">בקר</strong></div>
-        </div>
-
         <!-- Farms & cattle types & daily intake -->
         <div class="mgr-sec">משקים וסוגי בקר</div>
         <div class="mgr-card">
@@ -1519,15 +1572,7 @@ const LUNG_B64="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICA
               <button onclick="mgrAddCattleType()" style="padding:8px 14px;border-radius:7px;border:none;background:var(--gold);color:#07090F;font-size:13px;font-weight:700;cursor:pointer;">הוסף</button>
             </div>
           </details>
-          <!-- Daily intake entry -->
-          <div style="font-size:12px;color:var(--gold);font-weight:700;margin-bottom:6px;">קבלת בהמות היום</div>
-          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">
-            <select id="intakeFarm" style="flex:1;min-width:90px;background:var(--panel2);border:1px solid var(--border);border-radius:7px;padding:8px;color:var(--text);font-size:13px;"></select>
-            <select id="intakeType" style="flex:1;min-width:90px;background:var(--panel2);border:1px solid var(--border);border-radius:7px;padding:8px;color:var(--text);font-size:13px;"></select>
-            <input id="intakeQty" type="number" inputmode="numeric" placeholder="כמות" style="width:70px;background:var(--panel2);border:1px solid var(--border);border-radius:7px;padding:8px;color:var(--text);font-size:13px;">
-            <button onclick="mgrAddIntake()" style="padding:8px 14px;border-radius:7px;border:none;background:var(--green);color:#fff;font-size:13px;font-weight:700;cursor:pointer;">+ הוסף</button>
-          </div>
-          <div id="mgrIntakeList" style="max-height:200px;overflow-y:auto;-webkit-overflow-scrolling:touch;background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:6px 10px;"></div>
+
         </div>
 
         <!-- Kosher statuses + per-status seals -->
@@ -1670,6 +1715,17 @@ const LUNG_B64="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICA
   <!-- ════ LOG ════ -->
   <div id="mgr-log" class="mgr-panel" style="display:none;padding:12px;direction:rtl;">
     <button class="gt-print-btn" onclick="gtPrintPanel('mgr-log')" style="width:100%;margin-bottom:10px;padding:9px;border-radius:8px;background:transparent;border:1px solid var(--gold);color:var(--gold);font-weight:700;font-size:13px;cursor:pointer;">🖨 <span class="gt-print-lbl">הדפסה</span></button>
+    <div class="mgr-sec owner-hide">בדיקת תקינות</div>
+    <div class="mgr-card owner-hide">
+      <button onclick="mgrHealthCheck()" style="width:100%;padding:9px;border-radius:8px;background:rgba(42,127,255,.15);border:1px solid var(--blue);color:var(--blue);font-weight:700;font-size:13px;cursor:pointer;">🩺 בדוק את המערכת עכשיו</button>
+    </div>
+    <div class="mgr-sec" data-t="mgrSecProblems">דיווח בעיה</div>
+    <div class="mgr-card">
+      <div id="mgrProblemsList" style="font-size:11px;color:var(--muted);max-height:100px;overflow-y:auto;margin-bottom:8px;" data-empty="mgrProblemsNone">אין בעיות פתוחות</div>
+      <button class="owner-hide" onclick="mgrAiAnalyzeProblems()" data-t="mgrAiBtn"
+        style="width:100%;padding:9px;border-radius:8px;background:rgba(155,111,255,.15);border:1px solid var(--purple);color:var(--purple);font-weight:700;font-size:13px;cursor:pointer;">AI — נתח ותקן בעיות</button>
+    </div>
+
     <div class="mgr-sec" style="display:flex;align-items:center;justify-content:space-between;">
       <span>הדפסות חוזרות</span>
       <button class="owner-hide" onclick="mgrClearReprintLog()" style="font-size:11px;padding:3px 10px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;">נקה</button>
@@ -3671,6 +3727,9 @@ const KS = (function(){
     // put back other devices' changes with this device's older copy)
     const keys = (_loadSyncQueue().settingsKeys||[]).filter(k=>!['customSeals','customLungImage','billing','boardEpoch','lastServerResetAt','lastServerResetReason','forceReloadAt','supportAccessUntil'].includes(k));
     if(!keys.length){ _clearSettingsDirty([]); return; }
+    // a view-only login (owner / manufacturer without repair access) changes nothing on the
+    // server — its local display details (who is logged in here) are not sent at all
+    if(typeof _isOwnerSession === 'function' && _isOwnerSession() && !(typeof _devToken === 'function' && _devToken() && _kioskLoadLocal && _kioskLoadLocal())){ _clearSettingsDirty(keys); return; }
     // step45: the manufacturer changes the plant's settings only with a reason
     // (asked once per manufacturer login, sent with every settings push)
     const _maker = getManagerRole() === 'manufacturer';
@@ -4565,7 +4624,7 @@ const KS = (function(){
 // every device via settings_pilot — unescaped, a name containing markup
 // would run on every device that renders the list, not just the one it was
 // typed on.
-var GT_APP_VERSION='v10.14';
+var GT_APP_VERSION='v10.15';
 document.addEventListener('DOMContentLoaded',()=>{ try{ document.querySelectorAll('.gt-ver').forEach(e=>e.textContent=GT_APP_VERSION); }catch(e){} });
 function escapeHtml(str){
   return String(str==null?'':str).replace(/[&<>"']/g, c=>({
@@ -8153,6 +8212,300 @@ let mgrCurrentTab='monitor', mgrPeriod='day', mgrAiMessages=[];
 const mgrSubState={s:'screens', sum:'kosher', r:'pie', l:'reprint'};
 
 // ── MAIN TAB ──
+// ═══ step 46 redesign: SUMMARIES & ANALYSIS + SEARCH ═══════════════════════
+// Past days come from the server (archive_days, team leader / owner), today from
+// the live board. A period can be compared with the period before it and / or with
+// the same period a year earlier.
+var _gtArch = {};                                   // 'from|to' → {at, days, p}
+function _gtArchive(from, to){
+  const key = _gtIsoDate(from) + '|' + _gtIsoDate(to);
+  const c = _gtArch[key];
+  if(c && c.days && Date.now() - c.at < 60000) return Promise.resolve(c.days);
+  if(c && c.p) return c.p;
+  if(!(window.sb && KS.getManagerToken && KS.getManagerToken())) return Promise.resolve([]);
+  const chunks = []; let a = new Date(from);
+  while(a <= to){ const b = new Date(a); b.setDate(b.getDate() + 365); chunks.push([new Date(a), b < to ? b : new Date(to)]); a = new Date(b); a.setDate(a.getDate() + 1); }
+  const p = Promise.all(chunks.map(([x, y]) => Promise.resolve(window.sb.rpc('archive_days', { p_token: KS.getManagerToken(), p_from: _gtIsoDate(x), p_to: _gtIsoDate(y) }))
+      .then(r => (r && !r.error && r.data && r.data.ok === true && Array.isArray(r.data.days)) ? r.data.days : [], () => [])))
+    .then(parts => { const days = [].concat(...parts); _gtArch[key] = { at: Date.now(), days }; return days; });
+  _gtArch[key] = { p };
+  return p;
+}
+function _gtArchAnimals(day){
+  const arr = [];
+  (day.animals || []).forEach(r => {
+    arr[r.n] = { slaughter: r.s, innerStatus: r.i, outerStatus: r.o, slaughteredBy: r.sb, innerBy: r.ib, outerBy: r.ob,
+                 slaughterTime: r.st != null ? Number(r.st) : null, notChalakInner: !!r.nc,
+                 weightRight: r.wr != null ? Number(r.wr) : null, weightLeft: r.wl != null ? Number(r.wl) : null };
+  });
+  return arr;
+}
+// every slaughtered animal of [from, to] (archived days + today's live board)
+function gtCollect(from, to){
+  const today = _gtIsoDate(new Date()), f = _gtIsoDate(from), t = _gtIsoDate(to);
+  return _gtArchive(from, to).then(days => {
+    const out = [];
+    days.forEach(day => { const d = String(day.date || '').slice(0, 10); if(d >= f && d <= t) out.push({ date: d, animals: _gtArchAnimals(day), intake: day.intake || [], live: false, at: day.at }); });
+    if(today >= f && today <= t) out.push({ date: today, animals: KS.getAnimals(), intake: KS.getSettings().dailyIntake || [], live: true });
+    return out;
+  });
+}
+function gtStatsOf(daysList){
+  const acc = _freshPeriodAcc(); acc.days = 0;
+  daysList.forEach(d => { acc.days++; _accumulateAnimalStats(acc, d.animals, d.intake); });
+  return acc;
+}
+// ── periods ──
+var _gtAnPeriod = 'day', _gtAnCmp = { prev: false, year: false };
+function _gtDay(d){ const x = new Date(d); x.setHours(0, 0, 0, 0); return x; }
+function gtPeriodRange(kind){
+  const now = _gtDay(new Date());
+  if(kind === 'day') return { from: now, to: now };
+  if(kind === 'week'){ const f = new Date(now); f.setDate(f.getDate() - 6); return { from: f, to: now }; }
+  if(kind === 'month') return { from: new Date(now.getFullYear(), now.getMonth(), 1), to: now };
+  if(kind === 'year') return { from: new Date(now.getFullYear(), 0, 1), to: now };
+  const f = document.getElementById('anFrom').value, t = document.getElementById('anTo').value;
+  const from = f ? _gtDay(f) : now, to = t ? _gtDay(t) : now;
+  return from <= to ? { from, to } : { from: to, to: from };
+}
+function gtPrevRange(r, kind){
+  const days = Math.round((r.to - r.from) / 86400000);
+  if(kind === 'month'){ const f = new Date(r.from.getFullYear(), r.from.getMonth() - 1, 1); const end = new Date(f.getFullYear(), f.getMonth() + 1, 0);
+    const t = new Date(f.getFullYear(), f.getMonth(), Math.min(r.to.getDate(), end.getDate())); return { from: f, to: t }; }
+  if(kind === 'year'){ const f = new Date(r.from.getFullYear() - 1, 0, 1), t = new Date(r.to.getFullYear() - 1, r.to.getMonth(), r.to.getDate()); return { from: f, to: t }; }
+  const t = new Date(r.from); t.setDate(t.getDate() - 1); const f = new Date(t); f.setDate(f.getDate() - days); return { from: f, to: t };
+}
+function gtYearAgo(r){ const f = new Date(r.from), t = new Date(r.to); f.setFullYear(f.getFullYear() - 1); t.setFullYear(t.getFullYear() - 1); return { from: f, to: t }; }
+function _gtFmtD(d){ return d.toLocaleDateString(lang === 'he' ? 'he-IL' : lang === 'es' ? 'es' : 'en-GB', { day: 'numeric', month: 'short', year: 'numeric' }); }
+function _gtFmtR(r){ return _gtIsoDate(r.from) === _gtIsoDate(r.to) ? _gtFmtD(r.from) : _gtFmtD(r.from) + ' – ' + _gtFmtD(r.to); }
+function _gtNum(n, dig){ return Number(n || 0).toLocaleString(lang === 'he' ? 'he-IL' : lang === 'es' ? 'es' : 'en-US', { maximumFractionDigits: dig == null ? 0 : dig }); }
+// the numbers that matter, from a stats object
+function gtKey(acc){
+  const custom = Object.values(acc.custom || {}).reduce((a, b) => a + b, 0);
+  const graded = acc.glatt + acc.beit + acc.kosher + acc.rabKosher + acc.mk + custom;
+  const treif = acc.treif + acc.innerTreif;
+  const kg = (acc.weights.sumR || 0) + (acc.weights.sumL || 0);
+  const b = KS.getSettings().billing || {}; const price = (b.enabled && Number(b.price) > 0) ? Number(b.price) : 0;
+  const ruled = graded + treif;
+  return { total: acc.total, alive: acc.slaughtered, graded, treif, nev: acc.nevela + acc.shot, nevela: acc.nevela, shot: acc.shot,
+           glattPct: ruled ? acc.glatt / ruled * 100 : null, kosherPct: ruled ? graded / ruled * 100 : null, treifPct: ruled ? treif / ruled * 100 : null,
+           kg, weighed: acc.weights.n || 0, charge: kg * price, price, cur: b.currency || '₪', days: acc.days, perDay: acc.days ? acc.total / acc.days : 0 };
+}
+// "▲ 12% מול …" (for percentages: points)
+function gtDelta(now, was, opts){
+  opts = opts || {};
+  if(was == null || now == null) return '<span class="gt-flat">—</span>';
+  let d, txt;
+  if(opts.points){ d = now - was; txt = (d > 0 ? '+' : '') + _gtNum(d, 1) + ' ' + L('נק׳', 'pts', 'pts'); }
+  else { if(!was){ return '<span class="gt-flat">' + (now ? L('חדש', 'new', 'nuevo') : '—') + '</span>'; } d = (now - was) / was * 100; txt = (d > 0 ? '+' : '') + _gtNum(d, 0) + '%'; }
+  if(Math.abs(d) < 0.05) return '<span class="gt-flat">= ' + L('ללא שינוי', 'no change', 'sin cambio') + '</span>';
+  const good = opts.goodUp === undefined ? null : (opts.goodUp ? d > 0 : d < 0);
+  const cls = good === null ? 'gt-flat' : good ? 'gt-up' : 'gt-down';
+  return '<span class="' + cls + '">' + (d > 0 ? '▲ ' : '▼ ') + txt + '</span>';
+}
+function gtAnSetPeriod(k){ _gtAnPeriod = k; document.getElementById('anCustom').style.display = k === 'custom' ? 'flex' : 'none'; gtAnRender(); }
+function gtAnToggleCmp(k){ _gtAnCmp[k] = !_gtAnCmp[k]; gtAnRender(); }
+function gtAnChips(){
+  const per = [['day', L('היום', 'Today', 'Hoy')], ['week', L('7 ימים', '7 days', '7 días')], ['month', L('החודש', 'This month', 'Este mes')], ['year', L('השנה', 'This year', 'Este año')], ['custom', L('טווח…', 'Range…', 'Rango…')]];
+  document.getElementById('anPeriods').innerHTML = per.map(([k, l]) => `<button class="gt-chip${_gtAnPeriod === k ? ' on' : ''}" onclick="gtAnSetPeriod('${k}')">${l}</button>`).join('');
+  document.getElementById('anCompare').innerHTML = `<span class="gt-hint" style="align-self:center;margin:0 4px 0 0;">${L('השוואה:', 'Compare:', 'Comparar:')}</span>` +
+    `<button class="gt-chip${_gtAnCmp.prev ? ' on' : ''}" onclick="gtAnToggleCmp('prev')">${L('מול התקופה הקודמת', 'vs previous period', 'vs período anterior')}</button>` +
+    `<button class="gt-chip${_gtAnCmp.year ? ' on' : ''}" onclick="gtAnToggleCmp('year')">${L('מול אותה תקופה אשתקד', 'vs same period last year', 'vs mismo período del año pasado')}</button>`;
+  const cg = document.getElementById('anCustomGo'); if(cg) cg.textContent = L('הצג', 'Show', 'Mostrar');
+}
+var _gtAnSeq = 0, _gtAnOpen = {};
+function gtAnRender(){
+  const body = document.getElementById('anBody'); if(!body) return;
+  gtAnChips();
+  document.querySelectorAll('#anBody details[data-k]').forEach(d => { _gtAnOpen[d.getAttribute('data-k')] = d.open; });
+  const r = gtPeriodRange(_gtAnPeriod), seq = ++_gtAnSeq;
+  const cmps = [];
+  if(_gtAnCmp.prev) cmps.push({ k: 'prev', r: gtPrevRange(r, _gtAnPeriod), l: L('תקופה קודמת', 'previous period', 'período anterior') });
+  if(_gtAnCmp.year) cmps.push({ k: 'year', r: gtYearAgo(r), l: L('אשתקד', 'last year', 'año pasado') });
+  document.getElementById('anRanges').innerHTML = '<b>' + escapeHtml(_gtFmtR(r)) + '</b>' + cmps.map(c => ' · ' + escapeHtml(c.l) + ': ' + escapeHtml(_gtFmtR(c.r))).join('');
+  if(!body.innerHTML.trim()) body.innerHTML = '<div class="gt-hint">' + L('טוען…', 'Loading…', 'Cargando…') + '</div>';
+  Promise.all([gtCollect(r.from, r.to)].concat(cmps.map(c => gtCollect(c.r.from, c.r.to)))).then(res => {
+    if(seq !== _gtAnSeq) return;
+    const cur = gtStatsOf(res[0]), K = gtKey(cur);
+    const C = cmps.map((c, i) => { const a = gtStatsOf(res[i + 1]); return { ...c, acc: a, K: gtKey(a) }; });
+    body.innerHTML = gtAnHtml(cur, K, C);
+    body.querySelectorAll('details[data-k]').forEach(d => { const k = d.getAttribute('data-k'); if(_gtAnOpen[k]) d.open = true; });
+    try{ gtRenderWeightTables(); }catch(e){}
+  });
+}
+function gtAnHtml(acc, K, C){
+  const dl = (now, f, opts) => C.map(c => `<div>${gtDelta(now, f(c.K), opts)} <span class="gt-flat">${escapeHtml(c.l)}</span></div>`).join('');
+  const kpi = (v, l, color, deltas) => `<div class="gt-kpi"><div class="gt-kpi-v" style="color:${color};">${v}</div><div class="gt-kpi-l">${l}</div>${C.length ? '<div class="gt-kpi-d">' + deltas + '</div>' : ''}</div>`;
+  const pct = v => v == null ? '—' : _gtNum(v, 1) + '%';
+  let h = '<div class="gt-kpis">' +
+    kpi(_gtNum(K.total), L('נשחטו', 'Slaughtered', 'Faenados') + (K.days > 1 ? ' · ' + _gtNum(K.perDay, 0) + ' ' + L('ליום', '/day', '/día') : ''), 'var(--text)', dl(K.total, k => k.total, {})) +
+    kpi(pct(K.glattPct), L('גלאט', 'Glatt', 'Glatt'), 'var(--green)', dl(K.glattPct, k => k.glattPct, { points: true, goodUp: true })) +
+    kpi(pct(K.kosherPct), L('כשר (כל הדרגות)', 'Kosher (all grades)', 'Kosher (todos)'), 'var(--gold)', dl(K.kosherPct, k => k.kosherPct, { points: true, goodUp: true })) +
+    kpi(pct(K.treifPct), L('טרף', 'Treif', 'Treif'), 'var(--red-light)', dl(K.treifPct, k => k.treifPct, { points: true, goodUp: false })) +
+    kpi(_gtNum(K.nev), L('נבלה / ירוי', 'Nevela / shot', 'Nevelá / baleado'), 'var(--red-light)', dl(K.nev, k => k.nev, { goodUp: false })) +
+    kpi(_gtNum(K.kg) + ' ' + L('ק״ג', 'kg', 'kg'), L('משקל', 'Weight', 'Peso') + ' · ' + _gtNum(K.weighed) + ' ' + L('נשקלו', 'weighed', 'pesados'), 'var(--blue)', dl(K.kg, k => k.kg, {})) +
+    (K.price ? kpi(escapeHtml(K.cur) + _gtNum(K.charge, 0), L('חיוב', 'Charge', 'Cargo'), 'var(--gold)', dl(K.charge, k => k.charge, {})) : '') +
+    '</div>';
+  const sec = (k, title, sum, inner) => `<details class="gt-acc" data-k="${k}"><summary><span class="gt-acc-t">${title}</span><span class="gt-acc-s">${sum}</span></summary><div class="gt-acc-b">${inner}</div></details>`;
+  // 1. kashrut results
+  const st = getAllStatuses(), nm = key => { const s = st.find(x => x.key === key); return s ? (lang === 'he' ? s.he : lang === 'es' ? (s.es || s.en) : s.en) : key; };
+  const col = key => { const s = st.find(x => x.key === key); return s ? s.color : 'var(--gold)'; };
+  const rowsDef = [['glatt', acc.glatt, c => c.acc.glatt], ['beit', acc.beit, c => c.acc.beit], ['kosher', acc.kosher, c => c.acc.kosher],
+                   ['rabKosher', acc.rabKosher, c => c.acc.rabKosher], ['mk', acc.mk, c => c.acc.mk]]
+    .concat(Object.keys(Object.assign({}, acc.custom, ...C.map(c => c.acc.custom))).map(k => [k, acc.custom[k] || 0, c => c.acc.custom[k] || 0]))
+    .concat([['treif', acc.treif + acc.innerTreif, c => c.acc.treif + c.acc.innerTreif]]);
+  const ruled = K.graded + K.treif;
+  const bar = rowsDef.filter(r => r[1] > 0).map(([k, v]) => `<div title="${escapeHtml(nm(k === 'rabKosher' ? 'kosher' : k))}" style="width:${ruled ? v / ruled * 100 : 0}%;background:${k === 'rabKosher' ? '#C99A00' : col(k)};height:100%;"></div>`).join('');
+  const tbl = `<div style="height:14px;border-radius:7px;overflow:hidden;display:flex;background:var(--border);margin-bottom:10px;">${bar}</div>
+    <table class="gt-tbl"><tr><th></th><th>${L('כמות', 'Count', 'Cant.')}</th><th>%</th>${C.map(c => `<th>${escapeHtml(c.l)}</th>`).join('')}</tr>
+    ${rowsDef.filter(r => r[1] > 0 || C.some(c => r[2](c) > 0)).map(([k, v, f]) => `<tr><td><span style="color:${k === 'rabKosher' ? '#C99A00' : col(k)};">●</span> ${escapeHtml(k === 'rabKosher' ? L('כשר רבנות', 'Rabbinate kosher', 'Kosher rabinato') : nm(k))}</td><td>${_gtNum(v)}</td><td>${ruled ? _gtNum(v / ruled * 100, 1) + '%' : '—'}</td>${C.map(c => { const cr = c.K.graded + c.K.treif; return `<td>${_gtNum(f(c))}${cr ? ' <span class="gt-flat">(' + _gtNum(f(c) / cr * 100, 0) + '%)</span>' : ''}</td>`; }).join('')}</tr>`).join('')}
+    <tr><td>${L('ממתין לפסיקה', 'Waiting for a ruling', 'Esperando dictamen')}</td><td>${_gtNum(Math.max(0, acc.slaughtered - ruled))}</td><td></td>${C.map(() => '<td></td>').join('')}</tr></table>`;
+  h += sec('kashrut', '✅ ' + L('תוצאות כשרות', 'Kashrut results', 'Resultados de kashrut'), (K.glattPct == null ? '' : L('גלאט ', 'Glatt ', 'Glatt ') + pct(K.glattPct) + ' · ') + L('טרף ', 'Treif ', 'Treif ') + pct(K.treifPct), tbl);
+  // 2. nevela / shot / not chalak
+  h += sec('nevela', '⚠️ ' + L('נבלות, ירי ו"לא חלק"', 'Nevela, shot and not-chalak', 'Nevelá, baleado y no glatt'), _gtNum(K.nev) + ' ' + L('נבלה / ירוי', 'nevela / shot', 'nevelá / baleado'),
+    `<table class="gt-tbl"><tr><th></th><th>${L('כמות', 'Count', 'Cant.')}</th>${C.map(c => `<th>${escapeHtml(c.l)}</th>`).join('')}</tr>
+     <tr><td>${L('נבלה (בשחיטה)', 'Nevela (slaughter)', 'Nevelá (faena)')}</td><td>${_gtNum(acc.nevela)}</td>${C.map(c => `<td>${_gtNum(c.acc.nevela)} ${gtDelta(acc.nevela, c.acc.nevela, { goodUp: false })}</td>`).join('')}</tr>
+     <tr><td>${L('ירוי', 'Shot', 'Baleado')}</td><td>${_gtNum(acc.shot)}</td>${C.map(c => `<td>${_gtNum(c.acc.shot)} ${gtDelta(acc.shot, c.acc.shot, { goodUp: false })}</td>`).join('')}</tr>
+     <tr><td>${L('לא חלק (רבנות)', 'Not chalak (rabbinate)', 'No glatt (rabinato)')}</td><td>${_gtNum(acc.notChalak)}</td>${C.map(c => `<td>${_gtNum(c.acc.notChalak)}</td>`).join('')}</tr></table>`);
+  // 3–6. by farm / type / farm × type / outer inspector
+  const bsum = b => { const e = Object.entries(b || {}).sort((x, y) => y[1].total - x[1].total); return e.length ? escapeHtml(e[0][0]) + ' · ' + _gtNum(e[0][1].total) + (e.length > 1 ? ' (+' + (e.length - 1) + ')' : '') : '—'; };
+  h += sec('farm', '🏡 ' + L('לפי משק', 'By farm', 'Por granja'), bsum(acc.byFarm), _renderBucketBreakdown(acc.byFarm));
+  h += sec('type', '🐂 ' + L('לפי סוג בהמה', 'By animal type', 'Por tipo'), bsum(acc.byType), _renderBucketBreakdown(acc.byType));
+  h += sec('farmtype', '🔀 ' + L('משק × סוג', 'Farm × type', 'Granja × tipo'), bsum(acc.byFarmType), _renderBucketBreakdown(acc.byFarmType));
+  h += sec('inspector', '🧑‍⚖️ ' + L('לפי בודק חוץ', 'By outer inspector', 'Por inspector externo'), bsum(acc.byOuterInspector), _renderBucketBreakdown(acc.byOuterInspector));
+  // 7. by worker
+  const wl = (o, title) => { const e = Object.entries(o || {}).sort((a, b) => b[1] - a[1]); return `<div style="font-size:12px;color:var(--gold);font-weight:700;margin:8px 0 2px;">${title}</div>` + (e.length ? e.map(([n, v]) => `<div class="gt-row"><span>${escapeHtml(n)}</span><b>${_gtNum(v)}</b></div>`).join('') : '<div class="gt-hint">—</div>'); };
+  const wsum = Object.keys(acc.workers.slaughter).length + Object.keys(acc.workers.inner).length + Object.keys(acc.workers.outer).length;
+  h += sec('workers', '👷 ' + L('לפי עובד', 'By worker', 'Por trabajador'), wsum + ' ' + L('שמות', 'names', 'nombres'),
+    wl(acc.workers.slaughter, L('שוחטים', 'Slaughterers', 'Matarifes')) + wl(acc.workers.inner, L('בודקי פנים', 'Inner inspectors', 'Inspectores internos')) + wl(acc.workers.outer, L('בודקי חוץ', 'Outer inspectors', 'Inspectores externos')));
+  // 8. weight and charge
+  const W = acc.weights;
+  h += sec('weight', '⚖️ ' + (K.price ? L('משקל וחיוב', 'Weight and charge', 'Peso y cargo') : L('משקל', 'Weight', 'Peso')), _gtNum(K.kg) + ' ' + L('ק״ג', 'kg', 'kg') + (K.price ? ' · ' + escapeHtml(K.cur) + _gtNum(K.charge, 0) : ''),
+    `<table class="gt-tbl"><tr><th></th><th>${L('התקופה', 'Period', 'Período')}</th>${C.map(c => `<th>${escapeHtml(c.l)}</th>`).join('')}</tr>
+     <tr><td>${L('בהמות שנשקלו', 'Animals weighed', 'Animales pesados')}</td><td>${_gtNum(K.weighed)}</td>${C.map(c => `<td>${_gtNum(c.K.weighed)}</td>`).join('')}</tr>
+     <tr><td>${L('סה״כ ק״ג', 'Total kg', 'Total kg')}</td><td>${_gtNum(K.kg)}</td>${C.map(c => `<td>${_gtNum(c.K.kg)} ${gtDelta(K.kg, c.K.kg, {})}</td>`).join('')}</tr>
+     <tr><td>${L('ממוצע לבהמה', 'Average per animal', 'Promedio por animal')}</td><td>${W.nFull ? _gtNum(W.sumFull / W.nFull, 1) : '—'}</td>${C.map(c => `<td>${c.acc.weights.nFull ? _gtNum(c.acc.weights.sumFull / c.acc.weights.nFull, 1) : '—'}</td>`).join('')}</tr>
+     ${K.price ? `<tr><td>${L('חיוב', 'Charge', 'Cargo')} (${escapeHtml(K.cur)}${K.price}/${L('ק״ג', 'kg', 'kg')})</td><td><b style="color:var(--gold);">${escapeHtml(K.cur)}${_gtNum(K.charge, 0)}</b></td>${C.map(c => `<td>${escapeHtml(K.cur)}${_gtNum(c.K.charge, 0)} ${gtDelta(K.charge, c.K.charge, {})}</td>`).join('')}</tr>` : ''}
+     </table><div style="margin-top:12px;" id="mgrWeightTableA"></div>`);
+  // 9. by hour
+  const mx = Math.max(1, ...acc.hours);
+  const hrs = acc.hours.map((v, i) => v ? `<div style="display:flex;align-items:center;gap:6px;font-size:12px;margin:2px 0;"><span style="width:44px;color:var(--muted);direction:ltr;">${String(i).padStart(2, '0')}:00</span><div style="flex:1;background:var(--border);border-radius:4px;height:12px;"><div style="width:${v / mx * 100}%;background:var(--blue);height:100%;border-radius:4px;"></div></div><b style="width:36px;text-align:end;">${v}</b></div>` : '').join('');
+  const peak = acc.hours.indexOf(Math.max(...acc.hours));
+  h += sec('hours', '🕐 ' + L('שחיטה לפי שעה', 'Slaughter by hour', 'Faena por hora'), acc.total ? L('שיא: ', 'Peak: ', 'Pico: ') + String(peak).padStart(2, '0') + ':00' : '—', hrs || '<div class="gt-hint">—</div>');
+  return h;
+}
+
+// ── SEARCH ──
+var _gtSrch = { on: { number: true }, rows: [] };
+const _GT_SRCH = [['number', '#', 'מספר בהמה', 'Animal number', 'Número'], ['date', '📅', 'תאריך', 'Date', 'Fecha'], ['range', '📆', 'טווח תאריכים', 'Date range', 'Rango'],
+                  ['farm', '🏡', 'משק', 'Farm', 'Granja'], ['type', '🐂', 'סוג בהמה', 'Animal type', 'Tipo'], ['status', '✅', 'פסיקה', 'Ruling', 'Dictamen'], ['worker', '👷', 'עובד / בודק', 'Worker / inspector', 'Trabajador']];
+function gtSearchInit(){
+  const he = lang === 'he', es = lang === 'es';
+  document.getElementById('srchTitle').textContent = L('מה מחפשים?', 'What are you looking for?', '¿Qué busca?');
+  document.getElementById('srchHint').textContent = L('בחר סוג חיפוש — אפשר לסמן כמה יחד (למשל תאריך + מספר).', 'Pick the kind of search — several can be combined (e.g. date + number).', 'Elija el tipo de búsqueda — se pueden combinar.');
+  document.getElementById('srchGo').textContent = L('חפש', 'Search', 'Buscar');
+  document.getElementById('srchChips').innerHTML = _GT_SRCH.map(([k, ic, h, e, s]) => `<button class="gt-chip${_gtSrch.on[k] ? ' on' : ''}" onclick="gtSearchToggle('${k}')">${ic} ${he ? h : es ? s : e}</button>`).join('');
+  const st = getAllStatuses();
+  const opt = (arr) => arr.map(([v, l]) => `<option value="${escapeHtml(v)}">${escapeHtml(l)}</option>`).join('');
+  const sets = KS.getSettings();
+  const f = [];
+  const keep = id => { const e = document.getElementById(id); return e ? e.value : ''; };
+  const v = { number: keep('srN'), date: keep('srD'), from: keep('srF'), to: keep('srT'), farm: keep('srFarm'), type: keep('srType'), status: keep('srSt'), worker: keep('srW') };
+  if(_gtSrch.on.number) f.push(`<div class="gt-field"><label>${L('מספר בהמה', 'Animal number', 'Número')}</label><input id="srN" class="gt-in" type="number" min="1" inputmode="numeric" style="width:110px;" value="${escapeHtml(v.number)}"></div>`);
+  if(_gtSrch.on.date) f.push(`<div class="gt-field"><label>${L('תאריך', 'Date', 'Fecha')}</label><input id="srD" class="gt-in" type="date" value="${escapeHtml(v.date || _gtIsoDate(new Date()))}"></div>`);
+  if(_gtSrch.on.range) f.push(`<div class="gt-field"><label>${L('מתאריך עד תאריך', 'From – to', 'Desde – hasta')}</label><input id="srF" class="gt-in" type="date" value="${escapeHtml(v.from)}"> — <input id="srT" class="gt-in" type="date" value="${escapeHtml(v.to || _gtIsoDate(new Date()))}"></div>`);
+  if(_gtSrch.on.farm) f.push(`<div class="gt-field"><label>${L('משק', 'Farm', 'Granja')}</label><select id="srFarm" class="gt-in">${opt([['', L('כל המשקים', 'All farms', 'Todas')]].concat((sets.farmNames || []).map(x => [x, x])))}</select></div>`);
+  if(_gtSrch.on.type) f.push(`<div class="gt-field"><label>${L('סוג בהמה', 'Animal type', 'Tipo')}</label><select id="srType" class="gt-in">${opt([['', L('כל הסוגים', 'All types', 'Todos')]].concat((sets.cattleTypes || []).map(x => [x, x])))}</select></div>`);
+  if(_gtSrch.on.status) f.push(`<div class="gt-field"><label>${L('פסיקה', 'Ruling', 'Dictamen')}</label><select id="srSt" class="gt-in">${opt(st.map(x => [x.key, he ? x.he : es ? (x.es || x.en) : x.en]).concat([['nevela', L('נבלה', 'Nevela', 'Nevelá')], ['shot', L('ירוי', 'Shot', 'Baleado')], ['notChalak', L('לא חלק', 'Not chalak', 'No glatt')], ['pending', L('ממתין לפסיקה', 'Waiting', 'Pendiente')]]))}</select></div>`);
+  if(_gtSrch.on.worker) f.push(`<div class="gt-field"><label>${L('שם עובד / בודק', 'Worker / inspector name', 'Nombre')}</label><input id="srW" class="gt-in" type="text" style="flex:1;" value="${escapeHtml(v.worker)}"></div>`);
+  document.getElementById('srchFields').innerHTML = f.join('');
+  ['srFarm', 'srType', 'srSt'].forEach((id, i) => { const e = document.getElementById(id); const val = [v.farm, v.type, v.status][i]; if(e && val) e.value = val; });
+  document.querySelectorAll('#srchFields input').forEach(e => e.addEventListener('keydown', ev => { if(ev.key === 'Enter') gtSearchRun(); }));
+}
+function gtSearchToggle(k){
+  _gtSrch.on[k] = !_gtSrch.on[k];
+  if(k === 'date' && _gtSrch.on.date) _gtSrch.on.range = false;
+  if(k === 'range' && _gtSrch.on.range) _gtSrch.on.date = false;
+  gtSearchInit();
+}
+function _gtStatusOf(x){
+  if(x.slaughter === 'nevela' || x.slaughter === 'shot') return x.slaughter;
+  if(x.outerStatus) return x.outerStatus;
+  if(x.innerStatus === 'treif') return 'treif';
+  return 'pending';
+}
+function gtSearchRun(){
+  const val = id => { const e = document.getElementById(id); return e ? e.value.trim() : ''; };
+  const now = _gtDay(new Date()); let from, to, note = '';
+  if(_gtSrch.on.date && val('srD')){ from = to = _gtDay(val('srD')); }
+  else if(_gtSrch.on.range && (val('srF') || val('srT'))){ from = _gtDay(val('srF') || val('srT')); to = _gtDay(val('srT') || val('srF')); if(from > to){ const t = from; from = to; to = t; } }
+  else { to = now; from = new Date(now); from.setDate(from.getDate() - 30); note = L('בלי תאריך — מחפש ב־30 הימים האחרונים.', 'No date — searching the last 30 days.', 'Sin fecha — últimos 30 días.'); }
+  const num = _gtSrch.on.number ? parseInt(val('srN'), 10) : NaN;
+  const farm = _gtSrch.on.farm ? val('srFarm') : '', type = _gtSrch.on.type ? val('srType') : '', status = _gtSrch.on.status ? val('srSt') : '', worker = _gtSrch.on.worker ? val('srW').toLowerCase() : '';
+  const out = document.getElementById('srchResults');
+  out.innerHTML = '<div class="gt-hint">' + L('מחפש…', 'Searching…', 'Buscando…') + '</div>';
+  gtCollect(from, to).then(days => {
+    const rows = [];
+    days.sort((a, b) => a.date < b.date ? 1 : -1).forEach(d => {
+      let run = 0; const ranges = (d.intake || []).map(r => { const f = run, t = run + (Number(r.qty) || 0); run = t; return { farm: r.farm, type: r.type, f, t }; });
+      (d.animals || []).forEach((x, i) => {
+        if(!x || x.slaughter == null) return;
+        if(!isNaN(num) && i + 1 !== num) return;
+        const rg = ranges.find(r => i >= r.f && i < r.t) || {};
+        if(farm && rg.farm !== farm) return;
+        if(type && rg.type !== type) return;
+        const stt = _gtStatusOf(x);
+        if(status === 'notChalak' ? !(x.slaughter === 'notChalak' || x.notChalakInner || x.notChalakOuter) : (status && stt !== status)) return;
+        if(worker && ![x.slaughteredBy, x.innerBy, x.outerBy].some(n => String(n || '').toLowerCase().includes(worker))) return;
+        rows.push({ d, i, x, rg, stt });
+      });
+    });
+    _gtSrch.rows = rows;
+    const sum = document.getElementById('srchSum');
+    if(sum) sum.textContent = rows.length + ' ' + L('תוצאות', 'results', 'resultados');
+    if(!rows.length){ out.innerHTML = (note ? '<div class="gt-hint">' + note + '</div>' : '') + '<div class="gt-acc" style="padding:16px;text-align:center;color:var(--muted);">' + L('לא נמצא', 'Nothing found', 'No se encontró') + '</div>'; return; }
+    const lbl = k => { const s = getAllStatuses().find(z => z.key === k); if(s) return { t: lang === 'he' ? s.he : lang === 'es' ? (s.es || s.en) : s.en, c: s.color };
+      return ({ nevela: { t: L('נבלה', 'Nevela', 'Nevelá'), c: '#E03030' }, shot: { t: L('ירוי', 'Shot', 'Baleado'), c: '#E03030' }, treif: { t: L('טרף', 'Treif', 'Treif'), c: '#E03030' }, pending: { t: L('ממתין', 'Waiting', 'Pendiente'), c: 'var(--muted)' } })[k] || { t: k, c: 'var(--gold)' }; };
+    out.innerHTML = (note ? '<div class="gt-hint">' + note + '</div>' : '') + '<div class="gt-hint">' + rows.length + ' ' + L('תוצאות', 'results', 'resultados') + (rows.length > 300 ? ' · ' + L('מוצגות 300 הראשונות', 'showing the first 300', 'se muestran 300') : '') + '</div>' +
+      rows.slice(0, 300).map((r, j) => { const b = lbl(r.stt); return `<details class="gt-acc" ontoggle="if(this.open)gtSearchCard(${j},this)"><summary><span class="gt-acc-t"><b style="font-size:16px;">#${r.i + 1}</b> <span class="gt-flat" style="font-weight:600;">· ${escapeHtml(_gtFmtD(new Date(r.d.date + 'T12:00:00')))}${r.d.live ? ' · ' + L('היום', 'today', 'hoy') : ''}</span></span><span class="gt-acc-s" style="color:${b.c};">● ${escapeHtml(b.t)}</span></summary><div class="gt-acc-b" id="srCard${j}"></div></details>`; }).join('');
+  });
+}
+function gtSearchCard(j, det){
+  const r = _gtSrch.rows[j]; if(!r) return;
+  const el = document.getElementById('srCard' + j); if(!el || el.getAttribute('data-done')) return;
+  el.setAttribute('data-done', '1');
+  const x = r.x, t = v => v ? new Date(Number(v)).toLocaleTimeString(lang === 'he' ? 'he-IL' : 'en-GB', { hour: '2-digit', minute: '2-digit' }) : '';
+  const row = (l, v) => v ? `<div class="gt-row"><span class="gt-flat">${l}</span><span>${v}</span></div>` : '';
+  const sl = { slaughtered: L('נשחט', 'Slaughtered', 'Faenado'), nevela: L('נבלה', 'Nevela', 'Nevelá'), shot: L('ירוי', 'Shot', 'Baleado'), notChalak: L('לא חלק', 'Not chalak', 'No glatt') }[x.slaughter] || x.slaughter;
+  const nm = k => { const s = getAllStatuses().find(z => z.key === k); return s ? (lang === 'he' ? s.he : s.en) : k; };
+  const kg = _gtWeightOf(x);
+  el.innerHTML =
+    row(L('משק / סוג', 'Farm / type', 'Granja / tipo'), escapeHtml([r.rg.farm, r.rg.type].filter(Boolean).join(' · '))) +
+    row(L('שחיטה', 'Slaughter', 'Faena'), escapeHtml(sl + (x.slaughteredBy ? ' · ' + x.slaughteredBy : '') + (x.slaughterTime ? ' · ' + t(x.slaughterTime) : ''))) +
+    row(L('בדיקת פנים', 'Inner check', 'Interior'), x.innerStatus ? escapeHtml(({ confirmed: L('תקין', 'OK', 'OK'), treif: L('טרף', 'Treif', 'Treif'), in_progress: L('בבדיקה', 'In progress', 'En curso') })[x.innerStatus] || x.innerStatus) + (x.innerBy ? ' · ' + escapeHtml(x.innerBy) : '') + (x.innerTime ? ' · ' + t(x.innerTime) : '') : '') +
+    row(L('בדיקת חוץ', 'Outer check', 'Exterior'), x.outerStatus ? escapeHtml(nm(x.outerStatus)) + (x.outerBy ? ' · ' + escapeHtml(x.outerBy) : '') + (x.outerTime ? ' · ' + t(x.outerTime) : '') : '') +
+    row(L('משקל', 'Weight', 'Peso'), kg.w ? _gtNum(kg.kg, 1) + ' ' + L('ק״ג', 'kg', 'kg') : '') +
+    `<div style="font-size:12px;color:var(--gold);font-weight:700;margin:10px 0 4px;">${L('כל מה שקרה למספר הזה', 'Everything that happened to this number', 'Historial')}</div><div id="srEv${j}" class="gt-hint">${L('טוען…', 'Loading…', 'Cargando…')}</div>`;
+  if(!window.sb) return;
+  const from = new Date(r.d.date + 'T00:00:00'), to = r.d.at ? new Date(new Date(r.d.at).getTime() + 60000) : new Date();
+  Promise.all([
+    window.sb.from('events_pilot').select('stage,action,actor,device_id,created_at,payload').eq('animal_no', r.i + 1).gte('created_at', from.toISOString()).lte('created_at', to.toISOString()).order('created_at', { ascending: true }).limit(200),
+    window.sb.from('events_pilot').select('stage,action,actor,device_id,created_at,payload').eq('animal_no', r.i + 1).filter('payload->>slaughterDay', 'eq', r.d.date).order('created_at', { ascending: true }).limit(200)
+  ]).then(([a, b]) => {
+    const seen = new Set(), ev = [].concat(a.data || [], b.data || []).filter(e => { const k = e.created_at + e.action + e.stage; if(seen.has(k)) return false; seen.add(k); return true; }).sort((p, q) => p.created_at < q.created_at ? -1 : 1);
+    const box = document.getElementById('srEv' + j); if(!box) return;
+    box.innerHTML = ev.length ? ev.map(e => `<div class="gt-row" style="font-size:12px;"><span style="direction:ltr;color:var(--muted);">${escapeHtml(new Date(e.created_at).toLocaleString(lang === 'he' ? 'he-IL' : 'en-GB', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }))}</span><span>${escapeHtml(e.stage || '')} · ${escapeHtml(e.action || '')}${e.actor ? ' · ' + escapeHtml(e.actor) : ''}${e.payload && e.payload.reason ? ' · ' + escapeHtml(String(e.payload.reason).slice(0, 60)) : ''}</span></div>`).join('') : L('אין אירועים רשומים', 'No events recorded', 'Sin eventos');
+  }, () => { const box = document.getElementById('srEv' + j); if(box) box.textContent = '—'; });
+}
+function gtTodayIntakeSum(){
+  const e=document.getElementById('todayIntakeSum'); if(!e) return;
+  const s=KS.getSettings(); const n=(s.dailyIntake||[]).reduce((t,r)=>t+(Number(r.qty)||0),0);
+  e.textContent = n ? n+' '+L('בהמות','animals','animales') : L('לא הוזן','not entered','sin datos');
+}
+function gtMgrTabLabels(){
+  document.querySelectorAll('#scManager .gt-tablbl').forEach(e => { const t = e.getAttribute('data-' + (lang === 'he' ? 'he' : lang === 'es' ? 'es' : 'en')); if(t) e.textContent = t; });
+}
+
 // summaries / reports / log: print only the open tab (team leader and owner alike —
 // printing changes nothing)
 function gtPrintPanel(id){
@@ -8162,15 +8515,20 @@ function gtPrintPanel(id){
   const tab=document.querySelector('#scManager .mgr-tab.active');
   h.textContent='GlattTrack — '+((tab&&tab.innerText.trim())||'')+' — '+new Date().toLocaleString();
   el.classList.add('gt-print-area');
-  const done=()=>{ el.classList.remove('gt-print-area'); window.removeEventListener('afterprint', done); };
+  const shut=[...el.querySelectorAll('details:not([open])')]; shut.forEach(d=>d.open=true);   // closed sections print too
+  const done=()=>{ el.classList.remove('gt-print-area'); shut.forEach(d=>d.open=false); window.removeEventListener('afterprint', done); };
   window.addEventListener('afterprint', done);
   try{ window.print(); }catch(e){}
   setTimeout(done, 60000);
 }
 function mgrTab(tab){
+  if(tab==='summaries'||tab==='reports') tab='analysis';                 // step 46: one summaries tab
   if(tab==='settings' && typeof _isOwnerSession==='function' && _isOwnerSession()) tab='monitor';   // the owner only watches
   mgrCurrentTab=tab;
-  if(tab==='summaries'||tab==='reports') setTimeout(()=>{ try{ gtRenderWeightTables(); }catch(e){} }, 0);
+  try{ gtMgrTabLabels(); }catch(e){}
+  if(tab==='analysis') setTimeout(()=>{ try{ gtAnRender(); }catch(e){ gtLogError('analysis', e); } }, 0);
+  if(tab==='search') setTimeout(()=>{ try{ gtSearchInit(); }catch(e){ gtLogError('search', e); } }, 0);
+  if(tab==='monitor') setTimeout(()=>{ try{ mgrRenderFarmSystem(); gtTodayIntakeSum(); }catch(e){} }, 0);
   document.querySelectorAll('.mgr-tab').forEach(t=>t.classList.remove('active'));
   const tb=document.getElementById('tab-'+tab);if(tb)tb.classList.add('active');
   document.querySelectorAll('.mgr-panel').forEach(p=>p.style.display='none');
@@ -8997,6 +9355,7 @@ function mgrSetAnimalType(t){KS.updateSettings({animalType:t});['cattle','sheep'
 function mgrRenderFarms(){
   mgrRenderFarmSystem();
 }
+setTimeout(()=>{ try{ const o=window.mgrRenderFarmSystem; if(typeof o==='function'){ window.mgrRenderFarmSystem=function(){ const r=o.apply(this,arguments); try{ gtTodayIntakeSum(); }catch(e){} return r; }; } }catch(e){} }, 0);
 function mgrAddFarm(){mgrAddFarmName();}
 // ── Farm names ──
 function mgrAddFarmName(){
@@ -10842,7 +11201,7 @@ var _gtWT={at:0,days:null,busy:false};
 function _gtWeightOf(x){ const r=Number(x.weightRight!=null?x.weightRight:x.wr), l=Number(x.weightLeft!=null?x.weightLeft:x.wl);
   return { kg:(r>0?r:0)+(l>0?l:0), w:(r>0||l>0) }; }
 function gtRenderWeightTables(){
-  const els=['mgrWeightTableS','mgrWeightTableR'].map(id=>document.getElementById(id)).filter(Boolean);
+  const els=['mgrWeightTableS','mgrWeightTableR','mgrWeightTableA'].map(id=>document.getElementById(id)).filter(Boolean);
   if(!els.length) return;
   const now=new Date(), iso=d=>_gtIsoDate(d);
   if(!_gtWT.busy && window.sb && KS.getManagerToken && KS.getManagerToken() && Date.now()-_gtWT.at>60000){
