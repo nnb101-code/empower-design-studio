@@ -1,6 +1,6 @@
 -- ============================================================================
 -- GlattTrack — security self-test (run any time; changes NOTHING)
--- VERSION 3 — one statement (it starts with: do $gt_selftest$)
+-- VERSION 4 — one statement, no temporary tables (it starts with: do $gt_selftest$)
 -- ============================================================================
 -- Simulates requests exactly as they arrive through the API (PostgREST: the
 -- "authenticator" login, role anon, request headers, JWT claims) and live
@@ -33,7 +33,6 @@
 do $gt_selftest$
 declare
   v_step text := 'start'; v_test text; v_ok boolean; v_detail text; v_n int; v_fail int; v_names text; v_line text;
-  v_res text := (select '_st' || '_result');  -- the results table, named at run time (see below)
 begin
   -- an earlier result in this session is cleared
   if exists (select 1 from pg_prepared_statements where name = 'gt_selftest_result') then
@@ -48,13 +47,13 @@ $gt0$;
     execute $gt1$
 set local search_path = public, extensions;
 $gt1$;
-    v_step := 'create temp table _st_result (n serial primary key, test text not null, ok boolean not nul';
+    v_step := 'results list';
     execute $gt2$
-create temp table _st_result (n serial primary key, test text not null, ok boolean not null, detail text) on commit drop;
+select set_config('gt_st.results', '[]', true)   -- the results (no temporary tables: undone with everything else)
 $gt2$;
-    v_step := 'create temp table _st (k text primary key, v text) on commit drop;';
+    v_step := 'fixture values';
     execute $gt3$
-create temp table _st (k text primary key, v text) on commit drop;
+select set_config('gt_st.ready', 'on', true)      -- fixture values are kept as gt_st.<name> (see pg_temp.put)
 $gt3$;
     v_step := 'call SQL as the API would (authenticator → anon + request headers + JWT';
     execute $gt4$
@@ -131,25 +130,32 @@ $gt7$;
     v_step := 'create function pg_temp.rec(p_test text, p_ok boolean, p_detail text default null) returns';
     execute $gt8$
 create function pg_temp.rec(p_test text, p_ok boolean, p_detail text default null) returns void
-language sql as $$ insert into _st_result (test, ok, detail) values (p_test, coalesce(p_ok, false), p_detail) $$;
+language plpgsql as $$
+begin
+  perform set_config('gt_st.results',
+    (coalesce(nullif(current_setting('gt_st.results', true), ''), '[]')::jsonb
+       || jsonb_build_array(jsonb_build_object('test', p_test, 'ok', coalesce(p_ok, false), 'detail', p_detail)))::text, true);
+end $$;
 $gt8$;
     v_step := 'create function pg_temp.v(p_k text) returns text language sql stable as $$ select v from _';
     execute $gt9$
-create function pg_temp.v(p_k text) returns text language sql stable as $$ select v from _st where k = p_k $$;
+create function pg_temp.put(p_k text, p_v text) returns void language plpgsql as $$
+begin perform set_config('gt_st.' || lower(p_k), coalesce(p_v, ''), true); end $$;
+create function pg_temp.v(p_k text) returns text language sql stable as $$ select nullif(current_setting('gt_st.' || lower(p_k), true), '') $$;
 $gt9$;
     v_step := 'create function pg_temp.dev(p_name text) returns jsonb language sql stable as $$';
     execute $gt10$
 create function pg_temp.dev(p_name text) returns jsonb language sql stable as $$
-  select jsonb_build_object('x-device-token', (select v from _st where k = 'tok_' || p_name)) $$;
+  select jsonb_build_object('x-device-token', pg_temp.v('tok_' || p_name)) $$;
 $gt10$;
     v_step := 'create function pg_temp.devid(p_name text) returns text language sql stable as $$ select v';
     execute $gt11$
-create function pg_temp.devid(p_name text) returns text language sql stable as $$ select v from _st where k = 'id_' || p_name $$;
+create function pg_temp.devid(p_name text) returns text language sql stable as $$ select pg_temp.v('id_' || p_name) $$;
 $gt11$;
     v_step := 'create function pg_temp.mgr(p_k text default ''mgr'') returns jsonb language sql stable as $';
     execute $gt12$
 create function pg_temp.mgr(p_k text default 'mgr') returns jsonb language sql stable as $$
-  select jsonb_build_object('x-manager-token', (select v from _st where k = p_k)) $$;
+  select jsonb_build_object('x-manager-token', pg_temp.v(p_k)) $$;
 $gt12$;
     v_step := 'create function pg_temp.ep() returns bigint language sql stable as $$ select _board_epoch(';
     execute $gt13$
@@ -281,8 +287,9 @@ begin
     if devs[i][1] <> 'NEW' then
       insert into device_credentials (device_id, token_hash) values (v_id, encode(digest(tok, 'sha256'), 'hex'));
     end if;
-    insert into _st values ('id_' || devs[i][1], v_id), ('tok_' || devs[i][1], tok),
-                           ('uid_' || devs[i][1], (select auth_uid::text from devices_pilot where id = v_id));
+    perform pg_temp.put('id_' || devs[i][1], v_id);
+    perform pg_temp.put('tok_' || devs[i][1], tok);
+    perform pg_temp.put('uid_' || devs[i][1], (select auth_uid::text from devices_pilot where id = v_id));
   end loop;
   perform set_config('app.device_admin', '', true);
 
@@ -295,8 +302,13 @@ begin
   insert into manager_sessions (manager_id, expires_at) values (mid, now() - interval '1 minute') returning token into xtok;
   insert into manager_sessions (manager_id) values (oid_) returning token into otok;
   insert into manager_sessions (manager_id) values (fid) returning token into ftok;
-  insert into _st values ('mgr', mtok), ('mgr_expired', xtok), ('owner', otok), ('maker', ftok),
-                         ('mgr_code', code), ('maker_code', fcode), ('mgr_id', mid::text);
+  perform pg_temp.put('mgr', mtok);
+  perform pg_temp.put('mgr_expired', xtok);
+  perform pg_temp.put('owner', otok);
+  perform pg_temp.put('maker', ftok);
+  perform pg_temp.put('mgr_code', code);
+  perform pg_temp.put('maker_code', fcode);
+  perform pg_temp.put('mgr_id', mid::text);
 
   update settings_pilot
      set settings = coalesce(settings, '{}'::jsonb)
@@ -341,7 +353,7 @@ $gt29$;
 -- at the end) — the checks below start like a plant before its first team-leader
 -- device; the team-leader-device rules have their own section
 do $$ begin
-  if to_regclass('pg_temp._st') is null then                         -- not inside the test's transaction: change nothing
+  if coalesce(current_setting('gt_st.ready', true), '') <> 'on' then  -- not inside the test: change nothing
     raise exception 'GlattTrack self-test: run the WHOLE file at once (nothing selected); nothing was changed';
   end if;
   perform set_config('app.device_admin', 'on', true);
@@ -1268,8 +1280,9 @@ begin
   perform pg_temp.age_inner(981);
   perform pg_temp.api(pg_temp.dev('IN2'), pg_temp.q_claim(981, 'inner_start', 'in_progress', '', ''));
   perform pg_temp.api(pg_temp.dev('OUT2'), format('select outer_open(982, %s, true, ''x'')', pg_temp.ep()));
-  insert into _st values ('c1_before_reset', c1::text), ('epoch_before_reset', pg_temp.ep()::text),
-                         ('c1_answer', r::text);
+  perform pg_temp.put('c1_before_reset', c1::text);
+  perform pg_temp.put('epoch_before_reset', pg_temp.ep()::text);
+  perform pg_temp.put('c1_answer', r::text);
 end $$;
 $gt49$;
     v_step := 'step 45: test mode switches itself off after 8 hours';
@@ -1533,7 +1546,7 @@ declare r jsonb; r2 jsonb; r3 jsonb; r4 jsonb; r5 jsonb; r6 jsonb; ok boolean; s
 begin
   delete from animals_carry; delete from processing_day_closed;
   select settings into s0 from settings_pilot where id = 1;
-  insert into _st values ('settings_before_46', s0::text);
+  perform pg_temp.put('settings_before_46', s0::text);
   update settings_pilot set settings = settings || '{"esophagusEnabled":false}'::jsonb where id = 1;
   -- nothing before the slaughter: no inner / outer / esophagus / rabbinate / processing on an empty number
   r  := pg_temp.api(pg_temp.dev('IN1'),  pg_temp.q_claim(961, 'inner_start', 'in_progress', '', ''));
@@ -1642,7 +1655,7 @@ begin
   insert into manager_sessions (manager_id)
     select id from plant_managers where role = 'manufacturer' and name = 'selftest maker' and active limit 1
     returning token into v_mk;
-  insert into _st values ('maker46', v_mk);
+  perform pg_temp.put('maker46', v_mk);
   select settings -> 'users' into v_users from settings_pilot where id = 1;
   r := pg_temp.api(pg_temp.mgr('maker46'), format('select push_settings(%L::jsonb, ''x'', %L, ''printer repair'')',
          '{"printers":{"parts":"zebra-46"},"customStatuses":[],"users":[],"loginModeByRole":{"inspector":"none"},"notChalakEnabled":false}',
@@ -1934,7 +1947,8 @@ begin
   insert into device_pairing (code, device_id, device_name, secret_hash) values (v_code, v_id, 'selftest leader', 'x');
   r2 := pg_temp.api('{}', format('select device_pair(%L, %L, ''leader'', 0, false, ''TL phone'')', r ->> 'token', v_code));
   v_tok := (select token_plain from device_pairing where code = v_code);
-  insert into _st values ('id_LEADER', v_id), ('tok_LEADER', v_tok);
+  perform pg_temp.put('id_LEADER', v_id);
+  perform pg_temp.put('tok_LEADER', v_tok);
   ok := ok and pg_temp.ok(r2) and (select assigned_role from devices_pilot where id = v_id) = 'leader'
         and (select device_id from manager_sessions where token = r ->> 'token') = v_id;
   perform pg_temp.rec('step 46 team-leader device: before the first one any device may log in; the first is paired from that session, which moves onto it', ok,
@@ -2374,15 +2388,17 @@ $gt70$;
     raise notice '%', rpad('=', 100, '=');
     raise notice 'GlattTrack security self-test  (schema step %)', (select value from plant_state where key = 'schemaStep');
     raise notice '%', rpad('=', 100, '=');
-    -- (the temporary tables are read with EXECUTE only: a server that checks code
-    -- blocks before they run, plpgsql_check, would not find them yet)
-    for v_test, v_ok, v_detail in execute format('select test, ok, detail from %I order by n', v_res) loop
+    for v_test, v_ok, v_detail in
+        select e ->> 'test', (e ->> 'ok')::boolean, e ->> 'detail'
+          from jsonb_array_elements(current_setting('gt_st.results')::jsonb) e loop
       if v_ok then raise notice 'PASS  %', v_test;
       else raise notice 'FAIL  %   ::  %', v_test, left(coalesce(v_detail, ''), 600); end if;
     end loop;
-    execute format('select count(*), count(*) filter (where not ok) from %I', v_res) into v_n, v_fail;
-    execute format('select string_agg(f.test, '' | '' order by f.k)
-               from (select x.n as k, x.test from %I x where not x.ok order by x.n limit 8) f', v_res) into v_names;
+    select count(*), count(*) filter (where not (e ->> 'ok')::boolean)
+      into v_n, v_fail from jsonb_array_elements(current_setting('gt_st.results')::jsonb) e;
+    select string_agg(f.t, ' | ' order by f.k) into v_names
+      from (select e ->> 'test' as t, k from jsonb_array_elements(current_setting('gt_st.results')::jsonb) with ordinality x(e, k)
+             where not (e ->> 'ok')::boolean order by k limit 8) f;
     raise notice '%', rpad('-', 100, '-');
     raise notice '% checks, % passed, % failed  (nothing was changed — all undone)', v_n, v_n - v_fail, v_fail;
     raise exception 'gt_selftest_undo';
