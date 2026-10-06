@@ -16,16 +16,18 @@
 -- Everything runs inside ONE transaction that is ROLLED BACK at the end.
 -- While it runs (a few seconds) tablets writing to the board wait for it.
 --
--- Needs a database superuser (it switches to the API login to test it):
+-- Where to run it:
 --   plant server:  sudo bash /opt/glatttrack/tools/security-selftest.sh
 --   by hand:       psql -U supabase_admin -d postgres -v ON_ERROR_STOP=1 -f security-selftest.sql
+--   Supabase:      SQL Editor (as superuser it logs in as the API login itself;
+--                  otherwise it marks each test request as an API request)
 -- Prints a PASS/FAIL table; ends with an ERROR if anything failed.
 -- Needs schema step 46 or later (step 45: test-mode 8-hour limit, system health,
 -- reasons for exceptional actions, chaos checks after takeovers and resets;
 -- step 46: stage order, each station its own stage, kashrut configuration
 -- locks, processing kept over several days with no skipping).
+--   Supabase SQL Editor: paste the WHOLE file and Run (nothing selected).
 -- ============================================================================
-\set ON_ERROR_STOP 1
 begin;
 set local client_min_messages = notice;
 set local search_path = public, extensions;
@@ -37,11 +39,15 @@ create temp table _st (k text primary key, v text) on commit drop;   -- fixture 
 -- claims); returns the jsonb result, or {"exception": message, "sqlstate": code}
 create function pg_temp.api3(p_headers jsonb, p_claims jsonb, p_sql text) returns jsonb
 language plpgsql as $$
-declare r jsonb; e text; st text;
+declare r jsonb; e text; st text; v_su boolean;
 begin
   perform set_config('request.headers', coalesce(p_headers, '{}'::jsonb)::text, true);
   perform set_config('request.jwt.claims', coalesce(p_claims, '{"role":"anon"}'::jsonb)::text, true);
-  execute 'set session authorization authenticator';
+  -- a superuser logs in as "authenticator" exactly like the API; without
+  -- superuser (Supabase SQL Editor) the server's own API marker is used
+  v_su := coalesce((select rolsuper from pg_roles where rolname = session_user), false);
+  if v_su then execute 'set session authorization authenticator';
+  else perform set_config('gt.as_api', 'on', true); end if;
   execute 'set role anon';
   begin
     execute p_sql into r;
@@ -50,7 +56,8 @@ begin
     e := sqlerrm;
   end;
   execute 'reset role';
-  execute 'reset session authorization';
+  if v_su then execute 'reset session authorization';
+  else perform set_config('gt.as_api', '', true); end if;
   perform set_config('request.headers', '{}', true);
   perform set_config('request.jwt.claims', '', true);
   if e is not null then return jsonb_build_object('exception', e, 'sqlstate', st); end if;
@@ -75,6 +82,20 @@ begin
   perform set_config('request.jwt.claims', '', true);
   if e is not null then return jsonb_build_object('exception', e); end if;
   return coalesce(r, 'null'::jsonb);
+end $$;
+
+-- simulate a direct change to the event log (the append-only triggers off for
+-- this one sub-block, always rolled back): as superuser by replica mode,
+-- otherwise (Supabase SQL Editor, the table owner) by switching off the
+-- table's own triggers
+create function pg_temp.st_tamper() returns void
+language plpgsql as $$
+begin
+  begin
+    perform set_config('session_replication_role', 'replica', true);
+  exception when others then
+    execute 'alter table events_pilot disable trigger user';
+  end;
 end $$;
 
 create function pg_temp.rec(p_test text, p_ok boolean, p_detail text default null) returns void
@@ -1024,21 +1045,21 @@ begin
   r := pg_temp.api(pg_temp.dev('SL1'), 'select verify_event_chain()');
   perform pg_temp.rec('event log: a tablet cannot run the full chain check', r ->> 'error' = 'unauthorized', r::text);
   begin
-    set local session_replication_role = replica;
+    perform pg_temp.st_tamper();
     update events_pilot set payload = '{"n":99}' where chain_pos = p1;
     v1 := verify_event_chain();
     raise exception 'st_undo';
   exception when others then if sqlerrm <> 'st_undo' then v1 := jsonb_build_object('error', sqlerrm); end if;
   end;
   begin
-    set local session_replication_role = replica;
+    perform pg_temp.st_tamper();
     delete from events_pilot where chain_pos = p2;
     v2 := verify_event_chain();
     raise exception 'st_undo';
   exception when others then if sqlerrm <> 'st_undo' then v2 := jsonb_build_object('error', sqlerrm); end if;
   end;
   begin
-    set local session_replication_role = replica;
+    perform pg_temp.st_tamper();
     update events_pilot set chain_pos = -1 where chain_pos = p1;
     update events_pilot set chain_pos = p1 where chain_pos = p2;
     update events_pilot set chain_pos = p2 where chain_pos = -1;
@@ -1236,7 +1257,7 @@ begin
   det := concat_ws(' | ', r -> 'attention', r2 ->> 'error', r3 ->> 'error', r4 -> 'security');
   v_pos := (select max(chain_pos) from events_pilot where server_chained);
   begin
-    set local session_replication_role = replica;
+    perform pg_temp.st_tamper();
     update events_pilot set payload = '{"n":98}' where chain_pos = v_pos;
     r := system_health(pg_temp.v('mgr'));
     raise exception 'st_undo';
@@ -2186,8 +2207,20 @@ begin
   raise notice '%', rpad('-', 100, '-');
   raise notice '% checks, % passed, % failed  (nothing was changed — all rolled back)', n, n - n_fail, n_fail;
   if n_fail > 0 then
-    raise exception 'GlattTrack security self-test FAILED: % of % checks', n_fail, n;
+    raise exception 'GlattTrack security self-test FAILED: % of % checks: %', n_fail, n,
+      (select string_agg(f.test, ' | ' order by f.k) from (select x.n as k, x.test from _st_result x where not x.ok order by x.n limit 8) f);
   end if;
+  -- all passed: a session lock carries the count past the rollback below
+  perform pg_advisory_lock(7317, n);
 end $$;
 
 rollback;
+
+-- the result as one row (the SQL Editor shows no notices); PASSED only when
+-- every check passed — otherwise the error above lists the failed checks
+select coalesce((select format('PASSED — %s of %s security checks (nothing was changed)', l.objid, l.objid)
+                   from pg_locks l
+                  where l.locktype = 'advisory' and l.pid = pg_backend_pid()
+                    and l.classid = 7317 and l.objsubid = 2 and pg_advisory_unlock(7317, l.objid::int)
+                  limit 1),
+                'NOT PASSED — see the error above') as "GlattTrack security self-test";

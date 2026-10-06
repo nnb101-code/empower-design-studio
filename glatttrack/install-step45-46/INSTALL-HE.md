@@ -14,12 +14,16 @@
    - **46** → השרת כבר מעודכן. אפשר להריץ את 02 שוב, זה בטוח.
 
 ## ההתקנה (ב־SQL Editor, קובץ אחרי קובץ, כל קובץ במלואו)
-| שלב | קובץ | בסוף חייב להופיע |
-|---|---|---|
-| 1 | `01-setup-supabase-step45-health-and-reasons.sql` | `step 45 self-check OK` |
-| 2 | `02-setup-supabase-step46-order-and-processing-days.sql` | `GlattTrack step 46 self-check OK` |
-| 3 (בדיקה) | `03-security-selftest.sql` | `125 checks, 125 passed, 0 failed` |
+**איך מריצים קובץ:** פותחים שאילתה חדשה וריקה ומדביקים את **כל** הקובץ. לוחצים פעם אחת בתוך הטקסט, כדי ששום דבר לא יהיה מסומן, ואז Run. (אם חלק מהטקסט מסומן, Supabase מריץ רק אותו, ואז יוצאת שגיאה כמו `relation "_gt45_acl" does not exist`.)
 
+| שלב | קובץ | מה רואים בסוף ב־Supabase |
+|---|---|---|
+| 1 | `01-setup-supabase-step45-health-and-reasons.sql` | `Success. No rows returned` |
+| 2 | `02-setup-supabase-step46-order-and-processing-days.sql` | `Success. No rows returned` |
+| 3 (בדיקה) | `03-security-selftest.sql` | שורה אחת: `PASSED — 126 of 126 security checks (nothing was changed)` |
+
+- **אחרי שלב 2** אפשר לוודא: `select value from plant_state where key = 'schemaStep';` חייב להחזיר **46**.
+- **בבדיקה (שלב 3):** אם משהו נכשל, מופיעה שגיאה `security self-test FAILED` עם שמות הבדיקות שנכשלו.
 - **אם מופיעה שגיאה,** עוצרים ושולחים לי את ההודעה. לא ממשיכים לקובץ הבא.
 - **הבדיקה (שלב 3)** לא משנה כלום בשרת: היא רצה ובסוף מבטלת את כל מה שעשתה.
 - **אפשר להריץ את 01 ו־02 שוב** בלי נזק.
