@@ -88,6 +88,7 @@
 --      accounts only on the server (leader_account_add / leader_account_remove).
 --      The owner is view-only (no account changes either). The team leader adds /
 --      removes owner (view-only) accounts. Every account change is a security event.
+--  19. Billing currency (manufacturer): ₪ $ € £ or any 3-letter code (USD, CHF …).
 --  18. One worker list per screen: slaughter, esophagus, legs, inner, outer, parts,
 --      stamps (was 3 shared lists: slaughterers / inspectors / supervisors). A worker
 --      logs in only at a screen whose list has his name / code (worker_login, the
@@ -2560,6 +2561,41 @@ end $$;
 revoke execute on function _worker_lists_saved() from public, anon, authenticated;
 drop trigger if exists zz_worker_lists_saved on settings_pilot;
 create trigger zz_worker_lists_saved after update on settings_pilot for each row execute function _worker_lists_saved();
+
+-- ── 19. billing currency: ₪ $ € £ or any 3-letter code ────────────────────────
+CREATE OR REPLACE FUNCTION public.manufacturer_set_billing(p_token text, p_enabled boolean, p_price numeric, p_currency text, p_reason text DEFAULT NULL::text) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $_$
+declare v_billing jsonb;
+begin
+  if not _manufacturer_session_valid(p_token) then
+    return jsonb_build_object('ok', false, 'error', 'unauthorized');
+  end if;
+  if p_price is null or p_price < 0 or p_price > 1000000 then
+    return jsonb_build_object('ok', false, 'error', 'bad_price');
+  end if;
+  -- step 46: ₪ $ € £, or any 3-letter currency code (USD, CHF …) — not tied to the language
+  p_currency := upper(trim(coalesce(p_currency, '')));
+  if not (p_currency in ('₪','$','€','£') or p_currency ~ '^[A-Z]{3}$') then
+    return jsonb_build_object('ok', false, 'error', 'bad_currency');
+  end if;
+  if not _reason_ok(p_reason) then
+    return jsonb_build_object('ok', false, 'error', 'reason_required');
+  end if;
+  v_billing := jsonb_build_object('enabled', coalesce(p_enabled, false), 'price', round(p_price, 4),
+                                  'currency', p_currency, 'updatedAt', now()::text);
+  perform pg_advisory_xact_lock(hashtext('glatttrack_settings'));
+  insert into settings_pilot (id, settings, device_id, updated_at)
+  values (1, jsonb_build_object('billing', v_billing), 'manufacturer', now())
+  on conflict (id) do update
+    set settings = coalesce(settings_pilot.settings, '{}'::jsonb) || jsonb_build_object('billing', v_billing),
+        device_id = 'manufacturer', updated_at = now();
+  perform _admin_audit(p_token, 'billing', 'settings_pilot.billing', v_billing || jsonb_build_object('reason', left(trim(p_reason), 200)));
+  return jsonb_build_object('ok', true, 'billing', v_billing);
+end $_$;
+revoke execute on function manufacturer_set_billing(text, boolean, numeric, text, text) from public;
+grant execute on function manufacturer_set_billing(text, boolean, numeric, text, text) to anon, authenticated;
 
 -- ── system_health: processing boards waiting, rollover waiting, label mismatches ──
 create or replace function system_health(p_token text) returns jsonb

@@ -859,6 +859,16 @@ begin
   ok := ok and exists (select 1 from admin_audit where who = 'selftest leader' and action = 'support_access_opened');
   perform pg_temp.rec('manufacturer / support actions write an audit row (who, action, target, time)', ok,
     concat_ws(' | ', left(r2::text, 40), left(r3::text, 40), left(r4::text, 40)));
+  -- step 46: the billing currency — ₪ $ € £ or a 3-letter code (not tied to the language)
+  update plant_state set value = (now() + interval '1 hour')::text where key = 'supportAccessUntil';
+  r  := pg_temp.api('{}', format('select manufacturer_set_billing(%L, true, 3.2, ''chf'', ''selftest'')', pg_temp.v('maker')));
+  r2 := pg_temp.api('{}', format('select manufacturer_set_billing(%L, true, 3.2, ''£'', ''selftest'')', pg_temp.v('maker')));
+  r3 := pg_temp.api('{}', format('select manufacturer_set_billing(%L, true, 3.2, ''X1'', ''selftest'')', pg_temp.v('maker')));
+  r4 := pg_temp.api('{}', format('select manufacturer_set_billing(%L, true, 3.2, ''USD'', ''selftest'')', pg_temp.v('mgr')));
+  update plant_state set value = (now() - interval '1 minute')::text where key = 'supportAccessUntil';
+  perform pg_temp.rec('step 46 billing currency: ₪ $ € £ or a 3-letter code; anything else refused; only the manufacturer',
+    r #>> '{billing,currency}' = 'CHF' and r2 #>> '{billing,currency}' = '£' and r3 ->> 'error' = 'bad_currency' and not pg_temp.ok(r4),
+    concat_ws(' | ', r::text, r2::text, r3::text, r4::text));
 end $$;
 
 -- ── brakes ───────────────────────────────────────────────────────────────────

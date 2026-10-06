@@ -83,6 +83,12 @@ html,body{direction:ltr!important;font-family:'Rubik',sans-serif;background:var(
 #lgGrid .num-cell.next-nev,#esoGrid .num-cell.next-nev{animation:nevPulse .8s ease-in-out infinite!important;border-width:3px;color:#fff;font-weight:900;will-change:transform,box-shadow,background,border-color;position:relative;z-index:3;}
 @keyframes nevPulse{0%,100%{background:#5a1212;border-color:#E04040;box-shadow:0 0 4px rgba(224,64,64,.4);transform:scale(1);}50%{background:#9a1a1a;border-color:#FF6060;box-shadow:0 0 20px 4px rgba(255,90,90,.95);transform:scale(1.06);}}
 @keyframes pendingPulse{0%,100%{background:#0A1E4A;border-color:#2A7FFF;box-shadow:0 0 4px rgba(42,127,255,.4);transform:scale(1);}50%{background:#1E55C0;border-color:#7AB8FF;box-shadow:0 0 20px 4px rgba(80,170,255,.95);transform:scale(1.06);}}
+.gt-grp>summary{font-size:15px;padding:14px;}
+.gt-acc-in{background:var(--panel2,rgba(255,255,255,.03));margin-bottom:8px;}
+.gt-acc-in>summary{padding:10px 12px;}
+.gt-acc-in>summary .mgr-sec{margin:0!important;padding:0!important;font-size:14px!important;border:none!important;background:none!important;color:var(--text)!important;display:inline!important;}
+.gt-acc-in>.gt-acc-b{padding:8px 10px;}
+.gt-acc-in .mgr-card{margin-bottom:8px;}
 /* the five team-leader tabs fit a phone */
 #scManager .mgr-tab{white-space:nowrap;}
 @media (max-width:480px){ #scManager .mgr-tab{padding-left:6px!important;padding-right:6px!important;font-size:13px!important;flex:1 1 auto;text-align:center;} }
@@ -917,8 +923,9 @@ const LUNG_B64="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICA
         <span style="font-size:13px;color:var(--muted);min-width:90px;" id="makerPriceTxt">מחיר לק״ג:</span>
         <input type="number" id="makerPrice" inputmode="decimal" step="0.01" min="0" style="width:100px;background:var(--panel2);border:1px solid var(--border);border-radius:7px;padding:8px;color:var(--gold);font-size:14px;font-weight:700;text-align:center;">
         <select id="makerCurrency" style="background:var(--panel2);border:1px solid var(--border);border-radius:7px;padding:8px;color:var(--text);font-size:13px;">
-          <option value="₪">₪</option><option value="$">$</option><option value="€">€</option>
+          <option value="₪">₪ ILS</option><option value="$">$ USD</option><option value="€">€ EUR</option><option value="£">£ GBP</option><option value="other">…</option>
         </select>
+        <input type="text" id="makerCurrencyOther" maxlength="3" placeholder="USD" style="display:none;width:64px;text-transform:uppercase;background:var(--panel2);border:1px solid var(--border);border-radius:7px;padding:8px;color:var(--text);font-size:13px;">
       </div>
       <button onclick="makerSaveBilling()" id="makerSaveBtn" style="width:100%;padding:10px;border-radius:8px;border:none;background:var(--gold);color:#07090F;font-size:14px;font-weight:700;cursor:pointer;">שמור</button>
       <div id="makerBillStatus" style="font-size:12px;margin-top:8px;text-align:center;"></div>
@@ -6012,14 +6019,19 @@ function makerRender(){
   const b=KS.getSettings().billing||{};
   const on=document.getElementById('makerBillOn'); if(on) on.checked=!!b.enabled;
   const pr=document.getElementById('makerPrice'); if(pr) pr.value=(b.price!=null?Number(b.price):'');
-  const cu=document.getElementById('makerCurrency'); if(cu && b.currency) cu.value=b.currency;
+  const cu=document.getElementById('makerCurrency'), co=document.getElementById('makerCurrencyOther');
+  if(cu){ const known=['₪','$','€','£']; cu.value = !b.currency ? '₪' : known.includes(b.currency) ? b.currency : 'other';
+    if(co){ co.value = known.includes(b.currency||'₪') ? '' : (b.currency||''); co.style.display = cu.value==='other' ? '' : 'none'; }
+    cu.onchange = ()=>{ if(co){ co.style.display = cu.value==='other' ? '' : 'none'; if(cu.value==='other') co.focus(); } }; }
 }
 async function makerSaveBilling(){
   const st=document.getElementById('makerBillStatus');
   const say=(t,ok)=>{ if(st){ st.textContent=t; st.style.color=ok?'var(--green)':'var(--red-light)'; } };
   const enabled=!!document.getElementById('makerBillOn')?.checked;
   const price=parseFloat(document.getElementById('makerPrice')?.value);
-  const currency=document.getElementById('makerCurrency')?.value||'₪';
+  let currency=document.getElementById('makerCurrency')?.value||'₪';
+  if(currency==='other'){ currency=(document.getElementById('makerCurrencyOther')?.value||'').trim().toUpperCase();
+    if(!/^[A-Z]{3}$/.test(currency)){ say(L('קוד מטבע: 3 אותיות באנגלית (למשל USD, EUR, GBP)','Currency code: 3 letters (e.g. USD, EUR, GBP)','Código de moneda: 3 letras (p. ej. USD)')); return; } }
   if(!(price>=0)){ say(L('מחיר לא תקין','Invalid price','Precio no válido'),false); return; }
   if(!window.sb){ say(L('אין חיבור לשרת','No server connection','Sin conexión'),false); return; }
   const why=await gtAskReason(L('שינוי חיוב','Billing change','Cambio de facturación'),
@@ -8344,7 +8356,7 @@ function gtAnHtml(acc, K, C){
     kpi(pct(K.treifPct), L('טרף', 'Treif', 'Treif'), 'var(--red-light)', dl(K.treifPct, k => k.treifPct, { points: true, goodUp: false })) +
     kpi(_gtNum(K.nev), L('נבלה / ירוי', 'Nevela / shot', 'Nevelá / baleado'), 'var(--red-light)', dl(K.nev, k => k.nev, { goodUp: false })) +
     kpi(_gtNum(K.kg) + ' ' + L('ק״ג', 'kg', 'kg'), L('משקל', 'Weight', 'Peso') + ' · ' + _gtNum(K.weighed) + ' ' + L('נשקלו', 'weighed', 'pesados'), 'var(--blue)', dl(K.kg, k => k.kg, {})) +
-    (K.price ? kpi(escapeHtml(K.cur) + _gtNum(K.charge, 0), L('חיוב', 'Charge', 'Cargo'), 'var(--gold)', dl(K.charge, k => k.charge, {})) : '') +
+    (K.price ? kpi(escapeHtml(gtMoney(K.cur, K.charge, 0)), L('חיוב', 'Charge', 'Cargo'), 'var(--gold)', dl(K.charge, k => k.charge, {})) : '') +
     '</div>';
   const sec = (k, title, sum, inner) => `<details class="gt-acc" data-k="${k}"><summary><span class="gt-acc-t">${title}</span><span class="gt-acc-s">${sum}</span></summary><div class="gt-acc-b">${inner}</div></details>`;
   // 1. kashrut results
@@ -8380,12 +8392,12 @@ function gtAnHtml(acc, K, C){
     wl(acc.workers.slaughter, L('שוחטים', 'Slaughterers', 'Matarifes')) + wl(acc.workers.inner, L('בודקי פנים', 'Inner inspectors', 'Inspectores internos')) + wl(acc.workers.outer, L('בודקי חוץ', 'Outer inspectors', 'Inspectores externos')));
   // 8. weight and charge
   const W = acc.weights;
-  h += sec('weight', '⚖️ ' + (K.price ? L('משקל וחיוב', 'Weight and charge', 'Peso y cargo') : L('משקל', 'Weight', 'Peso')), _gtNum(K.kg) + ' ' + L('ק״ג', 'kg', 'kg') + (K.price ? ' · ' + escapeHtml(K.cur) + _gtNum(K.charge, 0) : ''),
+  h += sec('weight', '⚖️ ' + (K.price ? L('משקל וחיוב', 'Weight and charge', 'Peso y cargo') : L('משקל', 'Weight', 'Peso')), _gtNum(K.kg) + ' ' + L('ק״ג', 'kg', 'kg') + (K.price ? ' · ' + escapeHtml(gtMoney(K.cur, K.charge, 0)) : ''),
     `<table class="gt-tbl"><tr><th></th><th>${L('התקופה', 'Period', 'Período')}</th>${C.map(c => `<th>${escapeHtml(c.l)}</th>`).join('')}</tr>
      <tr><td>${L('בהמות שנשקלו', 'Animals weighed', 'Animales pesados')}</td><td>${_gtNum(K.weighed)}</td>${C.map(c => `<td>${_gtNum(c.K.weighed)}</td>`).join('')}</tr>
      <tr><td>${L('סה״כ ק״ג', 'Total kg', 'Total kg')}</td><td>${_gtNum(K.kg)}</td>${C.map(c => `<td>${_gtNum(c.K.kg)} ${gtDelta(K.kg, c.K.kg, {})}</td>`).join('')}</tr>
      <tr><td>${L('ממוצע לבהמה', 'Average per animal', 'Promedio por animal')}</td><td>${W.nFull ? _gtNum(W.sumFull / W.nFull, 1) : '—'}</td>${C.map(c => `<td>${c.acc.weights.nFull ? _gtNum(c.acc.weights.sumFull / c.acc.weights.nFull, 1) : '—'}</td>`).join('')}</tr>
-     ${K.price ? `<tr><td>${L('חיוב', 'Charge', 'Cargo')} (${escapeHtml(K.cur)}${K.price}/${L('ק״ג', 'kg', 'kg')})</td><td><b style="color:var(--gold);">${escapeHtml(K.cur)}${_gtNum(K.charge, 0)}</b></td>${C.map(c => `<td>${escapeHtml(K.cur)}${_gtNum(c.K.charge, 0)} ${gtDelta(K.charge, c.K.charge, {})}</td>`).join('')}</tr>` : ''}
+     ${K.price ? `<tr><td>${L('חיוב', 'Charge', 'Cargo')} (${escapeHtml(gtMoney(K.cur, K.price, 2))}/${L('ק״ג', 'kg', 'kg')})</td><td><b style="color:var(--gold);">${escapeHtml(gtMoney(K.cur, K.charge, 0))}</b></td>${C.map(c => `<td>${escapeHtml(gtMoney(K.cur, c.K.charge, 0))} ${gtDelta(K.charge, c.K.charge, {})}</td>`).join('')}</tr>` : ''}
      </table><div style="margin-top:12px;" id="mgrWeightTableA"></div>`);
   // 9. by hour
   const mx = Math.max(1, ...acc.hours);
@@ -8502,6 +8514,100 @@ function gtTodayIntakeSum(){
   const s=KS.getSettings(); const n=(s.dailyIntake||[]).reduce((t,r)=>t+(Number(r.qty)||0),0);
   e.textContent = n ? n+' '+L('בהמות','animals','animales') : L('לא הוזן','not entered','sin datos');
 }
+// ═══ step 46 redesign: SETTINGS by topic ════════════════════════════════════
+// The existing sections (their ids, buttons and code unchanged) are moved, once,
+// into seven topic groups that open in place; inside a group each section opens
+// in place too. Nothing is removed — a section not listed below lands in "System".
+var _gtSetBuilt = false;
+const _GT_SET_GROUPS = [
+  { k: 'devices', ic: '📱', t: ['מסכים ומכשירים', 'Screens & devices', 'Pantallas y dispositivos'], secs: ['#mgrStationsTitle', 'מכשירים רשומים', '🔧 החלפת מכשיר תקול'],
+    open: () => { try{ mgrRenderStationsPanel(); }catch(e){} try{ mgrRenderDevicesPanel(); }catch(e){} } },
+  { k: 'users', ic: '👷', t: ['עובדים וחשבונות', 'Workers & accounts', 'Trabajadores y cuentas'], secs: ['משתמשים', '#mgrOwnersTitle'],
+    open: () => { try{ mgrUserTab(mgrCurrentUserRole || 'slaughter'); mgrRenderOwners(); }catch(e){} } },
+  { k: 'kashrut', ic: '✡️', t: ['כשרות', 'Kashrut', 'Kashrut'], secs: ['סטטוסי כשרות וסימנים', 'רבנות (אופציות מתקדמות)', 'בדיקות פנים וחוץ', 'תמונת ריאה לבדיקה'],
+    open: () => {} },
+  { k: 'stations', ic: '🏭', t: ['התנהגות המסכים', 'How the screens work', 'Funcionamiento de pantallas'], secs: ['שחיטה', '#slKeysTitle', '#cnSetTitle', 'רגלים', 'חלקים קטנים', 'חותמות', 'שיטות קליטת משקל (חותמות)', 'בקרת משקל — ON/OFF נפרד לכל שלב', 'קולר / אריזה'],
+    open: () => { try{ mgrRenderWeightControls(); }catch(e){} try{ const wm = KS.getSettings().weightMethods || { qr: false, barcode: true, ocr: true };
+      const q = document.getElementById('wmMethodQR'); if(q) q.checked = !!wm.qr; const b = document.getElementById('wmMethodBarcode'); if(b) b.checked = wm.barcode !== false;
+      const o = document.getElementById('wmMethodOCR'); if(o) o.checked = wm.ocr !== false; }catch(e){} } },
+  { k: 'printing', ic: '🖨️', t: ['מדפסות, סורקים ומדבקות', 'Printers, scanners & labels', 'Impresoras, escáneres y etiquetas'], secs: ['@printing', 'מדפסות', 'סורקים', 'שיוך לכל מסך', 'מצב הדפסה — רגליים / ראש', 'תצוגה מקדימה — מדבקת רגלים / ראש', 'תצוגה מקדימה — מדבקת כשרות', 'כמות מדבקות', 'תוכן המדבקה'],
+    open: () => { try{ mgrRenderPrintPreview(); }catch(e){} } },
+  { k: 'daily', ic: '📅', t: ['עבודה יומית', 'Daily work', 'Trabajo diario'], secs: ['משקים וסוגי בקר', 'חלקים קטנים — משקל ממוצע', 'מערכת'],
+    open: () => { try{ mgrRenderFarmSystem(); }catch(e){} } },
+  { k: 'system', ic: '🛡️', t: ['מערכת', 'System', 'Sistema'], secs: ['גיבוי ושחזור', 'רישוי', '#mgrTestSec', '#supAccTitle'],
+    open: () => { try{ mgrRenderLicensePanel(); }catch(e){} try{ gtRenderTestCard(); }catch(e){} try{ mgrRenderSupportAccess(); }catch(e){} } }
+];
+function gtSettingsBuild(){
+  if(_gtSetBuilt) return; const root = document.getElementById('mgr-settings'); if(!root) return;
+  _gtSetBuilt = true;
+  const containers = ['ss-screens', 'ss-devices', 'ss-users', 'ss-system', 'func-slaughter', 'func-legs', 'func-inspection', 'func-parts', 'func-stamps', 'func-cooler', 'func-printing'];
+  const sections = [], pre = {};
+  containers.forEach(cid => {
+    const c = document.getElementById(cid); if(!c) return; let cur = null;
+    [...c.children].forEach(ch => {
+      if(ch.classList.contains('mgr-sec')){ cur = { head: ch, body: [], from: cid }; sections.push(cur); }
+      else if(cur) cur.body.push(ch);
+      else (pre[cid] = pre[cid] || []).push(ch);
+    });
+  });
+  const txt = el => (el.textContent || '').replace(/\s+/g, ' ').trim();
+  const take = m => {
+    const i = sections.findIndex(s => s && (m.startsWith('#') ? s.head.id === m.slice(1) : txt(s.head) === m));
+    if(i < 0) return null; const s = sections[i]; sections[i] = null; return s;
+  };
+  const host = document.createElement('div'); host.id = 'gtSetGroups';
+  const mkSec = (s) => {
+    const d = document.createElement('details'); d.className = 'gt-acc gt-acc-in';
+    ['owner-hide', 'maker-hide'].forEach(c => { if(s.head.classList.contains(c)) d.classList.add(c); });
+    const sm = document.createElement('summary'); const tt = document.createElement('span'); tt.className = 'gt-acc-t'; tt.appendChild(s.head); sm.appendChild(tt); d.appendChild(sm);
+    const b = document.createElement('div'); b.className = 'gt-acc-b'; s.body.forEach(e => b.appendChild(e)); d.appendChild(b);
+    return d;
+  };
+  _GT_SET_GROUPS.forEach((g, gi) => {
+    const d = document.createElement('details'); d.className = 'gt-acc gt-grp'; d.setAttribute('data-g', g.k);
+    const sm = document.createElement('summary');
+    sm.innerHTML = '<span class="gt-acc-t">' + g.ic + ' <span class="gt-grp-t"></span></span><span class="gt-acc-s"></span>';
+    d.appendChild(sm);
+    const b = document.createElement('div'); b.className = 'gt-acc-b';
+    const names = [];
+    g.secs.forEach(m => {
+      if(m === '@printing'){ (pre['func-printing'] || []).forEach(e => b.appendChild(e)); return; }
+      const s = take(m); if(!s) return;
+      if(m === 'מערכת') s.head.textContent = L('איפוס יומי וארכיון', 'Daily reset & archive', 'Reinicio diario y archivo');
+      names.push(txt(s.head)); b.appendChild(mkSec(s));
+    });
+    if(g.k === 'system') sections.forEach((s, i) => { if(s){ names.push(txt(s.head)); b.appendChild(mkSec(s)); sections[i] = null; } });   // nothing is lost
+    d.appendChild(b);
+    d._names = names;
+    d.addEventListener('toggle', () => { if(d.open){ try{ mgrSyncUI(); }catch(e){} try{ g.open(); }catch(e){} } });
+    host.appendChild(d);
+  });
+  // a single section opened inside a group re-draws what it shows
+  host.addEventListener('toggle', ev => { const t = ev.target; if(t && t.classList && t.classList.contains('gt-acc-in') && t.open){ try{ if(t.querySelector('#mgrScreensToggle')) mgrRenderStationsPanel(); if(t.querySelector('#mgrDevicesPanel')) mgrRenderDevicesPanel(); if(t.querySelector('#mgrWeightControls')) mgrRenderWeightControls(); if(t.querySelector('#mgrLicenseCard')) mgrRenderLicensePanel(); }catch(e){} } }, true);
+  // the old sub-tabs and their panels give way
+  const bar = document.getElementById('sub-s-screens'); if(bar && bar.parentElement) bar.parentElement.style.display = 'none';
+  ['ss-screens', 'ss-devices', 'ss-users', 'ss-system', 'ss-inspection'].forEach(id => { const e = document.getElementById(id); if(e) e.style.display = 'none'; });
+  root.appendChild(host);
+  gtSettingsLabels();
+  // old calls that opened a sub-tab now open the matching group
+  const map = { screens: 'devices', devices: 'devices', users: 'users', inspection: 'stations', system: 'system' };
+  const orig = window.mgrSubTab;
+  window.mgrSubTab = function(group, sub){
+    if(group !== 's') return orig.apply(this, arguments);
+    const d = document.querySelector('#gtSetGroups details[data-g="' + (map[sub] || 'system') + '"]');
+    if(d){ d.open = true; setTimeout(() => { try{ d.scrollIntoView({ block: 'start', behavior: 'smooth' }); }catch(e){} }, 50); }
+  };
+}
+function gtSettingsLabels(){
+  document.querySelectorAll('#gtSetGroups details.gt-grp').forEach(d => {
+    const g = _GT_SET_GROUPS.find(x => x.k === d.getAttribute('data-g')); if(!g) return;
+    d.querySelector('.gt-grp-t').textContent = L(g.t[0], g.t[1], g.t[2]);
+    d.querySelector('.gt-acc-s').textContent = (d._names || []).slice(0, 3).join(' · ') + ((d._names || []).length > 3 ? ' …' : '');
+  });
+}
+// money: a symbol in front (₪12), a 3-letter code with a space (USD 12)
+function gtMoney(cur, n, dig){ cur = String(cur || '₪'); const v = _gtNum(n, dig == null ? 0 : dig); return /^[A-Z]{3}$/.test(cur) ? cur + ' ' + v : cur + v; }
+
 function gtMgrTabLabels(){
   document.querySelectorAll('#scManager .gt-tablbl').forEach(e => { const t = e.getAttribute('data-' + (lang === 'he' ? 'he' : lang === 'es' ? 'es' : 'en')); if(t) e.textContent = t; });
 }
@@ -8528,6 +8634,7 @@ function mgrTab(tab){
   try{ gtMgrTabLabels(); }catch(e){}
   if(tab==='analysis') setTimeout(()=>{ try{ gtAnRender(); }catch(e){ gtLogError('analysis', e); } }, 0);
   if(tab==='search') setTimeout(()=>{ try{ gtSearchInit(); }catch(e){ gtLogError('search', e); } }, 0);
+  if(tab==='settings'){ try{ gtSettingsBuild(); gtSettingsLabels(); }catch(e){ gtLogError('settings.build', e); } }
   if(tab==='monitor') setTimeout(()=>{ try{ mgrRenderFarmSystem(); gtTodayIntakeSum(); }catch(e){} }, 0);
   document.querySelectorAll('.mgr-tab').forEach(t=>t.classList.remove('active'));
   const tb=document.getElementById('tab-'+tab);if(tb)tb.classList.add('active');
@@ -11229,9 +11336,9 @@ function gtRenderWeightTables(){
   const waiting=!_gtWT.days && window.sb;
   const html=`<div style="font-size:14px;font-weight:700;color:var(--gold);margin-bottom:6px;">⚖️ ${bill?L('משקל וחיוב','Weight and charge','Peso y cargo'):L('משקל','Weight','Peso')}</div>
     <table style="width:100%;border-collapse:collapse;"><tr><th style="${th}"></th><th style="${th}">${L('נשקלו','Weighed','Pesados')}</th><th style="${th}">${L('ק״ג','kg','kg')}</th>${bill?`<th style="${th}">${L('חיוב','Charge','Cargo')}</th>`:''}</tr>
-    ${rows.map(r=>`<tr><td style="${td}text-align:start;font-weight:700;">${lbl[r.per]}</td><td style="${td}">${r.n}</td><td style="${td}">${fmt(r.kg)}</td>${bill?`<td style="${td}color:var(--gold);font-weight:700;">${cur}${fmt(r.kg*price)}</td>`:''}</tr>`).join('')}
+    ${rows.map(r=>`<tr><td style="${td}text-align:start;font-weight:700;">${lbl[r.per]}</td><td style="${td}">${r.n}</td><td style="${td}">${fmt(r.kg)}</td>${bill?`<td style="${td}color:var(--gold);font-weight:700;">${escapeHtml(gtMoney(b.currency||'\u20aa', r.kg*price, 1))}</td>`:''}</tr>`).join('')}
     </table>
-    <div style="font-size:10px;color:var(--muted);margin-top:6px;">${bill?L('מחיר לק״ג: ','Price per kg: ','Precio por kg: ')+cur+price+' · ':''}${L('משקל = צד ימין + צד שמאל. ימים קודמים מהשרת','Weight = right + left side. Earlier days from the server','Peso = lado derecho + izquierdo. Días anteriores del servidor')}${waiting?' · '+L('טוען…','loading…','cargando…'):''}</div>`;
+    <div style="font-size:10px;color:var(--muted);margin-top:6px;">${bill?L('מחיר לק״ג: ','Price per kg: ','Precio por kg: ')+escapeHtml(gtMoney(b.currency||'\u20aa', price, 2))+' · ':''}${L('משקל = צד ימין + צד שמאל. ימים קודמים מהשרת','Weight = right + left side. Earlier days from the server','Peso = lado derecho + izquierdo. Días anteriores del servidor')}${waiting?' · '+L('טוען…','loading…','cargando…'):''}</div>`;
   els.forEach(e=>e.innerHTML=html);
 }
 
