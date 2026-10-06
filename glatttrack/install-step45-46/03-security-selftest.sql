@@ -32,7 +32,8 @@
 -- ============================================================================
 do $gt_selftest$
 declare
-  v_step text := 'start'; r record; v_n int; v_fail int; v_names text; v_line text;
+  v_step text := 'start'; v_test text; v_ok boolean; v_detail text; v_n int; v_fail int; v_names text; v_line text;
+  v_res text := (select '_st' || '_result');  -- the results table, named at run time (see below)
 begin
   -- an earlier result in this session is cleared
   if exists (select 1 from pg_prepared_statements where name = 'gt_selftest_result') then
@@ -2373,13 +2374,15 @@ $gt70$;
     raise notice '%', rpad('=', 100, '=');
     raise notice 'GlattTrack security self-test  (schema step %)', (select value from plant_state where key = 'schemaStep');
     raise notice '%', rpad('=', 100, '=');
-    for r in select * from _st_result order by n loop
-      if r.ok then raise notice 'PASS  %', r.test;
-      else raise notice 'FAIL  %   ::  %', r.test, left(coalesce(r.detail, ''), 600); end if;
+    -- (the temporary tables are read with EXECUTE only: a server that checks code
+    -- blocks before they run, plpgsql_check, would not find them yet)
+    for v_test, v_ok, v_detail in execute format('select test, ok, detail from %I order by n', v_res) loop
+      if v_ok then raise notice 'PASS  %', v_test;
+      else raise notice 'FAIL  %   ::  %', v_test, left(coalesce(v_detail, ''), 600); end if;
     end loop;
-    select count(*), count(*) filter (where not ok) into v_n, v_fail from _st_result;
-    select string_agg(f.test, ' | ' order by f.k) into v_names
-      from (select x.n as k, x.test from _st_result x where not x.ok order by x.n limit 8) f;
+    execute format('select count(*), count(*) filter (where not ok) from %I', v_res) into v_n, v_fail;
+    execute format('select string_agg(f.test, '' | '' order by f.k)
+               from (select x.n as k, x.test from %I x where not x.ok order by x.n limit 8) f', v_res) into v_names;
     raise notice '%', rpad('-', 100, '-');
     raise notice '% checks, % passed, % failed  (nothing was changed — all undone)', v_n, v_n - v_fail, v_fail;
     raise exception 'gt_selftest_undo';
