@@ -1,6 +1,7 @@
 -- ============================================================================
 -- GlattTrack — security self-test (run any time; changes NOTHING)
--- VERSION 4 — one statement, no temporary tables (it starts with: do $gt_selftest$)
+-- VERSION 5 — one statement, no temporary tables, nothing the Supabase SQL Editor
+--             mistakes for a new table (so it shows no "RLS" window and adds nothing)
 -- ============================================================================
 -- Simulates requests exactly as they arrive through the API (PostgREST: the
 -- "authenticator" login, role anon, request headers, JWT claims) and live

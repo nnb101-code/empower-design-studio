@@ -406,6 +406,11 @@ revoke execute on function _reason_ok(text) from public, anon, authenticated;
 
 create table if not exists _gt45_acl (fn text not null, grantee text not null, primary key (fn, grantee));
 revoke all on _gt45_acl from public, anon, authenticated;
+-- Row security is already on for these tables; the line is repeated so that the
+-- Supabase SQL Editor sees it and does not offer to append its own "enable RLS"
+-- lines (for a helper table dropped at the end of this file that line would fail)
+alter table _gt45_acl enable row level security;
+alter table plant_state enable row level security;
 do $$
 declare x record;
 begin

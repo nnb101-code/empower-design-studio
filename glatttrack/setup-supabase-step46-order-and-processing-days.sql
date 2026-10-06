@@ -233,6 +233,10 @@ create table if not exists processing_day_closed (
   primary key (board_id, station)
 );
 alter table processing_day_closed enable row level security;
+-- Row security is already on for these tables; the line is repeated so that the
+-- Supabase SQL Editor sees it and does not offer to append its own "enable RLS"
+-- lines
+alter table plant_state enable row level security;
 revoke all on processing_day_closed from public, anon, authenticated;
 
 -- the processing stations this plant uses (team-leader screen switches)
