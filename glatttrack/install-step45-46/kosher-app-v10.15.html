@@ -14564,6 +14564,8 @@ function _gtArm(){ if(_gtArmed) return; try{ history.pushState({gt:1},''); _gtAr
     if(from && to && from!==to && !_gtBackNav){ _gtScreens.push(from); if(_gtScreens.length>30) _gtScreens.shift(); }
     if(to!=='scInner'){ const sc=document.getElementById('scInner'); if(sc) sc.style.setProperty('--gt-float-h','0px'); }
     if(to==='scManager') setTimeout(()=>{ try{ _maybeShowLicenseRequest(); }catch(e){} },700);
+    // entering the team-leader screen: the health card shows at once ("checking…") and is filled right away
+    if(to==='scManager' && from!=='scManager') setTimeout(()=>{ try{ mgrRenderHealth(); gtHealthRefresh(); gtProcRefresh(); }catch(e){} },50);
     else { const lr=document.getElementById('licenseRequestModal'); if(lr) lr.classList.remove('open'); } // only ever over the team-leader screen
     _gtArm();
     return r;
@@ -14734,6 +14736,24 @@ async function gtHealthRefresh(){
   }catch(e){ window._gtHealth={ok:false, error:'network'}; }
   finally{ _gtHealthBusy=false; }
   _gtHealthStatusRow(); mgrRenderHealth();
+  if(window._gtHealth && window._gtHealth.error==='unauthorized') _gtSessionGone();
+}
+// the server no longer accepts this team-leader / owner session (expired, removed, or made
+// before the team-leader-device rule): confirm, then back to the login with an explanation
+let _gtSessionGoneBusy=false;
+async function _gtSessionGone(){
+  if(_gtSessionGoneBusy || !window.sb) return; _gtSessionGoneBusy=true;
+  try{
+    const tok=KS.getManagerToken && KS.getManagerToken(); if(!tok) return;
+    const r=await _withTimeout(window.sb.rpc('manager_session_check',{p_token:tok}),10000);
+    if(r.error || !r.data || r.data.ok!==false) return;          // no clear answer: leave it
+    KS.setManagerToken(null,null); _clearLeaderStash();
+    window._gtHealth=null; _gtHealthStatusRow();
+    if(document.getElementById('scManager')?.classList.contains('active')){ goTo('scNav'); _checkLogin('manager','scManagerLogin'); }
+    alert(L('הכניסה של ראש הצוות כבר לא בתוקף (פג הזמן, או שהשרת עודכן). היכנס שוב עם הקוד.',
+              'The team leader login is no longer valid (it expired, or the server was updated). Log in again with your code.',
+              'El acceso del jefe de equipo ya no es válido (caducó o se actualizó el servidor). Entre de nuevo con su código.'));
+  }catch(e){} finally{ _gtSessionGoneBusy=false; }
 }
 function mgrRenderHealth(){
   const el=document.getElementById('mgrHealth'); if(!el) return;
