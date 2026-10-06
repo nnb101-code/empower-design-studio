@@ -1,5 +1,6 @@
 -- ============================================================================
 -- GlattTrack — security self-test (run any time; changes NOTHING)
+-- VERSION 3 — one statement (it starts with: do $gt_selftest$)
 -- ============================================================================
 -- Simulates requests exactly as they arrive through the API (PostgREST: the
 -- "authenticator" login, role anon, request headers, JWT claims) and live
@@ -13,7 +14,8 @@
 --   settings shapes, audit (device lifecycle + manufacturer), brakes, the daily
 --   reset, the event chain, value rules, worker login, the archive, and the
 --   ACTIVE security surface against the expected manifest.
--- Everything runs inside ONE transaction that is ROLLED BACK at the end.
+-- The whole test is ONE statement (one DO block): every change it makes is
+-- undone inside it, whatever tool runs it (SQL Editor, psql, a pooler).
 -- While it runs (a few seconds) tablets writing to the board wait for it.
 --
 -- Where to run it:
@@ -28,30 +30,33 @@
 -- locks, processing kept over several days with no skipping).
 --   Supabase SQL Editor: paste the WHOLE file and Run (nothing selected).
 -- ============================================================================
--- a session left inside a failed transaction (an earlier run stopped half-way)
--- is cleared first; so is the result of an earlier run in this session
-rollback;
-do $$ begin
+do $gt_selftest$
+declare
+  v_step text := 'start'; r record; v_n int; v_fail int; v_names text; v_line text;
+begin
+  -- an earlier result in this session is cleared
   if exists (select 1 from pg_prepared_statements where name = 'gt_selftest_result') then
     execute 'deallocate gt_selftest_result';
   end if;
-end $$;
-
-begin;
+  begin                                  -- everything in here is undone at the end
+    v_step := 'set local client_min_messages = notice;';
+    execute $gt0$
 set local client_min_messages = notice;
+$gt0$;
+    v_step := 'set local search_path = public, extensions;';
+    execute $gt1$
 set local search_path = public, extensions;
-
+$gt1$;
+    v_step := 'create temp table _st_result (n serial primary key, test text not null, ok boolean not nul';
+    execute $gt2$
 create temp table _st_result (n serial primary key, test text not null, ok boolean not null, detail text) on commit drop;
-create temp table _st (k text primary key, v text) on commit drop;   -- fixture values
-
--- everything below must run in this one transaction (it is rolled back at the
--- end); if the tool ran the statements one by one, stop here, before any change
-do $$ begin
-  if to_regclass('pg_temp._st_result') is null then
-    raise exception 'GlattTrack self-test: run the WHOLE file at once (nothing selected) — it was run statement by statement or in parts; nothing was changed';
-  end if;
-end $$;
-
+$gt2$;
+    v_step := 'create temp table _st (k text primary key, v text) on commit drop;';
+    execute $gt3$
+create temp table _st (k text primary key, v text) on commit drop;
+$gt3$;
+    v_step := 'call SQL as the API would (authenticator → anon + request headers + JWT';
+    execute $gt4$
 -- call SQL as the API would (authenticator → anon + request headers + JWT
 -- claims); returns the jsonb result, or {"exception": message, "sqlstate": code}
 create function pg_temp.api3(p_headers jsonb, p_claims jsonb, p_sql text) returns jsonb
@@ -80,9 +85,14 @@ begin
   if e is not null then return jsonb_build_object('exception', e, 'sqlstate', st); end if;
   return coalesce(r, 'null'::jsonb);
 end $$;
+$gt4$;
+    v_step := 'create function pg_temp.api(p_headers jsonb, p_sql text) returns jsonb';
+    execute $gt5$
 create function pg_temp.api(p_headers jsonb, p_sql text) returns jsonb
 language sql as $$ select pg_temp.api3(p_headers, '{"role":"anon"}'::jsonb, p_sql) $$;
-
+$gt5$;
+    v_step := 'a live-updates read (role anon + JWT, no request headers, not the API login)';
+    execute $gt6$
 -- a live-updates read (role anon + JWT, no request headers, not the API login)
 create function pg_temp.rt(p_claims jsonb, p_sql text) returns jsonb
 language plpgsql as $$
@@ -100,7 +110,9 @@ begin
   if e is not null then return jsonb_build_object('exception', e); end if;
   return coalesce(r, 'null'::jsonb);
 end $$;
-
+$gt6$;
+    v_step := 'simulate a direct change to the event log (the append-only triggers off for';
+    execute $gt7$
 -- simulate a direct change to the event log (the append-only triggers off for
 -- this one sub-block, always rolled back): as superuser by replica mode,
 -- otherwise (Supabase SQL Editor, the table owner) by switching off the
@@ -114,45 +126,99 @@ begin
     execute 'alter table events_pilot disable trigger user';
   end;
 end $$;
-
+$gt7$;
+    v_step := 'create function pg_temp.rec(p_test text, p_ok boolean, p_detail text default null) returns';
+    execute $gt8$
 create function pg_temp.rec(p_test text, p_ok boolean, p_detail text default null) returns void
 language sql as $$ insert into _st_result (test, ok, detail) values (p_test, coalesce(p_ok, false), p_detail) $$;
-
+$gt8$;
+    v_step := 'create function pg_temp.v(p_k text) returns text language sql stable as $$ select v from _';
+    execute $gt9$
 create function pg_temp.v(p_k text) returns text language sql stable as $$ select v from _st where k = p_k $$;
+$gt9$;
+    v_step := 'create function pg_temp.dev(p_name text) returns jsonb language sql stable as $$';
+    execute $gt10$
 create function pg_temp.dev(p_name text) returns jsonb language sql stable as $$
   select jsonb_build_object('x-device-token', (select v from _st where k = 'tok_' || p_name)) $$;
+$gt10$;
+    v_step := 'create function pg_temp.devid(p_name text) returns text language sql stable as $$ select v';
+    execute $gt11$
 create function pg_temp.devid(p_name text) returns text language sql stable as $$ select v from _st where k = 'id_' || p_name $$;
+$gt11$;
+    v_step := 'create function pg_temp.mgr(p_k text default ''mgr'') returns jsonb language sql stable as $';
+    execute $gt12$
 create function pg_temp.mgr(p_k text default 'mgr') returns jsonb language sql stable as $$
   select jsonb_build_object('x-manager-token', (select v from _st where k = p_k)) $$;
+$gt12$;
+    v_step := 'create function pg_temp.ep() returns bigint language sql stable as $$ select _board_epoch(';
+    execute $gt13$
 create function pg_temp.ep() returns bigint language sql stable as $$ select _board_epoch() $$;
-
+$gt13$;
+    v_step := 'create function pg_temp.q_claim(p_id int, p_stage text, p_value text, p_actor text, p_dev ';
+    execute $gt14$
 create function pg_temp.q_claim(p_id int, p_stage text, p_value text, p_actor text, p_dev text) returns text
 language sql stable as $$
   select format('select claim_animal_stage(%s, %L, %L, %L, %L, %s)', p_id, p_stage, p_value, p_actor, p_dev,
                 coalesce(_board_epoch()::text, 'null')) $$;
+$gt14$;
+    v_step := 'create function pg_temp.q_claimc(p_id int, p_stage text, p_value text, p_cmd uuid) returns';
+    execute $gt15$
 create function pg_temp.q_claimc(p_id int, p_stage text, p_value text, p_cmd uuid) returns text
 language sql stable as $$
   select format('select claim_animal_stage(%s, %L, %L, %L, %L, %s, %L::uuid)', p_id, p_stage, p_value, '', 'ignored',
                 coalesce(_board_epoch()::text, 'null'), p_cmd) $$;
+$gt15$;
+    v_step := 'animal_push of one row (id + today''s board day + the given columns)';
+    execute $gt16$
 -- animal_push of one row (id + today's board day + the given columns)
 create function pg_temp.q_push(p_id int, p_set jsonb, p_cmd uuid default null) returns text
 language sql stable as $$
   select format('select animal_push(%L::jsonb, %L::uuid)',
                 jsonb_build_object('id', p_id, 'board_epoch', _board_epoch()) || coalesce(p_set, '{}'::jsonb), p_cmd) $$;
+$gt16$;
+    v_step := 'create function pg_temp.q_ev(p_event jsonb) returns text language sql immutable as $$';
+    execute $gt17$
 create function pg_temp.q_ev(p_event jsonb) returns text language sql immutable as $$
   select format('select event_append(%L::jsonb)', p_event) $$;
+$gt17$;
+    v_step := 'create function pg_temp.ev(p_stage text, p_action text, p_animal int default null) returns';
+    execute $gt18$
 create function pg_temp.ev(p_stage text, p_action text, p_animal int default null) returns jsonb language sql volatile as $$
   select jsonb_build_object('event_id', gen_random_uuid(), 'stage', p_stage, 'action', p_action, 'animal_no', p_animal,
                             'payload', '{}'::jsonb, 'actor', 'x', 'device_id', 'x', 'occurred_at', now()::text) $$;
+$gt18$;
+    v_step := 'create function pg_temp.q_upd(p_id int, p_set text) returns text language sql immutable as';
+    execute $gt19$
 create function pg_temp.q_upd(p_id int, p_set text) returns text language sql immutable as $$
   select format('with u as (update animals_pilot set %s where id = %s returning 1) select jsonb_build_object(''rows'', count(*)) from u', p_set, p_id) $$;
+$gt19$;
+    v_step := 'create function pg_temp.exc(r jsonb) returns text language sql immutable as $$ select coal';
+    execute $gt20$
 create function pg_temp.exc(r jsonb) returns text language sql immutable as $$ select coalesce(r ->> 'exception', '') $$;
+$gt20$;
+    v_step := 'create function pg_temp.err(r jsonb) returns text language sql immutable as $$ select coal';
+    execute $gt21$
 create function pg_temp.err(r jsonb) returns text language sql immutable as $$ select coalesce(r ->> 'error', r ->> 'exception', '') $$;
+$gt21$;
+    v_step := 'create function pg_temp.ok(r jsonb) returns boolean language sql immutable as $$ select co';
+    execute $gt22$
 create function pg_temp.ok(r jsonb) returns boolean language sql immutable as $$ select coalesce((r ->> 'ok')::boolean, false) $$;
+$gt22$;
+    v_step := 'create function pg_temp.claimed(r jsonb) returns boolean language sql immutable as $$ sele';
+    execute $gt23$
 create function pg_temp.claimed(r jsonb) returns boolean language sql immutable as $$ select coalesce((r ->> 'claimed')::boolean, false) $$;
+$gt23$;
+    v_step := 'create function pg_temp.ar(p_id int) returns animals_pilot language sql stable as $$ selec';
+    execute $gt24$
 create function pg_temp.ar(p_id int) returns animals_pilot language sql stable as $$ select * from animals_pilot where id = p_id $$;
+$gt24$;
+    v_step := 'create function pg_temp.testmode(p_on boolean) returns void language sql as $$';
+    execute $gt25$
 create function pg_temp.testmode(p_on boolean) returns void language sql as $$
   update plant_state set value = case when p_on then 'on' else 'off' end where key = 'testMode' $$;
+$gt25$;
+    v_step := 'make an open lung check look 11 minutes old';
+    execute $gt26$
 -- make an open lung check look 11 minutes old
 create function pg_temp.age_inner(p_id int) returns void language plpgsql as $$
 begin
@@ -160,13 +226,18 @@ begin
   update animals_pilot set inner_time = inner_time - 660000 where id = p_id;
   perform set_config('gt.reset_in_progress', 'false', true);
 end $$;
-
+$gt26$;
+    v_step := 'step 46: bring an animal (as the server, no checks) to the point where the';
+    execute $gt27$
 -- step 46: bring an animal (as the server, no checks) to the point where the
 -- next station may act: 'slaughter' = slaughtered; 'inner' = inner confirmed
 -- (ready for the outer inspector); 'outer' = ruled glatt by the outer inspector
 -- an animal write that went through: claim_animal_stage → claimed, animal_push → ok
 create function pg_temp.wrote(r jsonb) returns boolean language sql immutable as $$
   select coalesce((r ->> 'claimed')::boolean, false) or coalesce((r ->> 'ok')::boolean, false) $$;
+$gt27$;
+    v_step := 'create function pg_temp.prep(p_id int, p_upto text) returns void language plpgsql as $$';
+    execute $gt28$
 create function pg_temp.prep(p_id int, p_upto text) returns void language plpgsql as $$
 declare t bigint := (extract(epoch from now()) * 1000)::bigint - 3600000;
 begin
@@ -183,7 +254,9 @@ begin
   end if;
   perform set_config('gt.reset_in_progress', 'false', true);
 end $$;
-
+$gt28$;
+    v_step := 'fixture: test tablets (slots 90+), team leader, owner, manufacturer, workers';
+    execute $gt29$
 -- ── fixture: test tablets (slots 90+), team leader, owner, manufacturer, workers ──
 do $$
 declare
@@ -260,7 +333,9 @@ begin
   where id between 900 and 999;
   perform set_config('gt.reset_in_progress', 'false', true);
 end $$;
-
+$gt29$;
+    v_step := 'step 46: this plant''s own team-leader devices are set aside for the test (rolled back';
+    execute $gt30$
 -- step 46: this plant's own team-leader devices are set aside for the test (rolled back
 -- at the end) — the checks below start like a plant before its first team-leader
 -- device; the team-leader-device rules have their own section
@@ -273,13 +348,17 @@ do $$ begin
   delete from plant_state where key = 'leaderDevicesRequired';
   perform set_config('app.device_admin', '', true);
 end $$;
-
+$gt30$;
+    v_step := 'the plant''s switches';
+    execute $gt31$
 -- ── the plant's switches ─────────────────────────────────────────────────────
 do $$ begin
   perform pg_temp.rec('switch: test mode is OFF (default)', coalesce((select value from plant_state where key = 'testMode'), 'off') = 'off');
   perform pg_temp.rec('protection cannot be switched off (flags ignored)', _device_auth_required());
 end $$;
-
+$gt31$;
+    v_step := 'step 44: the app may only READ the test flag';
+    execute $gt32$
 -- ── step 44: the app may only READ the test flag ────────────────────────────
 do $$
 declare r jsonb; r2 jsonb; r3 jsonb;
@@ -294,7 +373,9 @@ begin
     and not exists (select 1 from pg_proc where oid = 'server_test_mode()'::regprocedure and provolatile <> 's'),
     concat_ws(' | ', r::text, r2::text, r3::text));
 end $$;
-
+$gt32$;
+    v_step := 'tablets: retired / unpaired / fake key / forged id / wrong station';
+    execute $gt33$
 -- ── tablets: retired / unpaired / fake key / forged id / wrong station ──────
 do $$
 declare r jsonb; r2 jsonb; r3 jsonb; r4 jsonb; a animals_pilot;
@@ -357,7 +438,9 @@ begin
     and a.outer_status is null and a.slaughter is null and a.weight_right is null and not a.not_chalak_outer,
     concat_ws(' | ', r::text, r2::text, left(r3::text, 80), r4::text));
 end $$;
-
+$gt33$;
+    v_step := 'direct table writes are closed (only the RPCs write)';
+    execute $gt34$
 -- ── direct table writes are closed (only the RPCs write) ────────────────────
 do $$
 declare r jsonb; r2 jsonb; r3 jsonb; r4 jsonb;
@@ -386,7 +469,9 @@ begin
     and r4 ->> 'error' = 'invalid_value' and (r4 ->> 'id')::int = 905 and (pg_temp.ar(904)).slaughter is null,
     concat_ws(' | ', r::text, r2::text, r3::text, left(r4::text, 100)));
 end $$;
-
+$gt34$;
+    v_step := 'team-leader sessions';
+    execute $gt35$
 -- ── team-leader sessions ─────────────────────────────────────────────────────
 do $$
 declare r jsonb; r2 jsonb; r3 jsonb; r4 jsonb; t text; ok boolean;
@@ -442,7 +527,9 @@ begin
     r ->> 'error' = 'unauthorized' and r2 ->> 'error' = 'device_not_paired' and r3 ->> 'error' = 'device_not_paired',
     concat_ws(' | ', r::text, r2::text, r3::text));
 end $$;
-
+$gt35$;
+    v_step := 'the team leader never rules; test mode (SQL-only switch) lets him act as a station';
+    execute $gt36$
 -- ── the team leader never rules; test mode (SQL-only switch) lets him act as a station ──
 do $$
 declare r jsonb; r2 jsonb; r3 jsonb; r4 jsonb; r5 jsonb; r6 jsonb; ok boolean;
@@ -482,7 +569,9 @@ begin
   perform pg_temp.rec('team leader, test mode ON: acts as a station (own rulings only, no override)', ok,
     concat_ws(' | ', left(r::text, 80), left(r2::text, 60), r4::text, r5 ->> 'ok'));
 end $$;
-
+$gt36$;
+    v_step := 'first claims: exactly one wins; retries are idempotent';
+    execute $gt37$
 -- ── first claims: exactly one wins; retries are idempotent ──────────────────
 do $$
 declare r jsonb; r2 jsonb; r3 jsonb; ok boolean := true; det text := ''; c uuid := gen_random_uuid(); c2 uuid := gen_random_uuid();
@@ -533,7 +622,9 @@ begin
     r ->> 'error' = 'stale_board' and r2 ->> 'error' = 'stale_board' and (pg_temp.ar(913)).slaughter is null
     and (pg_temp.ar(913)).board_epoch = pg_temp.ep(), concat_ws(' | ', r::text, r2::text, left(r3::text, 80)));
 end $$;
-
+$gt37$;
+    v_step := 'corrections';
+    execute $gt38$
 -- ── corrections ──────────────────────────────────────────────────────────────
 do $$
 declare r jsonb; r2 jsonb; r3 jsonb; r4 jsonb; ok boolean;
@@ -685,7 +776,9 @@ begin
   perform pg_temp.rec('inner takeover: the tablet that lost the check is refused (claim + push), B''s state kept, refusal recorded', ok,
     concat_ws(' | ', r ->> 'claimed', r2 ->> 'claimed', left(r3::text, 60), r4 ->> 'claimed'));
 end $$;
-
+$gt38$;
+    v_step := 'the rabbinate outer screen ("not chalak")';
+    execute $gt39$
 -- ── the rabbinate outer screen ("not chalak") ────────────────────────────────
 do $$
 declare r jsonb; r2 jsonb; r3 jsonb; r4 jsonb; r5 jsonb; ok boolean; c uuid := gen_random_uuid();
@@ -729,7 +822,9 @@ begin
   perform pg_temp.rec('a "not chalak" animal (slaughter / inner / outer) can only be ruled kosher or treif; ruled → can''t be sent', ok,
     concat_ws(' | ', left(r::text, 40), r2 ->> 'error', r5 ->> 'error'));
 end $$;
-
+$gt39$;
+    v_step := 'identity chaos: old key after a replacement, fake actor / role';
+    execute $gt40$
 -- ── identity chaos: old key after a replacement, fake actor / role ──────────
 do $$
 declare r jsonb; r2 jsonb; r3 jsonb; v_code text := lpad((floor(random() * 900000) + 100000)::text, 6, '0'); ok boolean; v_repl uuid;
@@ -782,7 +877,9 @@ begin
   perform pg_temp.rec('event_append: device + worker from the server, duplicate event id = ok, bad event refused', ok,
     concat_ws(' | ', left(r::text, 80), r2::text, r3::text));
 end $$;
-
+$gt40$;
+    v_step := 'reads';
+    execute $gt41$
 -- ── reads ────────────────────────────────────────────────────────────────────
 do $$
 declare r jsonb; r2 jsonb; r3 jsonb; r4 jsonb; r5 jsonb; r6 jsonb; ok boolean;
@@ -821,7 +918,9 @@ begin
   perform pg_temp.rec('legacy tables: no access (plants: an empty answer for the start-up probe)',
     (r #>> '{}')::int = 0 and r2 ->> 'sqlstate' = '42501' and r3 ->> 'sqlstate' = '42501', concat_ws(' | ', r::text, r2::text, r3::text));
 end $$;
-
+$gt41$;
+    v_step := 'settings: value shapes';
+    execute $gt42$
 -- ── settings: value shapes ───────────────────────────────────────────────────
 do $$
 declare r jsonb; ok boolean := true; det text := ''; t text[];
@@ -860,7 +959,9 @@ begin
   r := pg_temp.api(pg_temp.dev('OUT2'), 'select push_settings(''{"problemReports":[{"id":"st1","text":"x"}],"reprintLog":[{"id":"r1"}]}''::jsonb, ''x'')');
   perform pg_temp.rec('a station''s own keys (problem reports / reprint log) still go through', pg_temp.ok(r), r::text);
 end $$;
-
+$gt42$;
+    v_step := 'audit: device lifecycle (never swallowed), manufacturer actions';
+    execute $gt43$
 -- ── audit: device lifecycle (never swallowed), manufacturer actions ─────────
 do $$
 declare r jsonb; r2 jsonb; r3 jsonb; r4 jsonb; ok boolean; n0 bigint;
@@ -915,7 +1016,9 @@ begin
     r #>> '{billing,currency}' = 'CHF' and r2 #>> '{billing,currency}' = '£' and r3 ->> 'error' = 'bad_currency' and not pg_temp.ok(r4),
     concat_ws(' | ', r::text, r2::text, r3::text, r4::text));
 end $$;
-
+$gt43$;
+    v_step := 'brakes';
+    execute $gt44$
 -- ── brakes ───────────────────────────────────────────────────────────────────
 do $$
 declare r jsonb; r2 jsonb; i int; ok boolean; v_last jsonb;
@@ -943,7 +1046,9 @@ begin
   perform pg_temp.rec('manufacturer login: braked (6 per hour) and audited; team-leader login unaffected', ok,
     concat_ws(' | ', r2::text, left(r::text, 40)));
 end $$;
-
+$gt44$;
+    v_step := 'value rules';
+    execute $gt45$
 -- ── value rules ──────────────────────────────────────────────────────────────
 do $$
 declare r jsonb; ok boolean := true; det text := ''; t text[];
@@ -986,7 +1091,9 @@ begin
   ok := ok and pg_temp.claimed(r);
   perform pg_temp.rec('invalid slaughter / inner / outer / eso / role / weight values rejected', ok, det);
 end $$;
-
+$gt45$;
+    v_step := 'workers: login, session, the name on the ruling';
+    execute $gt46$
 -- ── workers: login, session, the name on the ruling ──────────────────────────
 do $$
 declare r jsonb; r2 jsonb; tok text; h jsonb; i int;
@@ -1051,7 +1158,9 @@ begin
   r := pg_temp.api(pg_temp.dev('OUT2'), 'select worker_login(''outer'', ''739104'')');
   perform pg_temp.rec('worker login: guessing is rate-limited', r ->> 'error' = 'rate_limited', r::text);
 end $$;
-
+$gt46$;
+    v_step := 'event log chain: changed / deleted / reordered events are detected';
+    execute $gt47$
 -- ── event log chain: changed / deleted / reordered events are detected ──────
 do $$
 declare r jsonb; v0 jsonb; v1 jsonb; v2 jsonb; v3 jsonb; p1 bigint; p2 bigint; i int;
@@ -1095,7 +1204,9 @@ begin
   perform pg_temp.rec('event chain: a deleted event is detected', not coalesce((v2 ->> 'ok')::boolean, true) and v2 ? 'brokenAt', v2::text);
   perform pg_temp.rec('event chain: reordered events are detected', not coalesce((v3 ->> 'ok')::boolean, true) and v3 ? 'brokenAt', v3::text);
 end $$;
-
+$gt47$;
+    v_step := 'archive: "not chalak" inner / outer apart';
+    execute $gt48$
 -- ── archive: "not chalak" inner / outer apart ────────────────────────────────
 do $$
 declare r jsonb; v_id bigint; x jsonb;
@@ -1113,7 +1224,9 @@ begin
     and not (x -> 1 ->> 'nci')::boolean and (x -> 1 ->> 'nco')::boolean and (x -> 1 ->> 'nc')::boolean
     and not (x -> 2 ->> 'nc')::boolean, left(r::text, 300));
 end $$;
-
+$gt48$;
+    v_step := 'step 45 chaos: inner takeover, then the old tablet comes back';
+    execute $gt49$
 -- ── step 45 chaos: inner takeover, then the old tablet comes back ────────────
 do $$
 declare r jsonb; r2 jsonb; r3 jsonb; r4 jsonb; ok boolean; c1 uuid := gen_random_uuid(); cq uuid := gen_random_uuid();
@@ -1157,7 +1270,9 @@ begin
   insert into _st values ('c1_before_reset', c1::text), ('epoch_before_reset', pg_temp.ep()::text),
                          ('c1_answer', r::text);
 end $$;
-
+$gt49$;
+    v_step := 'step 45: test mode switches itself off after 8 hours';
+    execute $gt50$
 -- ── step 45: test mode switches itself off after 8 hours ─────────────────────
 do $$
 declare r jsonb; r2 jsonb; r3 jsonb; r4 jsonb; ok boolean;
@@ -1183,7 +1298,9 @@ begin
     concat_ws(' | ', r::text, left(r2::text, 60), r3::text, r4::text, (select value from plant_state where key = 'testMode')));
   perform pg_temp.testmode(false);
 end $$;
-
+$gt50$;
+    v_step := 'step 45: a reason is required for exceptional actions';
+    execute $gt51$
 -- ── step 45: a reason is required for exceptional actions ────────────────────
 do $$
 declare r jsonb; r2 jsonb; r3 jsonb; r4 jsonb; r5 jsonb; r6 jsonb; ok boolean; det text;
@@ -1226,7 +1343,9 @@ begin
   update plant_state set value = (now() - interval '1 minute')::text where key = 'supportAccessUntil';
   perform pg_temp.rec('reason_required: support access open / billing / force reload / manufacturer settings without a reason are refused (closing access needs none); the reason is audited', ok, det);
 end $$;
-
+$gt51$;
+    v_step := 'step 45: system health for the team leader';
+    execute $gt52$
 -- ── step 45: system health for the team leader ───────────────────────────────
 do $$
 declare r jsonb; r2 jsonb; r3 jsonb; r4 jsonb; ok boolean; det text; n0 bigint; v_pos bigint;
@@ -1292,7 +1411,9 @@ begin
   perform pg_temp.rec('system_health: test mode on / writes with a revoked or retired key (counted) / a changed event → attention', ok,
     det || ' | ' || coalesce(r -> 'eventChain', r)::text);
 end $$;
-
+$gt52$;
+    v_step := 'the daily reset (last: it empties the whole board)';
+    execute $gt53$
 -- ── the daily reset (last: it empties the whole board) ──────────────────────
 do $$
 declare r1 jsonb; r2 jsonb; e0 bigint := _board_epoch(); e1 bigint; e2 bigint; n_arch int; r jsonb; ok boolean;
@@ -1325,7 +1446,9 @@ begin
   r := pg_temp.api(pg_temp.dev('SL1'), format('select reset_daily_board(%L)', 'x'));
   perform pg_temp.rec('a tablet cannot reset the day', r ->> 'error' = 'unauthorized', r::text);
 end $$;
-
+$gt53$;
+    v_step := 'step 45 chaos: after the daily reset';
+    execute $gt54$
 -- ── step 45 chaos: after the daily reset ─────────────────────────────────────
 do $$
 declare r jsonb; r2 jsonb; r3 jsonb; r4 jsonb; r5 jsonb; ok boolean; e_old bigint := pg_temp.v('epoch_before_reset')::bigint;
@@ -1360,7 +1483,9 @@ begin
   perform pg_temp.rec('chaos (e): commands queued with the previous day (claim / push / eso / open / rabbinate) → stale_board; an old command id changes nothing', ok,
     concat_ws(' | ', r ->> 'replayed', r2 ->> 'error', r3 ->> 'error', r4 ->> 'error', r5 ->> 'error'));
 end $$;
-
+$gt54$;
+    v_step := '(d) two automatic rollovers for the same plant date → one new day; two manual resets → two';
+    execute $gt55$
 -- (d) two automatic rollovers for the same plant date → one new day; two manual resets → two days, each archived
 do $$
 declare rr1 jsonb; rr2 jsonb; r jsonb; e0 bigint; e1 bigint; e2 bigint; e3 bigint; n0 int; ok boolean; a1 daily_board_archive; a2 daily_board_archive;
@@ -1397,7 +1522,9 @@ begin
   perform pg_temp.rec('chaos (d): two automatic rollovers for one plant date → one new day; two manual resets → two new days, each archives its board', ok,
     concat_ws(' | ', rr1::text, rr2::text, e0, e1, e2, e3, a1.animals_count, a2.animals_count));
 end $$;
-
+$gt55$;
+    v_step := 'step 46: the order of the stages';
+    execute $gt56$
 -- ── step 46: the order of the stages ─────────────────────────────────────────
 -- (tablets still paired at this point of the test: SL1, ESO1, IN1, OUT2, LEGS, PARTS, STAMPS)
 do $$
@@ -1485,7 +1612,9 @@ begin
   perform pg_temp.rec('step 46 stations: inner tablet → inner only, outer tablet → outer only; rabbinate send only after the lungs', ok,
     concat_ws(' | ', r::text, r2 ->> 'ok'));
 end $$;
-
+$gt56$;
+    v_step := 'step 46: kashrut configuration';
+    execute $gt57$
 -- ── step 46: kashrut configuration ───────────────────────────────────────────
 do $$
 declare r jsonb; r2 jsonb; r3 jsonb; ok boolean; v_users jsonb; v_mk text;
@@ -1524,7 +1653,9 @@ begin
   update plant_state set value = (now() - interval '1 minute')::text where key = 'supportAccessUntil';
   perform pg_temp.rec('step 46 manufacturer: printers yes; statuses / workers / login modes / kashrut switches ignored', ok, r::text);
 end $$;
-
+$gt57$;
+    v_step := 'step 46: processing over several days, strictly in order';
+    execute $gt58$
 -- ── step 46: processing over several days, strictly in order ─────────────────
 do $$
 declare r jsonb; r2 jsonb; r3 jsonb; r4 jsonb; ok boolean; b1 bigint; b2 bigint; n0 int; arch jsonb;
@@ -1603,7 +1734,9 @@ begin
     concat_ws(' | ', r::text, r2::text, r3::text));
   delete from animals_carry; delete from processing_day_closed;
 end $$;
-
+$gt58$;
+    v_step := 'step 46: the daily rollover never empties a board in the middle of work';
+    execute $gt59$
 -- ── step 46: the daily rollover never empties a board in the middle of work ──
 do $$
 declare rr jsonb; ok boolean; e0 bigint;
@@ -1626,7 +1759,9 @@ begin
   perform pg_temp.rec('step 46 rollover: never during work, never with a slaughtered animal short of its last ruling (health: rollover_waiting)', ok, rr::text);
   update settings_pilot set settings = pg_temp.v('settings_before_46')::jsonb where id = 1;
 end $$;
-
+$gt59$;
+    v_step := 'step 46 (review fixes): the manual reset stops for unfinished animals; worker codes hashes';
+    execute $gt60$
 -- ── step 46 (review fixes): the manual reset stops for unfinished animals; worker codes hashes only; board lock ──
 do $$
 declare r jsonb; r2 jsonb; ok boolean; e0 bigint; v_tok text; s0 jsonb;
@@ -1667,7 +1802,9 @@ begin
     and pg_get_functiondef('processing_day_close(text,bigint,text,text)'::regprocedure) ~ '_proc_board_lock\(p_board\)'
     and pg_get_functiondef('_proc_finalize(bigint)'::regprocedure) ~ '_proc_board_lock\(b.board_id\)');
 end $$;
-
+$gt60$;
+    v_step := 'step 46 (2nd review): a ruling''s time changes only with the ruling; archived status defini';
+    execute $gt61$
 -- ── step 46 (2nd review): a ruling's time changes only with the ruling; archived status definitions ──
 do $$
 declare r jsonb; r2 jsonb; r3 jsonb; ok boolean; t0 bigint; t1 bigint; t2 bigint; t3 bigint; a jsonb;
@@ -1720,7 +1857,9 @@ begin
     and exists (select 1 from jsonb_array_elements(a -> 'days') d where d ? 'statuses'),
     left(a::text, 200));
 end $$;
-
+$gt61$;
+    v_step := 'step 46 (3rd review): first team leader needs the setup code; 6-character codes; unique st';
+    execute $gt62$
 -- ── step 46 (3rd review): first team leader needs the setup code; 6-character codes; unique status keys; reset lock ──
 do $$
 declare r jsonb; r2 jsonb; r3 jsonb; r4 jsonb; ok boolean; v_hash text; v_ids uuid[];
@@ -1776,7 +1915,9 @@ begin
     and pg_get_functiondef('request_daily_rollover()'::regprocedure) ~ 'pg_advisory_xact_lock\(hashtext\(''glatttrack_daily_rollover''\)\)'
     and pg_get_functiondef('reset_daily_board(text,text)'::regprocedure) ~ 'pg_advisory_xact_lock\(hashtext\(''glatttrack_daily_rollover''\)\)');
 end $$;
-
+$gt62$;
+    v_step := 'step 46: the team leader only from a team-leader device';
+    execute $gt63$
 -- ── step 46: the team leader only from a team-leader device ──────────────────
 do $$
 declare r jsonb; r2 jsonb; r3 jsonb; r4 jsonb; r5 jsonb; ok boolean; v_id text; v_tok text; t text; v_code text;
@@ -1863,7 +2004,9 @@ begin
   delete from login_attempts;
   insert into plant_state (key, value) values ('leaderDevicesRequired', '1') on conflict (key) do update set value = '1';
 end $$;
-
+$gt63$;
+    v_step := 'step 46: accounts — team leaders only from the server; the owner changes nothing';
+    execute $gt64$
 -- ── step 46: accounts — team leaders only from the server; the owner changes nothing ──
 do $$
 declare r jsonb; r2 jsonb; r3 jsonb; r4 jsonb; r5 jsonb; ok boolean; v_s text; v_new uuid; v_own uuid := (select id from plant_managers where name = 'selftest owner');
@@ -1914,7 +2057,9 @@ begin
     concat_ws(' | ', left(r::text, 60), r2::text, r3::text, r4::text, left(r5::text, 40)));
   delete from plant_managers where name = 'ST owner 2';
 end $$;
-
+$gt64$;
+    v_step := 'step 46: the owner only watches — every changing function refuses his session';
+    execute $gt65$
 -- ── step 46: the owner only watches — every changing function refuses his session ──
 do $$
 declare q text; r jsonb; bad text[] := '{}'; v_set jsonb := (select settings from settings_pilot where id = 1);
@@ -1944,7 +2089,9 @@ begin
   perform pg_temp.rec('step 46 owner: view only — every changing function refuses an owner session (settings, reset, processing day, support access, devices, accounts, rulings)',
     array_length(bad, 1) is null, array_to_string(bad, ' | '));
 end $$;
-
+$gt65$;
+    v_step := 'step 46: one worker list per screen';
+    execute $gt66$
 -- ── step 46: one worker list per screen ─────────────────────────────────────
 do $$
 declare r jsonb; r2 jsonb; r3 jsonb; r4 jsonb; r5 jsonb; ok boolean; s0 jsonb;
@@ -1975,7 +2122,9 @@ begin
   update settings_pilot set settings = s0 where id = 1;
   delete from login_attempts;
 end $$;
-
+$gt66$;
+    v_step := 'step 46 (5th review): the owner / view-only manufacturer on a STATION tablet';
+    execute $gt67$
 -- ── step 46 (5th review): the owner / view-only manufacturer on a STATION tablet ──
 -- A station tablet writes for its station on its own; a view-only session that comes
 -- through it must not borrow those rights (and cannot log in there at all).
@@ -2030,7 +2179,9 @@ begin
   perform pg_temp.rec('step 46 owner / view-only manufacturer on every station tablet: no ruling, no station write, no settings (the tablet alone still works)',
     array_length(bad, 1) is null, array_to_string(bad, ' | '));
 end $$;
-
+$gt67$;
+    v_step := 'the owner / manufacturer cannot log in from a station tablet at all';
+    execute $gt68$
 -- the owner / manufacturer cannot log in from a station tablet at all
 do $$
 declare r jsonb; r2 jsonb; r3 jsonb; ok boolean;
@@ -2048,7 +2199,9 @@ begin
   delete from plant_managers where name = 'ST station owner';
   delete from login_attempts;
 end $$;
-
+$gt68$;
+    v_step := 'a pairing request alone never makes a station; recovery disconnects every team-leader devi';
+    execute $gt69$
 -- a pairing request alone never makes a station; recovery disconnects every team-leader device
 do $$
 declare r jsonb; ok boolean; v_new text := 'gtselftest_req_' || substr(md5(random()::text), 1, 6); a text; b text; ta text; tb text; v_s text;
@@ -2075,7 +2228,9 @@ begin
     concat_ws(' | ', left(r::text, 60), v_s));
   insert into plant_state (key, value) values ('leaderDevicesRequired', '1') on conflict (key) do update set value = '1';
 end $$;
-
+$gt69$;
+    v_step := 'the ACTIVE security surface against the expected manifest';
+    execute $gt70$
 -- ── the ACTIVE security surface against the expected manifest ───────────────
 -- (the same queries print the whole surface in tools/active-security-manifest.sql)
 do $$
@@ -2211,48 +2366,35 @@ begin
   perform pg_temp.rec('ACTIVE security surface matches the expected manifest (triggers, policies, grants, definer settings)',
     array_length(problems, 1) is null, array_to_string(problems, ' ; '));
 end $$;
+$gt70$;
 
--- ── result ───────────────────────────────────────────────────────────────────
-do $$
-declare r record; n_fail int := 0; n int := 0;
-begin
-  raise notice '%', rpad('=', 100, '=');
-  raise notice 'GlattTrack security self-test  (schema step %)', (select value from plant_state where key = 'schemaStep');
-  raise notice '%', rpad('=', 100, '=');
-  for r in select * from _st_result order by n loop
-    n := n + 1;
-    if r.ok then
-      raise notice 'PASS  %', r.test;
-    else
-      n_fail := n_fail + 1;
-      raise notice 'FAIL  %   ::  %', r.test, left(coalesce(r.detail, ''), 600);
+    -- the result (read before everything is undone)
+    v_step := 'result';
+    raise notice '%', rpad('=', 100, '=');
+    raise notice 'GlattTrack security self-test  (schema step %)', (select value from plant_state where key = 'schemaStep');
+    raise notice '%', rpad('=', 100, '=');
+    for r in select * from _st_result order by n loop
+      if r.ok then raise notice 'PASS  %', r.test;
+      else raise notice 'FAIL  %   ::  %', r.test, left(coalesce(r.detail, ''), 600); end if;
+    end loop;
+    select count(*), count(*) filter (where not ok) into v_n, v_fail from _st_result;
+    select string_agg(f.test, ' | ' order by f.k) into v_names
+      from (select x.n as k, x.test from _st_result x where not x.ok order by x.n limit 8) f;
+    raise notice '%', rpad('-', 100, '-');
+    raise notice '% checks, % passed, % failed  (nothing was changed — all undone)', v_n, v_n - v_fail, v_fail;
+    raise exception 'gt_selftest_undo';
+  exception when others then
+    if sqlerrm <> 'gt_selftest_undo' then
+      raise exception 'GlattTrack security self-test stopped at "%": %  (nothing was changed)', v_step, sqlerrm;
     end if;
-  end loop;
-  raise notice '%', rpad('-', 100, '-');
-  raise notice '% checks, % passed, % failed  (nothing was changed — all rolled back)', n, n - n_fail, n_fail;
-  -- the result outlives the rollback below (a prepared statement belongs to the
-  -- session, not to the transaction), so nothing ends inside a failed transaction
-  execute format('prepare gt_selftest_result as select %L::text as "GlattTrack security self-test"',
-    case when n_fail = 0 then format('PASSED — %s of %s security checks (nothing was changed)', n, n)
-         else format('FAILED — %s of %s checks: %s', n_fail, n,
-                     (select string_agg(f.test, ' | ' order by f.k)
-                        from (select x.n as k, x.test from _st_result x where not x.ok order by x.n limit 8) f)) end);
-end $$;
-
-rollback;
-
--- after the rollback: a failure is an ERROR (nothing is left open); otherwise
--- one row with the result (the SQL Editor shows no notices)
-do $$
-declare v text;
-begin
-  if not exists (select 1 from pg_prepared_statements where name = 'gt_selftest_result') then
-    raise exception 'GlattTrack security self-test did not finish — see the error above (nothing was changed)';
+  end;
+  if v_fail > 0 then
+    raise exception 'GlattTrack security self-test FAILED — % of % checks: %  (nothing was changed)', v_fail, v_n, v_names;
   end if;
-  execute 'execute gt_selftest_result' into v;
-  if v not like 'PASSED%' then
-    execute 'deallocate gt_selftest_result';
-    raise exception 'GlattTrack security self-test %', v;
-  end if;
-end $$;
-execute gt_selftest_result;
+  execute format('prepare gt_selftest_result as select %L::text', format('PASSED — %s of %s security checks (nothing was changed)', v_n, v_n));
+end $gt_selftest$;
+
+-- the result as one row (the SQL Editor shows no notices); PASSED only when the
+-- statement above passed in this session — a failure is the ERROR above
+select coalesce((select substring(statement from $p$'(PASSED[^']*)'$p$) from pg_prepared_statements where name = 'gt_selftest_result'),
+                'NOT PASSED — see the error above') as "GlattTrack security self-test";
