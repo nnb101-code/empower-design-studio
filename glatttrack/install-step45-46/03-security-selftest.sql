@@ -214,7 +214,11 @@ begin
                      || jsonb_build_array(jsonb_build_object('name', 'Selftest Inspector', 'role', 'inner', 'code', '739104'),
                                           jsonb_build_object('name', 'Selftest Slaughterer', 'role', 'slaughter', 'code', '550913')),
             'loginModeByRole', coalesce(settings -> 'loginModeByRole', '{}'::jsonb)
-                               || jsonb_build_object('inner', 'code', 'outer', 'code', 'slaughter', 'none'))
+                               || jsonb_build_object('inner', 'code', 'outer', 'code', 'slaughter', 'none'),
+            -- the checks start from the same plant switches on every server (the
+            -- step-46 checks switch the esophagus check on where they need it)
+            'esophagusEnabled', false)
+     - 'esoFromIdx'
    where id = 1;
   delete from login_attempts;
   delete from rate_events where kind in ('maker_login', 'correction_rejected');
