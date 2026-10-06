@@ -28,12 +28,29 @@
 -- locks, processing kept over several days with no skipping).
 --   Supabase SQL Editor: paste the WHOLE file and Run (nothing selected).
 -- ============================================================================
+-- a session left inside a failed transaction (an earlier run stopped half-way)
+-- is cleared first; so is the result of an earlier run in this session
+rollback;
+do $$ begin
+  if exists (select 1 from pg_prepared_statements where name = 'gt_selftest_result') then
+    execute 'deallocate gt_selftest_result';
+  end if;
+end $$;
+
 begin;
 set local client_min_messages = notice;
 set local search_path = public, extensions;
 
 create temp table _st_result (n serial primary key, test text not null, ok boolean not null, detail text) on commit drop;
 create temp table _st (k text primary key, v text) on commit drop;   -- fixture values
+
+-- everything below must run in this one transaction (it is rolled back at the
+-- end); if the tool ran the statements one by one, stop here, before any change
+do $$ begin
+  if to_regclass('pg_temp._st_result') is null then
+    raise exception 'GlattTrack self-test: run the WHOLE file at once (nothing selected) — it was run statement by statement or in parts; nothing was changed';
+  end if;
+end $$;
 
 -- call SQL as the API would (authenticator → anon + request headers + JWT
 -- claims); returns the jsonb result, or {"exception": message, "sqlstate": code}
@@ -248,6 +265,9 @@ end $$;
 -- at the end) — the checks below start like a plant before its first team-leader
 -- device; the team-leader-device rules have their own section
 do $$ begin
+  if to_regclass('pg_temp._st') is null then                         -- not inside the test's transaction: change nothing
+    raise exception 'GlattTrack self-test: run the WHOLE file at once (nothing selected); nothing was changed';
+  end if;
   perform set_config('app.device_admin', 'on', true);
   update devices_pilot set assigned_role = null, assigned_index = null where assigned_role = 'leader';
   delete from plant_state where key = 'leaderDevicesRequired';
@@ -2210,21 +2230,29 @@ begin
   end loop;
   raise notice '%', rpad('-', 100, '-');
   raise notice '% checks, % passed, % failed  (nothing was changed — all rolled back)', n, n - n_fail, n_fail;
-  if n_fail > 0 then
-    raise exception 'GlattTrack security self-test FAILED: % of % checks: %', n_fail, n,
-      (select string_agg(f.test, ' | ' order by f.k) from (select x.n as k, x.test from _st_result x where not x.ok order by x.n limit 8) f);
-  end if;
-  -- all passed: a session lock carries the count past the rollback below
-  perform pg_advisory_lock(7317, n);
+  -- the result outlives the rollback below (a prepared statement belongs to the
+  -- session, not to the transaction), so nothing ends inside a failed transaction
+  execute format('prepare gt_selftest_result as select %L::text as "GlattTrack security self-test"',
+    case when n_fail = 0 then format('PASSED — %s of %s security checks (nothing was changed)', n, n)
+         else format('FAILED — %s of %s checks: %s', n_fail, n,
+                     (select string_agg(f.test, ' | ' order by f.k)
+                        from (select x.n as k, x.test from _st_result x where not x.ok order by x.n limit 8) f)) end);
 end $$;
 
 rollback;
 
--- the result as one row (the SQL Editor shows no notices); PASSED only when
--- every check passed — otherwise the error above lists the failed checks
-select coalesce((select format('PASSED — %s of %s security checks (nothing was changed)', l.objid, l.objid)
-                   from pg_locks l
-                  where l.locktype = 'advisory' and l.pid = pg_backend_pid()
-                    and l.classid = 7317 and l.objsubid = 2 and pg_advisory_unlock(7317, l.objid::int)
-                  limit 1),
-                'NOT PASSED — see the error above') as "GlattTrack security self-test";
+-- after the rollback: a failure is an ERROR (nothing is left open); otherwise
+-- one row with the result (the SQL Editor shows no notices)
+do $$
+declare v text;
+begin
+  if not exists (select 1 from pg_prepared_statements where name = 'gt_selftest_result') then
+    raise exception 'GlattTrack security self-test did not finish — see the error above (nothing was changed)';
+  end if;
+  execute 'execute gt_selftest_result' into v;
+  if v not like 'PASSED%' then
+    execute 'deallocate gt_selftest_result';
+    raise exception 'GlattTrack security self-test %', v;
+  end if;
+end $$;
+execute gt_selftest_result;
