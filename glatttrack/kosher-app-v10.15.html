@@ -8536,11 +8536,9 @@ const _GT_SET_GROUPS = [
   { k: 'system', ic: '🛡️', t: ['מערכת', 'System', 'Sistema'], secs: ['#mgrRecoveryTitle', 'גיבוי ושחזור', 'רישוי', '#mgrTestSec', '#supAccTitle'],
     open: () => { try{ gtRenderRecoveryCard(); }catch(e){} try{ mgrRenderLicensePanel(); }catch(e){} try{ gtRenderTestCard(); }catch(e){} try{ mgrRenderSupportAccess(); }catch(e){}
       try{ const g = document.querySelector('#gtSetGroups details.gt-grp[data-g="system"] > .gt-acc-b'); if(g && !document.getElementById('gtGuideReopen')){
-        const b = document.createElement('button'); b.id = 'gtGuideReopen'; b.onclick = gtReopenGuide;
+        const b = document.createElement('button'); b.id = 'gtGuideReopen'; b.onclick = () => gtWizardOpen(0);
         b.style.cssText = 'width:100%;margin:4px 0 10px;padding:10px;border-radius:10px;border:1px solid var(--gold);background:rgba(212,168,67,.10);color:var(--gold);font-size:14px;font-weight:700;cursor:pointer;';
-        b.textContent = '🧭 ' + L('מדריך התקנת המפעל','Plant installation guide','Guía de instalación'); g.insertBefore(b, g.firstChild);
-        const b2 = document.createElement('button'); b2.onclick = () => gtWizardOpen(0); b2.style.cssText = b.style.cssText;
-        b2.textContent = '⚡ ' + L('עמוד ההתקנה המהירה','Quick setup page','Instalación rápida'); g.insertBefore(b2, b.nextSibling); } }catch(e){} } }
+        b.textContent = '⚡ ' + L('לפתוח שוב את עמוד ההתקנה המהירה','Open the quick setup page again','Abrir de nuevo la instalación rápida'); g.insertBefore(b, g.firstChild); } }catch(e){} } }
 ];
 function gtSettingsBuild(){
   if(_gtSetBuilt) return; const root = document.getElementById('mgr-settings'); if(!root) return;
@@ -15175,6 +15173,8 @@ async function gtRenderSetupGuide(){
   const el = document.getElementById('gtSetupGuide'); if(!el) return;
   const leader = !!(KS.getManagerToken && KS.getManagerToken()) && KS.getManagerRole()==='manager';
   const g = _gtGuideState();
+  // the installation is the one-time page (gtWizard); after it everything is done in its own tab — no guide card on "Today"
+  el.style.display = 'none'; return;
   if(!leader || (g.closed && !g.reopened)){ el.style.display = 'none'; return; }
   const s = KS.getSettings(), p = gtPlan(), E = escapeHtml;
   const devs = await _gtDevices(true);
@@ -15400,7 +15400,7 @@ async function gtWizardRender(){
   if(k==='welcome'){
     title = L('ברוך הבא — התקנה מהירה','Welcome — quick setup','Bienvenido — instalación rápida');
     body = `<p style="font-size:15px;line-height:1.7;">${L('כמה שלבים קצרים, לפי הסדר: קוד שחזור, אילו מסכים עובדים, העובדים בכל מסך, צימוד הטאבלטים, חשבון בעלים, מדפסות.','A few short steps, in order: recovery code, which screens work, the workers of each screen, pairing the tablets, owner account, printers.','Pasos cortos: código de recuperación, pantallas, trabajadores, emparejar tabletas, propietario, impresoras.')}</p>
-      <p style="font-size:13px;color:var(--muted);line-height:1.7;">${L('כל שלב אפשר לדלג, ותמיד אפשר לחזור ולהשלים אותו מהלשוניות של מסך ראש הצוות.','Every step can be skipped and completed later from the team-leader tabs.','Cada paso se puede omitir y completar luego desde las pestañas.')}</p>
+      <p style="font-size:13px;color:var(--muted);line-height:1.7;">${L('העמוד הזה מופיע פעם אחת בלבד. כל שלב אפשר לדלג. אחרי שתסיים או תדלג, כל דבר עושים בלשונית שלו במסך ראש הצוות (הגדרות ← מסכים ומכשירים, עובדים וחשבונות, מדפסות, מערכת).','This page appears only once. Every step can be skipped. After you finish or skip, everything is done in its own tab of the team-leader screen (Settings → Screens & devices, Workers, Printers, System).','Esta página aparece una sola vez. Después, todo se hace en su pestaña.')}</p>
       <div style="display:flex;gap:8px;justify-content:center;margin-top:18px;flex-wrap:wrap;">${_gtBtn(L('התחל','Start','Empezar'),'gtWizGo(1)','main')}${_gtBtn(L('דלג על הכל — אעשה אחר כך','Skip all — later','Omitir todo'),'gtWizardClose(true)','ghost')}</div>`;
   }
   if(k==='recovery'){
@@ -15453,7 +15453,12 @@ async function gtWizardRender(){
   }
   if(k==='done'){
     title = L('ההתקנה המהירה הסתיימה','Quick setup finished','Instalación rápida terminada');
-    body = `<p style="font-size:14px;line-height:1.7;">${L('בלשונית "היום" יש כרטיס "התקנת המפעל" שמראה מה הושלם ומה נשאר. כל דבר אפשר לשנות בהגדרות.','The "Today" tab has a "Plant installation" card showing what is done and what is left. Everything can be changed in Settings.','La pestaña "Hoy" muestra lo que falta.')}</p>
+    body = `<p style="font-size:14px;line-height:1.7;">${L('העמוד הזה לא יופיע שוב. מה שדילגת עליו, או כל שינוי, עושים בלשונית שלו:','This page will not appear again. Anything you skipped, or any change, is done in its own tab:','Esta página no volverá a aparecer. Todo se hace en su pestaña:')}</p>
+      <div style="font-size:13px;line-height:2;color:var(--text);padding:10px 12px;border:1px solid var(--border);border-radius:10px;">
+        📱 ${L('מסכים וצימוד טאבלטים','Screens and pairing','Pantallas y emparejamiento')} — ${L('הגדרות ← מסכים ומכשירים','Settings → Screens & devices','Ajustes → Pantallas')}<br>
+        👷 ${L('עובדים וחשבון בעלים','Workers and owner account','Trabajadores y propietario')} — ${L('הגדרות ← עובדים וחשבונות','Settings → Workers & accounts','Ajustes → Trabajadores')}<br>
+        🖨️ ${L('מדפסות וסורקים','Printers and scanners','Impresoras')} — ${L('הגדרות ← מדפסות, סורקים ומדבקות','Settings → Printers, scanners & labels','Ajustes → Impresoras')}<br>
+        🛡️ ${L('קוד שחזור לראש הצוות','Team-leader recovery code','Código de recuperación')} — ${L('הגדרות ← מערכת','Settings → System','Ajustes → Sistema')}</div>
       <div style="text-align:center;margin-top:16px;">${_gtBtn(L('סיום — למסך ראש הצוות','Finish — to the team-leader screen','Terminar'),'gtWizardClose(true)','main')}</div>`;
   }
   w.innerHTML = `<style>#gtWizard input{width:100%;box-sizing:border-box;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--panel2,#1a2130);color:var(--text);font-size:15px;}
