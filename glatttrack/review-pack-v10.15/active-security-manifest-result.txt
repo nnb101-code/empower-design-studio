@@ -3,9 +3,9 @@ Null display is "·".
 == 1. plant state =======================================================
     key     |     value     |          updated_at           
 ------------+---------------+-------------------------------
- boardEpoch | 1791323932481 | 2026-10-06 21:58:52.481178+00
- schemaStep | 46            | 2026-10-06 21:58:53.796878+00
- testMode   | off           | 2026-10-06 21:58:53.23371+00
+ boardEpoch | 1791343426904 | 2026-10-07 03:23:46.903581+00
+ schemaStep | 46            | 2026-10-07 03:23:48.033171+00
+ testMode   | off           | 2026-10-07 03:23:47.516759+00
 (3 rows)
 
 == 2. functions (public, gt_rls) ========================================
@@ -34,6 +34,9 @@ Null display is "·".
  public | eso_change(integer,text,text,bigint)                                      | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
  public | eso_change(integer,text,text,bigint,uuid)                                 | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
  public | event_append(jsonb)                                                       | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
+ public | leader_device_replace(text,text)                                          | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
+ public | leader_recovery_code_new(text)                                            | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
+ public | leader_recovery_status(text)                                              | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
  public | lung_drawing_get(integer)                                                 | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
  public | lung_drawing_set(integer,bigint,text)                                     | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
  public | manager_add(text,text,text)                                               | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
@@ -109,6 +112,7 @@ Null display is "·".
  public | _events_maker_guard()                                                     | trigger  | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _extend_maker_sessions()                                                  | trigger  | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _gt_flag(jsonb,text,boolean)                                              | function | f                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _gt_one_inspection()                                                      | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _gt_settings()                                                            | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _gt_value_ok(text,text)                                                   | function | f                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _is_api_request()                                                         | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
@@ -122,6 +126,7 @@ Null display is "·".
  public | _kosher_ready(animals_pilot)                                              | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _kosher_statuses()                                                        | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _leader_devices_exist()                                                   | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _leader_recovery_norm(text)                                               | function | f                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _log_correction_rejected(text,integer,text,text,jsonb)                    | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _log_device_event(text,text,text,integer,text,text)                       | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _maker_session_end()                                                      | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
@@ -189,7 +194,7 @@ Null display is "·".
  public | leader_account_remove(text)                                               | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | leader_device_recovery(text)                                              | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | manufacturer_set_code(text,text)                                          | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
-(178 rows)
+(183 rows)
 
 == 2b. API surface: functions the app roles can run ======================
                        callable_by_app                       | security_definer 
@@ -217,6 +222,9 @@ Null display is "·".
  gt_rls.devices_read_all()                                   | t
  gt_rls.devices_read_own_ids()                               | t
  gt_rls.events_reader_ok()                                   | t
+ leader_device_replace(text,text)                            | t
+ leader_recovery_code_new(text)                              | t
+ leader_recovery_status(text)                                | t
  lung_drawing_get(integer)                                   | t
  lung_drawing_set(integer,bigint,text)                       | t
  manager_add(text,text,text)                                 | t
@@ -251,7 +259,7 @@ Null display is "·".
  worker_login(text,text,text)                                | t
  worker_logout(text)                                         | t
  worker_session_check()                                      | t
-(57 rows)
+(60 rows)
 
 == 3. triggers on the key tables ========================================
         table        |               trigger               |               function                |                 fires                 |  state  | security_definer 

@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict nhF6u6jdakMz5Nn5ZDwwd2I28MKsUH84z2jyo3CcC7UM5RHgFq4tIOFATxcsCLZ
+\restrict 5ocH4qxpNeH2kFJHqOW44JUCCCGosfU6igafKOdA6r2nAeBdijRDZEHAxxabmsA
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -1093,13 +1093,14 @@ begin
   if not _is_api_request() or _request_is_service_role() then return p_client; end if;   -- the server itself
   c := left(nullif(trim(regexp_replace(coalesce(p_client, ''), '\s*\(\?\)\s*$', '')), ''), 60);
   v_role := _stage_worker_role(p_stage);
+  if v_role = 'outer' and _gt_one_inspection() then v_role := 'inner'; end if;   -- one shared screen: its one list
   v_def := case p_stage when 'slaughter' then 'שוחט' when 'inner' then 'בודק פנים' when 'inner_start' then 'בודק פנים'
                         when 'outer' then 'בודק חוץ' else 'משגיח' end;
+  select settings into s from settings_pilot where id = 1;
   select * into w from _current_worker() limit 1;
   if w.name is not null and w.role = v_role and (c is null or c = w.name or c = any(defaults)) then
     return w.name;
   end if;
-  select settings into s from settings_pilot where id = 1;
   v_mode := coalesce(s -> 'loginModeByRole' ->> v_role, 'none');
   if v_mode not in ('name', 'code', 'both') then
     return case when c = any(defaults) then c else v_def end;
@@ -1531,6 +1532,20 @@ $$;
 ALTER FUNCTION public._gt_flag(s jsonb, p_key text, p_default boolean) OWNER TO postgres;
 
 --
+-- Name: _gt_one_inspection(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public._gt_one_inspection() RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $$
+  select coalesce((select settings ->> 'screenConfig' from settings_pilot where id = 1), '') = '1both';
+$$;
+
+
+ALTER FUNCTION public._gt_one_inspection() OWNER TO postgres;
+
+--
 -- Name: _gt_settings(); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -1744,6 +1759,20 @@ $$;
 ALTER FUNCTION public._leader_devices_exist() OWNER TO postgres;
 
 --
+-- Name: _leader_recovery_norm(text); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public._leader_recovery_norm(p text) RETURNS text
+    LANGUAGE sql IMMUTABLE
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $$
+  select upper(regexp_replace(coalesce(p, ''), '[^A-Za-z0-9]', '', 'g'));
+$$;
+
+
+ALTER FUNCTION public._leader_recovery_norm(p text) OWNER TO postgres;
+
+--
 -- Name: _log_correction_rejected(text, integer, text, text, jsonb); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -1921,7 +1950,8 @@ begin
   if not _is_api_request() or _request_is_service_role() then return true; end if;
   v_dev := _current_device_id();
   if exists (select 1 from devices_pilot d
-              where d.id = v_dev and d.assigned_role = 'outer' and d.device_status = 'active') then
+              where d.id = v_dev and d.device_status = 'active'
+                and (d.assigned_role = 'outer' or (d.assigned_role = 'inner' and _gt_one_inspection()))) then
     return true;
   end if;
   if _test_mode_on() and _request_has_manager() then return true; end if;
@@ -2739,6 +2769,7 @@ begin
       when 'eso'       then v_role in ('esophagus','slaughter')
       when 'inner'     then v_role in ('inner')              -- step 46: inner tablet → inner only
       when 'outer'     then v_role in ('outer')              -- step 46: outer tablet → outer only
+                             or (v_role = 'inner' and _gt_one_inspection())   -- one shared screen (the plant's choice)
       when 'legs'      then v_role in ('legs')
       when 'stamped'   then v_role in ('stamps','parts')
       when 'parts'     then v_role in ('parts')
@@ -4472,6 +4503,115 @@ end $$;
 ALTER FUNCTION public.leader_device_recovery(p_reason text) OWNER TO postgres;
 
 --
+-- Name: leader_device_replace(text, text); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.leader_device_replace(p_code text, p_recovery text) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $$
+declare
+  v_ip text := 'lrec:' || coalesce(_request_ip(), '?');
+  v_fails int; v_last timestamptz; v_hash text; v_ok boolean; d record; n int := 0; v_dev text := _current_device_id();
+  r jsonb;
+begin
+  -- a station tablet serves only its station
+  if v_dev is not null and exists (select 1 from devices_pilot where id = v_dev
+       and assigned_role in ('slaughter', 'esophagus', 'legs', 'inner', 'outer', 'parts', 'stamps', 'display')) then
+    return jsonb_build_object('ok', false, 'reason', 'station_device');
+  end if;
+  select count(*), max(at) into v_fails, v_last from login_attempts
+   where ip = v_ip and not ok and at > now() - interval '1 hour';
+  if v_fails >= 5 then
+    return jsonb_build_object('ok', false, 'reason', 'locked',
+                              'retry_after', ceil(extract(epoch from (v_last + interval '1 hour' - now()))));
+  end if;
+  select value into v_hash from plant_state where key = 'leaderRecoveryHash';
+  v_ok := v_hash is not null and _leader_recovery_norm(p_recovery) <> ''
+          and crypt(_leader_recovery_norm(p_recovery), v_hash) = v_hash
+          and exists (select 1 from plant_managers m where m.role = 'manager' and m.active
+                         and m.code_hash = crypt(coalesce(p_code, ''), m.code_hash));
+  if not v_ok then
+    insert into login_attempts (ip, ok) values (v_ip, false);
+    perform _security_event(null, 'leader_device_replace_refused', jsonb_build_object('ip', v_ip), 'anonymous', coalesce(v_dev, '-'));
+    perform pg_sleep(0.3);
+    return jsonb_build_object('ok', false, 'reason', case when v_hash is null then 'no_recovery_code' else 'code_invalid' end,
+                              'attempts_left', greatest(0, 4 - v_fails));
+  end if;
+  delete from login_attempts where ip = v_ip;
+  -- every old team-leader device is disconnected; the recovery code is used up
+  perform set_config('gt.audit_actor', 'team leader (recovery code)', true);
+  perform set_config('gt.audit_reason', 'team-leader device replaced with the recovery code', true);
+  perform set_config('app.device_admin', 'on', true);
+  for d in select id, assigned_role, assigned_index from devices_pilot where assigned_role = 'leader' loop
+    update devices_pilot set assigned_role = null, assigned_index = null, paired_at = null, updated_at = now() where id = d.id;
+    update device_credentials set revoked = true, revoked_at = coalesce(revoked_at, now()) where device_id = d.id and not revoked;
+    delete from manager_sessions where device_id = d.id;
+    perform _audit_device_event(d.id, 'UNASSIGNED', d.assigned_role, d.assigned_index, 'replaced with the recovery code', null, null, 'team leader');
+    n := n + 1;
+  end loop;
+  perform set_config('app.device_admin', '', true);
+  perform set_config('gt.audit_actor', '', true);
+  perform set_config('gt.audit_reason', '', true);
+  delete from plant_state where key in ('leaderDevicesRequired', 'leaderRecoveryHash', 'leaderRecoveryAt');
+  perform _security_event(null, 'leader_device_replaced', jsonb_build_object('disconnected', n, 'ip', v_ip), 'team leader', coalesce(v_dev, '-'));
+  -- as at installation: this login registers this device as the team-leader device
+  r := manager_login(p_code);
+  return coalesce(r, '{}'::jsonb) || jsonb_build_object('replaced', true, 'disconnected', n);
+end $$;
+
+
+ALTER FUNCTION public.leader_device_replace(p_code text, p_recovery text) OWNER TO postgres;
+
+--
+-- Name: leader_recovery_code_new(text); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.leader_recovery_code_new(p_token text) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $$
+declare a text := 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; c text := ''; i int; b bytea := gen_random_bytes(12);
+begin
+  if coalesce(_session_role(p_token), '') <> 'manager' or not _is_real_manager(p_token) then
+    return jsonb_build_object('ok', false, 'error', 'unauthorized');
+  end if;
+  for i in 0 .. 11 loop
+    c := c || substr(a, 1 + (get_byte(b, i) % length(a)), 1);
+    if i in (3, 7) then c := c || '-'; end if;
+  end loop;
+  insert into plant_state (key, value) values ('leaderRecoveryHash', crypt(_leader_recovery_norm(c), gen_salt('bf')))
+    on conflict (key) do update set value = excluded.value, updated_at = now();
+  insert into plant_state (key, value) values ('leaderRecoveryAt', now()::text)
+    on conflict (key) do update set value = excluded.value, updated_at = now();
+  perform _security_event(null, 'leader_recovery_code_made', '{}'::jsonb, coalesce(_session_name(p_token), 'manager'), coalesce(_current_device_id(), 'team-leader'));
+  return jsonb_build_object('ok', true, 'code', c);
+end $$;
+
+
+ALTER FUNCTION public.leader_recovery_code_new(p_token text) OWNER TO postgres;
+
+--
+-- Name: leader_recovery_status(text); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.leader_recovery_status(p_token text) RETURNS jsonb
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $$
+begin
+  if coalesce(_session_role(p_token), '') not in ('manager', 'owner') then
+    return jsonb_build_object('ok', false, 'error', 'unauthorized');
+  end if;
+  return jsonb_build_object('ok', true,
+    'exists', exists (select 1 from plant_state where key = 'leaderRecoveryHash'),
+    'at', (select value from plant_state where key = 'leaderRecoveryAt'));
+end $$;
+
+
+ALTER FUNCTION public.leader_recovery_status(p_token text) OWNER TO postgres;
+
+--
 -- Name: lung_drawing_get(integer); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -5652,7 +5792,9 @@ begin
   if v_boards > 0 then v_info := v_info || 'processing_days_open'::text; end if;
   v_leaders := (select count(*) from devices_pilot d where d.assigned_role = 'leader' and coalesce(d.device_status, 'active') <> 'retired'
                    and exists (select 1 from device_credentials c where c.device_id = d.id and not c.revoked));
-  if v_leaders = 1 then v_info := v_info || 'one_leader_device'::text; end if;       -- a second one avoids a lock-out
+  if v_leaders > 0 and not exists (select 1 from plant_state where key = 'leaderRecoveryHash') then
+    v_attn := v_attn || 'leader_recovery_missing'::text;            -- without it a lost team-leader device needs the server
+  end if;
   if exists (select 1 from plant_state where key = 'workerListsCheck') then v_info := v_info || 'worker_lists_check'::text; end if;
 
   return jsonb_build_object(
@@ -8087,6 +8229,13 @@ REVOKE ALL ON FUNCTION public._gt_flag(s jsonb, p_key text, p_default boolean) F
 
 
 --
+-- Name: FUNCTION _gt_one_inspection(); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public._gt_one_inspection() FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION _gt_settings(); Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -8176,6 +8325,13 @@ REVOKE ALL ON FUNCTION public._kosher_statuses() FROM PUBLIC;
 --
 
 REVOKE ALL ON FUNCTION public._leader_devices_exist() FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION _leader_recovery_norm(p text); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public._leader_recovery_norm(p text) FROM PUBLIC;
 
 
 --
@@ -8834,6 +8990,33 @@ REVOKE ALL ON FUNCTION public.leader_device_recovery(p_reason text) FROM PUBLIC;
 
 
 --
+-- Name: FUNCTION leader_device_replace(p_code text, p_recovery text); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public.leader_device_replace(p_code text, p_recovery text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.leader_device_replace(p_code text, p_recovery text) TO anon;
+GRANT ALL ON FUNCTION public.leader_device_replace(p_code text, p_recovery text) TO authenticated;
+
+
+--
+-- Name: FUNCTION leader_recovery_code_new(p_token text); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public.leader_recovery_code_new(p_token text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.leader_recovery_code_new(p_token text) TO anon;
+GRANT ALL ON FUNCTION public.leader_recovery_code_new(p_token text) TO authenticated;
+
+
+--
+-- Name: FUNCTION leader_recovery_status(p_token text); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public.leader_recovery_status(p_token text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.leader_recovery_status(p_token text) TO anon;
+GRANT ALL ON FUNCTION public.leader_recovery_status(p_token text) TO authenticated;
+
+
+--
 -- Name: FUNCTION lung_drawing_get(p_id integer); Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -9314,5 +9497,5 @@ GRANT ALL ON TABLE public.system_flags TO service_role;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict nhF6u6jdakMz5Nn5ZDwwd2I28MKsUH84z2jyo3CcC7UM5RHgFq4tIOFATxcsCLZ
+\unrestrict 5ocH4qxpNeH2kFJHqOW44JUCCCGosfU6igafKOdA6r2nAeBdijRDZEHAxxabmsA
 

@@ -4667,7 +4667,6 @@ var _GT_ERR = {
   device_not_paired:['המכשיר לא מצומד לשרת — ראש הצוות צריך לצמד אותו.','This device is not paired with the server — the team leader needs to pair it.','Este dispositivo no está emparejado con el servidor — el jefe de equipo debe emparejarlo.'],
   unauthorized:['הכניסה פגה או שאין הרשאה — היכנס שוב ונסה שוב.','The login expired or is not allowed — log in again and retry.','La sesión caducó o no tiene permiso — inicie sesión de nuevo e intente otra vez.'],
   code_invalid:['קוד שגוי','Wrong code','Código incorrecto'],
-  not_on_outer_list:['המסך הזה עושה גם בדיקת פנים וגם בדיקת חוץ — העובד צריך להיות גם ברשימת בודקי החוץ','This screen does both the inner and the outer check — the worker must also be on the outer list','Esta pantalla hace interno y externo — el trabajador debe estar también en la lista externa'],
   no_recovery_code:['אין קוד שחזור שמור. צריך את המתקין.','There is no saved recovery code. The installer is needed.','No hay código de recuperación. Se necesita al instalador.'],
   rate_limited:['יותר מדי ניסיונות — המתן כמה דקות ונסה שוב.','Too many attempts — wait a few minutes and try again.','Demasiados intentos — espere unos minutos e intente de nuevo.'],
   moved_on:['לא ניתן לשנות פסיקה זו: כבר עברת לעבוד על בהמה אחרת מאז שנקבעה. שינוי אפשרי רק כל עוד לא התקדמת הלאה.','Cannot change this ruling: you already worked on a different animal since it was set. Changes are only possible before moving on.','No se puede cambiar este dictamen: ya trabajaste en otro animal desde que se definió. Solo se puede cambiar antes de avanzar.'],
@@ -10299,7 +10298,15 @@ const ROLE_LABELS={
   manager:{he:'ראש צוות',en:'Team leader',es:'Jefe de equipo'},
 };
 
+function gtSharedUserTabs(){
+  const sh = (typeof gtPlan==='function') && KS.getSettings().screenConfig==='1both';
+  const bi = document.getElementById('utab-inner'), bo = document.getElementById('utab-outer');
+  if(bo) bo.style.display = sh ? 'none' : '';
+  if(bi) bi.textContent = sh ? L('בודקים (פנים + חוץ)','Inspectors (inner + outer)','Inspectores') : L('בודק פנים','Inner inspector','Inspector interno');
+  return sh;
+}
 function mgrUserTab(role){
+  if(gtSharedUserTabs() && role==='outer') role='inner';            // one shared screen: one list
   mgrCurrentUserRole=role;
   WORKER_SCREENS.forEach(r=>{
     const b=document.getElementById('utab-'+r);
@@ -14971,7 +14978,7 @@ async function mgrRenderPlan(){
       x += `<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:8px 32px 0 0;">
         ${opt(!D.shared, L('מסכים נפרדים לפנים ולחוץ','Separate inner and outer screens','Pantallas separadas'), 'gtPlanShared(false)')}
         ${opt(D.shared, L('מסך אחד משותף','One shared screen','Una pantalla compartida'), 'gtPlanShared(true)')}</div>
-        ${D.shared?`<div style="font-size:11px;color:var(--muted);margin:4px 32px 0 0;line-height:1.5;">${L('בודק אחד עושה בטאבלט אחד את בדיקת הפנים ואת בדיקת החוץ. העובד במסך הזה צריך להיות גם ברשימת בודקי הפנים וגם ברשימת בודקי החוץ.','One inspector does the inner and the outer check on one tablet. The worker must be on both the inner and the outer list.','Un inspector hace ambos chequeos en una tableta; debe estar en las dos listas.')}</div>`:''}`;
+        ${D.shared?`<div style="font-size:11px;color:var(--muted);margin:4px 32px 0 0;line-height:1.5;">${L('בודק אחד עושה בטאבלט אחד את בדיקת הפנים ואת בדיקת החוץ. מסך אחד — רשימת עובדים אחת: "בודקים".','One inspector does the inner and the outer check on one tablet. One screen — one worker list: "Inspectors".','Un inspector hace ambos chequeos en una tableta: una lista, "Inspectores".')}</div>`:''}`;
     }
     if(on && (sc.k==='inner' || sc.k==='outer') && !(D.shared && D.screens.has('inner') && D.screens.has('outer'))){
       const n = sc.k==='inner' ? D.ni : D.no;
@@ -15117,7 +15124,8 @@ async function gtRenderSetupGuide(){
   const has = (r,i) => devs.some(d => d.assigned_role===r && Number(d.assigned_index||0)===i);
   const missing = slots.filter(([r,i]) => !has(r,i));
   const labels = _kioskRoleLabels();
-  const workerScreens = [...p.screens].filter(r => r!=='display');
+  const sharedScr = s.screenConfig==='1both' && p.screens.has('inner') && p.screens.has('outer');
+  const workerScreens = [...p.screens].filter(r => r!=='display' && !(sharedScr && r==='outer'));
   const users = Array.isArray(s.users) ? s.users : [];
   const lm = s.loginModeByRole || {};
   const needPrint = ['legs','parts','stamps'].some(r => p.screens.has(r));
@@ -15134,7 +15142,8 @@ async function gtRenderSetupGuide(){
     { k:'workers', done: !!g.workers, need: p.decided, t:L('רשימות עובדים ומצב כניסה','Worker lists and login mode','Listas de trabajadores y modo de acceso'),
       d: workerScreens.map(r => { const n = users.filter(u => u.role===r).length; const m = lm[r]||'none';
            const ml = { none:L('בלי כניסה','no login','sin acceso'), name:L('שם','name','nombre'), code:L('קוד','code','código'), both:L('שם + קוד','name + code','nombre + código') }[m] || m;
-           const sc = GT_PLAN_SCREENS.find(x => x.k===r); return (sc?L(sc.t[0],sc.t[1],sc.t[2]):r)+': '+n+' · '+ml; }).join('<br>') || '—',
+           const sc = GT_PLAN_SCREENS.find(x => x.k===r); const nm = (sharedScr && r==='inner') ? L('בודקים (פנים + חוץ)','Inspectors (inner + outer)','Inspectores') : (sc?L(sc.t[0],sc.t[1],sc.t[2]):r);
+           return nm+': '+n+' · '+ml; }).join('<br>') || '—',
       go: () => gtOpenSetting('users'), mark: 'workers' },
     { k:'pair', done: p.decided && slots.length>0 && !missing.length, need: p.decided, t:L('צימוד מכשירים','Pair the devices','Emparejar dispositivos'),
       d: !p.decided ? L('אחרי בחירת המסכים.','After choosing the screens.','Después de elegir las pantallas.')
@@ -15414,14 +15423,13 @@ function gtWizRenderWorkers(){
   const host = document.getElementById('gtWizWorkers'); if(!host) return;
   const s = KS.getSettings(), p = gtPlan(), users = Array.isArray(s.users) ? s.users : [], lm = s.loginModeByRole || {};
   const shared = s.screenConfig==='1both' && p.screens.has('inner') && p.screens.has('outer');
-  const roles = WORKER_SCREENS.filter(r => p.screens.has(r));
+  const roles = WORKER_SCREENS.filter(r => p.screens.has(r) && !(shared && r==='outer'));
   if(!p.decided || !roles.length){ host.innerHTML = `<div class="mgr-card" style="font-size:13px;color:var(--muted);">${L('קודם בוחרים מסכים (שלב קודם).','Choose the screens first (previous step).','Elija primero las pantallas.')}</div>`; return; }
   const modes = [['none',L('בלי כניסה','No login','Sin acceso')],['name',L('שם','Name','Nombre')],['code',L('קוד','Code','Código')],['both',L('שם + קוד','Name + code','Nombre + código')]];
   host.innerHTML = roles.map(r => {
-    const lbl = ROLE_LABELS[r] ? (ROLE_LABELS[r][lang] || ROLE_LABELS[r].he) : r, cur = lm[r] || 'none';
+    const lbl = (shared && r==='inner') ? L('בודקים (פנים + חוץ — מסך אחד)','Inspectors (inner + outer — one screen)','Inspectores (interno + externo)') : (ROLE_LABELS[r] ? (ROLE_LABELS[r][lang] || ROLE_LABELS[r].he) : r), cur = lm[r] || 'none';
     const list = users.map((u,i) => [u,i]).filter(([u]) => u && u.role===r);
     return `<div class="mgr-card" style="margin-bottom:10px;"><div style="font-size:15px;font-weight:800;color:var(--text);">${_gtE(lbl)}</div>
-      ${shared && (r==='inner'||r==='outer') ? `<div style="font-size:11px;color:var(--amber);">${L('מסך משותף לפנים + חוץ: העובד צריך להיות בשתי הרשימות.','Shared inner + outer screen: the worker must be on both lists.','Pantalla compartida: en ambas listas.')}</div>` : ''}
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin:8px 0;">${modes.map(([m,t]) => `<button onclick="gtWizMode('${r}','${m}')" style="padding:6px 10px;border-radius:8px;border:1px solid ${cur===m?'var(--gold)':'var(--border)'};background:${cur===m?'rgba(212,168,67,.15)':'transparent'};color:${cur===m?'var(--gold)':'var(--text)'};font-size:12px;font-weight:700;cursor:pointer;">${t}</button>`).join('')}</div>
       ${list.map(([u,i]) => `<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--border);font-size:13px;"><span>${_gtE(u.name)}${(u.codeHash||u.code)?' · ••••':''}</span><button onclick="gtWizDelWorker(${i})" style="background:none;border:none;color:var(--red-light);cursor:pointer;font-size:15px;">✕</button></div>`).join('') || `<div style="font-size:12px;color:var(--muted);">${L('אין עדיין עובדים','No workers yet','Sin trabajadores')}</div>`}
       <div style="display:flex;gap:6px;margin-top:8px;"><input id="gtWn_${r}" placeholder="${L('שם','Name','Nombre')}" style="flex:2;min-width:0;"><input id="gtWc_${r}" placeholder="${L('קוד','Code','Código')}" inputmode="numeric" style="flex:1;min-width:0;">

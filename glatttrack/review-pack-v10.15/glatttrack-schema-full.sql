@@ -14782,7 +14782,9 @@ begin
   if v_boards > 0 then v_info := v_info || 'processing_days_open'::text; end if;
   v_leaders := (select count(*) from devices_pilot d where d.assigned_role = 'leader' and coalesce(d.device_status, 'active') <> 'retired'
                    and exists (select 1 from device_credentials c where c.device_id = d.id and not c.revoked));
-  if v_leaders = 1 then v_info := v_info || 'one_leader_device'::text; end if;       -- a second one avoids a lock-out
+  if v_leaders > 0 and not exists (select 1 from plant_state where key = 'leaderRecoveryHash') then
+    v_attn := v_attn || 'leader_recovery_missing'::text;            -- without it a lost team-leader device needs the server
+  end if;
   if exists (select 1 from plant_state where key = 'workerListsCheck') then v_info := v_info || 'worker_lists_check'::text; end if;
 
   return jsonb_build_object(
@@ -14805,6 +14807,278 @@ begin
 end $$;
 revoke execute on function system_health(text) from public;
 grant execute on function system_health(text) to anon, authenticated;
+
+-- ── 20. one shared screen for the inner AND the outer check (screenConfig '1both') ──
+-- The plant may choose one inspector screen for both checks. Only then the inner
+-- tablet may also rule the outer check (and send to the rabbinate); every other
+-- configuration keeps "each station its own stage". One screen = ONE worker list
+-- ("inspectors" — kept under the inner screen's key): whoever is on it logs in on
+-- the shared screen and is the name on both its inner and its outer rulings.
+create or replace function _gt_one_inspection() returns boolean
+language sql stable security definer set search_path = public, extensions, pg_temp as $$
+  select coalesce((select settings ->> 'screenConfig' from settings_pilot where id = 1), '') = '1both';
+$$;
+revoke execute on function _gt_one_inspection() from public, anon, authenticated;
+
+create or replace function _stage_allowed(p_stage text) returns boolean
+language plpgsql stable security definer set search_path = public, extensions, pg_temp as $$
+declare v_role text; v_ok boolean := false; v_dev text;
+begin
+  if _request_privileged() then return true; end if;
+  v_role := _caller_device_role();
+  if v_role is not null then
+    v_ok := case p_stage
+      when 'slaughter' then v_role in ('slaughter')
+      when 'eso'       then v_role in ('esophagus','slaughter')
+      when 'inner'     then v_role in ('inner')              -- step 46: inner tablet → inner only
+      when 'outer'     then v_role in ('outer')              -- step 46: outer tablet → outer only
+                             or (v_role = 'inner' and _gt_one_inspection())   -- one shared screen (the plant's choice)
+      when 'legs'      then v_role in ('legs')
+      when 'stamped'   then v_role in ('stamps','parts')
+      when 'parts'     then v_role in ('parts')
+      when 'weights'   then v_role in ('stamps')        -- the scale is on the stamps screen
+      else false end;
+  end if;
+  if v_ok then return true; end if;
+  -- the team leader has NO ruling rights — except in test mode (SQL-only switch, 8 hours)
+  if _test_mode_on() and _request_has_manager() then return true; end if;
+  if v_role is null then                             -- a revoked / retired key: counted for the health screen
+    v_dev := _current_device_id();
+    if v_dev is null then perform _note_revoked_write(); else perform _note_revoked_write(v_dev); end if;
+  end if;
+  return false;
+end $$;
+
+create or replace function _nc_outer_allowed() returns boolean
+language plpgsql stable security definer set search_path = public, extensions, pg_temp as $$
+declare v_dev text;
+begin
+  if not _is_api_request() or _request_is_service_role() then return true; end if;
+  v_dev := _current_device_id();
+  if exists (select 1 from devices_pilot d
+              where d.id = v_dev and d.device_status = 'active'
+                and (d.assigned_role = 'outer' or (d.assigned_role = 'inner' and _gt_one_inspection()))) then
+    return true;
+  end if;
+  if _test_mode_on() and _request_has_manager() then return true; end if;
+  if v_dev is null then perform _note_revoked_write(); else perform _note_revoked_write(v_dev); end if;
+  return false;
+end $$;
+
+create or replace function _derive_actor(p_stage text, p_client text) returns text
+language plpgsql stable security definer set search_path = public, extensions, pg_temp as $$
+declare
+  w record; v_role text; v_mode text; v_def text; c text; s jsonb;
+  defaults text[] := array['שוחט', 'בודק פנים', 'בודק חוץ', 'בודק', 'משגיח'];
+begin
+  if not _is_api_request() or _request_is_service_role() then return p_client; end if;   -- the server itself
+  c := left(nullif(trim(regexp_replace(coalesce(p_client, ''), '\s*\(\?\)\s*$', '')), ''), 60);
+  v_role := _stage_worker_role(p_stage);
+  if v_role = 'outer' and _gt_one_inspection() then v_role := 'inner'; end if;   -- one shared screen: its one list
+  v_def := case p_stage when 'slaughter' then 'שוחט' when 'inner' then 'בודק פנים' when 'inner_start' then 'בודק פנים'
+                        when 'outer' then 'בודק חוץ' else 'משגיח' end;
+  select settings into s from settings_pilot where id = 1;
+  select * into w from _current_worker() limit 1;
+  if w.name is not null and w.role = v_role and (c is null or c = w.name or c = any(defaults)) then
+    return w.name;
+  end if;
+  v_mode := coalesce(s -> 'loginModeByRole' ->> v_role, 'none');
+  if v_mode not in ('name', 'code', 'both') then
+    return case when c = any(defaults) then c else v_def end;
+  end if;
+  if v_mode = 'name' and c is not null and exists (
+       select 1 from jsonb_array_elements(case when jsonb_typeof(s -> 'users') = 'array' then s -> 'users' else '[]'::jsonb end) u
+        where u ->> 'name' = c and _worker_role_norm(u ->> 'role') = v_role) then
+    return c;
+  end if;
+  return coalesce(c, v_def) || ' (?)';
+end $$;
+revoke execute on function _derive_actor(text, text) from public, anon, authenticated;
+
+create or replace function worker_login(p_role text, p_code text, p_name text DEFAULT NULL::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'extensions', 'pg_temp'
+AS $function$
+declare
+  v_role text := _worker_role_norm(p_role);
+  v_dev text := _current_device_id();
+  v_mgr boolean := _request_has_manager() and _test_mode_on();      -- a team leader acts as a station only in test mode
+  v_mt text := _request_headers() ->> 'x-manager-token';
+  d devices_pilot%rowtype;
+  v_ip text := 'w:' || _request_ip();
+  v_key2 text;
+  v_fails int; v_all int; v_last timestamptz;
+  s jsonb; u jsonb; v_h1 text; v_h2 text;
+  v_tok text; v_exp timestamptz;
+begin
+  if v_role is null then return jsonb_build_object('ok', false, 'error', 'bad_role'); end if;
+  if v_dev is null and not v_mgr then return jsonb_build_object('ok', false, 'error', 'device_not_paired'); end if;
+  if v_dev is not null then
+    select * into d from devices_pilot where id = v_dev;
+    if d.id is null or d.assigned_role is null or coalesce(d.device_status, 'active') = 'retired' then
+      return jsonb_build_object('ok', false, 'error', 'device_not_paired');
+    end if;
+    if not v_mgr and _worker_role_norm(d.assigned_role) is distinct from v_role then
+      return jsonb_build_object('ok', false, 'error', 'wrong_station');
+    end if;
+  end if;
+  v_key2 := 'wdev:' || coalesce(v_dev, 'mgr');
+
+  delete from login_attempts where at < now() - interval '1 day';
+  select count(*), max(at) into v_fails, v_last from login_attempts
+   where ip in (v_ip, v_key2) and not ok and at > now() - interval '15 minutes';
+  if v_fails >= 8 then
+    return jsonb_build_object('ok', false, 'error', 'rate_limited',
+                              'retry_after', ceil(extract(epoch from (v_last + interval '15 minutes' - now()))));
+  end if;
+  select count(*) into v_all from login_attempts where not ok and at > now() - interval '15 minutes';
+  if v_all >= 30 then perform pg_sleep(least(3.0, v_all / 30.0)); end if;
+
+  select settings into s from settings_pilot where id = 1;
+  if p_code is not null and trim(p_code) <> '' and jsonb_typeof(s -> 'users') = 'array' then
+    v_h1 := _worker_code_hash(trim(p_code));
+    v_h2 := case when coalesce(s ->> 'codeSalt', '') <> ''
+                 then encode(digest('gt1:' || (s ->> 'codeSalt') || ':' || trim(p_code), 'sha256'), 'hex') end;
+    select x into u from jsonb_array_elements(s -> 'users') x
+     where jsonb_typeof(x) = 'object'
+       and _worker_role_norm(x ->> 'role') = v_role
+       and (p_name is null or x ->> 'name' = p_name)
+       and coalesce(x ->> 'name', '') <> ''
+       and (x ->> 'codeHash' = v_h1 or (v_h2 is not null and x ->> 'codeHash' = v_h2))   -- step 46: hashes only
+     limit 1;
+  end if;
+  if u is null then
+    insert into login_attempts (ip, ok) values (v_ip, false), (v_key2, false);
+    perform pg_sleep(0.3);
+    return jsonb_build_object('ok', false, 'error', 'code_invalid', 'attempts_left', greatest(0, 7 - v_fails));
+  end if;
+  delete from login_attempts where ip in (v_ip, v_key2);
+
+  update worker_sessions set revoked = true, revoked_at = now()
+   where not revoked and ((v_dev is not null and device_id = v_dev)
+                          or (v_dev is null and mgr_session_hash = encode(digest(v_mt, 'sha256'), 'hex')));
+  delete from worker_sessions where expires_at < now() - interval '2 days';
+  v_tok := encode(gen_random_bytes(24), 'hex');
+  insert into worker_sessions (token_hash, device_id, mgr_session_hash, test_mode, name, role)
+  values (encode(digest(v_tok, 'sha256'), 'hex'), v_dev,
+          case when v_dev is null then encode(digest(v_mt, 'sha256'), 'hex') end,
+          v_mgr and (v_dev is null or _worker_role_norm(d.assigned_role) is distinct from v_role),
+          left(u ->> 'name', 60), v_role)
+  returning expires_at into v_exp;
+
+  perform _security_event(null, 'worker_login', jsonb_build_object('role', v_role, 'testMode', v_dev is null or v_mgr),
+                          left(u ->> 'name', 60), coalesce(v_dev, 'team-leader'));
+  return jsonb_build_object('ok', true, 'token', v_tok, 'name', left(u ->> 'name', 60), 'role', v_role, 'expires_at', v_exp);
+end $function$;
+revoke execute on function worker_login(text, text, text) from public;
+grant execute on function worker_login(text, text, text) to anon, authenticated;
+
+-- ── 21. a lost / broken team-leader device: replaced by the team leader himself ──
+-- No manufacturer and no SQL. When the plant is installed the team leader gets a
+-- RECOVERY CODE (shown once, to print or keep). If the team-leader device is lost:
+-- on any new device (not a station tablet) → "team-leader device lost?" → the
+-- team-leader code + the recovery code. Every old team-leader device is then
+-- disconnected (keys revoked, sessions ended), this device registers itself as the
+-- team-leader device (as at installation), and the recovery code is used up — the
+-- team leader makes a new one. Wrong codes are braked (5 per hour per address).
+--   leader_recovery_code_new(p_token)  → {ok, code}          team leader only (shown once)
+--   leader_recovery_status(p_token)    → {ok, exists, at}    team leader / owner
+--   leader_device_replace(p_code, p_recovery) → the answer of manager_login (+ replaced)
+create or replace function _leader_recovery_norm(p text) returns text
+language sql immutable set search_path = public, extensions, pg_temp as $$
+  select upper(regexp_replace(coalesce(p, ''), '[^A-Za-z0-9]', '', 'g'));
+$$;
+revoke execute on function _leader_recovery_norm(text) from public, anon, authenticated;
+
+create or replace function leader_recovery_code_new(p_token text) returns jsonb
+language plpgsql security definer set search_path = public, extensions, pg_temp as $$
+declare a text := 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; c text := ''; i int; b bytea := gen_random_bytes(12);
+begin
+  if coalesce(_session_role(p_token), '') <> 'manager' or not _is_real_manager(p_token) then
+    return jsonb_build_object('ok', false, 'error', 'unauthorized');
+  end if;
+  for i in 0 .. 11 loop
+    c := c || substr(a, 1 + (get_byte(b, i) % length(a)), 1);
+    if i in (3, 7) then c := c || '-'; end if;
+  end loop;
+  insert into plant_state (key, value) values ('leaderRecoveryHash', crypt(_leader_recovery_norm(c), gen_salt('bf')))
+    on conflict (key) do update set value = excluded.value, updated_at = now();
+  insert into plant_state (key, value) values ('leaderRecoveryAt', now()::text)
+    on conflict (key) do update set value = excluded.value, updated_at = now();
+  perform _security_event(null, 'leader_recovery_code_made', '{}'::jsonb, coalesce(_session_name(p_token), 'manager'), coalesce(_current_device_id(), 'team-leader'));
+  return jsonb_build_object('ok', true, 'code', c);
+end $$;
+revoke execute on function leader_recovery_code_new(text) from public;
+grant execute on function leader_recovery_code_new(text) to anon, authenticated;
+
+create or replace function leader_recovery_status(p_token text) returns jsonb
+language plpgsql stable security definer set search_path = public, extensions, pg_temp as $$
+begin
+  if coalesce(_session_role(p_token), '') not in ('manager', 'owner') then
+    return jsonb_build_object('ok', false, 'error', 'unauthorized');
+  end if;
+  return jsonb_build_object('ok', true,
+    'exists', exists (select 1 from plant_state where key = 'leaderRecoveryHash'),
+    'at', (select value from plant_state where key = 'leaderRecoveryAt'));
+end $$;
+revoke execute on function leader_recovery_status(text) from public;
+grant execute on function leader_recovery_status(text) to anon, authenticated;
+
+create or replace function leader_device_replace(p_code text, p_recovery text) returns jsonb
+language plpgsql volatile security definer set search_path = public, extensions, pg_temp as $$
+declare
+  v_ip text := 'lrec:' || coalesce(_request_ip(), '?');
+  v_fails int; v_last timestamptz; v_hash text; v_ok boolean; d record; n int := 0; v_dev text := _current_device_id();
+  r jsonb;
+begin
+  -- a station tablet serves only its station
+  if v_dev is not null and exists (select 1 from devices_pilot where id = v_dev
+       and assigned_role in ('slaughter', 'esophagus', 'legs', 'inner', 'outer', 'parts', 'stamps', 'display')) then
+    return jsonb_build_object('ok', false, 'reason', 'station_device');
+  end if;
+  select count(*), max(at) into v_fails, v_last from login_attempts
+   where ip = v_ip and not ok and at > now() - interval '1 hour';
+  if v_fails >= 5 then
+    return jsonb_build_object('ok', false, 'reason', 'locked',
+                              'retry_after', ceil(extract(epoch from (v_last + interval '1 hour' - now()))));
+  end if;
+  select value into v_hash from plant_state where key = 'leaderRecoveryHash';
+  v_ok := v_hash is not null and _leader_recovery_norm(p_recovery) <> ''
+          and crypt(_leader_recovery_norm(p_recovery), v_hash) = v_hash
+          and exists (select 1 from plant_managers m where m.role = 'manager' and m.active
+                         and m.code_hash = crypt(coalesce(p_code, ''), m.code_hash));
+  if not v_ok then
+    insert into login_attempts (ip, ok) values (v_ip, false);
+    perform _security_event(null, 'leader_device_replace_refused', jsonb_build_object('ip', v_ip), 'anonymous', coalesce(v_dev, '-'));
+    perform pg_sleep(0.3);
+    return jsonb_build_object('ok', false, 'reason', case when v_hash is null then 'no_recovery_code' else 'code_invalid' end,
+                              'attempts_left', greatest(0, 4 - v_fails));
+  end if;
+  delete from login_attempts where ip = v_ip;
+  -- every old team-leader device is disconnected; the recovery code is used up
+  perform set_config('gt.audit_actor', 'team leader (recovery code)', true);
+  perform set_config('gt.audit_reason', 'team-leader device replaced with the recovery code', true);
+  perform set_config('app.device_admin', 'on', true);
+  for d in select id, assigned_role, assigned_index from devices_pilot where assigned_role = 'leader' loop
+    update devices_pilot set assigned_role = null, assigned_index = null, paired_at = null, updated_at = now() where id = d.id;
+    update device_credentials set revoked = true, revoked_at = coalesce(revoked_at, now()) where device_id = d.id and not revoked;
+    delete from manager_sessions where device_id = d.id;
+    perform _audit_device_event(d.id, 'UNASSIGNED', d.assigned_role, d.assigned_index, 'replaced with the recovery code', null, null, 'team leader');
+    n := n + 1;
+  end loop;
+  perform set_config('app.device_admin', '', true);
+  perform set_config('gt.audit_actor', '', true);
+  perform set_config('gt.audit_reason', '', true);
+  delete from plant_state where key in ('leaderDevicesRequired', 'leaderRecoveryHash', 'leaderRecoveryAt');
+  perform _security_event(null, 'leader_device_replaced', jsonb_build_object('disconnected', n, 'ip', v_ip), 'team leader', coalesce(v_dev, '-'));
+  -- as at installation: this login registers this device as the team-leader device
+  r := manager_login(p_code);
+  return coalesce(r, '{}'::jsonb) || jsonb_build_object('replaced', true, 'disconnected', n);
+end $$;
+revoke execute on function leader_device_replace(text, text) from public;
+grant execute on function leader_device_replace(text, text) to anon, authenticated;
 
 insert into plant_state (key, value) values ('schemaStep', '46')
   on conflict (key) do update
@@ -14838,6 +15112,10 @@ begin
     problems := problems || 'manager_add still open through the app'::text; end if;
   if has_function_privilege('anon', 'leader_account_add(text,text)', 'execute') then
     problems := problems || 'leader_account_add callable by the app'::text; end if;
+  if has_function_privilege('anon', '_gt_one_inspection()', 'execute') or has_function_privilege('anon', '_leader_recovery_norm(text)', 'execute') then
+    problems := problems || 'an internal function callable by the app'::text; end if;
+  if pg_get_functiondef('_stage_allowed(text)'::regprocedure) !~ '_gt_one_inspection' then
+    problems := problems || 'shared inner + outer screen missing in _stage_allowed'::text; end if;
   if (select value from plant_state where key = 'schemaStep')::int < 46 then
     problems := problems || 'schemaStep not 46'::text; end if;
   if array_length(problems, 1) > 0 then

@@ -2255,25 +2255,24 @@ begin
   delete from login_attempts;
   update settings_pilot set settings = settings || jsonb_build_object('screenConfig', '1both', 'esophagusEnabled', false,
       'users', coalesce(settings -> 'users', '[]'::jsonb) || jsonb_build_array(
-         jsonb_build_object('name', 'Inner Only 1b', 'role', 'inner', 'codeHash', encode(digest('gt-worker:620101', 'sha256'), 'hex')),
-         jsonb_build_object('name', 'Both Lists 1b', 'role', 'inner', 'codeHash', encode(digest('gt-worker:620102', 'sha256'), 'hex')),
-         jsonb_build_object('name', 'Both Lists 1b', 'role', 'outer', 'codeHash', encode(digest('gt-worker:620102', 'sha256'), 'hex'))),
+         jsonb_build_object('name', 'Inspector 1b', 'role', 'inner', 'codeHash', encode(digest('gt-worker:620101', 'sha256'), 'hex')),
+         jsonb_build_object('name', 'Outer Only 1b', 'role', 'outer', 'codeHash', encode(digest('gt-worker:620102', 'sha256'), 'hex'))),
       'loginModeByRole', coalesce(settings -> 'loginModeByRole', '{}'::jsonb) || '{"inner":"code","outer":"code"}'::jsonb) where id = 1;
   perform pg_temp.prep(997, 'inner'); perform pg_temp.prep(998, 'inner'); perform pg_temp.prep(996, 'inner');
   r  := pg_temp.api(pg_temp.dev('IN1'), pg_temp.q_claim(997, 'outer', 'glatt', '', ''));
   r2 := pg_temp.api(pg_temp.dev('IN1'), format('select set_not_chalak_outer(998, %s)', pg_temp.ep()));
-  r3 := pg_temp.api(pg_temp.dev('IN1'), 'select worker_login(''inner'', ''620101'')');
-  r4 := pg_temp.api(pg_temp.dev('IN1'), 'select worker_login(''inner'', ''620102'')');
+  r3 := pg_temp.api(pg_temp.dev('IN1'), 'select worker_login(''inner'', ''620102'')');      -- not on the shared screen's list
+  r4 := pg_temp.api(pg_temp.dev('IN1'), 'select worker_login(''inner'', ''620101'')');      -- on it: inner + outer
   tok := r4 ->> 'token';
   perform pg_temp.api(pg_temp.dev('IN1') || jsonb_build_object('x-worker-token', tok), pg_temp.q_claim(996, 'outer', 'glatt', '', ''));
   ok := pg_temp.claimed(r) and (pg_temp.ar(997)).outer_status = 'glatt' and pg_temp.ok(r2) and (pg_temp.ar(998)).not_chalak_outer
-        and r3 ->> 'error' = 'not_on_outer_list' and pg_temp.ok(r4) and (pg_temp.ar(996)).outer_by = 'Both Lists 1b';
+        and r3 ->> 'error' = 'code_invalid' and pg_temp.ok(r4) and (pg_temp.ar(996)).outer_by = 'Inspector 1b';
   -- any other configuration: each station its own stage again
   update settings_pilot set settings = settings || '{"screenConfig":"1in1out"}'::jsonb where id = 1;
   perform pg_temp.prep(999, 'inner');
   r2 := pg_temp.api(pg_temp.dev('IN1'), pg_temp.q_claim(999, 'outer', 'glatt', '', ''));
   ok := ok and r2 ->> 'error' = 'wrong_station' and (pg_temp.ar(999)).outer_status is null;
-  perform pg_temp.rec('shared inner + outer screen (the plant''s choice): the inner tablet rules outer and sends to the rabbinate; its worker must be on both lists and is named on the outer ruling; otherwise inner tablet → inner only', ok,
+  perform pg_temp.rec('shared inner + outer screen (the plant''s choice): the inner tablet rules outer and sends to the rabbinate; one worker list for the one screen, its worker named on the outer ruling; otherwise inner tablet → inner only', ok,
     concat_ws(' | ', left(r::text, 60), r3::text, left(r4::text, 50), (pg_temp.ar(996)).outer_by, r2::text));
   update settings_pilot set settings = s0 where id = 1;
   delete from login_attempts;

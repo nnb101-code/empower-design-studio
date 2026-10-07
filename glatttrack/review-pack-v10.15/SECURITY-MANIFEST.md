@@ -170,7 +170,14 @@ New API functions:
 
 New tables (no grant to anon / authenticated): `animals_carry` (kept slaughter days, PK board_id + id, board_id = daily_board_archive.id), `processing_day_closed`.
 
-## v10.15 (step 46, section 19)
+## v10.15 (step 46, sections 19–21)
 
-- `manufacturer_set_billing(p_token, p_enabled, p_price, p_currency, p_reason)`: unchanged rights (manufacturer session with support access, reason required, admin_audit); the currency is `upper(trim(p_currency))` and must be `₪ $ € £` or `^[A-Z]{3}$`, else `bad_currency`. Grants: anon, authenticated (as before).
-- No other server change. The new app screens (Search, Summaries) only read: `archive_days` (team leader / owner), `events_pilot` (RLS `gt_rls.events_reader_ok()`), `animals_pilot`, `settings_pilot`.
+| Function | Who | Enforced by | Errors |
+|---|---|---|---|
+| `manufacturer_set_billing(…, p_currency, p_reason)` | manufacturer (support access), reason | `_manufacturer_session_valid`, `_reason_ok` | unauthorized, bad_price, bad_currency, reason_required |
+| `leader_recovery_code_new(p_token)` | team leader only | `_session_role = manager`, `_is_real_manager` | unauthorized |
+| `leader_recovery_status(p_token)` | team leader / owner | `_session_role` | unauthorized |
+| `leader_device_replace(p_code, p_recovery)` | anyone, from a non-station device, with BOTH the team-leader code and the recovery code | bcrypt checks, `login_attempts` brake (5 / hour / address) | station_device, code_invalid, no_recovery_code, locked |
+
+- Shared inner + outer screen: `_stage_allowed('outer')` and `_nc_outer_allowed()` accept an `inner` device only when `screenConfig = '1both'`; `_derive_actor` uses the shared screen's one list for outer rulings in that mode. Internal helpers `_gt_one_inspection()`, `_leader_recovery_norm(text)`: no grant to anon / authenticated.
+- `leader_device_recovery(reason)` (server only) still exists for the installer.

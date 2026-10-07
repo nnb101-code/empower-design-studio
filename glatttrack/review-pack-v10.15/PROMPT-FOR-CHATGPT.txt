@@ -1,20 +1,24 @@
 מצורפת חבילת הבדיקה העדכנית של GlattTrack (אפליקציה v10.15, שרת שלב 46).
 קודם תקרא את README-REVIEW.md (החלק "Changed in v10.15") ואת STEP46-CHANGES.md.
 זה סבב שמיני. מה השתנה מאז v10.14:
-- מסך ראש הצוות ב-5 לשוניות, עם חיפוש וסיכומים (קריאה בלבד), והגדרות מקובצות ב-7 קבוצות.
-- בחירת מטבע לחיוב. בשרת: סעיף 19 בקובץ שלב 46.
-- קובץ בדיקת האבטחה נכתב מחדש כפקודה אחת, בלי טבלאות זמניות, כך שירוץ ב-Supabase SQL Editor (126/126).
-- קבצי ההתקנה עודכנו בגלל חלון ה-RLS של Supabase.
+- מסך ראש הצוות ב-5 לשוניות, עם חיפוש וסיכומים (קריאה בלבד), והגדרות ב-7 קבוצות.
+- עמוד התקנה ראשונה, ובחירת מסכים לפני צימוד.
+- בשרת:
+  - סעיף 19: מטבע לחיוב.
+  - סעיף 20: מסך אחד משותף לפנים וחוץ, רק כשהמפעל בחר בכך, עם רשימת עובדים אחת.
+  - סעיף 21: החלפת מכשיר ראש צוות שאבד בעזרת קוד ראש הצוות וקוד שחזור, בלי יצרן ובלי SQL.
+- קובץ בדיקת האבטחה כפקודה אחת שרצה ב-Supabase SQL Editor (128/128).
 בדוק במיוחד:
-(1) שהמסכים החדשים לא פותחים דרך כתיבה חדשה, ושהבעלים לא יכול לשנות כלום גם דרכם.
-(2) את בדיקת המטבע ב-manufacturer_set_billing.
-(3) שבדיקת האבטחה בגרסה החדשה עדיין בודקת את מה שבדקה (בלי superuser היא משתמשת ב-gt.as_api — האם זה יכול רק להחמיר ולא לתת הרשאה?), ושכל השינויים שלה באמת מתבטלים.
+(1) leader_device_replace — האם אפשר להשתלט על מכשיר ראש הצוות בלי שני הקודים, לעקוף את הבלם, או להשתמש בקוד פעמיים; ומה קורה בזמן שבין הניתוק לרישום המכשיר החדש.
+(2) המסך המשותף — האם טאבלט פנים יכול לפסוק חוץ כשהמפעל לא בחר מסך משותף, ומי יכול לשנות את screenConfig.
+(3) שהמסכים החדשים (חיפוש, סיכומים, עמוד ההתקנה) לא פותחים דרך כתיבה חדשה, ושהבעלים לא משנה כלום.
+(4) שבדיקת האבטחה החדשה עדיין בודקת את מה שבדקה (בלי superuser היא משתמשת ב-gt.as_api — האם זה רק מחמיר?), ושכל השינויים שלה מתבטלים.
 
 Please review this pack according to README-REVIEW.md.
 
 Rules for the review:
 1. Audit the ACTIVE state in active-schema-snapshot.sql (one definition per function). Do not audit older step files or the history inside glatttrack-schema-full.sql as if it were active.
-2. Use SECURITY-MANIFEST.md and security-selftest-result.txt (126/126) to see what is already enforced and tested. Before reporting a vulnerability, check whether a self-test already covers it; if it does, say so and explain why you still think it is exploitable (with the exact function name and line from the snapshot).
+2. Use SECURITY-MANIFEST.md and security-selftest-result.txt (128/128) to see what is already enforced and tested. Before reporting a vulnerability, check whether a self-test already covers it; if it does, say so and explain why you still think it is exploitable (with the exact function name and line from the snapshot).
 3. Separate your findings into:
    A. Real, exploitable problems (with a concrete attack: which role, which call, which parameters, what wrong result).
    B. Defense-in-depth improvements (not exploitable today).

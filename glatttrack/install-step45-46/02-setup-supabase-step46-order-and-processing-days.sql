@@ -2706,9 +2706,9 @@ grant execute on function system_health(text) to anon, authenticated;
 -- ── 20. one shared screen for the inner AND the outer check (screenConfig '1both') ──
 -- The plant may choose one inspector screen for both checks. Only then the inner
 -- tablet may also rule the outer check (and send to the rabbinate); every other
--- configuration keeps "each station its own stage". The worker logged in on that
--- shared screen must be on the inner list AND on the outer list (only someone on
--- the outer list confirms an outer ruling).
+-- configuration keeps "each station its own stage". One screen = ONE worker list
+-- ("inspectors" — kept under the inner screen's key): whoever is on it logs in on
+-- the shared screen and is the name on both its inner and its outer rulings.
 create or replace function _gt_one_inspection() returns boolean
 language sql stable security definer set search_path = public, extensions, pg_temp as $$
   select coalesce((select settings ->> 'screenConfig' from settings_pilot where id = 1), '') = '1both';
@@ -2769,18 +2769,13 @@ begin
   if not _is_api_request() or _request_is_service_role() then return p_client; end if;   -- the server itself
   c := left(nullif(trim(regexp_replace(coalesce(p_client, ''), '\s*\(\?\)\s*$', '')), ''), 60);
   v_role := _stage_worker_role(p_stage);
+  if v_role = 'outer' and _gt_one_inspection() then v_role := 'inner'; end if;   -- one shared screen: its one list
   v_def := case p_stage when 'slaughter' then 'שוחט' when 'inner' then 'בודק פנים' when 'inner_start' then 'בודק פנים'
                         when 'outer' then 'בודק חוץ' else 'משגיח' end;
   select settings into s from settings_pilot where id = 1;
   select * into w from _current_worker() limit 1;
-  if w.name is not null and (c is null or c = w.name or c = any(defaults)) then
-    if w.role = v_role then return w.name; end if;
-    -- the shared inner + outer screen: its worker rules the outer check when he is on the outer list too
-    if v_role = 'outer' and w.role = 'inner' and _gt_one_inspection() and exists (
-         select 1 from jsonb_array_elements(case when jsonb_typeof(s -> 'users') = 'array' then s -> 'users' else '[]'::jsonb end) u
-          where u ->> 'name' = w.name and _worker_role_norm(u ->> 'role') = 'outer') then
-      return w.name;
-    end if;
+  if w.name is not null and w.role = v_role and (c is null or c = w.name or c = any(defaults)) then
+    return w.name;
   end if;
   v_mode := coalesce(s -> 'loginModeByRole' ->> v_role, 'none');
   if v_mode not in ('name', 'code', 'both') then
@@ -2848,13 +2843,6 @@ begin
        and coalesce(x ->> 'name', '') <> ''
        and (x ->> 'codeHash' = v_h1 or (v_h2 is not null and x ->> 'codeHash' = v_h2))   -- step 46: hashes only
      limit 1;
-  end if;
-  -- the shared inner + outer screen: its worker must be on the outer list as well
-  if u is not null and v_role = 'inner' and _gt_one_inspection() and not exists (
-       select 1 from jsonb_array_elements(s -> 'users') x
-        where jsonb_typeof(x) = 'object' and x ->> 'name' = u ->> 'name' and _worker_role_norm(x ->> 'role') = 'outer') then
-    insert into login_attempts (ip, ok) values (v_ip, false), (v_key2, false);
-    return jsonb_build_object('ok', false, 'error', 'not_on_outer_list', 'name', left(u ->> 'name', 60));
   end if;
   if u is null then
     insert into login_attempts (ip, ok) values (v_ip, false), (v_key2, false);
