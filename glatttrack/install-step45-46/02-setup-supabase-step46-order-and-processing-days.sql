@@ -3250,7 +3250,7 @@ grant execute on function animal_card(text, date, integer) to anon, authenticate
 -- ── 25. the rabbinate screen (v10.17) ─────────────────────────────────────────
 -- "Send to the rabbinate screen" (set_not_chalak_outer) is routing from the glatt outer screen to the
 -- rabbinate outer screen, not a ruling. There the animal is ruled רבנות חלק, רבנות כשר or טרף.
--- An animal marked "לא חלק רבנות" by the shochet or at the maw check stays רבנות כשר or טרף only.
+-- An animal marked "לא חלק" by the shochet or at the maw check stays רבנות כשר or טרף only.
 -- The same rule on every write path: claim_animal_stage (above) and any push / correction (this trigger).
 create or replace function _animals_nc_outer_value() returns trigger
 language plpgsql security definer set search_path = public, extensions, pg_temp as $$
