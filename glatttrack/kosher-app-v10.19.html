@@ -4634,7 +4634,7 @@ const KS = (function(){
 // every device via settings_pilot — unescaped, a name containing markup
 // would run on every device that renders the list, not just the one it was
 // typed on.
-var GT_APP_VERSION='v10.18';
+var GT_APP_VERSION='v10.19';
 document.addEventListener('DOMContentLoaded',()=>{ try{ document.querySelectorAll('.gt-ver').forEach(e=>e.textContent=GT_APP_VERSION); }catch(e){} });
 function escapeHtml(str){
   return String(str==null?'':str).replace(/[&<>"']/g, c=>({
@@ -6895,7 +6895,11 @@ function buildStickerPayload(idx){
   // Compact, scanner-friendly payload: number, slaughter day, shochet, slaughter time, status at printing.
   // Scanners read the NUMBER (N:) and look up the animal's CURRENT ruling — so a legs / head sticker
   // printed before the ruling shows the ruling once it is made.
-  return `BH|N:${num}|D:${t?_gtIsoDate(t):''}|SH:${by}|T:${t?t.toISOString():''}|S:${status}`;
+  let hd='', wd='';
+  if(t){ try{ hd=getHebrewDate(t)||''; }catch(e){}
+         wd='יום '+['ראשון','שני','שלישי','רביעי','חמישי','שישי','שבת'][t.getDay()]+' / '+['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][t.getDay()]; }
+  const hm=t?String(t.getHours()).padStart(2,'0')+':'+String(t.getMinutes()).padStart(2,'0'):'';
+  return `BH|N:${num}|D:${t?_gtIsoDate(t):''}|HD:${hd}|W:${wd}|TM:${hm}|SH:${by}|S:${status}`;   // (time is TM: — no ISO copy, the code stays small)
 }
 // Render a visual sticker into a container. kind: 'legs'|'head'|'kosher'
 // If sample=true, render an example sticker (number 1, today, sample status).
@@ -6904,16 +6908,15 @@ function renderSticker(containerId,idx,kind,sample){
   if(!cont)return;
   const s=KS.getSettings();
   const opt={showQR:s.printShowQR!==false, showHeb:s.printShowHeb!==false, showGreg:s.printShowGreg!==false};
-  let num=idx+1, heb='', greg='', st=['—','#888'], sealImg=null, payload='', shochet='', slTime=null;
+  let num=idx+1, heb='', greg='', st=['—','#888'], sealImg=null, payload='', shochet='', slTime=null, stRaw=null;
   // sample may be an object {status} (the sticker viewer): 'kosherRab' = רבנות כשר
   const _smp=(sample && typeof sample==='object') ? sample : null;
   try{
-    let stRaw;
     if(sample){
       num=(_smp && _smp.num) || 1;
       stRaw=(_smp && _smp.status) ? (_smp.status==='kosherRab' ? 'kosher' : _smp.status) : ((kind==='kosher')?'glatt':'slaughtered');
       shochet=L('דוגמה','Sample','Ejemplo'); slTime=new Date();
-      payload='BH|N:'+num+'|D:'+_gtIsoDate(new Date())+'|SH:דוגמה|T:'+new Date().toISOString()+'|S:'+stRaw;
+      payload='BH|N:'+num+'|D:'+_gtIsoDate(new Date())+'|SH:דוגמה|S:'+stRaw+'|T:'+new Date().toISOString();
     }else{
       const a=KS.getAnimal(idx);
       stRaw=a?_stickerStatus(a):null;
@@ -6926,9 +6929,8 @@ function renderSticker(containerId,idx,kind,sample){
     if((!sample && stRaw==='kosher' && _isNCAnimal(KS.getAnimal(idx))) || (_smp && _smp.status==='kosherRab')) st=['רבנות כשר', st[1], 'Rabbinate Kosher'];
     const _d=slTime||new Date();
     if(opt.showHeb){try{heb=(typeof getHebrewDate==='function')?getHebrewDate(_d):'';
-      if(heb) heb='יום '+['א׳','ב׳','ג׳','ד׳','ה׳','ו׳','ש׳'][_d.getDay()]+' · '+heb;}catch(e){heb='';}}
-    if(opt.showGreg){try{greg=_d.toLocaleDateString('he-IL',{day:'2-digit',month:'2-digit',year:'numeric'})
-      +' · '+['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][_d.getDay()];}catch(e){greg='';}}
+      }catch(e){heb='';}}
+    if(opt.showGreg){try{greg=_d.toLocaleDateString('he-IL',{day:'2-digit',month:'2-digit',year:'numeric'});}catch(e){greg='';}}
     if(kind==='kosher'){try{const _sm=s.customSeals||{};const _rab=(_smp&&_smp.status==='kosherRab')||(!sample&&stRaw==='kosher'&&_isNCAnimal(KS.getAnimal(idx)));sealImg=(_rab&&_sm.kosherRab)||_sm[stRaw]||null;}catch(e){sealImg=null;}}
   }catch(e){console.warn('sticker data failed',e); gtLogError('sticker.data', e);}
   // Per-type sticker size: legs/head use legsW/H, kosher uses kosherW/H.
@@ -6950,8 +6952,8 @@ function renderSticker(containerId,idx,kind,sample){
         <div style="font-size:${numFS}px;font-weight:900;line-height:1;">${num}</div>
         ${heb?`<div style="font-size:${dateFS}px;color:#333;margin-top:3px;">${heb}</div>`:''}
         ${greg?`<div style="font-size:${dateFS}px;color:#333;" dir="ltr">${greg}</div>`:''}
-        ${kind!=='kosher'&&(shochet||slTime)?`<div style="font-size:${dateFS}px;color:#000;margin-top:2px;">${shochet?`שוחט / Shochet: <b>${escapeHtml(shochet)}</b>`:''}${slTime?` · ${String(slTime.getHours()).padStart(2,'0')}:${String(slTime.getMinutes()).padStart(2,'0')}`:''}</div>`:''}
-        <div style="display:inline-block;margin-top:4px;font-size:${stFS}px;font-weight:700;color:#fff;background:${st[1]};border-radius:4px;padding:${Math.round(1*scale)}px ${Math.round(8*scale)}px;line-height:1.15;"><div>${escapeHtml(st[0])}</div>${st[2]&&st[2]!==st[0]?`<div dir="ltr" style="font-size:${Math.round(stFS*0.85)}px;">${escapeHtml(st[2])}</div>`:''}</div>
+        ${kind!=='kosher'&&slTime?`<div style="font-size:${dateFS}px;color:#000;" dir="ltr">${String(slTime.getHours()).padStart(2,'0')}:${String(slTime.getMinutes()).padStart(2,'0')}</div>`:''}
+${(kind==='kosher'||['nevela','shot','notChalak'].includes(stRaw))?`        <div style="display:inline-block;margin-top:4px;font-size:${stFS}px;font-weight:700;color:#fff;background:${st[1]};border-radius:4px;padding:${Math.round(1*scale)}px ${Math.round(8*scale)}px;line-height:1.15;"><div>${escapeHtml(st[0])}</div>${st[2]&&st[2]!==st[0]?`<div dir="ltr" style="font-size:${Math.round(stFS*0.85)}px;">${escapeHtml(st[2])}</div>`:''}</div>`:''}
         ${_safeImg(sealImg)?`<div style="margin-top:5px;"><img src="${_safeImg(sealImg)}" style="height:${sealH}px;width:auto;max-width:${Math.round(W*0.5)}px;object-fit:contain;"></div>`:''}
       </div>
       ${opt.showQR?`<canvas id="${containerId}_qr" width="${qrPX}" height="${qrPX}" style="width:${qrPX}px;height:${qrPX}px;flex-shrink:0;background:#fff;"></canvas>`:''}
