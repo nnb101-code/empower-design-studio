@@ -1,6 +1,6 @@
 -- ============================================================================
 -- GlattTrack — security self-test (run any time; changes NOTHING)
--- VERSION 8 — one statement, no temporary tables, nothing the Supabase SQL Editor
+-- VERSION 9 — one statement, no temporary tables, nothing the Supabase SQL Editor
 --             mistakes for a new table (so it shows no "RLS" window and adds nothing)
 -- ============================================================================
 -- Simulates requests exactly as they arrive through the API (PostgREST: the
@@ -318,7 +318,9 @@ begin
                      || jsonb_build_array(jsonb_build_object('name', 'Selftest Inspector', 'role', 'inner', 'code', '739104'),
                                           jsonb_build_object('name', 'Selftest Slaughterer', 'role', 'slaughter', 'code', '550913')),
             'loginModeByRole', coalesce(settings -> 'loginModeByRole', '{}'::jsonb)
-                               || jsonb_build_object('inner', 'code', 'outer', 'code', 'slaughter', 'none'),
+                               || jsonb_build_object('inner', 'none', 'outer', 'none', 'slaughter', 'none', 'esophagus', 'none',
+                                                     'legs', 'none', 'parts', 'none', 'stamps', 'none'),
+            -- (no worker login on any screen here: the checks that need one switch it on themselves)
             -- the checks start from the same plant switches on every server (the
             -- step-46 checks switch the esophagus check on where they need it)
             'esophagusEnabled', false,
@@ -891,6 +893,13 @@ begin
   ok := ok and pg_temp.ok(r2) and (r2 ->> 'duplicate')::boolean and r3 ->> 'error' = 'bad_event';
   perform pg_temp.rec('event_append: device + worker from the server, duplicate event id = ok, bad event refused', ok,
     concat_ws(' | ', left(r::text, 80), r2::text, r3::text));
+  -- v10.16 (review B2): a tablet writes only its own station's events; the server's own logs are closed to it
+  r  := pg_temp.api(pg_temp.dev('SL1'), pg_temp.q_ev(pg_temp.ev('security', 'leader_device_replaced')));
+  r2 := pg_temp.api(pg_temp.dev('OUT2'), pg_temp.q_ev(pg_temp.ev('slaughter', 'slaughtered', 946)));
+  r3 := pg_temp.api(pg_temp.dev('OUT2'), pg_temp.q_ev(pg_temp.ev('outer', 'glatt', 946)));
+  perform pg_temp.rec('event_append: a tablet logs only its own station (security log → reserved_stage; outer tablet → no slaughter events; its own → ok)',
+    r ->> 'error' = 'reserved_stage' and r2 ->> 'error' = 'wrong_station' and pg_temp.ok(r3),
+    concat_ws(' | ', r::text, r2::text, left(r3::text, 60)));
 end $$;
 $gt40$;
     v_step := 'reads';
@@ -971,6 +980,7 @@ begin
          'farmNames', jsonb_build_array('Farm A'), 'cattleTypes', jsonb_build_array('Bull'), 'dailyIntakeNote', null),
        pg_temp.v('mgr')));
   perform pg_temp.rec('push_settings accepts the value shapes the app writes', pg_temp.ok(r), r::text);
+  update settings_pilot set settings = settings || '{"loginModeByRole":{"inner":"none","outer":"none","slaughter":"none","legs":"none"}}'::jsonb where id = 1;
   r := pg_temp.api(pg_temp.dev('OUT2'), 'select push_settings(''{"problemReports":[{"id":"st1","text":"x"}],"reprintLog":[{"id":"r1"}]}''::jsonb, ''x'')');
   perform pg_temp.rec('a station''s own keys (problem reports / reprint log) still go through', pg_temp.ok(r), r::text);
 end $$;
@@ -1111,7 +1121,7 @@ $gt45$;
     execute $gt46$
 -- ── workers: login, session, the name on the ruling ──────────────────────────
 do $$
-declare r jsonb; r2 jsonb; tok text; h jsonb; i int;
+declare r jsonb; r2 jsonb; r3 jsonb; r4 jsonb; r5 jsonb; r6 jsonb; cmd uuid; tok text; h jsonb; i int;
 begin
   perform pg_temp.rec('worker codes are stored only as hashes',
     not exists (select 1 from settings_pilot s, jsonb_array_elements(s.settings -> 'users') u where u ? 'code')
@@ -1140,6 +1150,9 @@ begin
     pg_temp.ok(r) and tok is not null and r ->> 'name' = 'Selftest Inspector'
     and exists (select 1 from worker_sessions where token_hash = encode(digest(tok, 'sha256'), 'hex') and device_id = pg_temp.devid('IN1')),
     left(r::text, 200));
+  -- the inner screen logs in with a code from here on (v10.16: a code screen rules only with its worker's login)
+  update settings_pilot set settings = settings || jsonb_build_object('loginModeByRole',
+    coalesce(settings -> 'loginModeByRole', '{}'::jsonb) || '{"inner":"code","outer":"code","legs":"name"}'::jsonb) where id = 1;
   h := pg_temp.dev('IN1') || jsonb_build_object('x-worker-token', tok);
   r := pg_temp.api(h, 'select worker_session_check()');
   perform pg_temp.prep(951, 'slaughter'); perform pg_temp.prep(952, 'slaughter');
@@ -1151,15 +1164,35 @@ begin
     (pg_temp.ar(951)).inner_by = 'Selftest Inspector' and r ->> 'name' = 'Selftest Inspector'
     and (pg_temp.ar(952)).inner_by = 'Somebody Else (?)',
     concat_ws(' | ', (pg_temp.ar(951)).inner_by, (pg_temp.ar(952)).inner_by, r::text));
+  -- v10.16: on a code screen a ruling WITHOUT the worker's login is refused — another tablet's
+  -- session, or none at all (GTW01 'worker login required'); a screen without login keeps its default name
   h := pg_temp.dev('IN2') || jsonb_build_object('x-worker-token', tok);
-  perform pg_temp.api(h, pg_temp.q_claim(953, 'inner', 'confirmed', 'Selftest Inspector', ''));
-  perform pg_temp.api(pg_temp.dev('IN1'), pg_temp.q_claim(954, 'inner', 'confirmed', 'Moshe', ''));
+  r2 := pg_temp.api(h, pg_temp.q_claim(953, 'inner', 'confirmed', 'Selftest Inspector', ''));
+  r3 := pg_temp.api(pg_temp.dev('IN1'), pg_temp.q_claim(954, 'inner', 'confirmed', 'Moshe', ''));
   perform pg_temp.api(pg_temp.dev('SL1'), pg_temp.q_claim(955, 'slaughter', 'slaughtered', 'Claimed Name', ''));
-  perform pg_temp.rec('unverified names are marked (?) / default name when no login',
-    (pg_temp.ar(953)).inner_by = 'Selftest Inspector (?)' and (pg_temp.ar(954)).inner_by = 'Moshe (?)'
+  perform pg_temp.rec('code screen: no ruling without that tablet''s worker login (another tablet''s session / none → refused); no-login screen → default name',
+    r2 ->> 'sqlstate' = 'GTW01' and r3 ->> 'sqlstate' = 'GTW01'
+    and (pg_temp.ar(953)).inner_status is distinct from 'confirmed' and (pg_temp.ar(954)).inner_status is distinct from 'confirmed'
     and (pg_temp.ar(955)).slaughtered_by = 'שוחט',
-    concat_ws(' | ', (pg_temp.ar(953)).inner_by, (pg_temp.ar(954)).inner_by, (pg_temp.ar(955)).slaughtered_by));
+    concat_ws(' | ', r2::text, r3::text, (pg_temp.ar(955)).slaughtered_by));
+  -- every write path of a code screen needs the login (claim, push, lung picture, outer open,
+  -- "not chalak"); a refused push is not kept as the command's answer — after the login the
+  -- same command goes through; a name-only screen (legs) is not stopped
+  perform pg_temp.prep(979, 'slaughter'); perform pg_temp.prep(978, 'inner');
+  cmd := gen_random_uuid();
+  r2 := pg_temp.api(pg_temp.dev('IN1'), pg_temp.q_push(979, '{"inner_status":"confirmed","inner_time":1}'::jsonb, cmd));
+  r3 := pg_temp.api(pg_temp.dev('IN1'), format('select lung_drawing_set(979, %s, ''data:image/png;base64,AAAA'')', pg_temp.ep()));
+  r4 := pg_temp.api(pg_temp.dev('OUT2'), format('select outer_open(978, %s, true, ''x'')', pg_temp.ep()));
+  r5 := pg_temp.api(pg_temp.dev('OUT2'), format('select set_not_chalak_outer(979, %s)', pg_temp.ep()));
+  r6 := pg_temp.api(pg_temp.dev('IN1') || jsonb_build_object('x-worker-token', tok),
+                    pg_temp.q_push(979, '{"inner_status":"confirmed","inner_time":1}'::jsonb, cmd));
+  perform pg_temp.rec('code screen: every write path refused without the worker login (push / lung / outer open / not chalak); the same command after the login goes through',
+    r2 ->> 'error' = 'worker_login_required' and r3 ->> 'sqlstate' = 'GTW01' and r4 ->> 'sqlstate' = 'GTW01'
+    and r5 ->> 'sqlstate' = 'GTW01' and pg_temp.ok(r6) and (pg_temp.ar(979)).inner_status = 'confirmed'
+    and (pg_temp.ar(978)).outer_open_at is null,
+    concat_ws(' | ', r2 ->> 'error', left(r3::text, 90), left(r4::text, 90), left(r5::text, 90), r6 ->> 'error', (pg_temp.ar(979)).inner_status));
   perform pg_temp.api('{}', format('select worker_logout(%L)', tok));
+  update settings_pilot set settings = settings || '{"loginModeByRole":{"inner":"none","outer":"none","slaughter":"none","legs":"none"}}'::jsonb where id = 1;
   r := pg_temp.api(pg_temp.dev('IN1') || jsonb_build_object('x-worker-token', tok), 'select worker_session_check()');
   perform pg_temp.rec('worker logout ends the session', r ->> 'error' = 'session_invalid', r::text);
   r := pg_temp.api(pg_temp.dev('IN2'), 'select worker_login(''inner'', ''739104'')');
@@ -2260,20 +2293,24 @@ begin
          jsonb_build_object('name', 'Outer Only 1b', 'role', 'outer', 'codeHash', encode(digest('gt-worker:620102', 'sha256'), 'hex'))),
       'loginModeByRole', coalesce(settings -> 'loginModeByRole', '{}'::jsonb) || '{"inner":"code","outer":"code"}'::jsonb) where id = 1;
   perform pg_temp.prep(997, 'inner'); perform pg_temp.prep(998, 'inner'); perform pg_temp.prep(996, 'inner');
+  -- (v10.16) the shared screen's code list: no ruling before its worker logs in
   r  := pg_temp.api(pg_temp.dev('IN1'), pg_temp.q_claim(997, 'outer', 'glatt', '', ''));
   r2 := pg_temp.api(pg_temp.dev('IN1'), format('select set_not_chalak_outer(998, %s)', pg_temp.ep()));
+  ok := r ->> 'sqlstate' = 'GTW01' and r2 ->> 'sqlstate' = 'GTW01';
   r3 := pg_temp.api(pg_temp.dev('IN1'), 'select worker_login(''inner'', ''620102'')');      -- not on the shared screen's list
   r4 := pg_temp.api(pg_temp.dev('IN1'), 'select worker_login(''inner'', ''620101'')');      -- on it: inner + outer
   tok := r4 ->> 'token';
+  r  := pg_temp.api(pg_temp.dev('IN1') || jsonb_build_object('x-worker-token', tok), pg_temp.q_claim(997, 'outer', 'glatt', '', ''));
+  r2 := pg_temp.api(pg_temp.dev('IN1') || jsonb_build_object('x-worker-token', tok), format('select set_not_chalak_outer(998, %s)', pg_temp.ep()));
   perform pg_temp.api(pg_temp.dev('IN1') || jsonb_build_object('x-worker-token', tok), pg_temp.q_claim(996, 'outer', 'glatt', '', ''));
-  ok := pg_temp.claimed(r) and (pg_temp.ar(997)).outer_status = 'glatt' and pg_temp.ok(r2) and (pg_temp.ar(998)).not_chalak_outer
+  ok := ok and pg_temp.claimed(r) and (pg_temp.ar(997)).outer_status = 'glatt' and pg_temp.ok(r2) and (pg_temp.ar(998)).not_chalak_outer
         and r3 ->> 'error' = 'code_invalid' and pg_temp.ok(r4) and (pg_temp.ar(996)).outer_by = 'Inspector 1b';
   -- any other configuration: each station its own stage again
   update settings_pilot set settings = settings || '{"screenConfig":"1in1out"}'::jsonb where id = 1;
   perform pg_temp.prep(999, 'inner');
-  r2 := pg_temp.api(pg_temp.dev('IN1'), pg_temp.q_claim(999, 'outer', 'glatt', '', ''));
+  r2 := pg_temp.api(pg_temp.dev('IN1') || jsonb_build_object('x-worker-token', tok), pg_temp.q_claim(999, 'outer', 'glatt', '', ''));
   ok := ok and r2 ->> 'error' = 'wrong_station' and (pg_temp.ar(999)).outer_status is null;
-  perform pg_temp.rec('shared inner + outer screen (the plant''s choice): the inner tablet rules outer and sends to the rabbinate; one worker list for the one screen, its worker named on the outer ruling; otherwise inner tablet → inner only', ok,
+  perform pg_temp.rec('shared inner + outer screen (the plant''s choice): after its worker logs in (one list for the one screen) the inner tablet rules outer and sends to the rabbinate, the worker named on the outer ruling; before the login refused; otherwise inner tablet → inner only', ok,
     concat_ws(' | ', left(r::text, 60), r3::text, left(r4::text, 50), (pg_temp.ar(996)).outer_by, r2::text));
   update settings_pilot set settings = s0 where id = 1;
   delete from login_attempts;

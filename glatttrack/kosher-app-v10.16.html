@@ -2341,7 +2341,7 @@ const KS = (function(){
     });
   }
   async function _lungFlush(){
-    if(_lungFlushing || !window.sb || (typeof navigator!=='undefined' && navigator.onLine === false)) return;
+    if(_lungFlushing || !window.sb) return;
     _lungFlushing = true;
     try{
       const q = _lungQ(); let changed = false;
@@ -2998,6 +2998,7 @@ const KS = (function(){
   function _isKeepErr(e){
     if(!e) return false;
     const c=String(e.code||''), m=String(e.message||'');
+    if(c==='GTW01' || /WORKER_LOGIN_REQUIRED/.test(m)) return true;   // v10.16: kept until the worker logs in again
     return _isNetErr(e) || c==='GT_OUTDATED' || /^(08|40|53|57)/.test(c) || c==='PGRST301' || c==='PGRST302'
         || c==='PGRST202' || c==='42883' || /JWT|timeout|fetch/i.test(m);
   }
@@ -4204,7 +4205,7 @@ const KS = (function(){
       _carry.dirty={}; _carrySave();
       _showRuleNotice(gtErrText(code)+(lost ? L(' — '+lost+' בהמות נרשמו ביומן האירועים',' — '+lost+' animals written to the event log',' — '+lost+' animales anotados en el registro de eventos') : ''));
       setTimeout(_carryRefresh, 50);
-    } else if(code==='server_error'){
+    } else if(code==='server_error' || code==='worker_login_required'){   // v10.16: kept until the worker logs in again
       p.rows.forEach(r=>{ _carry.dirty[r.id]=(_carry.dirty[r.id]||0)+1; }); _carrySave();
       setTimeout(_carryPump, 20000);
     } else {
@@ -4629,7 +4630,7 @@ const KS = (function(){
 // every device via settings_pilot — unescaped, a name containing markup
 // would run on every device that renders the list, not just the one it was
 // typed on.
-var GT_APP_VERSION='v10.15';
+var GT_APP_VERSION='v10.16';
 document.addEventListener('DOMContentLoaded',()=>{ try{ document.querySelectorAll('.gt-ver').forEach(e=>e.textContent=GT_APP_VERSION); }catch(e){} });
 function escapeHtml(str){
   return String(str==null?'':str).replace(/[&<>"']/g, c=>({
@@ -4662,6 +4663,7 @@ var _GT_ERR = {
   server_only:['ראש צוות מוסיפים או מסירים רק בשרת (המתקין) — לא מהאפליקציה.','A team leader is added or removed only on the server (the installer) — not from the app.','Un jefe de equipo se agrega o quita solo en el servidor (el instalador).'],
   last_manager:['זה ראש הצוות האחרון — אי אפשר להסיר אותו.','This is the last team leader — it cannot be removed.','Es el último jefe de equipo — no se puede quitar.'],
   leader_device_required:['המכשיר הזה לא רשום כמכשיר ראש צוות. ראש צוות נכנס רק ממכשיר ראש צוות — ראש צוות קיים צריך לצמד אותו: הגדרות ← מסכים ← "מכשירי ראש צוות" ← "הוסף מכשיר", עם קוד הצימוד שמופיע כאן מתחת.','This device is not registered as a team-leader device. A team leader logs in only from a team-leader device — an existing team leader must pair it: Settings → Screens → "Team-leader devices" → "Add device", with the pairing code shown below.','Este dispositivo no está registrado como dispositivo del jefe de equipo. El jefe de equipo entra solo desde un dispositivo de jefe de equipo — un jefe existente debe emparejarlo: Ajustes → Pantallas → "Dispositivos del jefe de equipo" → "Agregar", con el código de emparejamiento que aparece abajo.'],
+  worker_login_required:['צריך להיכנס עם הקוד לפני פסיקה. מה שנלחץ נשמר ויישלח אחרי הכניסה.','Log in with your code before ruling. What you pressed is kept and sent after the login.','Ingrese con su código antes de dictaminar.'],
   wrong_station:['מכשיר זה לא משויך לתחנה הזו — השינוי לא נרשם.','This device is not paired to this station — the change was not recorded.','Este dispositivo no está emparejado a esta estación — el cambio no se registró.'],
   stale_board:['השינוי שייך ללוח של יום עבודה קודם — הוא לא נרשם.','This change belongs to an earlier work day\'s board — it was not recorded.','Este cambio pertenece al tablero de un día anterior — no se registró.'],
   device_not_paired:['המכשיר לא מצומד לשרת — ראש הצוות צריך לצמד אותו.','This device is not paired with the server — the team leader needs to pair it.','Este dispositivo no está emparejado con el servidor — el jefe de equipo debe emparejarlo.'],
@@ -4703,7 +4705,7 @@ function gtErrCode(e){
   if(c==='PGRST202' || c==='42883') return 'missing_fn';
   const k = s.trim().toLowerCase();
   if(Object.prototype.hasOwnProperty.call(_GT_ERR, k)) return k;
-  const w = s.match(/\b(wrong_station|stale_board|device_not_paired|unauthorized|code_invalid|rate_limited|moved_on|correction_not_allowed|bad_id|bad_picture|no_device|setup_code_required|eso_locked|nc_kosher_or_treif_only|already_ruled|bad_settings|invalid_value|not_checked|reason_required)\b/);
+  const w = s.match(/\b(wrong_station|stale_board|device_not_paired|unauthorized|code_invalid|rate_limited|moved_on|correction_not_allowed|bad_id|bad_picture|no_device|setup_code_required|eso_locked|nc_kosher_or_treif_only|already_ruled|bad_settings|invalid_value|not_checked|reason_required|worker_login_required)\b/);
   if(w) return w[1];
   if(c==='42501') return 'permission_denied';
   if(typeof e==='object' && !c && /fetch|network|timeout|load failed|offline/i.test(s)) return 'network';
@@ -5629,6 +5631,17 @@ function _gtWorkerSessionSet(sess){
   try{ if(sess) localStorage.setItem(_GT_WSESS, JSON.stringify(sess)); else localStorage.removeItem(_GT_WSESS); }catch(e){}
 }
 function _gtWorkerLogout(){ if(_gtWorkerSession()) _gtWorkerSessionSet(null); }
+// v10.16 (review A1): a code screen writes only with its worker's live login. When the server
+// says "log in first" (session over / cleared), the change stays on the tablet, the worker logs in
+// again, and the waiting changes go out by themselves.
+window._gtNeedWorkerLogin = function(){
+  const now = Date.now(); if(window._gtNeedWLAt && now - window._gtNeedWLAt < 5000) return; window._gtNeedWLAt = now;
+  try{ _gtWorkerSessionSet(null); }catch(e){}
+  const cur = document.querySelector('.screen.active'); const id = cur && cur.id;
+  const msg = L('צריך להיכנס שוב עם הקוד. מה שנלחץ נשמר בטאבלט ויישלח מיד אחרי הכניסה.','Please log in again with your code. What you pressed is kept on this tablet and is sent right after the login.','Ingrese de nuevo con su código. Lo marcado se guarda y se envía tras el ingreso.');
+  if(id && !/Login$/.test(id) && document.getElementById(id+'Login')){ try{ goTo(id+'Login'); }catch(e){} }
+  try{ window.gtStatusSet && window.gtStatusSet('worker', '🔑 '+msg, {color:'red', ttl:20000}); }catch(e){}
+};
 function _gtNetLikeErr(e){ return !!e && (!e.code || e.code==='GT_OUTDATED' || /^(08|53|57)/.test(String(e.code))); }
 function _gtWorkerNotice(text){
   try{
@@ -5661,7 +5674,7 @@ async function _workerLoginVerify(role, name, code, users, err, loginScreenId){
   };
   // step 46: a worker logs in only against the plant server (no server = no work)
   const noServer=()=>fail(L('אין חיבור לשרת המפעל — אי אפשר להיכנס עכשיו. המסך ייפתח לבד כשהחיבור יחזור.','No connection to the plant server — cannot log in now.','Sin conexión con el servidor de la planta — no se puede entrar ahora.'));
-  if(!window.sb || navigator.onLine===false) return noServer();
+  if(!window.sb) return noServer();                       // v10.16: the server itself is asked (no browser 'offline' shortcut)
   err.style.color='var(--muted)'; err.textContent=L('מאמת...','Verifying...','Verificando...'); err.style.display='block';
   let res;
   try{ res=await _withTimeout(Promise.resolve(window.sb.rpc('worker_login',{p_role:role, p_code:code})), 8000); }
@@ -5679,12 +5692,15 @@ async function _workerLoginVerify(role, name, code, users, err, loginScreenId){
     }
     return finish(nm, {token:String(data.token), name:nm, role:data.role||role, exp:(Date.parse(data.expires_at)||0)});
   }
-  if(!data || (data.ok && !data.token)) return local(null);   // an answer without a session: check on this tablet
+  // v10.16: no login without the server's session (a code screen rules only with it)
+  if(!data || (data.ok && !data.token)) return fail(L('שגיאת תקשורת — נסה שוב','Connection error — try again','Error de conexión — intente de nuevo'));
   const ec=gtErrCode(data.error);
   if(ec==='code_invalid'){
     // a code saved before step41 (salted on this tablet) — the server can't check it until the team leader sets a new one
     const m=await _workerLocalMatch(users, name, code, true);
-    if(m) return finish(m.name, {token:'', name:m.name, role, exp:0, local:true},
+    // v10.16: an old-format code cannot be checked by the server — no login until the team leader sets a new one
+    if(m) return fail(L('הקוד של '+m.name+' נשמר בפורמט ישן — ראש הצוות צריך להגדיר לו קוד חדש (הגדרות ← עובדים).',m.name+'\'s code is in an old format — the team leader must set a new code (Settings → Workers).','Código en formato antiguo — el jefe de equipo debe definir uno nuevo.'));
+    if(false) return finish(m.name, {token:'', name:m.name, role, exp:0, local:true},
       L('הקוד של '+m.name+' נשמר בפורמט ישן — ראש הצוות צריך להגדיר לו קוד חדש. עד אז השם יסומן כ"לא מאומת".',
         m.name+'\'s code is in an old format — the team leader needs to set a new code. Until then the name is marked unverified.',
         'El código de '+m.name+' tiene un formato antiguo — el jefe de equipo debe definir uno nuevo. Hasta entonces el nombre queda como no verificado.'));
@@ -13698,6 +13714,7 @@ function _gtNetLockShow(on, why){
   ov.innerHTML = '<div style="max-width:520px;">'+
     '<div style="font-size:64px;line-height:1;">📡</div>'+
     '<div style="font-size:28px;font-weight:800;color:#FF6B6B;margin:14px 0 8px;">'+escapeHtml(L('אין חיבור לשרת המפעל','No connection to the plant server','Sin conexión con el servidor de la planta'))+'</div>'+
+    (window._gtPlantConfigMissing ? '<div style="font-size:14px;color:#ffd76a;margin-bottom:10px;">'+escapeHtml(L('קובץ ההגדרות של שרת המפעל (gt-config.js) לא נטען — הטאבלט לא עובר לשרת אחר. לקרוא למתקין.','The plant server settings file (gt-config.js) did not load — this tablet does not switch to another server. Call the installer.','No se cargó gt-config.js — llame al instalador.'))+'</div>' : '')+
     '<div style="font-size:20px;font-weight:700;color:#fff;margin-bottom:14px;">'+escapeHtml(L('העבודה נעצרה','Work is stopped','El trabajo está detenido'))+'</div>'+
     '<div style="font-size:14px;color:#ddd;line-height:1.7;">'+escapeHtml(L('המסך ייפתח לבד כשהחיבור יחזור. מה שנלחץ לפני הניתוק יישלח אוטומטית.','The screen opens by itself when the connection is back. Whatever was pressed before the cut is sent automatically.','La pantalla se abre sola cuando vuelva la conexión. Lo pulsado antes del corte se envía automáticamente.'))+'</div>'+
     '<div style="font-size:12px;color:#aaa;margin-top:12px;">'+escapeHtml(L('בודק חיבור…','Checking the connection…','Comprobando la conexión…'))+(mins>0?' · '+mins+' '+escapeHtml(L('דק׳','min','min')):'')+'</div></div>';
@@ -13710,9 +13727,11 @@ function _gtNetTick(){
   const offline = (typeof navigator !== 'undefined' && navigator.onLine === false);
   if(offline){ if(!_gtOfflineSince) _gtOfflineSince = now; } else _gtOfflineSince = 0;
   // no answer for a while → ask the server (a cheap call), so a quiet screen also knows
-  if(!offline && now - okAt > 6000) _gtNetPing();
+  // v10.16 (review B4): "no network" from the browser is only a hint — a plant LAN without internet
+  // can look "offline" to it; the server is always asked, and only its silence stops the work
+  if(now - okAt > 6000) _gtNetPing();
   let bad;
-  if(offline) bad = (now - _gtOfflineSince) > _GT_NET_GRACE;                    // Wi-Fi gone: 15 s grace
+  if(offline) bad = (now - _gtOfflineSince) > _GT_NET_GRACE && (now - okAt) > _GT_NET_GRACE;   // Wi-Fi gone AND no answer: 15 s grace
   else if(!window.sb) bad = (now - (window._gtBootAt||now)) > _GT_NET_GRACE;   // the server library never loaded
   else bad = failAt > okAt && (now - okAt) > _GT_NET_GRACE;                     // no answer from the server for 15 s
   const scr = (document.querySelector('.screen.active')||{}).id;
@@ -14095,6 +14114,8 @@ setTimeout(_maybeShowLicenseRequest, 2000); // let the app render first, then ch
   // (works with no internet), otherwise from the public CDN as before.
   (function(){
     var s=document.createElement('script');
+    // v10.16 (A7): known before anything loads, so the stop screen can say why
+    try{ window._gtPlantConfigMissing = !(window.GT_SERVER && window.GT_SERVER.url) && localStorage.getItem('gt_plant_bound') === '1'; }catch(e){}
     s.src=(window.GT_SERVER ? 'vendor/supabase.js' : 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js');
     s.async=false;
     document.head.appendChild(s);
@@ -14121,7 +14142,13 @@ setTimeout(_maybeShowLicenseRequest, 2000); // let the app render first, then ch
       // key here.
       // On a plant server, gt-config.js points everything at that server.
       const GT = window.GT_SERVER || null;
-      const SUPABASE_URL = (GT && GT.url) ? GT.url : 'https://grnpowvittmghmegdacw.supabase.co';
+      // v10.16 (review A7): a tablet that has ever worked with a plant server (gt-config.js) is bound to
+      // it for good — if that file is missing later it does NOT fall back to the cloud test server
+      // (that would bypass "no plant server = no work"): it stays stopped until the plant server answers.
+      let _gtBound = false; try{ _gtBound = localStorage.getItem('gt_plant_bound') === '1'; }catch(e){}
+      if(GT && GT.url){ try{ localStorage.setItem('gt_plant_bound', '1'); }catch(e){} }
+      window._gtPlantConfigMissing = !(GT && GT.url) && _gtBound;
+      const SUPABASE_URL = (GT && GT.url) ? GT.url : (window._gtPlantConfigMissing ? 'http://127.0.0.1:9' : 'https://grnpowvittmghmegdacw.supabase.co');
       const SUPABASE_ANON_KEY = (GT && GT.anonKey) ? GT.anonKey : 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdybnBvd3ZpdHRtZ2htZWdkYWN3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgyNjEzNTksImV4cCI6MjEwMzgzNzM1OX0.KvzSRB7P9SA3wig5jO3kAJU-Uk6a_GntHwn9-bqUDrM';
       // Every database request (/rest/v1/…) carries this device's pairing key
       // and, if a manager is logged in here, the manager session — read fresh
@@ -14160,6 +14187,11 @@ setTimeout(_maybeShowLicenseRequest, 2000); // let the app render first, then ch
         const _isApi = typeof input === 'string' && input.indexOf('/rest/v1/') !== -1;
         return fetch(input, init).then(r=>{
           if(_isApi){ if(r.status < 500) window._gtNetOkAt = Date.now(); else window._gtNetFailAt = Date.now(); }
+          // v10.16: the server refused a ruling because this screen's worker is not logged in
+          // (code screen, session over) — the change stays on the tablet; ask for the login
+          if(_isApi && input.indexOf('/rpc/') !== -1 && r.status < 500){
+            try{ r.clone().text().then(t=>{ if(/WORKER_LOGIN_REQUIRED|"worker_login_required"/.test(t)) window._gtNeedWorkerLogin && window._gtNeedWorkerLogin(); }, ()=>{}); }catch(e){}
+          }
           return r;
         }, err=>{ if(_isApi) window._gtNetFailAt = Date.now(); throw err; });
       }

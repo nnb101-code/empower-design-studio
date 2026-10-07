@@ -2781,6 +2781,35 @@ language sql stable security definer set search_path = public, extensions, pg_te
 $$;
 revoke execute on function _gt_one_inspection() from public, anon, authenticated;
 
+-- v10.16 (review A1): a screen whose workers log in with a code (loginModeByRole = code / both)
+-- writes ONLY with a live worker session of that screen's own list (x-worker-token) — the device
+-- key alone is not enough. Raises GTW01 'GT:WORKER_LOGIN_REQUIRED': nothing is changed, the tablet
+-- keeps the change and asks for the login. A name-only screen has no secret to check (the name is
+-- recorded). One shared inner + outer screen: its device is 'inner', so its one list is checked.
+create or replace function _worker_gate(p_device_role text) returns void
+language plpgsql stable security definer set search_path = public, extensions, pg_temp as $$
+declare v_role text := _worker_role_norm(p_device_role);
+begin
+  if v_role is null then return; end if;
+  if coalesce((select settings from settings_pilot where id = 1) -> 'loginModeByRole' ->> v_role, 'none') not in ('code', 'both') then return; end if;
+  if exists (select 1 from _current_worker() w where w.role = v_role) then return; end if;
+  raise exception 'GT:WORKER_LOGIN_REQUIRED worker login required (%)', v_role using errcode = 'GTW01';
+end $$;
+revoke execute on function _worker_gate(text) from public, anon, authenticated;
+
+-- a refused "log in first" answer is never kept as the command's answer: the same command,
+-- sent again after the worker logs in, is carried out
+create or replace function _cmd_put(p_cmd uuid, p_dev text, p_fn text, p_result jsonb) returns void
+language plpgsql security definer set search_path = public, extensions, pg_temp as $$
+begin
+  if p_cmd is null or p_result is null then return; end if;
+  if coalesce(p_result ->> 'error', '') in ('rate_limited', 'command_id_conflict', 'server_error', 'worker_login_required') then return; end if;
+  delete from processed_commands where at < now() - interval '3 days';
+  insert into processed_commands (command_id, device_id, fn, result) values (p_cmd, coalesce(p_dev, '?'), p_fn, p_result)
+    on conflict (command_id) do nothing;
+end $$;
+revoke execute on function _cmd_put(uuid, text, text, jsonb) from public, anon, authenticated;
+
 create or replace function _stage_allowed(p_stage text) returns boolean
 language plpgsql stable security definer set search_path = public, extensions, pg_temp as $$
 declare v_role text; v_ok boolean := false; v_dev text;
@@ -2788,6 +2817,7 @@ begin
   if _request_privileged() then return true; end if;
   v_role := _caller_device_role();
   if v_role is not null then
+    perform _worker_gate(v_role);                    -- v10.16 (review A1): a code screen needs its worker's login
     v_ok := case p_stage
       when 'slaughter' then v_role in ('slaughter')
       when 'eso'       then v_role in ('esophagus','slaughter')
@@ -2819,6 +2849,7 @@ begin
   if exists (select 1 from devices_pilot d
               where d.id = v_dev and d.device_status = 'active'
                 and (d.assigned_role = 'outer' or (d.assigned_role = 'inner' and _gt_one_inspection()))) then
+    perform _worker_gate((select assigned_role from devices_pilot where id = v_dev));   -- v10.16 (A1)
     return true;
   end if;
   if _test_mode_on() and _request_has_manager() then return true; end if;
@@ -2994,6 +3025,9 @@ declare
   v_fails int; v_last timestamptz; v_hash text; v_ok boolean; d record; n int := 0; v_dev text := _current_device_id();
   r jsonb;
 begin
+  -- v10.16 (review A2): one replacement at a time — a second request with the same codes waits
+  -- here, then finds the recovery code already used up (no_recovery_code)
+  perform pg_advisory_xact_lock(hashtext('glatttrack_leader_device_replace'));
   -- a station tablet serves only its station
   if v_dev is not null and exists (select 1 from devices_pilot where id = v_dev
        and assigned_role in ('slaughter', 'esophagus', 'legs', 'inner', 'outer', 'parts', 'stamps', 'display')) then
@@ -3046,6 +3080,95 @@ insert into plant_state (key, value) values ('schemaStep', '46')
     set value = case when plant_state.value ~ '^\d+$' and plant_state.value::int > 46 then plant_state.value else '46' end,
         updated_at = now();
 
+-- ── 23. review v10.15 → v10.16 ───────────────────────────────────────────────
+-- (A1 worker login gate: _worker_gate in §20 · A2 recovery serialized: §21)
+-- B2: the event log takes from a tablet only events of its own station
+create or replace function event_append(p_event jsonb) returns jsonb
+language plpgsql security definer set search_path = public, extensions, pg_temp as $$
+declare
+  v_id uuid; v_stage text; v_action text; v_payload jsonb; v_animal int; v_occ text; v_actor text;
+  v_pos bigint; v_state text; v_msg text; v_err text; v_maker boolean;
+begin
+  if p_event is null or jsonb_typeof(p_event) <> 'object' then
+    return jsonb_build_object('ok', false, 'error', 'bad_event');
+  end if;
+  begin
+    v_id := (p_event ->> 'event_id')::uuid;
+  exception when others then v_id := null;
+  end;
+  v_stage := p_event ->> 'stage';
+  v_action := p_event ->> 'action';
+  v_payload := coalesce(case when jsonb_typeof(p_event -> 'payload') = 'object' then p_event -> 'payload' end, '{}'::jsonb);
+  v_occ := coalesce(nullif(left(p_event ->> 'occurred_at', 64), ''), now()::text);
+  v_actor := left(p_event ->> 'actor', 80);
+  if v_id is null
+     or v_stage is null or v_stage !~ '^[a-z_]{1,40}$'
+     or v_action is null or v_action !~ '^[A-Za-z0-9_:.-]{1,80}$'
+     or (p_event ? 'payload' and jsonb_typeof(p_event -> 'payload') not in ('object', 'null'))
+     or length(v_payload::text) > 16384
+     or (p_event ->> 'animal_no' is not null and (p_event ->> 'animal_no') !~ '^\d{1,4}$') then
+    return jsonb_build_object('ok', false, 'error', 'bad_event');
+  end if;
+  v_animal := (p_event ->> 'animal_no')::int;
+  if v_animal is not null and (v_animal < 1 or v_animal > 1000) then
+    return jsonb_build_object('ok', false, 'error', 'bad_event');
+  end if;
+  v_maker := _request_has_manufacturer();
+  if not _device_write_allowed() and not v_maker then
+    return jsonb_build_object('ok', false, 'error', 'device_not_paired');
+  end if;
+  -- v10.16 (review B2): a tablet writes events only for its own work. The server's own logs
+  -- ('security', 'admin' …) are written by the server alone; a station tablet only its station's
+  -- stages (and 'correction'); the team leader's device 'settings'. Test mode keeps the old freedom.
+  if _is_api_request() and not _request_is_service_role() then
+    if v_stage in ('security', 'admin', 'audit', 'support', 'system', 'device', 'manufacturer', 'leader') then
+      return jsonb_build_object('ok', false, 'error', 'reserved_stage');
+    end if;
+    if not (_test_mode_on() and _request_has_manager()) and not v_maker then
+      declare v_role text := _caller_device_role();
+      begin
+        if v_role is not null and not (v_stage = 'correction' or case v_role
+             when 'slaughter' then v_stage in ('slaughter')
+             when 'esophagus' then v_stage in ('esophagus')
+             when 'inner'     then v_stage in ('inner') or (v_stage = 'outer' and _gt_one_inspection())
+             when 'outer'     then v_stage in ('outer')
+             when 'legs'      then v_stage in ('legs')
+             when 'parts'     then v_stage in ('parts')
+             when 'stamps'    then v_stage in ('stamps', 'weight')
+             when 'leader'    then v_stage in ('settings')
+             else false end) then
+          return jsonb_build_object('ok', false, 'error', 'wrong_station');
+        end if;
+      end;
+    end if;
+  end if;
+  if exists (select 1 from events_pilot where event_id = v_id) then
+    return jsonb_build_object('ok', true, 'duplicate', true, 'event_id', v_id);
+  end if;
+  begin
+    insert into events_pilot (event_id, animal_no, stage, action, payload, actor, device_id, occurred_at)
+    values (v_id, v_animal, v_stage, v_action, v_payload, v_actor,
+            case when not _is_api_request() then left(p_event ->> 'device_id', 80) end, v_occ)
+    returning chain_pos into v_pos;
+  exception
+    when unique_violation then
+      return jsonb_build_object('ok', true, 'duplicate', true, 'event_id', v_id);
+    when others then
+      get stacked diagnostics v_state = returned_sqlstate, v_msg = message_text;
+      v_err := case when v_msg ~ 'GT:[A-Z_]+' then lower(substring(v_msg from 'GT:([A-Z_]+)'))
+                    when v_state = '42501' then 'device_not_paired'
+                    else 'server_error' end;
+      return jsonb_build_object('ok', false, 'error', v_err);
+  end;
+  if v_maker then
+    perform _admin_audit(_request_headers() ->> 'x-manager-token', 'event_append', v_stage || '/' || v_action,
+                         jsonb_build_object('event_id', v_id));
+  end if;
+  return jsonb_build_object('ok', true, 'event_id', v_id, 'chain_pos', v_pos);
+end $$;
+revoke execute on function event_append(jsonb) from public;
+grant execute on function event_append(jsonb) to anon, authenticated;
+
 -- ── self-check ──────────────────────────────────────────────────────────────
 do $$
 declare problems text[] := '{}';
@@ -3077,6 +3200,12 @@ begin
     problems := problems || 'an internal function callable by the app'::text; end if;
   if has_function_privilege('anon', '_gt_standbys()', 'execute') then
     problems := problems || '_gt_standbys callable by the app'::text; end if;
+  if pg_get_functiondef('_stage_allowed(text)'::regprocedure) !~ '_worker_gate' then
+    problems := problems || '_stage_allowed does not check the worker login (v10.16 A1)'::text; end if;
+  if pg_get_functiondef('leader_device_replace(text,text)'::regprocedure) !~ 'pg_advisory_xact_lock' then
+    problems := problems || 'leader_device_replace is not serialized (v10.16 A2)'::text; end if;
+  if has_function_privilege('anon', '_worker_gate(text)', 'execute') then
+    problems := problems || '_worker_gate callable by the app'::text; end if;
   if pg_get_functiondef('_stage_allowed(text)'::regprocedure) !~ '_gt_one_inspection' then
     problems := problems || 'shared inner + outer screen missing in _stage_allowed'::text; end if;
   if (select value from plant_state where key = 'schemaStep')::int < 46 then
