@@ -35,6 +35,8 @@ Every A-finding was confirmed first, then fixed, then tested (browser tests are 
 | B4 | `navigator.onLine` on a LAN without internet | Partly (Chrome usually reports online on a LAN) | the browser's "offline" is only a hint: the server is always asked; the screen stops only when the server is silent for 15 s | `offline-hint-and-plant-binding` (onLine=false, server answers → never locked) + the 15-s black-hole test still locks |
 | B6 | keepalived secret in the kit | Yes | see A6 | — |
 
+Also new in v10.16 (app only, read-only — no new server path): Summaries tab — weight per farm / type / farm × type / inspector, a "same farm, same type, by date" comparison (with previous period / last year), sortable rankings, a per-worker table (slaughterer nevela / shot, inner treif, outer glatt / treif). Data: `archive_days` (team leader / owner) as before.
+
 Still open (not changed in v10.16, please re-check our reasoning):
 - **B1** rate limit per IP needs the nginx config that strips / sets `x-gt-client-ip` — the nginx file is still to be written (plant-server kit).
 - **B3** worker code hashes readable by paired tablets — planned: move the hashes out of `settings_pilot` into a server-only table (worker_login already checks on the server; station logins no longer need them). Larger change, next round.

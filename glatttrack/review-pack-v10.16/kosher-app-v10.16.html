@@ -117,6 +117,7 @@ html,body{direction:ltr!important;font-family:'Rubik',sans-serif;background:var(
 .gt-tbl{width:100%;border-collapse:collapse;font-size:13px;}
 .gt-tbl th{font-size:11px;color:var(--muted);font-weight:600;padding:5px 4px;text-align:center;}
 .gt-tbl td{padding:7px 4px;border-top:1px solid var(--border);text-align:center;color:var(--text);}
+.gt-tbl.gt-tight{font-size:12px;}.gt-tbl.gt-tight th{font-size:10px;padding:4px 2px;}.gt-tbl.gt-tight td{padding:6px 2px;}
 .gt-tbl td:first-child,.gt-tbl th:first-child{text-align:start;}
 .gt-row{display:flex;justify-content:space-between;gap:8px;padding:9px 4px;border-top:1px solid var(--border);font-size:13px;}
 .gt-field{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:8px;}
@@ -8253,8 +8254,10 @@ function _gtArchive(from, to){
   const chunks = []; let a = new Date(from);
   while(a <= to){ const b = new Date(a); b.setDate(b.getDate() + 365); chunks.push([new Date(a), b < to ? b : new Date(to)]); a = new Date(b); a.setDate(a.getDate() + 1); }
   const p = Promise.all(chunks.map(([x, y]) => Promise.resolve(window.sb.rpc('archive_days', { p_token: KS.getManagerToken(), p_from: _gtIsoDate(x), p_to: _gtIsoDate(y) }))
-      .then(r => (r && !r.error && r.data && r.data.ok === true && Array.isArray(r.data.days)) ? r.data.days : [], () => [])))
-    .then(parts => { const days = [].concat(...parts); _gtArch[key] = { at: Date.now(), days }; return days; });
+      .then(r => (r && !r.error && r.data && r.data.ok === true && Array.isArray(r.data.days)) ? r.data.days : null, () => null)))
+    // v10.16: a failed answer (session not ready yet, no connection) is not kept as "no days"
+    .then(parts => { const bad = parts.some(x => x === null); const days = [].concat(...parts.map(x => x || []));
+                     if(bad){ delete _gtArch[key]; window._gtArchBad = true; } else _gtArch[key] = { at: Date.now(), days }; return days; });
   _gtArch[key] = { p };
   return p;
 }
@@ -8324,7 +8327,7 @@ function gtDelta(now, was, opts){
   if(was == null || now == null) return '<span class="gt-flat">—</span>';
   let d, txt;
   if(opts.points){ d = now - was; txt = (d > 0 ? '+' : '') + _gtNum(d, 1) + ' ' + L('נק׳', 'pts', 'pts'); }
-  else { if(!was){ return '<span class="gt-flat">' + (now ? L('חדש', 'new', 'nuevo') : '—') + '</span>'; } d = (now - was) / was * 100; txt = (d > 0 ? '+' : '') + _gtNum(d, 0) + '%'; }
+  else { if(!was){ return '<span class="gt-flat">' + (now ? L('חדש', 'new', 'nuevo') : '—') + '</span>'; } d = (now - was) / was * 100; if(Math.abs(d) < 0.5) d = 0; txt = (d > 0 ? '+' : '') + _gtNum(d, 0) + '%'; }
   if(Math.abs(d) < 0.05) return '<span class="gt-flat">= ' + L('ללא שינוי', 'no change', 'sin cambio') + '</span>';
   const good = opts.goodUp === undefined ? null : (opts.goodUp ? d > 0 : d < 0);
   const cls = good === null ? 'gt-flat' : good ? 'gt-up' : 'gt-down';
@@ -8355,7 +8358,12 @@ function gtAnRender(){
     if(seq !== _gtAnSeq) return;
     const cur = gtStatsOf(res[0]), K = gtKey(cur);
     const C = cmps.map((c, i) => { const a = gtStatsOf(res[i + 1]); return { ...c, acc: a, K: gtKey(a) }; });
+    // v10.16: the archive did not answer (e.g. right after the login) — try again a few times
+    if(window._gtArchBad){ window._gtArchBad = false; if((window._gtAnRetry = (window._gtAnRetry || 0) + 1) <= 4) setTimeout(() => { if(seq === _gtAnSeq) gtAnRender(); }, 4000); }
+    else window._gtAnRetry = 0;
+    window._gtAnData = { cur: res[0], cmps: cmps.map((c, i) => ({ l: c.l, days: res[i + 1] })) };
     body.innerHTML = gtAnHtml(cur, K, C);
+    try{ gtFocusRender(); }catch(e){ console.warn('focus', e); }
     body.querySelectorAll('details[data-k]').forEach(d => { const k = d.getAttribute('data-k'); if(_gtAnOpen[k]) d.open = true; });
     try{ gtRenderWeightTables(); }catch(e){}
   });
@@ -8396,15 +8404,16 @@ function gtAnHtml(acc, K, C){
      <tr><td>${L('לא חלק (רבנות)', 'Not chalak (rabbinate)', 'No glatt (rabinato)')}</td><td>${_gtNum(acc.notChalak)}</td>${C.map(c => `<td>${_gtNum(c.acc.notChalak)}</td>`).join('')}</tr></table>`);
   // 3–6. by farm / type / farm × type / outer inspector
   const bsum = b => { const e = Object.entries(b || {}).sort((x, y) => y[1].total - x[1].total); return e.length ? escapeHtml(e[0][0]) + ' · ' + _gtNum(e[0][1].total) + (e.length > 1 ? ' (+' + (e.length - 1) + ')' : '') : '—'; };
-  h += sec('farm', '🏡 ' + L('לפי משק', 'By farm', 'Por granja'), bsum(acc.byFarm), _renderBucketBreakdown(acc.byFarm));
-  h += sec('type', '🐂 ' + L('לפי סוג בהמה', 'By animal type', 'Por tipo'), bsum(acc.byType), _renderBucketBreakdown(acc.byType));
-  h += sec('farmtype', '🔀 ' + L('משק × סוג', 'Farm × type', 'Granja × tipo'), bsum(acc.byFarmType), _renderBucketBreakdown(acc.byFarmType));
+  const more = b => `<details style="margin-top:10px;"><summary style="font-size:12px;color:var(--muted);cursor:pointer;">${L('פירוט הדרגות', 'Grades in detail', 'Detalle de grados')}</summary><div style="margin-top:8px;">${_renderBucketBreakdown(b)}</div></details>`;
+  h += sec('focus', '🔎 ' + L('השוואה: אותו משק, אותו סוג, לפי תאריך', 'Compare: same farm, same type, by date', 'Comparar: misma granja y tipo, por fecha'), L('בוחרים משק וסוג', 'pick a farm and a type', 'elegir granja y tipo'), '<div id="gtFocus"></div>');
+  h += sec('farm', '🏡 ' + L('דירוג משקים — כשרות ומשקל', 'Farms ranked — kashrut and weight', 'Granjas — kashrut y peso'), bsum(acc.byFarm), gtRankTable(acc.byFarm, 'farm') + more(acc.byFarm));
+  h += sec('type', '🐂 ' + L('לפי סוג בהמה — כשרות ומשקל', 'By animal type — kashrut and weight', 'Por tipo — kashrut y peso'), bsum(acc.byType), gtRankTable(acc.byType, 'type') + more(acc.byType));
+  h += sec('farmtype', '🔀 ' + L('משק × סוג — כשרות ומשקל', 'Farm × type — kashrut and weight', 'Granja × tipo — kashrut y peso'), bsum(acc.byFarmType), gtRankTable(acc.byFarmType, 'farmtype') + more(acc.byFarmType));
   h += sec('inspector', '🧑‍⚖️ ' + L('לפי בודק חוץ', 'By outer inspector', 'Por inspector externo'), bsum(acc.byOuterInspector), _renderBucketBreakdown(acc.byOuterInspector));
   // 7. by worker
   const wl = (o, title) => { const e = Object.entries(o || {}).sort((a, b) => b[1] - a[1]); return `<div style="font-size:12px;color:var(--gold);font-weight:700;margin:8px 0 2px;">${title}</div>` + (e.length ? e.map(([n, v]) => `<div class="gt-row"><span>${escapeHtml(n)}</span><b>${_gtNum(v)}</b></div>`).join('') : '<div class="gt-hint">—</div>'); };
   const wsum = Object.keys(acc.workers.slaughter).length + Object.keys(acc.workers.inner).length + Object.keys(acc.workers.outer).length;
-  h += sec('workers', '👷 ' + L('לפי עובד', 'By worker', 'Por trabajador'), wsum + ' ' + L('שמות', 'names', 'nombres'),
-    wl(acc.workers.slaughter, L('שוחטים', 'Slaughterers', 'Matarifes')) + wl(acc.workers.inner, L('בודקי פנים', 'Inner inspectors', 'Inspectores internos')) + wl(acc.workers.outer, L('בודקי חוץ', 'Outer inspectors', 'Inspectores externos')));
+  h += sec('workers', '👷 ' + L('לפי עובד', 'By worker', 'Por trabajador'), wsum + ' ' + L('שמות', 'names', 'nombres'), gtWorkerTables(acc.workerStats || {}));
   // 8. weight and charge
   const W = acc.weights;
   h += sec('weight', '⚖️ ' + (K.price ? L('משקל וחיוב', 'Weight and charge', 'Peso y cargo') : L('משקל', 'Weight', 'Peso')), _gtNum(K.kg) + ' ' + L('ק״ג', 'kg', 'kg') + (K.price ? ' · ' + escapeHtml(gtMoney(K.cur, K.charge, 0)) : ''),
@@ -8420,6 +8429,91 @@ function gtAnHtml(acc, K, C){
   const peak = acc.hours.indexOf(Math.max(...acc.hours));
   h += sec('hours', '🕐 ' + L('שחיטה לפי שעה', 'Slaughter by hour', 'Faena por hora'), acc.total ? L('שיא: ', 'Peak: ', 'Pico: ') + String(peak).padStart(2, '0') + ':00' : '—', hrs || '<div class="gt-hint">—</div>');
   return h;
+}
+
+// ── v10.16: rankings, focused comparison, workers ──
+const _GT_MIN_N = 5;                       // fewer animals than this: shown, but not ranked best / worst
+function _gtRow(o){
+  const graded = o.glatt + o.beit + o.kosher + (o.rabKosher || 0) + o.mk + (o.other || 0), ruled = graded + o.treif;
+  return { n: o.total, glatt: ruled ? o.glatt / ruled * 100 : null, kosher: ruled ? graded / ruled * 100 : null, treif: ruled ? o.treif / ruled * 100 : null,
+           nev: o.total ? (o.nevela + o.shot) / o.total * 100 : null, avg: o.kgN ? o.kgSum / o.kgN : null, kg: o.kgAll || 0, kgN: o.kgN || 0 };
+}
+function gtRankTable(bucket, id){
+  const rows = Object.entries(bucket || {}).map(([name, o]) => ({ name, ..._gtRow(o) }));
+  if(!rows.length) return '<div class="gt-hint">' + L('אין נתונים לתקופה זו', 'No data for this period', 'Sin datos') + '</div>';
+  const un = L('לא משויך', 'Unassigned', 'Sin asignar');
+  const big = rows.filter(r => r.n >= _GT_MIN_N && r.name !== un);
+  const best = (k, up) => { const v = big.filter(r => r[k] != null).map(r => r[k]); return v.length > 1 ? (up ? Math.max(...v) : Math.min(...v)) : null; };
+  const mark = (r, k, up) => { if(r.n < _GT_MIN_N || r.name === un || r[k] == null || big.length < 2) return '';
+    if(r[k] === best(k, up)) return ' style="color:var(--green);font-weight:800;"';
+    if(r[k] === best(k, !up)) return ' style="color:var(--red-light);font-weight:800;"'; return ''; };
+  const p = v => v == null ? '—' : _gtNum(v, 1) + '%';
+  const cols = [['name', L('שם', 'Name', 'Nombre')], ['n', L('בהמות', 'Animals', 'Animales')], ['glatt', L('גלאט', 'Glatt', 'Glatt')], ['kosher', L('כשר', 'Kosher', 'Kosher')],
+                ['treif', L('טרף', 'Treif', 'Treif')], ['nev', L('נבלה/ירוי', 'Nevela/shot', 'Nevelá')], ['avg', L('ממוצע ק״ג', 'Avg kg', 'Prom. kg')], ['kg', L('סה״כ ק״ג', 'Total kg', 'Total kg')]];
+  const sortHint = '<span style="font-size:9px;opacity:.6;">⇅</span>';
+  rows.sort((a, b) => b.n - a.n);
+  return `<div style="overflow-x:auto;"><table class="gt-tbl gt-rank gt-tight" id="gtRank_${id}"><tr>${cols.map(([k, l], i) => `<th style="cursor:pointer;white-space:nowrap;" onclick="gtSortTbl('gtRank_${id}', ${i})">${l} ${sortHint}</th>`).join('')}</tr>` +
+    rows.map(r => `<tr${r.n < _GT_MIN_N ? ' style="opacity:.6;"' : ''}><td style="text-align:start;font-weight:700;" data-v="${escapeHtml(r.name)}">${escapeHtml(r.name)}</td><td data-v="${r.n}">${_gtNum(r.n)}</td>` +
+      `<td data-v="${r.glatt ?? -1}"${mark(r, 'glatt', true)}>${p(r.glatt)}</td><td data-v="${r.kosher ?? -1}"${mark(r, 'kosher', true)}>${p(r.kosher)}</td>` +
+      `<td data-v="${r.treif ?? -1}"${mark(r, 'treif', false)}>${p(r.treif)}</td><td data-v="${r.nev ?? -1}"${mark(r, 'nev', false)}>${p(r.nev)}</td>` +
+      `<td data-v="${r.avg ?? -1}"${mark(r, 'avg', true)}>${r.avg == null ? '—' : _gtNum(r.avg, 1)}</td><td data-v="${r.kg}">${r.kg ? _gtNum(r.kg) : '—'}</td></tr>`).join('') +
+    `</table></div><div class="gt-hint" style="margin-top:6px;">${L('ירוק = הכי טוב, אדום = הכי חלש (רק כשיש לפחות ' + _GT_MIN_N + ' בהמות). ממוצע ק״ג = בהמות ששתי החצאים שלהן נשקלו. לחיצה על כותרת ממיינת.',
+      'Green = best, red = weakest (only with at least ' + _GT_MIN_N + ' animals). Avg kg = animals with both halves weighed. Tap a header to sort.', 'Verde = mejor, rojo = más débil. Toque un encabezado para ordenar.')}</div>`;
+}
+function gtSortTbl(id, col){
+  const t = document.getElementById(id); if(!t) return;
+  const rows = [...t.querySelectorAll('tr')].slice(1), dir = t.dataset.sc == col && t.dataset.sd === 'd' ? 'a' : 'd';
+  t.dataset.sc = col; t.dataset.sd = dir;
+  rows.sort((a, b) => { const x = a.children[col].dataset.v, y = b.children[col].dataset.v; const nx = Number(x), ny = Number(y);
+    const c = (!isNaN(nx) && !isNaN(ny)) ? nx - ny : String(x).localeCompare(String(y), lang); return dir === 'd' ? -c : c; });
+  rows.forEach(r => t.appendChild(r));
+}
+function gtWorkerTables(WS){
+  const p = (a, b) => b ? _gtNum(a / b * 100, 1) + '%' : '—';
+  const tbl = (title, o, cols) => { const e = Object.entries(o || {}).sort((a, b) => b[1].n - a[1].n);
+    return `<div style="font-size:12px;color:var(--gold);font-weight:700;margin:10px 0 4px;">${title}</div>` + (e.length ?
+      `<table class="gt-tbl"><tr><th style="text-align:start;">${L('שם', 'Name', 'Nombre')}</th><th>${L('בהמות', 'Animals', 'Animales')}</th>${cols.map(c => `<th>${c[0]}</th>`).join('')}</tr>` +
+      e.map(([n, r]) => `<tr${r.n < _GT_MIN_N ? ' style="opacity:.6;"' : ''}><td style="text-align:start;">${escapeHtml(n)}</td><td>${_gtNum(r.n)}</td>${cols.map(c => `<td>${c[1](r)}</td>`).join('')}</tr>`).join('') + '</table>'
+      : '<div class="gt-hint">—</div>'); };
+  return tbl(L('שוחטים', 'Slaughterers', 'Matarifes'), WS.slaughter, [[L('נבלה', 'Nevela', 'Nevelá'), r => p(r.nevela, r.n)], [L('ירוי', 'Shot', 'Baleado'), r => p(r.shot, r.n)]]) +
+         tbl(L('בודקי פנים', 'Inner inspectors', 'Inspectores internos'), WS.inner, [[L('טרף בפנים', 'Inner treif', 'Treif interno'), r => p(r.treif, r.n)]]) +
+         tbl(L('בודקי חוץ', 'Outer inspectors', 'Inspectores externos'), WS.outer, [[L('גלאט', 'Glatt', 'Glatt'), r => p(r.glatt, r.n)], [L('טרף', 'Treif', 'Treif'), r => p(r.treif, r.n)]]) +
+         `<div class="gt-hint" style="margin-top:6px;">${L('הבדלים בין עובדים תלויים גם במשקים ובסוגי הבהמות שהגיעו אליהם — להשוות יחד עם הדירוג לפי משק.', 'Differences between workers also depend on the farms and animal types they got — compare together with the farm ranking.', 'Las diferencias dependen también de las granjas.')}</div>`;
+}
+// which farm / type an animal came from: the day's intake lines, in order
+function _gtIntakeOf(intake, idx){ let run = 0; for(const r of (intake || [])){ const to = run + (Number(r.qty) || 0); if(idx >= run && idx < to) return r; run = to; } return null; }
+function _gtFilterDay(d, farm, type){
+  const out = [];
+  (d.animals || []).forEach((x, idx) => { if(!x || x.slaughter == null) return; const r = _gtIntakeOf(d.intake, idx);
+    if(farm && (!r || r.farm !== farm)) return; if(type && (!r || r.type !== type)) return; out[idx] = x; });
+  return out;
+}
+var _gtFocus = { farm: '', type: '' };
+function gtFocusRender(){
+  const el = document.getElementById('gtFocus'), D = window._gtAnData; if(!el || !D) return;
+  const farms = new Set(), types = new Set();
+  [D.cur].concat(D.cmps.map(c => c.days)).forEach(list => list.forEach(d => (d.intake || []).forEach(r => { if(r.farm) farms.add(r.farm); if(r.type) types.add(r.type); })));
+  const sel = (id, v, set, all) => `<select id="${id}" class="gt-in" onchange="_gtFocus.${id === 'gtFF' ? 'farm' : 'type'}=this.value;gtFocusRender();"><option value="">${all}</option>${[...set].sort().map(x => `<option value="${escapeHtml(x)}"${x === v ? ' selected' : ''}>${escapeHtml(x)}</option>`).join('')}</select>`;
+  let h = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">${sel('gtFF', _gtFocus.farm, farms, L('כל המשקים', 'All farms', 'Todas'))}${sel('gtFT', _gtFocus.type, types, L('כל הסוגים', 'All types', 'Todos'))}</div>`;
+  const stat = list => { const acc = _freshPeriodAcc(); acc.days = 0; list.forEach(d => { acc.days++; _accumulateAnimalStats(acc, _gtFilterDay(d, _gtFocus.farm, _gtFocus.type), []); }); return acc; };
+  const line = (label, acc, ref) => { const K = gtKey(acc), W = acc.weights, avg = W.nFull ? W.sumFull / W.nFull : null;
+    const R = ref ? gtKey(ref) : null, ravg = ref && ref.weights.nFull ? ref.weights.sumFull / ref.weights.nFull : null;
+    const pc = v => v == null ? '—' : _gtNum(v, 1) + '%';
+    return `<tr><td style="text-align:start;white-space:nowrap;">${label}</td><td>${_gtNum(K.total)}</td><td>${pc(K.glattPct)}${R ? '<br>' + gtDelta(K.glattPct, R.glattPct, { points: true, goodUp: true }) : ''}</td>` +
+      `<td>${pc(K.treifPct)}${R ? '<br>' + gtDelta(K.treifPct, R.treifPct, { points: true, goodUp: false }) : ''}</td><td>${_gtNum(K.nev)}</td>` +
+      `<td>${avg == null ? '—' : _gtNum(avg, 1)}${R && avg != null && ravg != null ? '<br>' + gtDelta(avg, ravg, {}) : ''}</td><td>${K.kg ? _gtNum(K.kg) : '—'}</td></tr>`; };
+  const head = `<tr><th style="text-align:start;">${L('תאריך', 'Date', 'Fecha')}</th><th>${L('בהמות', 'Animals', 'Animales')}</th><th>${L('גלאט', 'Glatt', 'Glatt')}</th><th>${L('טרף', 'Treif', 'Treif')}</th><th>${L('נבלה/ירוי', 'Nevela/shot', 'Nevelá')}</th><th>${L('ממוצע ק״ג', 'Avg kg', 'Prom. kg')}</th><th>${L('סה״כ ק״ג', 'Total kg', 'Total kg')}</th></tr>`;
+  const days = D.cur.slice().sort((a, b) => a.date < b.date ? -1 : 1).filter(d => stat([d]).total > 0);
+  const total = stat(D.cur);
+  h += `<div style="overflow-x:auto;"><table class="gt-tbl gt-tight">${head}` +
+       days.map(d => line(escapeHtml(d.date.slice(8, 10).replace(/^0/, '') + '.' + d.date.slice(5, 7).replace(/^0/, '') + '.' + d.date.slice(2, 4)) + (d.live ? ' · ' + L('היום', 'today', 'hoy') : ''), stat([d]))).join('') +
+       (days.length > 1 || D.cmps.length ? line('<b>' + L('כל התקופה', 'Whole period', 'Todo el período') + '</b>', total) : '') +
+       D.cmps.map(c => line(escapeHtml(c.l), stat(c.days))).join('') +
+       (D.cmps.length ? `<tr><td colspan="7" class="gt-hint" style="text-align:start;">${L('החיצים: התקופה מול', 'Arrows: the period vs', 'Flechas: el período vs')} ${escapeHtml(D.cmps[0].l)}</td></tr>` + line(L('התקופה מול ', 'Period vs ', 'Período vs ') + escapeHtml(D.cmps[0].l), total, stat(D.cmps[0].days)) : '') +
+       `</table></div>`;
+  if(!days.length) h += `<div class="gt-hint">${L('אין בהמות של המשק / הסוג האלה בתקופה. משק וסוג נקבעים לפי "קבלת בהמות יומית" (עבודה יומית).', 'No animals of this farm / type in the period. Farm and type come from the daily intake (Daily work).', 'Sin animales de esta granja / tipo.')}</div>`;
+  h += `<div class="gt-hint" style="margin-top:6px;">${L('כדי להשוות לתקופה קודמת או לאשתקד — לסמן "השוואה" למעלה.', 'To compare with the previous period or last year, tick "Compare" above.', 'Para comparar, marque "Comparar" arriba.')}</div>`;
+  el.innerHTML = h;
 }
 
 // ── SEARCH ──
@@ -8900,6 +8994,7 @@ function _freshPeriodAcc(){
     // carcass weights (stage 1, right + left halves) for the weight report
     weights:{n:0,sumR:0,nR:0,sumL:0,nL:0,sumFull:0,nFull:0},
     workers:{slaughter:{},inner:{},outer:{}},
+    workerStats:{slaughter:{},inner:{},outer:{}},   // v10.16: per worker — nevela / treif / grades
     byFarm:{}, byType:{}, byFarmType:{}, byOuterInspector:{},
     hours:new Array(24).fill(0),
     days:1
@@ -8910,8 +9005,11 @@ function _accumulateAnimalStats(acc, animals, dailyIntake){
   const ranges=(dailyIntake||[]).map(r=>{const from=running,to=running+(r.qty||0);running=to;return {farm:r.farm,type:r.type,from,to};});
   const bumpBucket=(bucket,key,x)=>{
     if(!key)return;
-    const o=bucket[key]=bucket[key]||{total:0,glatt:0,beit:0,kosher:0,rabKosher:0,mk:0,treif:0,nevela:0,shot:0,pending:0};
+    const o=bucket[key]=bucket[key]||{total:0,glatt:0,beit:0,kosher:0,rabKosher:0,mk:0,treif:0,nevela:0,shot:0,pending:0,kgN:0,kgSum:0,kgAll:0};
     o.total++;
+    { const wr=Number(x.weightRight)||0, wl=Number(x.weightLeft)||0;          // v10.16: weight per farm / type / inspector
+      if(wr>0||wl>0) o.kgAll=(o.kgAll||0)+wr+wl;
+      if(wr>0&&wl>0){ o.kgN=(o.kgN||0)+1; o.kgSum=(o.kgSum||0)+wr+wl; } }
     if(x.slaughter==='nevela')o.nevela++;
     else if(x.slaughter==='shot')o.shot++;
     else if(x.outerStatus==='glatt')o.glatt++;
@@ -8954,6 +9052,11 @@ function _accumulateAnimalStats(acc, animals, dailyIntake){
       }
     }
     if(x.slaughteredBy){acc.workers.slaughter[x.slaughteredBy]=(acc.workers.slaughter[x.slaughteredBy]||0)+1;}
+    { const WS=acc.workerStats||(acc.workerStats={slaughter:{},inner:{},outer:{}});
+      const g=(o,k,f)=>{ const r=o[k]=o[k]||{n:0,nevela:0,shot:0,treif:0,glatt:0,graded:0}; r.n++; f(r); };
+      if(x.slaughteredBy) g(WS.slaughter,x.slaughteredBy,r=>{ if(x.slaughter==='nevela')r.nevela++; else if(x.slaughter==='shot')r.shot++; });
+      if(x.innerBy && x.innerStatus && x.innerStatus!=='in_progress') g(WS.inner,x.innerBy,r=>{ if(x.innerStatus==='treif')r.treif++; });
+      if(x.outerBy && x.outerStatus) g(WS.outer,x.outerBy,r=>{ if(x.outerStatus==='treif')r.treif++; else { r.graded++; if(x.outerStatus==='glatt')r.glatt++; } }); }
     if(x.innerBy){acc.workers.inner[x.innerBy]=(acc.workers.inner[x.innerBy]||0)+1;}
     if(x.outerBy){acc.workers.outer[x.outerBy]=(acc.workers.outer[x.outerBy]||0)+1;}
     if(x.slaughterTime){const h=new Date(x.slaughterTime).getHours();acc.hours[h]++;}
