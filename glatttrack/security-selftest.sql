@@ -1,6 +1,6 @@
 -- ============================================================================
 -- GlattTrack — security self-test (run any time; changes NOTHING)
--- VERSION 5 — one statement, no temporary tables, nothing the Supabase SQL Editor
+-- VERSION 6 — one statement, no temporary tables, nothing the Supabase SQL Editor
 --             mistakes for a new table (so it shows no "RLS" window and adds nothing)
 -- ============================================================================
 -- Simulates requests exactly as they arrive through the API (PostgREST: the
@@ -2245,6 +2245,87 @@ begin
   insert into plant_state (key, value) values ('leaderDevicesRequired', '1') on conflict (key) do update set value = '1';
 end $$;
 $gt69$;
+    v_step := 'shared inner + outer screen';
+    execute $gtn0$
+do $$
+declare r jsonb; r2 jsonb; r3 jsonb; r4 jsonb; ok boolean; s0 jsonb; tok text;
+begin
+  -- ── one shared screen for the inner and the outer check ──
+  select settings into s0 from settings_pilot where id = 1;
+  delete from login_attempts;
+  update settings_pilot set settings = settings || jsonb_build_object('screenConfig', '1both', 'esophagusEnabled', false,
+      'users', coalesce(settings -> 'users', '[]'::jsonb) || jsonb_build_array(
+         jsonb_build_object('name', 'Inner Only 1b', 'role', 'inner', 'codeHash', encode(digest('gt-worker:620101', 'sha256'), 'hex')),
+         jsonb_build_object('name', 'Both Lists 1b', 'role', 'inner', 'codeHash', encode(digest('gt-worker:620102', 'sha256'), 'hex')),
+         jsonb_build_object('name', 'Both Lists 1b', 'role', 'outer', 'codeHash', encode(digest('gt-worker:620102', 'sha256'), 'hex'))),
+      'loginModeByRole', coalesce(settings -> 'loginModeByRole', '{}'::jsonb) || '{"inner":"code","outer":"code"}'::jsonb) where id = 1;
+  perform pg_temp.prep(997, 'inner'); perform pg_temp.prep(998, 'inner'); perform pg_temp.prep(996, 'inner');
+  r  := pg_temp.api(pg_temp.dev('IN1'), pg_temp.q_claim(997, 'outer', 'glatt', '', ''));
+  r2 := pg_temp.api(pg_temp.dev('IN1'), format('select set_not_chalak_outer(998, %s)', pg_temp.ep()));
+  r3 := pg_temp.api(pg_temp.dev('IN1'), 'select worker_login(''inner'', ''620101'')');
+  r4 := pg_temp.api(pg_temp.dev('IN1'), 'select worker_login(''inner'', ''620102'')');
+  tok := r4 ->> 'token';
+  perform pg_temp.api(pg_temp.dev('IN1') || jsonb_build_object('x-worker-token', tok), pg_temp.q_claim(996, 'outer', 'glatt', '', ''));
+  ok := pg_temp.claimed(r) and (pg_temp.ar(997)).outer_status = 'glatt' and pg_temp.ok(r2) and (pg_temp.ar(998)).not_chalak_outer
+        and r3 ->> 'error' = 'not_on_outer_list' and pg_temp.ok(r4) and (pg_temp.ar(996)).outer_by = 'Both Lists 1b';
+  -- any other configuration: each station its own stage again
+  update settings_pilot set settings = settings || '{"screenConfig":"1in1out"}'::jsonb where id = 1;
+  perform pg_temp.prep(999, 'inner');
+  r2 := pg_temp.api(pg_temp.dev('IN1'), pg_temp.q_claim(999, 'outer', 'glatt', '', ''));
+  ok := ok and r2 ->> 'error' = 'wrong_station' and (pg_temp.ar(999)).outer_status is null;
+  perform pg_temp.rec('shared inner + outer screen (the plant''s choice): the inner tablet rules outer and sends to the rabbinate; its worker must be on both lists and is named on the outer ruling; otherwise inner tablet → inner only', ok,
+    concat_ws(' | ', left(r::text, 60), r3::text, left(r4::text, 50), (pg_temp.ar(996)).outer_by, r2::text));
+  update settings_pilot set settings = s0 where id = 1;
+  delete from login_attempts;
+end $$;
+$gtn0$;
+    v_step := 'team-leader device replacement';
+    execute $gtn1$
+do $$
+declare r jsonb; r2 jsonb; r3 jsonb; r4 jsonb; r5 jsonb; ok boolean; v_code text; a text; ta text; i int;
+begin
+  -- ── a lost team-leader device: replaced with the team-leader code + the recovery code ──
+  delete from login_attempts;
+  r  := pg_temp.api3('{}', '{"role":"authenticated","sub":"11111111-1111-1111-1111-111111111111"}', format('select leader_recovery_code_new(%L)', pg_temp.v('owner')));
+  r2 := pg_temp.api('{}', format('select leader_recovery_code_new(%L)', pg_temp.v('mgr')));
+  v_code := r2 ->> 'code';
+  r3 := pg_temp.api('{}', format('select leader_recovery_status(%L)', pg_temp.v('mgr')));
+  ok := r ->> 'error' = 'unauthorized' and pg_temp.ok(r2) and v_code ~ '^[A-Z2-9]{4}-[A-Z2-9]{4}-[A-Z2-9]{4}$'
+        and (r3 ->> 'exists')::boolean and (select value from plant_state where key = 'leaderRecoveryHash') !~ v_code;
+  -- the team leader's (lost) device, still paired, a session on it
+  a := 'gtselftest_ldR_' || substr(md5(random()::text), 1, 6);
+  perform set_config('app.device_admin', 'on', true);
+  update devices_pilot set assigned_role = null, assigned_index = null where assigned_role = 'leader';
+  insert into devices_pilot (id, device_name, assigned_role, assigned_index, device_status, paired_at) values (a, 'lost TL phone', 'leader', 0, 'active', now());
+  insert into device_credentials (device_id, token_hash) values (a, md5(a));
+  perform set_config('app.device_admin', '', true);
+  insert into plant_state (key, value) values ('leaderDevicesRequired', '1') on conflict (key) do update set value = '1';
+  insert into manager_sessions (manager_id, device_id) values ((pg_temp.v('mgr_id'))::uuid, a) returning token into ta;
+  r  := pg_temp.api(pg_temp.dev('SL1'), format('select leader_device_replace(%L, %L)', pg_temp.v('mgr_code'), v_code));     -- from a station tablet
+  r2 := pg_temp.api('{}', format('select leader_device_replace(%L, %L)', pg_temp.v('mgr_code'), 'AAAA-BBBB-CCCC'));          -- wrong recovery code
+  r3 := pg_temp.api('{}', format('select leader_device_replace(%L, %L)', 'not-the-leader-code', v_code));                   -- wrong team-leader code
+  r4 := pg_temp.api('{}', format('select leader_device_replace(%L, %L)', pg_temp.v('mgr_code'), lower(v_code)));           -- right (case / dashes do not matter)
+  r5 := pg_temp.api('{}', format('select leader_device_replace(%L, %L)', pg_temp.v('mgr_code'), v_code));                  -- used up
+  ok := ok and r ->> 'reason' = 'station_device' and r2 ->> 'reason' = 'code_invalid' and r3 ->> 'reason' = 'code_invalid'
+        and pg_temp.ok(r4) and (r4 ->> 'replaced')::boolean and (r4 ->> 'registerLeaderDevice')::boolean
+        and (select assigned_role from devices_pilot where id = a) is null
+        and not exists (select 1 from device_credentials where device_id = a and not revoked)
+        and not exists (select 1 from manager_sessions where token = ta)
+        and not exists (select 1 from plant_state where key = 'leaderRecoveryHash')
+        and r5 ->> 'reason' = 'no_recovery_code'
+        and exists (select 1 from events_pilot where stage = 'security' and action = 'leader_device_replaced');
+  -- guessing is braked: 5 wrong tries an hour
+  delete from login_attempts;
+  perform pg_temp.api('{}', format('select leader_recovery_code_new(%L)', pg_temp.v('mgr')));
+  for i in 1 .. 5 loop r := pg_temp.api('{}', format('select leader_device_replace(%L, %L)', pg_temp.v('mgr_code'), 'WRONG' || i)); end loop;
+  r := pg_temp.api('{}', format('select leader_device_replace(%L, %L)', pg_temp.v('mgr_code'), 'WRONG6'));
+  ok := ok and r ->> 'reason' = 'locked';
+  perform pg_temp.rec('team-leader device lost: replaced with the team-leader code + the recovery code (team leader makes it; not from a station tablet; wrong codes refused and braked; old device disconnected; the code is used once)', ok,
+    concat_ws(' | ', r2::text, r3::text, left(r4::text, 80), r5::text, r::text));
+  delete from login_attempts;
+  insert into plant_state (key, value) values ('leaderDevicesRequired', '1') on conflict (key) do update set value = '1';
+end $$;
+$gtn1$;
     v_step := 'the ACTIVE security surface against the expected manifest';
     execute $gt70$
 -- ── the ACTIVE security surface against the expected manifest ───────────────
@@ -2347,7 +2428,7 @@ begin
                 'eso_change(integer,text,text,bigint)', 'eso_change(integer,text,text,bigint,uuid)', 'event_append(jsonb)',
                 'lung_drawing_get(integer)', 'lung_drawing_set(integer,bigint,text)', 'manager_add(text,text,text)',
                 'manager_add_owner(text,text,text)', 'manager_deactivate(text,uuid)', 'manager_list(text)', 'manager_login(text)',
-                'manager_logout(text)', 'manager_session_check(text)', 'manufacturer_set_billing(text,boolean,numeric,text,text)',
+                'manager_logout(text)', 'manager_session_check(text)', 'leader_recovery_code_new(text)', 'leader_recovery_status(text)', 'leader_device_replace(text,text)', 'manufacturer_set_billing(text,boolean,numeric,text,text)',
                 'outer_open(integer,bigint,boolean,text)', 'outer_open(integer,bigint,boolean,text,uuid)', 'plant_status_snapshot()', 'plant_setup_needed()',
                 'push_settings(jsonb,text,text,text)', 'request_daily_rollover()', 'reset_daily_board(text,text)', 'security_summary(text)',
                 'processing_board(text)', 'carry_push(bigint,jsonb,uuid)', 'carry_claim(bigint,integer,text,uuid)',

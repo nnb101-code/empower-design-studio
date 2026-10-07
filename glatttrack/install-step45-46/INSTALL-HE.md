@@ -22,7 +22,7 @@
 |---|---|---|
 | 1 | `01-setup-supabase-step45-health-and-reasons.sql` | `Success. No rows returned` |
 | 2 | `02-setup-supabase-step46-order-and-processing-days.sql` | `Success. No rows returned` |
-| 3 (בדיקה) | `03-security-selftest.sql` | שורה אחת: `PASSED — 126 of 126 security checks (nothing was changed)` |
+| 3 (בדיקה) | `03-security-selftest.sql` | שורה אחת: `PASSED — 128 of 128 security checks (nothing was changed)` |
 
 - **אחרי שלב 2** אפשר לוודא: `select value from plant_state where key = 'schemaStep';` חייב להחזיר **46**.
 - **בבדיקה (שלב 3):** אם משהו נכשל, מופיעה שגיאה `security self-test FAILED` עם שמות הבדיקות שנכשלו.
