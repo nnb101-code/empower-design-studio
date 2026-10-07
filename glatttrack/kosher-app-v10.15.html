@@ -10299,12 +10299,34 @@ const ROLE_LABELS={
 };
 
 function gtSharedUserTabs(){
+  // the worker lists follow the screen choice: only the screens the plant uses; inner + outer as
+  // two lists ("Inner inspectors", "Outer inspectors"), or ONE list "Inspectors" on a shared screen
   const sh = (typeof gtPlan==='function') && KS.getSettings().screenConfig==='1both';
+  const p = (typeof gtPlan==='function') ? gtPlan() : {decided:false};
+  WORKER_SCREENS.forEach(r => {
+    const b = document.getElementById('utab-'+r); if(!b) return;
+    let show = !p.decided || p.screens.has(r);
+    if(r==='outer' && sh) show = false;
+    if(r==='inner' && sh && p.decided) show = p.screens.has('inner') || p.screens.has('outer');
+    b.style.display = show ? '' : 'none';
+  });
   const bi = document.getElementById('utab-inner'), bo = document.getElementById('utab-outer');
-  if(bo) bo.style.display = sh ? 'none' : '';
-  if(bi) bi.textContent = sh ? L('בודקים (פנים + חוץ)','Inspectors (inner + outer)','Inspectores') : L('בודק פנים','Inner inspector','Inspector interno');
+  if(bi) bi.textContent = sh ? L('בודקים (פנים + חוץ)','Inspectors (inner + outer)','Inspectores') : L('בודקי פנים','Inner inspectors','Inspectores internos');
+  if(bo) bo.textContent = L('בודקי חוץ','Outer inspectors','Inspectores externos');
   return sh;
 }
+// opening "Workers": the lists match the screen choice, and a hidden list is never the one shown
+document.addEventListener('toggle', ev => {
+  const g = ev.target; if(!(g && g.matches && g.matches('details.gt-grp[data-g="users"]') && g.open)) return;
+  try{
+    gtSharedUserTabs();
+    const cur = document.getElementById('utab-'+mgrCurrentUserRole);
+    if(!cur || cur.style.display==='none'){
+      const first = WORKER_SCREENS.find(r => { const b=document.getElementById('utab-'+r); return b && b.style.display!=='none'; });
+      if(first) mgrUserTab(first);
+    } else mgrUserTab(mgrCurrentUserRole);
+  }catch(e){}
+}, true);
 function mgrUserTab(role){
   if(gtSharedUserTabs() && role==='outer') role='inner';            // one shared screen: one list
   mgrCurrentUserRole=role;
@@ -10312,7 +10334,7 @@ function mgrUserTab(role){
     const b=document.getElementById('utab-'+r);
     if(b)b.classList.toggle('active-mini',r===role);
   });
-  const lbl=ROLE_LABELS[role];
+  const lbl=(role==='inner' && KS.getSettings().screenConfig==='1both') ? {he:'בודק (פנים + חוץ)',en:'Inspector (inner + outer)',es:'Inspector'} : ROLE_LABELS[role];
   const btn=document.getElementById('mgrAddUserBtn');
   if(btn)btn.textContent=(lang==='he'?'הוסף ':lang==='es'?'Agregar ':'Add ')+(lbl[lang]||lbl.he);
   const title=document.getElementById('mgrAddUserTitle');
@@ -14999,12 +15021,24 @@ async function mgrRenderPlan(){
         <div style="min-width:0;"><div style="font-size:14px;font-weight:700;color:var(--text);">${E(L(sc.t[0],sc.t[1],sc.t[2]))}${locked?` <span style="font-size:11px;color:var(--green);font-weight:600;">🔐 ${L('מצומד','paired','emparejado')}</span>`:''}</div>
         ${desc?`<div style="font-size:11px;color:var(--muted);line-height:1.5;">${E(desc)}</div>`:''}</div></div>`;
     if(on && sc.k==='outer' && D.screens.has('inner')){
-      x += `<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:8px 32px 0 0;">
-        ${opt(!D.shared, L('מסכים נפרדים לפנים ולחוץ','Separate inner and outer screens','Pantallas separadas'), 'gtPlanShared(false)')}
-        ${opt(D.shared, L('מסך אחד משותף','One shared screen','Una pantalla compartida'), 'gtPlanShared(true)')}</div>
-        ${D.shared?`<div style="font-size:11px;color:var(--muted);margin:4px 32px 0 0;line-height:1.5;">${L('בודק אחד עושה בטאבלט אחד את בדיקת הפנים ואת בדיקת החוץ. מסך אחד — רשימת עובדים אחת: "בודקים".','One inspector does the inner and the outer check on one tablet. One screen — one worker list: "Inspectors".','Un inspector hace ambos chequeos en una tableta: una lista, "Inspectores".')}</div>`:''}`;
+      // inner + outer both used: one clear choice of how many screens, and which worker lists follow from it
+      const cur = D.shared ? '1both' : _gtCfgFor(D.ni, D.no);
+      const lists2 = L('רשימות עובדים: "בודקי פנים" ו"בודקי חוץ"','Worker lists: "Inner inspectors" and "Outer inspectors"','Listas: "Inspectores internos" y "externos"');
+      const choices = [
+        ['1both', L('מסך אחד משותף — פנים + חוץ יחד','One shared screen — inner + outer together','Una pantalla compartida'), L('בודק אחד עושה את שתי הבדיקות. רשימת עובדים אחת: "בודקים"','One inspector does both checks. One worker list: "Inspectors"','Un inspector hace ambos chequeos. Una lista: "Inspectores"')],
+        ['1in1out', L('2 מסכים — 1 פנים + 1 חוץ','2 screens — 1 inner + 1 outer','2 pantallas — 1 interna + 1 externa'), lists2],
+        ['2in1out', L('3 מסכים — 2 פנים + 1 חוץ','3 screens — 2 inner + 1 outer','3 pantallas — 2 internas + 1 externa'), lists2],
+        ['2in2out', L('4 מסכים — 2 פנים + 2 חוץ','4 screens — 2 inner + 2 outer','4 pantallas — 2 internas + 2 externas'), lists2],
+        ['1in2out', L('3 מסכים — 1 פנים + 2 חוץ','3 screens — 1 inner + 2 outer','3 pantallas — 1 interna + 2 externas'), lists2]
+      ];
+      x += `<div style="margin:10px 32px 0 0;"><div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:6px;">${L('בדיקת פנים וחוץ — כמה מסכים?','Inner and outer check — how many screens?','Chequeo interno y externo — ¿cuántas pantallas?')}</div>`
+        + choices.map(([k,t,d]) => { const on2 = cur===k;
+            return `<div onclick="gtPlanCfg('${k}')" style="display:flex;gap:10px;align-items:flex-start;padding:8px 10px;margin-bottom:6px;border-radius:10px;cursor:pointer;border:1px solid ${on2?'var(--gold)':'var(--border)'};background:${on2?'rgba(212,168,67,.12)':'transparent'};">
+              <span style="width:18px;height:18px;border-radius:50%;border:2px solid ${on2?'var(--gold)':'var(--border)'};flex-shrink:0;margin-top:1px;display:inline-flex;align-items:center;justify-content:center;">${on2?'<span style="width:8px;height:8px;border-radius:50%;background:var(--gold);"></span>':''}</span>
+              <div><div style="font-size:13px;font-weight:700;color:${on2?'var(--gold)':'var(--text)'};">${E(t)}</div><div style="font-size:11px;color:var(--muted);line-height:1.5;">${E(d)}</div></div></div>`; }).join('')
+        + `</div>`;
     }
-    if(on && (sc.k==='inner' || sc.k==='outer') && !(D.shared && D.screens.has('inner') && D.screens.has('outer'))){
+    if(on && (sc.k==='inner' || sc.k==='outer') && !(D.screens.has('inner') && D.screens.has('outer'))){
       const n = sc.k==='inner' ? D.ni : D.no;
       x += `<div style="display:flex;gap:6px;align-items:center;margin:8px 32px 0 0;font-size:12px;color:var(--muted);">${L('כמה מסכים:','How many screens:','Cuántas pantallas:')}
         ${opt(n===1,'1',`gtPlanCount('${sc.k}',1)`)} ${opt(n===2,'2',`gtPlanCount('${sc.k}',2)`)}</div>`;
@@ -15035,6 +15069,7 @@ function gtPlanToggle(k){
   } else D.screens.add(k);
   mgrRenderPlan();
 }
+function gtPlanCfg(k){ const D=_gtPlanDraft; if(!D) return; if(k==='1both'){ D.shared=true; } else { D.shared=false; const c=_GT_CFG[k]||[1,1]; D.ni=c[0]; D.no=c[1]; } mgrRenderPlan(); }
 function gtPlanShared(on){ const D=_gtPlanDraft; if(!D) return; D.shared=!!on; mgrRenderPlan(); }
 function gtPlanCount(k, n){ const D=_gtPlanDraft; if(!D) return; if(k==='inner') D.ni=n; else D.no=n; mgrRenderPlan(); }
 function gtPlanLegs(on){ const D=_gtPlanDraft; if(!D) return; D.legsMode=!!on; if(!on) D.sort=false; mgrRenderPlan(); }
@@ -15451,7 +15486,7 @@ function gtWizRenderWorkers(){
   if(!p.decided || !roles.length){ host.innerHTML = `<div class="mgr-card" style="font-size:13px;color:var(--muted);">${L('קודם בוחרים מסכים (שלב קודם).','Choose the screens first (previous step).','Elija primero las pantallas.')}</div>`; return; }
   const modes = [['none',L('בלי כניסה','No login','Sin acceso')],['name',L('שם','Name','Nombre')],['code',L('קוד','Code','Código')],['both',L('שם + קוד','Name + code','Nombre + código')]];
   host.innerHTML = roles.map(r => {
-    const lbl = (shared && r==='inner') ? L('בודקים (פנים + חוץ — מסך אחד)','Inspectors (inner + outer — one screen)','Inspectores (interno + externo)') : (ROLE_LABELS[r] ? (ROLE_LABELS[r][lang] || ROLE_LABELS[r].he) : r), cur = lm[r] || 'none';
+    const lbl = (shared && r==='inner') ? L('בודקים (פנים + חוץ — מסך אחד)','Inspectors (inner + outer — one screen)','Inspectores (interno + externo)') : r==='inner' ? L('בודקי פנים','Inner inspectors','Inspectores internos') : r==='outer' ? L('בודקי חוץ','Outer inspectors','Inspectores externos') : (ROLE_LABELS[r] ? (ROLE_LABELS[r][lang] || ROLE_LABELS[r].he) : r), cur = lm[r] || 'none';
     const list = users.map((u,i) => [u,i]).filter(([u]) => u && u.role===r);
     return `<div class="mgr-card" style="margin-bottom:10px;"><div style="font-size:15px;font-weight:800;color:var(--text);">${_gtE(lbl)}</div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin:8px 0;">${modes.map(([m,t]) => `<button onclick="gtWizMode('${r}','${m}')" style="padding:6px 10px;border-radius:8px;border:1px solid ${cur===m?'var(--gold)':'var(--border)'};background:${cur===m?'rgba(212,168,67,.15)':'transparent'};color:${cur===m?'var(--gold)':'var(--text)'};font-size:12px;font-weight:700;cursor:pointer;">${t}</button>`).join('')}</div>
