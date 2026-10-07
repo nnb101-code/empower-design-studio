@@ -9,13 +9,14 @@
 (5) B2: האם הגבלת השלבים ב-event_append שוברת אירוע לגיטימי שהאפליקציה שולחת.
 (6) האם ההחלטות על B1, B3 ו-B5 (נשארו פתוחים) סבירות.
 (7) בדיקת הלילה (plant-server/nightly-check.sh): האם התיקונים האוטומטיים בטוחים, והאם משהו בה יכול לפגוע בעבודה או בנתונים.
-בדיקת האבטחה: 132/132, גם ב-PostgreSQL 17, וגם בלי superuser.
+(8) animal_card: האם היא חושפת משהו למי שאסור לו, או נתונים של יום אחר.
+בדיקת האבטחה: 133/133, גם ב-PostgreSQL 17, וגם בלי superuser.
 
 Please review this pack according to README-REVIEW.md.
 
 Rules for the review:
 1. Audit the ACTIVE state in active-schema-snapshot.sql (one definition per function). Do not audit older step files or the history inside glatttrack-schema-full.sql as if it were active.
-2. Use SECURITY-MANIFEST.md and security-selftest-result.txt (132/132) to see what is already enforced and tested. Before reporting a vulnerability, check whether a self-test already covers it; if it does, say so and explain why you still think it is exploitable (with the exact function name and line from the snapshot).
+2. Use SECURITY-MANIFEST.md and security-selftest-result.txt (133/133) to see what is already enforced and tested. Before reporting a vulnerability, check whether a self-test already covers it; if it does, say so and explain why you still think it is exploitable (with the exact function name and line from the snapshot).
 3. Separate your findings into:
    A. Real, exploitable problems (with a concrete attack: which role, which call, which parameters, what wrong result).
    B. Defense-in-depth improvements (not exploitable today).

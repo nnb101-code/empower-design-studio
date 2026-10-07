@@ -4674,6 +4674,7 @@ var _GT_ERR = {
   rate_limited:['יותר מדי ניסיונות — המתן כמה דקות ונסה שוב.','Too many attempts — wait a few minutes and try again.','Demasiados intentos — espere unos minutos e intente de nuevo.'],
   moved_on:['לא ניתן לשנות פסיקה זו: כבר עברת לעבוד על בהמה אחרת מאז שנקבעה. שינוי אפשרי רק כל עוד לא התקדמת הלאה.','Cannot change this ruling: you already worked on a different animal since it was set. Changes are only possible before moving on.','No se puede cambiar este dictamen: ya trabajaste en otro animal desde que se definió. Solo se puede cambiar antes de avanzar.'],
   correction_not_allowed:['לא ניתן לשנות פסיקה זו בשלב הזה — השינוי לא נרשם.','This ruling can no longer be changed at this stage — the change was not recorded.','Este dictamen ya no se puede cambiar en esta etapa — el cambio no se registró.'],
+  not_found:['לא נמצאה בהמה כזו ביום הזה.','No such animal on that day.','No se encontró ese animal ese día.'],
   bad_id:['מספר בהמה לא תקין.','Invalid animal number.','Número de animal no válido.'],
   bad_picture:['התמונה לא תקינה או גדולה מדי.','The picture is invalid or too large.','La imagen no es válida o es demasiado grande.'],
   no_device:['המכשיר לא מוכר בשרת — יש לצמד אותו מחדש.','This device is not known to the server — pair it again.','El servidor no reconoce este dispositivo — emparéjelo de nuevo.'],
@@ -8364,6 +8365,7 @@ function gtAnRender(){
     window._gtAnData = { cur: res[0], cmps: cmps.map((c, i) => ({ l: c.l, days: res[i + 1] })) };
     body.innerHTML = gtAnHtml(cur, K, C);
     try{ gtFocusRender(); }catch(e){ console.warn('focus', e); }
+    try{ gtAddExportButtons(body); }catch(e){}
     body.querySelectorAll('details[data-k]').forEach(d => { const k = d.getAttribute('data-k'); if(_gtAnOpen[k]) d.open = true; });
     try{ gtRenderWeightTables(); }catch(e){}
   });
@@ -8514,6 +8516,7 @@ function gtFocusRender(){
   if(!days.length) h += `<div class="gt-hint">${L('אין בהמות של המשק / הסוג האלה בתקופה. משק וסוג נקבעים לפי "קבלת בהמות יומית" (עבודה יומית).', 'No animals of this farm / type in the period. Farm and type come from the daily intake (Daily work).', 'Sin animales de esta granja / tipo.')}</div>`;
   h += `<div class="gt-hint" style="margin-top:6px;">${L('כדי להשוות לתקופה קודמת או לאשתקד — לסמן "השוואה" למעלה.', 'To compare with the previous period or last year, tick "Compare" above.', 'Para comparar, marque "Comparar" arriba.')}</div>`;
   el.innerHTML = h;
+  try{ gtAddExportButtons(el); }catch(e){}
 }
 
 // ── SEARCH ──
@@ -8601,6 +8604,7 @@ function gtSearchCard(j, det){
   const nm = k => { const s = getAllStatuses().find(z => z.key === k); return s ? (lang === 'he' ? s.he : s.en) : k; };
   const kg = _gtWeightOf(x);
   el.innerHTML =
+    `<button onclick="gtAnimalCard(${r.d.live ? 'null' : `'${r.d.date}'`}, ${r.i})" style="width:100%;margin-bottom:8px;padding:9px;border-radius:10px;border:1px solid var(--gold);background:rgba(212,168,67,.12);color:var(--gold);font-weight:800;cursor:pointer;">📋 ${L('כרטיס בהמה מלא', 'Full animal card', 'Ficha completa')}</button>` +
     row(L('משק / סוג', 'Farm / type', 'Granja / tipo'), escapeHtml([r.rg.farm, r.rg.type].filter(Boolean).join(' · '))) +
     row(L('שחיטה', 'Slaughter', 'Faena'), escapeHtml(sl + (x.slaughteredBy ? ' · ' + x.slaughteredBy : '') + (x.slaughterTime ? ' · ' + t(x.slaughterTime) : ''))) +
     row(L('בדיקת פנים', 'Inner check', 'Interior'), x.innerStatus ? escapeHtml(({ confirmed: L('תקין', 'OK', 'OK'), treif: L('טרף', 'Treif', 'Treif'), in_progress: L('בבדיקה', 'In progress', 'En curso') })[x.innerStatus] || x.innerStatus) + (x.innerBy ? ' · ' + escapeHtml(x.innerBy) : '') + (x.innerTime ? ' · ' + t(x.innerTime) : '') : '') +
@@ -8617,6 +8621,88 @@ function gtSearchCard(j, det){
     const box = document.getElementById('srEv' + j); if(!box) return;
     box.innerHTML = ev.length ? ev.map(e => `<div class="gt-row" style="font-size:12px;"><span style="direction:ltr;color:var(--muted);">${escapeHtml(new Date(e.created_at).toLocaleString(lang === 'he' ? 'he-IL' : 'en-GB', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }))}</span><span>${escapeHtml(e.stage || '')} · ${escapeHtml(e.action || '')}${e.actor ? ' · ' + escapeHtml(e.actor) : ''}${e.payload && e.payload.reason ? ' · ' + escapeHtml(String(e.payload.reason).slice(0, 60)) : ''}</span></div>`).join('') : L('אין אירועים רשומים', 'No events recorded', 'Sin eventos');
   }, () => { const box = document.getElementById('srEv' + j); if(box) box.textContent = '—'; });
+}
+// ── v10.16: the full animal card (team leader / owner) ──
+async function gtAnimalCard(date, n){
+  let m = document.getElementById('gtCardModal');
+  if(!m){ m = document.createElement('div'); m.id = 'gtCardModal'; m.className = 'overlay'; m.style.zIndex = '99980'; document.body.appendChild(m); }
+  const shell = inner => `<div class="gt-box" style="max-width:520px;width:94%;max-height:88vh;overflow:auto;direction:${lang === 'he' ? 'rtl' : 'ltr'};">${inner}
+    <div style="display:flex;gap:8px;justify-content:center;margin-top:14px;"><button onclick="gtCardPrint()" style="padding:8px 14px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--text);font-weight:700;cursor:pointer;">🖨 ${L('הדפס', 'Print', 'Imprimir')}</button>
+    <button onclick="document.getElementById('gtCardModal').classList.remove('open')" style="padding:8px 18px;border-radius:10px;border:none;background:var(--gold);color:#111;font-weight:800;cursor:pointer;">${L('סגור', 'Close', 'Cerrar')}</button></div></div>`;
+  m.innerHTML = shell('<div class="gt-hint">' + L('טוען…', 'Loading…', 'Cargando…') + '</div>'); m.classList.add('open');
+  let r; try{ r = await _withTimeout(window.sb.rpc('animal_card', { p_token: KS.getManagerToken(), p_date: date, p_n: n }), 12000); }catch(e){ r = { error: e }; }
+  const d = r && !r.error && r.data;
+  if(!d || !d.ok){ m.innerHTML = shell('<div style="font-size:14px;">' + escapeHtml(gtErrText((d && d.error) || (r && r.error) || 'server_error')) + '</div>'); return; }
+  const x = Object.assign({}, d.row || {}), c = d.carry || null;
+  if(c) ['legs_stickers', 'head_stickers', 'legs_sorted', 'parts_scanned', 'tongue_sticker', 'cheek_sticker', 'parts_print_count', 'parts_printed_as', 'stamped', 'stamped_as',
+         'weight_right', 'weight_left', 'weight_stage2', 'weight_stage3', 'weight_right_skipped', 'weight_left_skipped'].forEach(k => { if(c[k] != null) x[k] = c[k]; });
+  const E = escapeHtml, tm = v => v ? new Date(Number(v)).toLocaleString(lang === 'he' ? 'he-IL' : 'en-GB', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+  const nm = k => { const s0 = getAllStatuses().find(z => z.key === k); return s0 ? (lang === 'he' ? s0.he : lang === 'es' ? (s0.es || s0.en) : s0.en) : k; };
+  const col = k => { const s0 = getAllStatuses().find(z => z.key === k); return s0 ? s0.color : 'var(--gold)'; };
+  const rg = _gtIntakeOf(d.intake, n) || {};
+  const stage = (done, title, main, sub, color) => `<div style="display:flex;gap:10px;padding:9px 0;border-bottom:1px solid var(--border);">
+      <span style="width:22px;height:22px;border-radius:50%;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:900;background:${done ? (color || 'var(--green)') : 'transparent'};border:2px solid ${done ? (color || 'var(--green)') : 'var(--border)'};color:#111;">${done ? '✓' : ''}</span>
+      <div style="min-width:0;flex:1;"><div style="display:flex;justify-content:space-between;gap:8px;"><b style="color:${done ? 'var(--text)' : 'var(--muted)'};">${E(title)}</b><span style="font-weight:800;color:${color || 'var(--text)'};">${E(main || (done ? '' : L('עוד לא', 'not yet', 'aún no')))}</span></div>
+      ${sub ? `<div style="font-size:12px;color:var(--muted);margin-top:2px;">${E(sub)}</div>` : ''}</div></div>`;
+  const sl = { slaughtered: L('נשחט', 'Slaughtered', 'Faenado'), nevela: L('נבלה', 'Nevela', 'Nevelá'), shot: L('ירוי', 'Shot', 'Baleado'), notChalak: L('לא חלק', 'Not chalak', 'No glatt') };
+  const dead = x.slaughter === 'nevela' || x.slaughter === 'shot';
+  const who = (by, dev, t) => [by, t ? tm(t) : '', dev ? L('טאבלט ', 'tablet ', 'tableta ') + dev : ''].filter(Boolean).join(' · ');
+  const s = KS.getSettings(), kg = (Number(x.weight_right) || 0) + (Number(x.weight_left) || 0);
+  let h = `<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;"><div style="font-size:30px;font-weight:900;color:var(--gold);">#${n + 1}</div>
+    <div style="font-size:13px;color:var(--muted);text-align:end;">${E(d.live ? L('היום', 'Today', 'Hoy') : _gtFmtD(new Date(d.date + 'T12:00:00')))}${rg.farm || rg.type ? '<br>' + E([rg.farm, rg.type].filter(Boolean).join(' · ')) : ''}</div></div>`;
+  if(x.outer_status && !dead) h += `<div style="margin:8px 0;padding:10px;border-radius:10px;text-align:center;font-size:20px;font-weight:900;background:${col(x.outer_status)};color:#111;">${E(nm(x.outer_status))}${(x.not_chalak_inner || x.not_chalak_outer) ? ' · ' + E(L('רבנות', 'rabbinate', 'rabinato')) : ''}</div>`;
+  else if(dead) h += `<div style="margin:8px 0;padding:10px;border-radius:10px;text-align:center;font-size:20px;font-weight:900;background:var(--red);color:#fff;">${E(sl[x.slaughter])}</div>`;
+  h += stage(!!x.slaughter, L('שחיטה', 'Slaughter', 'Faena'), sl[x.slaughter] || x.slaughter, who(x.slaughtered_by, x.slaughter_by_device, x.slaughter_time), dead ? 'var(--red-light)' : null);
+  if(x.eso_checked || s.esophagusEnabled) h += stage(!!x.eso_checked, L('בדיקת וושט', 'Esophagus', 'Esófago'), x.eso_result === 'nevela' ? L('נבלה', 'Nevela', 'Nevelá') : x.eso_result === 'ok' ? L('תקין', 'OK', 'OK') : '', who('', x.eso_by_device, null), x.eso_result === 'nevela' ? 'var(--red-light)' : null);
+  if(!dead){
+    h += stage(x.inner_status === 'confirmed' || x.inner_status === 'treif', L('בדיקת פנים', 'Inner check', 'Interior'),
+      x.inner_status === 'treif' ? L('טרף', 'Treif', 'Treif') : x.inner_status === 'confirmed' ? L('תקין', 'OK', 'OK') + (x.not_chalak_inner ? ' · ' + L('לא חלק', 'not chalak', 'no glatt') : '') : x.inner_status === 'in_progress' ? L('בבדיקה', 'in progress', 'en curso') : '',
+      [who(x.inner_by, x.inner_by_device, x.inner_time), x.maw ? L('בית הכוסות: ', 'maw: ', 'cuajar: ') + (x.maw === 'treif' ? L('טרף', 'treif', 'treif') : L('כשר', 'kosher', 'kosher')) : '', x.rumen ? L('כרסים: ', 'rumen: ', 'panza: ') + (x.rumen === 'treif' ? L('טרף', 'treif', 'treif') : L('כשר', 'kosher', 'kosher')) : ''].filter(Boolean).join(' · '),
+      x.inner_status === 'treif' ? 'var(--red-light)' : null);
+    h += stage(!!x.outer_status, L('בדיקת חוץ', 'Outer check', 'Exterior'), x.outer_status ? nm(x.outer_status) : '', [who(x.outer_by, x.outer_by_device, x.outer_time), x.not_chalak_outer ? L('נשלח לרבנות', 'sent to the rabbinate', 'enviado al rabinato') : ''].filter(Boolean).join(' · '), x.outer_status ? col(x.outer_status) : null);
+    h += stage(!!(x.legs_stickers || x.head_stickers || x.legs_sorted), L('רגלים / ראש', 'Legs / head', 'Patas / cabeza'),
+      [x.legs_stickers ? L('מדבקות רגלים', 'leg stickers', 'etiquetas patas') : '', x.head_stickers ? L('מדבקות ראש', 'head stickers', 'etiquetas cabeza') : '', x.legs_sorted ? L('מוין', 'sorted', 'clasificado') : ''].filter(Boolean).join(' · '), '');
+    h += stage(Number(x.parts_print_count) > 0 || !!x.parts_scanned, L('חלקים קטנים', 'Small parts', 'Partes'), x.parts_printed_as ? nm(x.parts_printed_as) : '', Number(x.parts_print_count) > 0 ? L('הודפס ', 'printed ', 'impreso ') + x.parts_print_count + L(' פעמים', ' times', ' veces') : '');
+    h += stage(!!x.stamped, L('חותמות', 'Stamps', 'Sellos'), x.stamped_as ? nm(x.stamped_as) : '', '');
+    h += stage(kg > 0, L('משקל', 'Weight', 'Peso'), kg > 0 ? _gtNum(kg, 1) + ' ' + L('ק״ג', 'kg', 'kg') : '',
+      [x.weight_right ? L('ימין ', 'right ', 'der. ') + _gtNum(x.weight_right, 1) : (x.weight_right_skipped ? L('ימין דולג', 'right skipped', 'der. omitido') : ''), x.weight_left ? L('שמאל ', 'left ', 'izq. ') + _gtNum(x.weight_left, 1) : (x.weight_left_skipped ? L('שמאל דולג', 'left skipped', 'izq. omitido') : ''),
+       x.weight_stage2 ? L('שלב 2: ', 'stage 2: ', 'etapa 2: ') + _gtNum(x.weight_stage2, 1) : '', x.weight_stage3 ? L('שלב 3: ', 'stage 3: ', 'etapa 3: ') + _gtNum(x.weight_stage3, 1) : ''].filter(Boolean).join(' · '));
+  }
+  if(c) h += `<div class="gt-hint" style="margin-top:6px;">${L('היום הזה עוד בעיבוד — רגלים / חלקים / חותמות / משקל מעודכנים עד עכשיו.', 'This day is still in processing — legs / parts / stamps / weight are as of now.', 'Este día sigue en procesamiento.')}</div>`;
+  const ev = d.events || [];
+  h += `<details style="margin-top:12px;"><summary style="cursor:pointer;font-weight:700;color:var(--gold);">${L('יומן האירועים של המספר', 'Event log of this number', 'Registro')} (${ev.length})</summary>` +
+       (ev.length ? ev.map(e => `<div style="display:flex;gap:8px;font-size:12px;padding:4px 0;border-bottom:1px solid var(--border);"><span style="color:var(--muted);white-space:nowrap;">${E(new Date(e.at).toLocaleString(lang === 'he' ? 'he-IL' : 'en-GB', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }))}</span><span>${E([e.stage, e.action, e.actor, e.reason].filter(Boolean).join(' · '))}</span></div>`).join('')
+                  : `<div class="gt-hint">${L('אין אירועים רשומים', 'No events recorded', 'Sin eventos')}</div>`) + '</details>';
+  m.innerHTML = shell(h);
+}
+function gtCardPrint(){
+  const b = document.querySelector('#gtCardModal .gt-box'); if(!b) return;
+  const w = window.open('', '_blank'); if(!w) return;
+  w.document.write('<html dir="' + (lang === 'he' ? 'rtl' : 'ltr') + '"><head><meta charset="utf-8"><title>GlattTrack</title><style>body{font-family:Arial;color:#000;padding:16px}button{display:none}details>*{display:block}</style></head><body>' + b.innerHTML + '</body></html>');
+  w.document.close(); w.focus(); setTimeout(() => { w.print(); }, 300);
+}
+// ── v10.16: every summary table to Excel (a .csv file Excel opens, Hebrew kept) ──
+function _gtCellText(td){ const t = document.createElement('textarea'); t.innerHTML = td.innerHTML.replace(/<br\s*\/?>/gi, ' ').replace(/<[^>]+>/g, ''); return t.value.replace(/[⇅▲▼]/g, '').replace(/\s+/g, ' ').trim(); }
+function gtExportTable(tbl, name){
+  const rows = [...tbl.querySelectorAll('tr')].map(tr => [...tr.children].map(td => { const v = _gtCellText(td); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }).join(','));
+  const blob = new Blob(['﻿' + rows.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = ('GlattTrack-' + (name || _gtIsoDate(new Date()))).replace(/[^A-Za-z0-9_.-]+/g, '-') + '.csv';
+  document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+}
+function gtAddExportButtons(root){
+  if(!root) return;
+  root.querySelectorAll('table.gt-tbl').forEach((t, i) => {
+    if(t.dataset.gtx) return; t.dataset.gtx = '1';
+    const sec = t.closest('details.gt-acc'); const key = (sec && sec.getAttribute('data-k')) || 'table';
+    let rng = ''; try{ const r = gtPeriodRange(_gtAnPeriod); rng = _gtIsoDate(r.from) + '_' + _gtIsoDate(r.to); }catch(e){}
+    const b = document.createElement('button'); b.textContent = '⬇ ' + L('אקסל', 'Excel', 'Excel');
+    b.style.cssText = 'display:block;margin:6px 0 4px auto;padding:4px 10px;border-radius:8px;border:1px solid var(--green);background:transparent;color:var(--green);font-size:12px;font-weight:700;cursor:pointer;';
+    const k2 = sec ? [...sec.querySelectorAll('table.gt-tbl')].indexOf(t) : i;
+    b.onclick = () => gtExportTable(t, key + (k2 > 0 ? '-' + (k2 + 1) : '') + '-' + rng);   // an English file name: every phone saves it
+    const host = t.parentElement && t.parentElement.style.overflowX ? t.parentElement : t;
+    host.parentElement.insertBefore(b, host);
+  });
 }
 function gtTodayIntakeSum(){
   const e=document.getElementById('todayIntakeSum'); if(!e) return;

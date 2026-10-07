@@ -4,7 +4,7 @@ Null display is "·".
     key     |     value     |          updated_at           
 ------------+---------------+-------------------------------
  boardEpoch | 1791343426904 | 2026-10-07 03:23:46.903581+00
- schemaStep | 46            | 2026-10-07 16:57:11.080317+00
+ schemaStep | 46            | 2026-10-07 17:08:28.463883+00
  testMode   | off           | 2026-10-07 03:23:47.516759+00
 (3 rows)
 
@@ -15,6 +15,7 @@ Null display is "·".
  gt_rls | gt_rls.devices_read_own_ids()                                             | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
  gt_rls | gt_rls.events_reader_ok()                                                 | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
  public | _reader_ok()                                                              | function | t                | public, extensions, pg_temp | postgres | t    | t             | t           | f
+ public | animal_card(text,date,integer)                                            | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
  public | animal_push(jsonb,uuid)                                                   | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
  public | archive_days(text,date,date)                                              | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
  public | carry_claim(bigint,integer,text,uuid)                                     | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
@@ -197,12 +198,13 @@ Null display is "·".
  public | leader_account_remove(text)                                               | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | leader_device_recovery(text)                                              | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | manufacturer_set_code(text,text)                                          | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
-(186 rows)
+(187 rows)
 
 == 2b. API surface: functions the app roles can run ======================
                        callable_by_app                       | security_definer 
 -------------------------------------------------------------+------------------
  _reader_ok()                                                | t
+ animal_card(text,date,integer)                              | t
  animal_push(jsonb,uuid)                                     | t
  archive_days(text,date,date)                                | t
  carry_claim(bigint,integer,text,uuid)                       | t
@@ -263,7 +265,7 @@ Null display is "·".
  worker_login(text,text,text)                                | t
  worker_logout(text)                                         | t
  worker_session_check()                                      | t
-(61 rows)
+(62 rows)
 
 == 3. triggers on the key tables ========================================
         table        |               trigger               |               function                |                 fires                 |  state  | security_definer 

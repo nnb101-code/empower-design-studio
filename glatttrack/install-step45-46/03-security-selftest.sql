@@ -2404,6 +2404,16 @@ begin
     and r2 -> 'attention' ? 'nightly_check_missing'
     and not (r3 -> 'attention' ? 'nightly_check_problems') and not (r3 -> 'attention' ? 'nightly_check_missing'),
     concat_ws(' | ', r -> 'attention', r2 -> 'attention', r3 -> 'attention'));
+  -- v10.16: the animal card — team leader / owner only, read-only, the full row
+  perform pg_temp.prep(977, 'outer');
+  r  := pg_temp.api('{}', format('select animal_card(%L, null, 977)', pg_temp.v('mgr')));
+  r2 := pg_temp.api(pg_temp.dev('SL1'), 'select animal_card(''x'', null, 977)');
+  r3 := pg_temp.api('{}', format('select animal_card(%L, null, 5000)', pg_temp.v('mgr')));
+  r4 := pg_temp.api('{}', format('select animal_card(%L, ''2001-01-01'', 977)', pg_temp.v('mgr')));
+  perform pg_temp.rec('animal card: team leader sees the full row (every stage); a station tablet is refused; bad number / no such day refused',
+    pg_temp.ok(r) and r #>> '{row,outer_status}' = 'glatt' and r -> 'row' ? 'eso_result' and r -> 'row' ? 'legs_sorted'
+    and r2 ->> 'error' = 'unauthorized' and r3 ->> 'error' = 'bad_id' and r4 ->> 'error' = 'not_found',
+    concat_ws(' | ', left(r::text, 80), r2::text, r3::text, r4::text));
 end $$
 $gtn9$;
     v_step := 'the ACTIVE security surface against the expected manifest';
@@ -2508,7 +2518,7 @@ begin
                 'eso_change(integer,text,text,bigint)', 'eso_change(integer,text,text,bigint,uuid)', 'event_append(jsonb)',
                 'lung_drawing_get(integer)', 'lung_drawing_set(integer,bigint,text)', 'manager_add(text,text,text)',
                 'manager_add_owner(text,text,text)', 'manager_deactivate(text,uuid)', 'manager_list(text)', 'manager_login(text)',
-                'manager_logout(text)', 'manager_session_check(text)', 'leader_recovery_code_new(text)', 'leader_recovery_status(text)', 'leader_device_replace(text,text)', 'plant_server_status(text)', 'manufacturer_set_billing(text,boolean,numeric,text,text)',
+                'manager_logout(text)', 'manager_session_check(text)', 'leader_recovery_code_new(text)', 'leader_recovery_status(text)', 'leader_device_replace(text,text)', 'plant_server_status(text)', 'animal_card(text,date,integer)', 'manufacturer_set_billing(text,boolean,numeric,text,text)',
                 'outer_open(integer,bigint,boolean,text)', 'outer_open(integer,bigint,boolean,text,uuid)', 'plant_status_snapshot()', 'plant_setup_needed()',
                 'push_settings(jsonb,text,text,text)', 'request_daily_rollover()', 'reset_daily_board(text,text)', 'security_summary(text)',
                 'processing_board(text)', 'carry_push(bigint,jsonb,uuid)', 'carry_claim(bigint,integer,text,uuid)',

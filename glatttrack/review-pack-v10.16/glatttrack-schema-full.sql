@@ -15291,6 +15291,49 @@ end $$;
 revoke execute on function event_append(jsonb) from public;
 grant execute on function event_append(jsonb) to anon, authenticated;
 
+-- ── 24. animal card (v10.16): everything about one animal, for the team leader / owner ──
+-- animal_card(p_token, p_date, p_n) — p_n = the board row id (number − 1); p_date null = today's
+-- live board. The full row (every stage, device and time), its processing row while that day is
+-- still in processing, the day's intake (farm / type) and the event log of that number during the
+-- day. Read-only.
+create or replace function animal_card(p_token text, p_date date, p_n integer) returns jsonb
+language plpgsql stable security definer set search_path = public, extensions, pg_temp as $$
+declare
+  v_role text := coalesce(_session_role(p_token), '');
+  d daily_board_archive%rowtype; v_row jsonb; v_carry jsonb; v_from timestamptz; v_to timestamptz; v_live boolean := p_date is null;
+begin
+  if v_role not in ('manager', 'owner') then return jsonb_build_object('ok', false, 'error', 'unauthorized'); end if;
+  if p_n is null or p_n < 0 or p_n > 999 then return jsonb_build_object('ok', false, 'error', 'bad_id'); end if;
+  if v_live then
+    select to_jsonb(a) into v_row from animals_pilot a where a.id = p_n and a.slaughter is not null;
+    v_from := coalesce(to_timestamp(_board_epoch() / 1000.0), now() - interval '1 day'); v_to := now();
+  else
+    select * into d from daily_board_archive x
+     where coalesce(x.business_date, (x.archived_at at time zone 'UTC')::date) = p_date
+       and exists (select 1 from jsonb_array_elements(x.board) y where (y ->> 'id')::int = p_n and y ->> 'slaughter' is not null)
+     order by x.archived_at desc limit 1;
+    if d.id is null then return jsonb_build_object('ok', false, 'error', 'not_found'); end if;
+    select y into v_row from jsonb_array_elements(d.board) y where (y ->> 'id')::int = p_n limit 1;
+    select to_jsonb(c) into v_carry from animals_carry c where c.board_id = d.id and c.id = p_n;
+    select coalesce(to_timestamp(min((y ->> 'slaughter_time')::bigint) / 1000.0) - interval '1 hour', d.archived_at - interval '1 day')
+      into v_from from jsonb_array_elements(d.board) y where y ->> 'slaughter_time' ~ '^\d+$';
+    v_to := d.archived_at + interval '1 minute';
+  end if;
+  if v_row is null then return jsonb_build_object('ok', false, 'error', 'not_found'); end if;
+  return jsonb_build_object('ok', true, 'live', v_live, 'date', p_date, 'board', d.id, 'archivedAt', d.archived_at,
+    'row', v_row, 'carry', v_carry,
+    'intake', case when v_live then coalesce((select settings -> 'dailyIntake' from settings_pilot where id = 1), '[]'::jsonb) else coalesce(d.intake, '[]'::jsonb) end,
+    'events', coalesce((select jsonb_agg(jsonb_build_object('at', e.created_at, 'stage', e.stage, 'action', e.action, 'actor', e.actor,
+                                                            'device', e.device_id, 'reason', e.payload ->> 'reason') order by e.created_at)
+                        from (select * from events_pilot e
+                               where e.animal_no = p_n + 1
+                                 and ((e.created_at between v_from and v_to)
+                                      or (not v_live and e.payload ->> 'slaughterDay' = p_date::text))
+                               order by e.created_at limit 300) e), '[]'::jsonb));
+end $$;
+revoke execute on function animal_card(text, date, integer) from public;
+grant execute on function animal_card(text, date, integer) to anon, authenticated;
+
 -- ── self-check ──────────────────────────────────────────────────────────────
 do $$
 declare problems text[] := '{}';

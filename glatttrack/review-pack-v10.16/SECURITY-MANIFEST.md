@@ -179,6 +179,7 @@ New tables (no grant to anon / authenticated): `animals_carry` (kept slaughter d
 | `leader_recovery_status(p_token)` | team leader / owner | `_session_role` | unauthorized |
 | `leader_device_replace(p_code, p_recovery)` | anyone, from a non-station device, with BOTH the team-leader code and the recovery code | bcrypt checks, `login_attempts` brake (5 / hour / address) | station_device, code_invalid, no_recovery_code, locked |
 | `plant_server_status(p_token)` | team leader / owner | `_session_role`; read-only | unauthorized |
+| `animal_card(p_token, p_date, p_n)` (v10.16) | team leader / owner | `_session_role`; read-only | unauthorized, bad_id, not_found |
 | `_worker_gate(role)` (v10.16) | internal only — called by `_stage_allowed` / `_nc_outer_allowed` | a "code" / "both" screen writes only with a live worker session of its list on that device (`GTW01`) | worker_login_required |
 | `event_append(p_event)` (v10.16 limits) | a paired device / team leader | server-only stages refused; a station only its own stages + correction | reserved_stage, wrong_station |
 | `_gt_standbys()` | internal only (revoked from public / anon / authenticated) | — | — |
