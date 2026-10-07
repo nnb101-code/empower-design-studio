@@ -1,6 +1,6 @@
 -- ============================================================================
 -- GlattTrack — security self-test (run any time; changes NOTHING)
--- VERSION 6 — one statement, no temporary tables, nothing the Supabase SQL Editor
+-- VERSION 7 — one statement, no temporary tables, nothing the Supabase SQL Editor
 --             mistakes for a new table (so it shows no "RLS" window and adds nothing)
 -- ============================================================================
 -- Simulates requests exactly as they arrive through the API (PostgREST: the
@@ -321,7 +321,8 @@ begin
                                || jsonb_build_object('inner', 'code', 'outer', 'code', 'slaughter', 'none'),
             -- the checks start from the same plant switches on every server (the
             -- step-46 checks switch the esophagus check on where they need it)
-            'esophagusEnabled', false)
+            'esophagusEnabled', false,
+            'screenConfig', '1in1out')       -- (the shared-screen check switches it itself)
      - 'esoFromIdx'
    where id = 1;
   delete from login_attempts;
