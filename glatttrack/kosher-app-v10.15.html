@@ -988,6 +988,7 @@ const LUNG_B64="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICA
 
   <!-- ════ MONITOR ════ -->
   <div id="mgr-monitor" class="mgr-panel" style="padding:12px;direction:rtl;">
+    <div class="mgr-card" id="gtSetupGuide" style="display:none;margin-bottom:14px;border-color:var(--gold);"></div>
     <div class="mgr-card" id="mgrHealth" style="display:none;margin-bottom:14px;"></div>
     <div class="mgr-card" id="mgrProc" style="display:none;margin-bottom:14px;"></div>
     <div class="mgr-sec" data-t="mgrSecLive">ניטור חי</div>
@@ -1062,6 +1063,8 @@ const LUNG_B64="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICA
 
     <!-- ── SCREENS: ON/OFF ── -->
     <div id="ss-screens">
+      <div class="mgr-sec" id="mgrPlanTitle">בחירת מסכים — אילו מסכים עובדים במפעל</div>
+      <div class="mgr-card" id="mgrPlanCard"></div>
       <div class="mgr-sec" id="mgrStationsTitle">תחנות — צימוד מכשירים</div>
       <div class="mgr-card" id="mgrScreensToggle"></div>
       <div class="mgr-sec">בקרת משקל — ON/OFF נפרד לכל שלב</div>
@@ -1196,13 +1199,6 @@ const LUNG_B64="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICA
               <div style="font-size:11px;color:var(--muted);">כפתור פסיקה נוסף בבודק החוץ</div>
             </div>
             <div class="mgr-toggle" id="mgrRabChalakT" onclick="mgrToggleRabChalak(this)"><div class="mgr-toggle-dot" style="right:26px"></div></div>
-          </div>
-          <div class="mgr-toggle-row" style="margin-top:12px;">
-            <div>
-              <div style="font-size:13px;color:var(--text);font-weight:600;">מסך בדיקת וושט</div>
-              <div style="font-size:11px;color:var(--muted);">משגיח בודק וושט אחרי שחיטה — יכול לפסול לנבלה</div>
-            </div>
-            <div class="mgr-toggle" id="mgrEsophagusT" onclick="mgrToggleRab('esophagusEnabled',this)"><div class="mgr-toggle-dot" style="right:26px"></div></div>
           </div>
         </div>
       </div><!-- end func-slaughter -->
@@ -8520,8 +8516,8 @@ function gtTodayIntakeSum(){
 // in place too. Nothing is removed — a section not listed below lands in "System".
 var _gtSetBuilt = false;
 const _GT_SET_GROUPS = [
-  { k: 'devices', ic: '📱', t: ['מסכים ומכשירים', 'Screens & devices', 'Pantallas y dispositivos'], secs: ['#mgrStationsTitle', 'מכשירים רשומים', '🔧 החלפת מכשיר תקול'],
-    open: () => { try{ mgrRenderStationsPanel(); }catch(e){} try{ mgrRenderDevicesPanel(); }catch(e){} } },
+  { k: 'devices', ic: '📱', t: ['מסכים ומכשירים', 'Screens & devices', 'Pantallas y dispositivos'], secs: ['#mgrPlanTitle', '#mgrStationsTitle', 'מכשירים רשומים', '🔧 החלפת מכשיר תקול'],
+    open: () => { try{ mgrRenderPlan(); }catch(e){} try{ mgrRenderStationsPanel(); }catch(e){} try{ mgrRenderDevicesPanel(); }catch(e){} } },
   { k: 'users', ic: '👷', t: ['עובדים וחשבונות', 'Workers & accounts', 'Trabajadores y cuentas'], secs: ['משתמשים', '#mgrOwnersTitle'],
     open: () => { try{ mgrUserTab(mgrCurrentUserRole || 'slaughter'); mgrRenderOwners(); }catch(e){} } },
   { k: 'kashrut', ic: '✡️', t: ['כשרות', 'Kashrut', 'Kashrut'], secs: ['סטטוסי כשרות וסימנים', 'רבנות (אופציות מתקדמות)', 'בדיקות פנים וחוץ', 'תמונת ריאה לבדיקה'],
@@ -8535,7 +8531,11 @@ const _GT_SET_GROUPS = [
   { k: 'daily', ic: '📅', t: ['עבודה יומית', 'Daily work', 'Trabajo diario'], secs: ['משקים וסוגי בקר', 'חלקים קטנים — משקל ממוצע', 'מערכת'],
     open: () => { try{ mgrRenderFarmSystem(); }catch(e){} } },
   { k: 'system', ic: '🛡️', t: ['מערכת', 'System', 'Sistema'], secs: ['גיבוי ושחזור', 'רישוי', '#mgrTestSec', '#supAccTitle'],
-    open: () => { try{ mgrRenderLicensePanel(); }catch(e){} try{ gtRenderTestCard(); }catch(e){} try{ mgrRenderSupportAccess(); }catch(e){} } }
+    open: () => { try{ mgrRenderLicensePanel(); }catch(e){} try{ gtRenderTestCard(); }catch(e){} try{ mgrRenderSupportAccess(); }catch(e){}
+      try{ const g = document.querySelector('#gtSetGroups details.gt-grp[data-g="system"] > .gt-acc-b'); if(g && !document.getElementById('gtGuideReopen')){
+        const b = document.createElement('button'); b.id = 'gtGuideReopen'; b.onclick = gtReopenGuide;
+        b.style.cssText = 'width:100%;margin:4px 0 10px;padding:10px;border-radius:10px;border:1px solid var(--gold);background:rgba(212,168,67,.10);color:var(--gold);font-size:14px;font-weight:700;cursor:pointer;';
+        b.textContent = '🧭 ' + L('מדריך התקנת המפעל','Plant installation guide','Guía de instalación'); g.insertBefore(b, g.firstChild); } }catch(e){} } }
 ];
 function gtSettingsBuild(){
   if(_gtSetBuilt) return; const root = document.getElementById('mgr-settings'); if(!root) return;
@@ -13445,8 +13445,17 @@ async function mgrRenderStationsPanel(){
   const rows = KIOSK_ROLE_KEYS.map(k=>{
     const parts = k.split('-'); const role = parts[0]; const idx = parts.length>1 ? parseInt(parts[1],10) : 0;
     const d = devices.find(x=>x.assigned_role===role && Number(x.assigned_index||0)===idx);
-    const note = (role==='esophagus' && !s.esophagusEnabled)
-      ? `<div style="font-size:10px;color:var(--muted);margin-top:3px;">${L('פעיל רק כשבדיקת וושט מופעלת בטאב "פונקציות"','Active only when the esophagus check is on in "Functions"','Activo solo si el chequeo de esófago está activado en "Funciones"')}</div>` : '';
+    const note = '';
+    // v10.15: only the screens chosen in "Choose screens" (and their slots) can be paired
+    const wanted = (typeof gtPlanSlots==='function') && gtPlanSlots().some(([r,i])=>r===role && i===idx);
+    if(!d && !wanted){
+      const chosen = (typeof gtPlanned==='function') && gtPlanned(role);
+      if(chosen) return '';                                   // a second slot the plant does not use
+      return `<div class="mgr-toggle-row" style="align-items:center;opacity:.5;">
+        <div><div style="font-size:13px;color:var(--text);font-weight:600;">${labels[k]}</div>
+          <div style="font-size:11px;color:var(--muted);">${L('לא בשימוש — לא נבחר ב"בחירת מסכים"','Not used — not chosen in "Choose screens"','No se usa — no elegida')}</div></div>
+      </div>`;
+    }
     if(!d){
       return `<div class="mgr-toggle-row" style="align-items:center;">
         <div><div style="font-size:13px;color:var(--text);font-weight:600;">${labels[k]}</div>
@@ -13492,7 +13501,9 @@ async function mgrRenderStationsPanel(){
     ${freeIdx!==undefined ? `<button onclick="mgrPairPrompt('leader',${freeIdx})" style="${btn('var(--gold)')};margin-top:8px;">＋ ${L('הוסף מכשיר ראש צוות','Add team-leader device','Agregar dispositivo de jefe')}</button>` : ''}
   </div>`;
 
-  el.innerHTML = rows + leaderBlock +
+  const planNote = (typeof gtPlan==='function' && !gtPlan().decided)
+    ? `<div style="padding:9px 10px;border-radius:8px;border:1px solid var(--gold);background:rgba(212,168,67,.10);color:var(--gold);font-size:12px;font-weight:700;margin-bottom:8px;">${L('קודם בוחרים למעלה אילו מסכים עובדים במפעל ושומרים. רק אחר כך אפשר לצמד אליהם מכשירים.','First choose above which screens the plant uses and save. Only then can devices be paired to them.','Primero elija arriba las pantallas y guarde; luego empareje.')}</div>` : '';
+  el.innerHTML = planNote + rows + leaderBlock +
     `<div style="font-size:10px;color:var(--muted);margin-top:10px;">${L('קולר, אריזה, מליחה, ניקור — בקרוב','Cooler, packaging, salting, nikkur — coming soon','Cámara, empaque, salazón, nikkur — próximamente')}</div>`;
 
   // Home-menu cards follow the stations: with a device → shown, without → hidden.
@@ -14866,5 +14877,282 @@ setInterval(()=>{
 setTimeout(gtHealthRefresh, 5000);
 setTimeout(gtProcRefresh, 5500);
 </script>
+<script>
+/* ═══════════════════════════════════════════════════════════════════
+   v10.15 — installation in order: 1. which screens the plant uses
+   (settings.screensPlan), 2. worker lists, 3. pairing — only the chosen
+   screens, 4. printers & scanners, 5. owner account (optional).
+   A guide card at the top of "Today" until the installation is done;
+   every step can be changed later from Settings.
+   ═══════════════════════════════════════════════════════════════════ */
+const GT_PLAN_SCREENS = [
+  { k:'slaughter', t:['שחיטה','Slaughter','Faena'], d:['השוחט מסמן נשחט / נבלה / ירוי','The shochet marks slaughtered / nevela / shot','El shojet marca faenado / nevela / disparo'] },
+  { k:'esophagus', t:['בדיקת וושט','Esophagus check','Chequeo de esófago'], d:['משגיח בודק וושט אחרי השחיטה. כשהמסך בשימוש, בדיקת הפנים מחכה לתוצאה שלו.','A supervisor checks the esophagus after slaughter. When used, the inner check waits for its result.','Un supervisor revisa el esófago; el chequeo interno espera su resultado.'] },
+  { k:'inner', t:['בדיקת פנים (ריאות)','Inner check (lungs)','Chequeo interno (pulmones)'], d:['','',''] },
+  { k:'outer', t:['בדיקת חוץ (פסיקה)','Outer check (ruling)','Chequeo externo (dictamen)'], d:['','',''] },
+  { k:'legs', t:['רגלים / ראש','Legs / head','Patas / cabeza'], d:['מדבקות רגלים וראש. מיון רגלים הוא חלק ממסך הרגלים.','Leg and head stickers. Leg sorting is part of the legs screen.','Etiquetas de patas y cabeza; la clasificación de patas es parte de esta pantalla.'] },
+  { k:'parts', t:['חלקים קטנים','Small parts','Partes pequeñas'], d:['','',''] },
+  { k:'stamps', t:['חותמות ושקילה','Stamps & weight','Sellos y peso'], d:['','',''] },
+  { k:'display', t:['מסך ספירה (תצוגה בלבד)','Counter screen (display only)','Pantalla de conteo (solo vista)'], d:['','',''] }
+];
+const _GT_CFG = { '1in1out':[1,1], '2in1out':[2,1], '2in2out':[2,2], '1in2out':[1,2] };
+function _gtCfgFor(ni, no){ return Object.keys(_GT_CFG).find(k => _GT_CFG[k][0]===ni && _GT_CFG[k][1]===no) || '1in1out'; }
+function gtPlan(){
+  const p = KS.getSettings().screensPlan;
+  if(p && Array.isArray(p.screens)) return { decided: !!p.decided, screens: new Set(p.screens) };
+  return { decided: false, screens: new Set() };
+}
+function gtPlanned(role){ const p = gtPlan(); return p.decided && p.screens.has(role); }
+// the station slots a planned screen needs a device for
+function gtPlanSlots(){
+  const p = gtPlan(), s = KS.getSettings(), out = [];
+  if(!p.decided) return out;
+  const cfg = _GT_CFG[s.screenConfig] || [1,1];
+  ['slaughter','esophagus'].forEach(r => { if(p.screens.has(r)) out.push([r,0]); });
+  if(p.screens.has('inner')) for(let i=0;i<cfg[0];i++) out.push(['inner',i]);
+  if(p.screens.has('outer')) for(let i=0;i<cfg[1];i++) out.push(['outer',i]);
+  ['legs','parts','stamps'].forEach(r => { if(p.screens.has(r)) out.push([r,0]); });
+  if(p.screens.has('display')) out.push(['display',0]);
+  return out;
+}
+let _gtDevCache = { at:0, list:null };
+async function _gtDevices(force){
+  if(!window.sb || !(KS.getManagerToken && KS.getManagerToken())) return [];
+  if(!force && _gtDevCache.list && Date.now()-_gtDevCache.at < 8000) return _gtDevCache.list;
+  try{
+    const r = await _withTimeout(window.sb.from('devices_pilot').select('id,device_name,assigned_role,assigned_index,device_status,last_seen'), 12000);
+    if(!r.error){ _gtDevCache = { at: Date.now(), list: (r.data||[]).filter(d => d.device_status!=='retired' && d.assigned_role) }; }
+  }catch(e){}
+  return _gtDevCache.list || [];
+}
+// a plant that already worked before this version: the screens it has devices for are its choice
+function _gtPlanAdopt(devices){
+  const s = KS.getSettings();
+  if(s.screensPlan || !(KS.getManagerToken && KS.getManagerToken()) || KS.getManagerRole()!=='manager') return;
+  const roles = new Set((devices||[]).map(d => d.assigned_role).filter(r => r && r!=='leader'));
+  if(!roles.size) return;
+  if(s.esophagusEnabled) roles.add('esophagus');
+  KS.updateSettings({ screensPlan: { decided: true, screens: [...roles], at: new Date().toISOString(), adopted: true } });
+}
+
+// ── step 1: the "choose screens" card (Settings → Screens & devices) ──
+let _gtPlanDraft = null;
+async function mgrRenderPlan(){
+  const el = document.getElementById('mgrPlanCard'); if(!el) return;
+  const s = KS.getSettings(), p = gtPlan();
+  if(!_gtPlanDraft){
+    const cfg = _GT_CFG[s.screenConfig] || [1,1];
+    _gtPlanDraft = { screens: new Set(p.screens), ni: cfg[0], no: cfg[1], legsMode: s.legsMode!==false, sort: s.legsSortEnabled===true && s.legsMode!==false };
+  }
+  const D = _gtPlanDraft, E = escapeHtml;
+  const devs = await _gtDevices();
+  const paired = new Set(devs.map(d => d.assigned_role));
+  const chk = (on) => `<span style="display:inline-flex;width:22px;height:22px;border-radius:6px;border:2px solid ${on?'var(--gold)':'var(--border)'};background:${on?'var(--gold)':'transparent'};color:#111;align-items:center;justify-content:center;font-weight:900;flex-shrink:0;">${on?'✓':''}</span>`;
+  const opt = (on, txt, fn, dis) => `<button onclick="${fn}" ${dis?'disabled':''} style="padding:6px 10px;border-radius:8px;border:1px solid ${on?'var(--gold)':'var(--border)'};background:${on?'rgba(212,168,67,.15)':'transparent'};color:${dis?'var(--muted)':(on?'var(--gold)':'var(--text)')};font-size:12px;font-weight:700;cursor:${dis?'default':'pointer'};opacity:${dis?.5:1};">${txt}</button>`;
+  let x = `<div style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.6;">${L('מסמנים אילו מסכים עובדים במפעל. רק את המסכים שסומנו אפשר לצמד למכשיר. אפשר לשנות כאן בכל זמן.','Mark which screens the plant uses. Only marked screens can be paired with a device. You can change this any time.','Marque qué pantallas usa la planta. Solo esas se pueden emparejar. Puede cambiarlo cuando quiera.')}</div>`;
+  GT_PLAN_SCREENS.forEach(sc => {
+    const on = D.screens.has(sc.k), locked = on && paired.has(sc.k);
+    const desc = L(sc.d[0], sc.d[1], sc.d[2]);
+    x += `<div style="padding:9px 0;border-bottom:1px solid var(--border);">
+      <div onclick="gtPlanToggle('${sc.k}')" style="display:flex;gap:10px;align-items:flex-start;cursor:pointer;">${chk(on)}
+        <div style="min-width:0;"><div style="font-size:14px;font-weight:700;color:var(--text);">${E(L(sc.t[0],sc.t[1],sc.t[2]))}${locked?` <span style="font-size:11px;color:var(--green);font-weight:600;">🔐 ${L('מצומד','paired','emparejado')}</span>`:''}</div>
+        ${desc?`<div style="font-size:11px;color:var(--muted);line-height:1.5;">${E(desc)}</div>`:''}</div></div>`;
+    if(on && (sc.k==='inner' || sc.k==='outer')){
+      const n = sc.k==='inner' ? D.ni : D.no;
+      x += `<div style="display:flex;gap:6px;align-items:center;margin:8px 32px 0 0;font-size:12px;color:var(--muted);">${L('כמה מסכים:','How many screens:','Cuántas pantallas:')}
+        ${opt(n===1,'1',`gtPlanCount('${sc.k}',1)`)} ${opt(n===2,'2',`gtPlanCount('${sc.k}',2)`)}</div>`;
+    }
+    if(on && sc.k==='legs'){
+      x += `<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:8px 32px 0 0;">
+        ${opt(D.legsMode, L('רגלים + ראש','Legs + head','Patas + cabeza'), 'gtPlanLegs(true)')} ${opt(!D.legsMode, L('ראש בלבד','Head only','Solo cabeza'), 'gtPlanLegs(false)')}
+        ${opt(D.sort && D.legsMode, (D.sort && D.legsMode ? '✓ ' : '') + L('מיון רגלים','Leg sorting','Clasificación de patas'), 'gtPlanSort()', !D.legsMode)}</div>
+        <div style="font-size:11px;color:var(--muted);margin:4px 32px 0 0;">${D.legsMode ? L('מדבקות ראש (5) ממשיכות כרגיל.','Head stickers (5) as usual.','Etiquetas de cabeza (5) como siempre.') : L('בלי רגלים אין מיון רגלים. מדבקות הראש (5) ממשיכות.','Without legs there is no leg sorting. Head stickers (5) continue.','Sin patas no hay clasificación; las etiquetas de cabeza (5) siguen.')}</div>`;
+    }
+    x += `</div>`;
+  });
+  if((s.screenConfig||'')==='1both') x += `<div style="font-size:11px;color:var(--amber);margin-top:8px;">${L('כרגע מוגדר "מסך אחד לפנים + חוץ". בשמירה זה יוחלף בבחירה שלמעלה.','Currently set to "one screen for inner + outer". Saving replaces it with the choice above.','Ahora: "una pantalla para interno + externo". Al guardar se reemplaza.')}</div>`;
+  x += `<button onclick="gtPlanSave()" style="width:100%;margin-top:12px;padding:11px;border-radius:10px;background:var(--gold);border:none;color:#111;font-size:15px;font-weight:800;cursor:pointer;">💾 ${L('שמור בחירת מסכים','Save the screen choice','Guardar la selección')}</button>`;
+  if(p.decided) x += `<div style="font-size:11px;color:var(--green);margin-top:6px;text-align:center;">✓ ${L('נשמר. השלב הבא: צימוד המכשירים למטה.','Saved. Next: pair the devices below.','Guardado. Siguiente: emparejar abajo.')}</div>`;
+  el.innerHTML = x;
+}
+function gtPlanToggle(k){
+  const D = _gtPlanDraft; if(!D) return;
+  if(D.screens.has(k)){
+    const devs = (_gtDevCache.list||[]);
+    if(devs.some(d => d.assigned_role===k)){
+      alert(L('למסך הזה מצומד מכשיר. כדי להוריד את המסך, קודם מסירים את המכשיר (למטה, "תחנות — צימוד מכשירים").',
+              'A device is paired to this screen. To drop the screen, first remove the device (below, "Stations").',
+              'Hay un dispositivo emparejado. Para quitar la pantalla, primero quite el dispositivo.'));
+      return;
+    }
+    D.screens.delete(k);
+  } else D.screens.add(k);
+  mgrRenderPlan();
+}
+function gtPlanCount(k, n){ const D=_gtPlanDraft; if(!D) return; if(k==='inner') D.ni=n; else D.no=n; mgrRenderPlan(); }
+function gtPlanLegs(on){ const D=_gtPlanDraft; if(!D) return; D.legsMode=!!on; if(!on) D.sort=false; mgrRenderPlan(); }
+function gtPlanSort(){ const D=_gtPlanDraft; if(!D || !D.legsMode) return; D.sort=!D.sort; mgrRenderPlan(); }
+async function gtPlanSave(){
+  const D = _gtPlanDraft; if(!D) return;
+  const s = KS.getSettings();
+  const devs = await _gtDevices(true);
+  // a second inner / outer slot that has a device cannot be dropped silently
+  const busy2 = ['inner','outer'].find(r => (r==='inner'?D.ni:D.no)===1 && devs.some(d => d.assigned_role===r && Number(d.assigned_index||0)===1));
+  if(busy2){ alert(L('למסך '+(busy2==='inner'?'הפנים':'החוץ')+' השני מצומד מכשיר. קודם מסירים אותו.','The second '+busy2+' screen has a device. Remove it first.','La segunda pantalla tiene un dispositivo. Quítelo primero.')); return; }
+  // a device paired to a screen that is not chosen: remove it first (or keep the screen)
+  const stray = [...new Set(devs.filter(d => d.assigned_role && d.assigned_role!=='leader' && !D.screens.has(d.assigned_role)).map(d => d.assigned_role))];
+  if(stray.length){
+    const nm = stray.map(r => { const sc = GT_PLAN_SCREENS.find(x => x.k===r); return sc ? L(sc.t[0],sc.t[1],sc.t[2]) : r; }).join(', ');
+    alert(L('מצומד מכשיר למסך שלא סומן: '+nm+'. מסמנים את המסך, או מסירים קודם את המכשיר (למטה, "תחנות — צימוד מכשירים").',
+            'A device is paired to a screen that is not marked: '+nm+'. Mark the screen, or first remove the device (below, "Stations").',
+            'Hay un dispositivo en una pantalla no marcada: '+nm+'. Márquela o quite primero el dispositivo.'));
+    return;
+  }
+  const eso = D.screens.has('esophagus');
+  const upd = {
+    screensPlan: { decided: true, screens: [...D.screens], at: new Date().toISOString() },
+    screenConfig: _gtCfgFor(D.ni, D.no),
+    legsMode: !!D.legsMode,
+    legsSortEnabled: !!(D.legsMode && D.sort)
+  };
+  if(eso && !s.esophagusEnabled){ upd.esophagusEnabled = true; upd.esoFromIdx = _esoComputeFromIdx(); upd.esoFromReset = s.lastServerResetAt || ''; }
+  else if(!eso && s.esophagusEnabled) upd.esophagusEnabled = false;
+  KS.updateSettings(upd);
+  _gtPlanDraft = null;
+  try{ buildNavCards(); }catch(e){}
+  try{ mgrSyncUI(); }catch(e){}
+  mgrRenderPlan(); try{ mgrRenderStationsPanel(); }catch(e){}
+  gtRenderSetupGuide();
+  // next step: the pairing section opens by itself
+  setTimeout(() => { const h = document.getElementById('mgrStationsTitle'); const d = h && h.closest('details.gt-acc-in');
+    if(d){ d.open = true; d.scrollIntoView({ block:'start', behavior:'smooth' }); } }, 300);
+}
+
+// ── the order: no pairing for a screen that was not chosen ──
+(function(){
+  const orig = window.mgrPairPrompt;
+  window.mgrPairPrompt = function(role, idx){
+    if(role!=='leader'){
+      const p = gtPlan();
+      if(!p.decided || !p.screens.has(role)){
+        alert(p.decided
+          ? L('המסך הזה לא נבחר כמסך שעובד במפעל. מסמנים אותו קודם ב"בחירת מסכים" ושומרים.','This screen was not chosen. Mark it first in "Choose screens" and save.','Esta pantalla no fue elegida. Márquela primero en "Elegir pantallas".')
+          : L('קודם בוחרים אילו מסכים עובדים במפעל ("בחירת מסכים"), ורק אחר כך מצמדים מכשירים.','First choose which screens the plant uses ("Choose screens"), then pair devices.','Primero elija las pantallas de la planta y luego empareje dispositivos.'));
+        gtOpenSetting('devices', 'mgrPlanTitle');
+        return;
+      }
+    }
+    return orig.apply(this, arguments);
+  };
+  // legs sorting is part of the legs screen: "head only" → no sorting
+  const origMode = window.mgrSetLegsMode;
+  window.mgrSetLegsMode = function(on){
+    const r = origMode.apply(this, arguments);
+    if(!on && KS.getSettings().legsSortEnabled){ KS.updateSettings({ legsSortEnabled:false }); try{ mgrSyncUI(); }catch(e){} }
+    return r;
+  };
+  const origSort = window.mgrToggleLegsSort;
+  window.mgrToggleLegsSort = function(el){
+    if(KS.getSettings().legsMode===false && !(el && el.classList.contains('on'))){
+      alert(L('מיון רגלים הוא חלק ממסך הרגלים. במצב "ראש בלבד" אין מיון.','Leg sorting is part of the legs screen. In "head only" there is no sorting.','La clasificación es parte de la pantalla de patas; en "solo cabeza" no hay.'));
+      return;
+    }
+    return origSort.apply(this, arguments);
+  };
+})();
+// open a settings group and scroll to a section
+function gtOpenSetting(group, secId){
+  try{ mgrTab('settings'); }catch(e){}
+  setTimeout(() => {
+    const g = document.querySelector('#gtSetGroups details.gt-grp[data-g="'+group+'"]'); if(!g) return;
+    g.open = true;
+    const h = secId ? document.getElementById(secId) : null;
+    const d = h ? h.closest('details.gt-acc-in') : g.querySelector('details.gt-acc-in');
+    if(d){ d.open = true; d.scrollIntoView({ block:'start', behavior:'smooth' }); }
+  }, 80);
+}
+
+// ── the guide card (top of "Today") ──
+let _gtOwnerCount = null, _gtOwnerAt = 0;
+async function _gtOwners(){
+  if(_gtOwnerCount!==null && Date.now()-_gtOwnerAt < 60000) return _gtOwnerCount;
+  try{ const r = await _withTimeout(window.sb.rpc('manager_list', { p_token: KS.getManagerToken() }), 12000);
+       if(!r.error && r.data && r.data.accounts){ _gtOwnerCount = r.data.accounts.filter(a => a.role==='owner' && a.active!==false).length; _gtOwnerAt = Date.now(); } }catch(e){}
+  return _gtOwnerCount;
+}
+function _gtGuideState(){ return KS.getSettings().setupGuide || {}; }
+function gtGuideMark(key, val){ const g = Object.assign({}, _gtGuideState()); g[key] = val; KS.updateSettings({ setupGuide: g }); gtRenderSetupGuide(); }
+async function gtRenderSetupGuide(){
+  const el = document.getElementById('gtSetupGuide'); if(!el) return;
+  const leader = !!(KS.getManagerToken && KS.getManagerToken()) && KS.getManagerRole()==='manager';
+  const g = _gtGuideState();
+  if(!leader || (g.closed && !g.reopened)){ el.style.display = 'none'; return; }
+  const s = KS.getSettings(), p = gtPlan(), E = escapeHtml;
+  const devs = await _gtDevices(true);
+  _gtPlanAdopt(devs);
+  const slots = gtPlanSlots();
+  const has = (r,i) => devs.some(d => d.assigned_role===r && Number(d.assigned_index||0)===i);
+  const missing = slots.filter(([r,i]) => !has(r,i));
+  const labels = _kioskRoleLabels();
+  const workerScreens = [...p.screens].filter(r => r!=='display');
+  const users = Array.isArray(s.users) ? s.users : [];
+  const lm = s.loginModeByRole || {};
+  const needPrint = ['legs','parts','stamps'].some(r => p.screens.has(r));
+  const owners = await _gtOwners();
+  const steps = [
+    { k:'plan', done: p.decided, t:L('בחירת מסכים','Choose screens','Elegir pantallas'),
+      d: p.decided ? [...p.screens].map(r => { const sc = GT_PLAN_SCREENS.find(x => x.k===r); return sc ? L(sc.t[0],sc.t[1],sc.t[2]) : r; }).join(' · ')
+                   : L('מסמנים אילו מסכים עובדים במפעל. רק אותם אפשר יהיה לצמד.','Mark which screens the plant uses. Only those can be paired.','Marque las pantallas que usa la planta.'),
+      go: () => gtOpenSetting('devices','mgrPlanTitle') },
+    { k:'workers', done: !!g.workers, need: p.decided, t:L('רשימות עובדים ומצב כניסה','Worker lists and login mode','Listas de trabajadores y modo de acceso'),
+      d: workerScreens.map(r => { const n = users.filter(u => u.role===r).length; const m = lm[r]||'none';
+           const ml = { none:L('בלי כניסה','no login','sin acceso'), name:L('שם','name','nombre'), code:L('קוד','code','código'), both:L('שם + קוד','name + code','nombre + código') }[m] || m;
+           const sc = GT_PLAN_SCREENS.find(x => x.k===r); return (sc?L(sc.t[0],sc.t[1],sc.t[2]):r)+': '+n+' · '+ml; }).join('<br>') || '—',
+      go: () => gtOpenSetting('users'), mark: 'workers' },
+    { k:'pair', done: p.decided && slots.length>0 && !missing.length, need: p.decided, t:L('צימוד מכשירים','Pair the devices','Emparejar dispositivos'),
+      d: !p.decided ? L('אחרי בחירת המסכים.','After choosing the screens.','Después de elegir las pantallas.')
+         : (L('בטאבלט פותחים את האפליקציה ומופיע קוד של 6 ספרות. כאן לוחצים "הוסף מכשיר" ליד המסך ומקלידים את הקוד.','On the tablet open the app: a 6-digit code appears. Here press "Add device" next to the screen and type the code.','En la tableta abra la app: aparece un código de 6 dígitos; aquí pulse "Agregar" y escríbalo.')+'<br>'+
+            slots.map(([r,i]) => { const k = r+((r==='inner'||r==='outer'||r==='display')?'-'+i:''); return (has(r,i)?'✅ ':'⬜ ')+E(labels[k]||r); }).join(' · ')),
+      go: () => gtOpenSetting('devices','mgrStationsTitle') },
+    needPrint ? { k:'print', done: !!g.print, need: p.decided, t:L('מדפסות וסורקים','Printers and scanners','Impresoras y escáneres'),
+      d: L('מדפסות: ','Printers: ','Impresoras: ')+((s.printers||[]).length)+' · '+L('סורקים: ','Scanners: ','Escáneres: ')+((s.scanners||[]).length)+' — '+L('לכל מסך שמדפיס (רגלים / חלקים / חותמות).','for every screen that prints (legs / parts / stamps).','para cada pantalla que imprime.'),
+      go: () => gtOpenSetting('printing'), mark: 'print' } : null,
+    { k:'owner', done: (owners||0)>0 || !!g.ownerSkip, optional: true, t:L('חשבון בעלים (לא חובה)','Owner account (optional)','Cuenta del propietario (opcional)'),
+      d: (owners||0)>0 ? L('נוסף','added','agregada') : L('הבעלים רואה הכל ולא משנה כלום.','The owner sees everything and changes nothing.','El propietario ve todo y no cambia nada.'),
+      go: () => gtOpenSetting('users','mgrOwnersTitle'), mark: 'ownerSkip', markTxt: L('דלג','Skip','Omitir') }
+  ].filter(Boolean);
+  const all = steps.every(x => x.done);
+  const btn = (txt, fn, col) => `<button onclick="${fn}" style="padding:6px 12px;border-radius:8px;border:1px solid ${col};background:transparent;color:${col};font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">${txt}</button>`;
+  window._gtGuideSteps = steps;
+  let firstOpen = steps.findIndex(x => !x.done);
+  let x = `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px;">
+     <div style="font-size:16px;font-weight:800;color:var(--gold);">🧭 ${all?L('ההתקנה הושלמה','Installation complete','Instalación completa'):L('התקנת המפעל — לפי הסדר','Plant installation — in order','Instalación — en orden')}</div>
+     ${all ? btn(L('סגור','Close','Cerrar'), "gtGuideMark('closed',true);gtGuideMark('reopened',false)", 'var(--muted)') : ''}</div>`;
+  if(!all) x += `<div style="font-size:11px;color:var(--muted);margin-bottom:8px;">${L('כל שלב אפשר לשנות גם אחר כך, מלשונית ההגדרות.','Every step can be changed later from the Settings tab.','Cada paso se puede cambiar luego en Ajustes.')}</div>`;
+  steps.forEach((st, i) => {
+    const locked = st.need===false;
+    const cur = i===firstOpen;
+    x += `<div style="display:flex;gap:10px;align-items:flex-start;padding:9px 0;border-top:1px solid var(--border);opacity:${locked?.45:1};">
+      <div style="font-size:18px;line-height:1.2;">${st.done?'✅':(cur?'👉':'⬜')}</div>
+      <div style="flex:1;min-width:0;"><div style="font-size:14px;font-weight:700;color:${cur?'var(--gold)':'var(--text)'};">${i+1}. ${E(st.t)}</div>
+        <div style="font-size:11px;color:var(--muted);line-height:1.6;margin-top:2px;">${st.d}</div>
+        ${locked?'':`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">${btn(L('פתח','Open','Abrir'),'window._gtGuideSteps['+i+'].go()','var(--blue)')}${st.mark&&!st.done?btn(st.markTxt||L('סיימתי','Done','Listo'),"gtGuideMark('"+st.mark+"',true)",'var(--green)'):''}</div>`}
+      </div></div>`;
+  });
+  el.innerHTML = x; el.style.display = '';
+}
+function gtReopenGuide(){ const g = Object.assign({}, _gtGuideState(), { closed:false, reopened:true }); KS.updateSettings({ setupGuide: g }); try{ mgrTab('monitor'); }catch(e){} gtRenderSetupGuide(); }
+
+// refresh: entering the team-leader screen, the Today tab, and after the stations panel changes
+(function(){
+  const og = window.goTo;
+  window.goTo = function(id){ const r = og.apply(this, arguments); if(id==='scManager') setTimeout(() => { try{ gtRenderSetupGuide(); }catch(e){} }, 120); return r; };
+  const ot = window.mgrTab;
+  window.mgrTab = function(t){ const r = ot.apply(this, arguments); if(t==='monitor') setTimeout(() => { try{ gtRenderSetupGuide(); }catch(e){} }, 60); return r; };
+  const os = window._syncStationFlags;
+  window._syncStationFlags = function(devices){ const r = os.apply(this, arguments); _gtDevCache = { at: Date.now(), list: (devices||[]).filter(d => d.device_status!=='retired' && d.assigned_role) }; _gtPlanAdopt(devices); setTimeout(() => { try{ gtRenderSetupGuide(); }catch(e){} }, 30); return r; };
+})();
+</script>
+
 </body>
 </html>
