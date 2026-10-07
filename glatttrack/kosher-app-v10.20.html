@@ -4634,7 +4634,7 @@ const KS = (function(){
 // every device via settings_pilot — unescaped, a name containing markup
 // would run on every device that renders the list, not just the one it was
 // typed on.
-var GT_APP_VERSION='v10.19';
+var GT_APP_VERSION='v10.20';
 document.addEventListener('DOMContentLoaded',()=>{ try{ document.querySelectorAll('.gt-ver').forEach(e=>e.textContent=GT_APP_VERSION); }catch(e){} });
 function escapeHtml(str){
   return String(str==null?'':str).replace(/[&<>"']/g, c=>({
@@ -6947,7 +6947,7 @@ function renderSticker(containerId,idx,kind,sample){
   // aspect: let height follow hMM/wMM ratio (min-height)
   const minH=Math.round(W*(hMM/wMM));
   cont.innerHTML=`
-    <div style="background:#fff;color:#000;border:2px solid #000;border-radius:6px;padding:${Math.round(8*scale)}px ${Math.round(10*scale)}px;width:${W}px;min-height:${minH}px;display:flex;gap:${Math.round(8*scale)}px;align-items:center;font-family:sans-serif;direction:rtl;box-sizing:border-box;">
+    <div data-no-i18n style="background:#fff;color:#000;border:2px solid #000;border-radius:6px;padding:${Math.round(8*scale)}px ${Math.round(10*scale)}px;width:${W}px;min-height:${minH}px;display:flex;gap:${Math.round(8*scale)}px;align-items:center;font-family:sans-serif;direction:rtl;box-sizing:border-box;">
       <div style="flex:1;text-align:center;">
         <div style="font-size:${numFS}px;font-weight:900;line-height:1;">${num}</div>
         ${heb?`<div style="font-size:${dateFS}px;color:#333;margin-top:3px;">${heb}</div>`:''}
@@ -13712,7 +13712,17 @@ async function _refreshStationFlags(force){
 // logs in on (the server says so with registerLeaderDevice — only while the plant
 // has no team-leader device). It pairs itself with the role 'leader'; later ones
 // are paired by a team leader with a pairing code.
-async function _gtSelfPairLeader(mgrToken, name){
+// While the first team-leader device registers itself, the server already counts it as the
+// team-leader device but this browser has no device key yet: a session check made in that
+// moment says "not valid". _gtSessionGone waits for the registration (window._gtSelfPairing).
+function _gtSelfPairLeader(mgrToken, name){
+  const p = _gtSelfPairLeaderRun(mgrToken, name);
+  window._gtSelfPairing = p;
+  p.finally(() => { if(window._gtSelfPairing === p) window._gtSelfPairing = null;
+                    try{ gtHealthRefresh(); }catch(e){} });
+  return p;
+}
+async function _gtSelfPairLeaderRun(mgrToken, name){
   if(!window.sb || _kioskLoadLocal() || _devToken()) return;               // a station / already paired device: never
   try{
     const rq = await window.sb.rpc('device_request_pairing', { p_device_id: KS.getDeviceId(), p_secret: _pairSecret(), p_device_name: _kioskDeviceName() });
@@ -15106,6 +15116,7 @@ let _gtSessionGoneBusy=false;
 async function _gtSessionGone(){
   if(_gtSessionGoneBusy || !window.sb) return; _gtSessionGoneBusy=true;
   try{
+    if(window._gtSelfPairing){ try{ await window._gtSelfPairing; }catch(e){} }   // registering this device: ask after it
     const tok=KS.getManagerToken && KS.getManagerToken(); if(!tok) return;
     const r=await _withTimeout(window.sb.rpc('manager_session_check',{p_token:tok}),10000);
     if(r.error || !r.data || r.data.ok!==false) return;          // no clear answer: leave it
