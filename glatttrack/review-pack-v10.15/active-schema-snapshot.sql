@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict 5ocH4qxpNeH2kFJHqOW44JUCCCGosfU6igafKOdA6r2nAeBdijRDZEHAxxabmsA
+\restrict YDg9m2PQsVbRzF5Jec6Isc6pMB61WJQ3E18kbbLSYk7g2GgAQTvdicRLSftybLZ
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -19,6 +19,24 @@ SET client_min_messages = warning;
 SET row_security = off;
 
 --
+-- Name: auth; Type: SCHEMA; Schema: -; Owner: postgres
+--
+
+CREATE SCHEMA auth;
+
+
+ALTER SCHEMA auth OWNER TO postgres;
+
+--
+-- Name: extensions; Type: SCHEMA; Schema: -; Owner: postgres
+--
+
+CREATE SCHEMA extensions;
+
+
+ALTER SCHEMA extensions OWNER TO postgres;
+
+--
 -- Name: gt_rls; Type: SCHEMA; Schema: -; Owner: postgres
 --
 
@@ -28,20 +46,29 @@ CREATE SCHEMA gt_rls;
 ALTER SCHEMA gt_rls OWNER TO postgres;
 
 --
--- Name: public; Type: SCHEMA; Schema: -; Owner: pg_database_owner
+-- Name: pgcrypto; Type: EXTENSION; Schema: -; Owner: -
 --
 
-CREATE SCHEMA public;
+CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA extensions;
 
-
-ALTER SCHEMA public OWNER TO pg_database_owner;
 
 --
--- Name: SCHEMA public; Type: COMMENT; Schema: -; Owner: pg_database_owner
+-- Name: EXTENSION pgcrypto; Type: COMMENT; Schema: -; Owner: 
 --
 
-COMMENT ON SCHEMA public IS 'standard public schema';
+COMMENT ON EXTENSION pgcrypto IS 'cryptographic functions';
 
+
+--
+-- Name: uid(); Type: FUNCTION; Schema: auth; Owner: postgres
+--
+
+CREATE FUNCTION auth.uid() RETURNS uuid
+    LANGUAGE sql STABLE
+    AS $$ select nullif(current_setting('request.jwt.claim.sub', true),'')::uuid $$;
+
+
+ALTER FUNCTION auth.uid() OWNER TO postgres;
 
 --
 -- Name: devices_read_all(); Type: FUNCTION; Schema: gt_rls; Owner: postgres
@@ -1558,6 +1585,28 @@ $$;
 
 
 ALTER FUNCTION public._gt_settings() OWNER TO postgres;
+
+--
+-- Name: _gt_standbys(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public._gt_standbys() RETURNS jsonb
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $$
+declare v jsonb;
+begin
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'name', application_name, 'state', state, 'sync', sync_state,
+           'lagSeconds', round(coalesce(extract(epoch from replay_lag), 0)::numeric, 1))), '[]'::jsonb)
+    into v from pg_stat_replication;
+  return v;
+exception when others then
+  return '[]'::jsonb;                          -- no right to see the replication view (cloud test server)
+end $$;
+
+
+ALTER FUNCTION public._gt_standbys() OWNER TO postgres;
 
 --
 -- Name: _gt_value_ok(text, text); Type: FUNCTION; Schema: public; Owner: postgres
@@ -5040,6 +5089,32 @@ end $$;
 ALTER FUNCTION public.outer_open(p_id integer, p_epoch bigint, p_open boolean, p_device_id text, p_command_id uuid) OWNER TO postgres;
 
 --
+-- Name: plant_server_status(text); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.plant_server_status(p_token text) RETURNS jsonb
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $$
+begin
+  if coalesce(_session_role(p_token), '') not in ('manager', 'owner') then
+    return jsonb_build_object('ok', false, 'error', 'unauthorized');
+  end if;
+  return jsonb_build_object('ok', true,
+    'server', nullif(current_setting('gt.server_name', true), ''),
+    'role', case when pg_is_in_recovery() then 'standby' else 'primary' end,
+    'standbyExpected', coalesce((select value from plant_state where key = 'standbyExpected'), '') = '1',
+    'standbys', _gt_standbys(),
+    'syncMode', current_setting('synchronous_standby_names', true),
+    'ups', jsonb_build_object('status', (select value from plant_state where key = 'upsStatus'),
+                              'at', (select value from plant_state where key = 'upsAt')),
+    'lastFailoverAt', (select value from plant_state where key = 'lastFailoverAt'));
+end $$;
+
+
+ALTER FUNCTION public.plant_server_status(p_token text) OWNER TO postgres;
+
+--
 -- Name: plant_setup_needed(); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -5726,6 +5801,7 @@ declare
   v_attn text[] := '{}'; v_info text[] := '{}';
   v_offline int; v_failed int; v_revoked int; v_brakes int; v_locks int;
   v_boards int; v_oldest date; v_wait timestamptz; v_mismatch int; v_order int; v_leaders int;
+  v_stb jsonb; v_ups text; v_ups_at timestamptz; v_fo timestamptz;
 begin
   if v_role not in ('manager', 'owner') then
     return jsonb_build_object('ok', false, 'error', 'unauthorized');
@@ -5796,12 +5872,33 @@ begin
     v_attn := v_attn || 'leader_recovery_missing'::text;            -- without it a lost team-leader device needs the server
   end if;
   if exists (select 1 from plant_state where key = 'workerListsCheck') then v_info := v_info || 'worker_lists_check'::text; end if;
+  -- §22 the plant's standby server and UPS (written by the plant-server tools)
+  v_stb := _gt_standbys();
+  if not pg_is_in_recovery() and coalesce((select value from plant_state where key = 'standbyExpected'), '') = '1' then
+    if not exists (select 1 from jsonb_array_elements(v_stb) x where x ->> 'state' = 'streaming') then
+      v_attn := v_attn || 'standby_down'::text;
+      if coalesce(current_setting('synchronous_standby_names', true), '') = '' then v_info := v_info || 'standby_async'::text; end if;
+    elsif exists (select 1 from jsonb_array_elements(v_stb) x where (x ->> 'lagSeconds')::numeric > 30) then
+      v_attn := v_attn || 'standby_lag'::text;
+    end if;
+  end if;
+  v_ups := (select value from plant_state where key = 'upsStatus');
+  v_ups_at := _ts_or_null((select value from plant_state where key = 'upsAt'));
+  if v_ups_at > now() - interval '1 day' then
+    if v_ups = 'lowbattery' then v_attn := v_attn || 'ups_low_battery'::text;
+    elsif v_ups = 'onbattery' then v_attn := v_attn || 'ups_on_battery'::text; end if;
+  end if;
+  v_fo := _ts_or_null((select value from plant_state where key = 'lastFailoverAt'));
+  if v_fo > now() - interval '7 days' then v_info := v_info || 'failover_recent'::text; end if;
 
   return jsonb_build_object(
     'ok', true,
     'schemaStep', (select value from plant_state where key = 'schemaStep'),
     'serverTime', now(),
     'devices', v_devs || jsonb_build_object('leader', v_leaders),
+    'server', jsonb_build_object('name', nullif(current_setting('gt.server_name', true), ''),
+                                 'role', case when pg_is_in_recovery() then 'standby' else 'primary' end,
+                                 'standbys', v_stb, 'ups', v_ups, 'lastFailoverAt', v_fo),
     'testMode', jsonb_build_object('on', v_tm, 'on_at', case when v_tm then v_on_at end,
                                    'expires_at', case when v_tm then v_on_at + _test_mode_max() end),
     'lastBackupVerifiedAt', v_ver,
@@ -5976,6 +6073,20 @@ end $$;
 
 
 ALTER FUNCTION public.worker_session_check() OWNER TO postgres;
+
+--
+-- Name: users; Type: TABLE; Schema: auth; Owner: postgres
+--
+
+CREATE TABLE auth.users (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    email text,
+    raw_user_meta_data jsonb,
+    created_at timestamp with time zone DEFAULT now()
+);
+
+
+ALTER TABLE auth.users OWNER TO postgres;
 
 --
 -- Name: admin_audit; Type: TABLE; Schema: public; Owner: postgres
@@ -6688,6 +6799,14 @@ ALTER TABLE ONLY public.login_attempts ALTER COLUMN id SET DEFAULT nextval('publ
 --
 
 ALTER TABLE ONLY public.rate_events ALTER COLUMN id SET DEFAULT nextval('public.rate_events_id_seq'::regclass);
+
+
+--
+-- Name: users users_pkey; Type: CONSTRAINT; Schema: auth; Owner: postgres
+--
+
+ALTER TABLE ONLY auth.users
+    ADD CONSTRAINT users_pkey PRIMARY KEY (id);
 
 
 --
@@ -7889,6 +8008,96 @@ ALTER TABLE public.system_flags ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.worker_sessions ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: supabase_realtime; Type: PUBLICATION; Schema: -; Owner: postgres
+--
+
+CREATE PUBLICATION supabase_realtime WITH (publish = 'insert, update, delete, truncate');
+
+
+ALTER PUBLICATION supabase_realtime OWNER TO postgres;
+
+--
+-- Name: supabase_realtime animals; Type: PUBLICATION TABLE; Schema: public; Owner: postgres
+--
+
+ALTER PUBLICATION supabase_realtime ADD TABLE ONLY public.animals;
+
+
+--
+-- Name: supabase_realtime animals_pilot; Type: PUBLICATION TABLE; Schema: public; Owner: postgres
+--
+
+ALTER PUBLICATION supabase_realtime ADD TABLE ONLY public.animals_pilot;
+
+
+--
+-- Name: supabase_realtime audit_log; Type: PUBLICATION TABLE; Schema: public; Owner: postgres
+--
+
+ALTER PUBLICATION supabase_realtime ADD TABLE ONLY public.audit_log;
+
+
+--
+-- Name: supabase_realtime batches; Type: PUBLICATION TABLE; Schema: public; Owner: postgres
+--
+
+ALTER PUBLICATION supabase_realtime ADD TABLE ONLY public.batches;
+
+
+--
+-- Name: supabase_realtime device_lifecycle_events; Type: PUBLICATION TABLE; Schema: public; Owner: postgres
+--
+
+ALTER PUBLICATION supabase_realtime ADD TABLE ONLY public.device_lifecycle_events;
+
+
+--
+-- Name: supabase_realtime devices_pilot; Type: PUBLICATION TABLE; Schema: public; Owner: postgres
+--
+
+ALTER PUBLICATION supabase_realtime ADD TABLE ONLY public.devices_pilot;
+
+
+--
+-- Name: supabase_realtime events_pilot; Type: PUBLICATION TABLE; Schema: public; Owner: postgres
+--
+
+ALTER PUBLICATION supabase_realtime ADD TABLE ONLY public.events_pilot;
+
+
+--
+-- Name: supabase_realtime outer_status_pilot; Type: PUBLICATION TABLE; Schema: public; Owner: postgres
+--
+
+ALTER PUBLICATION supabase_realtime ADD TABLE ONLY public.outer_status_pilot;
+
+
+--
+-- Name: supabase_realtime settings_pilot; Type: PUBLICATION TABLE; Schema: public; Owner: postgres
+--
+
+ALTER PUBLICATION supabase_realtime ADD TABLE ONLY public.settings_pilot;
+
+
+--
+-- Name: SCHEMA auth; Type: ACL; Schema: -; Owner: postgres
+--
+
+GRANT USAGE ON SCHEMA auth TO anon;
+GRANT USAGE ON SCHEMA auth TO authenticated;
+GRANT USAGE ON SCHEMA auth TO service_role;
+
+
+--
+-- Name: SCHEMA extensions; Type: ACL; Schema: -; Owner: postgres
+--
+
+GRANT USAGE ON SCHEMA extensions TO anon;
+GRANT USAGE ON SCHEMA extensions TO authenticated;
+GRANT USAGE ON SCHEMA extensions TO service_role;
+
+
+--
 -- Name: SCHEMA gt_rls; Type: ACL; Schema: -; Owner: postgres
 --
 
@@ -8240,6 +8449,13 @@ REVOKE ALL ON FUNCTION public._gt_one_inspection() FROM PUBLIC;
 --
 
 REVOKE ALL ON FUNCTION public._gt_settings() FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION _gt_standbys(); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public._gt_standbys() FROM PUBLIC;
 
 
 --
@@ -9134,6 +9350,15 @@ GRANT ALL ON FUNCTION public.outer_open(p_id integer, p_epoch bigint, p_open boo
 
 
 --
+-- Name: FUNCTION plant_server_status(p_token text); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public.plant_server_status(p_token text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.plant_server_status(p_token text) TO anon;
+GRANT ALL ON FUNCTION public.plant_server_status(p_token text) TO authenticated;
+
+
+--
 -- Name: FUNCTION plant_setup_needed(); Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -9497,5 +9722,5 @@ GRANT ALL ON TABLE public.system_flags TO service_role;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict 5ocH4qxpNeH2kFJHqOW44JUCCCGosfU6igafKOdA6r2nAeBdijRDZEHAxxabmsA
+\unrestrict YDg9m2PQsVbRzF5Jec6Isc6pMB61WJQ3E18kbbLSYk7g2GgAQTvdicRLSftybLZ
 

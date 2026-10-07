@@ -1,6 +1,6 @@
 -- ============================================================================
 -- GlattTrack — security self-test (run any time; changes NOTHING)
--- VERSION 7 — one statement, no temporary tables, nothing the Supabase SQL Editor
+-- VERSION 8 — one statement, no temporary tables, nothing the Supabase SQL Editor
 --             mistakes for a new table (so it shows no "RLS" window and adds nothing)
 -- ============================================================================
 -- Simulates requests exactly as they arrive through the API (PostgREST: the
@@ -2326,6 +2326,29 @@ begin
   insert into plant_state (key, value) values ('leaderDevicesRequired', '1') on conflict (key) do update set value = '1';
 end $$;
 $gtn1$;
+    v_step := 'standby server and UPS';
+    execute $gtn9$
+do $$
+declare r jsonb; r2 jsonb; r3 jsonb; r4 jsonb; ok boolean;
+begin
+  -- the plant-server tools report: a standby is expected but none streams; the UPS runs on battery
+  insert into plant_state (key, value) values ('standbyExpected', '1'), ('upsStatus', 'onbattery'), ('upsAt', now()::text), ('lastFailoverAt', now()::text)
+    on conflict (key) do update set value = excluded.value;
+  r  := pg_temp.api('{}', format('select system_health(%L)', pg_temp.v('mgr')));
+  r2 := pg_temp.api('{}', format('select plant_server_status(%L)', pg_temp.v('mgr')));
+  r3 := pg_temp.api(pg_temp.dev('SL1'), 'select plant_server_status(''x'')');
+  update plant_state set value = 'lowbattery' where key = 'upsStatus';
+  r4 := pg_temp.api('{}', format('select system_health(%L)', pg_temp.v('mgr')));
+  ok := r -> 'attention' ? 'standby_down' and r -> 'attention' ? 'ups_on_battery' and r -> 'info' ? 'failover_recent'
+        and pg_temp.ok(r2) and r2 ->> 'role' = 'primary' and (r2 ->> 'standbyExpected')::boolean and r2 #>> '{ups,status}' = 'onbattery'
+        and r3 ->> 'error' = 'unauthorized' and r4 -> 'attention' ? 'ups_low_battery' and not (r4 -> 'attention' ? 'ups_on_battery');
+  delete from plant_state where key in ('standbyExpected', 'upsStatus', 'upsAt', 'lastFailoverAt');
+  r := pg_temp.api('{}', format('select system_health(%L)', pg_temp.v('mgr')));
+  ok := ok and not (r -> 'attention' ? 'standby_down') and not (r -> 'attention' ? 'ups_on_battery');
+  perform pg_temp.rec('standby server and UPS: health warns (standby expected but not streaming, UPS on battery / low battery, a recent failover); the status only for team leader / owner', ok,
+    concat_ws(' | ', r2::text, r3::text));
+end $$
+$gtn9$;
     v_step := 'the ACTIVE security surface against the expected manifest';
     execute $gt70$
 -- ── the ACTIVE security surface against the expected manifest ───────────────
@@ -2428,7 +2451,7 @@ begin
                 'eso_change(integer,text,text,bigint)', 'eso_change(integer,text,text,bigint,uuid)', 'event_append(jsonb)',
                 'lung_drawing_get(integer)', 'lung_drawing_set(integer,bigint,text)', 'manager_add(text,text,text)',
                 'manager_add_owner(text,text,text)', 'manager_deactivate(text,uuid)', 'manager_list(text)', 'manager_login(text)',
-                'manager_logout(text)', 'manager_session_check(text)', 'leader_recovery_code_new(text)', 'leader_recovery_status(text)', 'leader_device_replace(text,text)', 'manufacturer_set_billing(text,boolean,numeric,text,text)',
+                'manager_logout(text)', 'manager_session_check(text)', 'leader_recovery_code_new(text)', 'leader_recovery_status(text)', 'leader_device_replace(text,text)', 'plant_server_status(text)', 'manufacturer_set_billing(text,boolean,numeric,text,text)',
                 'outer_open(integer,bigint,boolean,text)', 'outer_open(integer,bigint,boolean,text,uuid)', 'plant_status_snapshot()', 'plant_setup_needed()',
                 'push_settings(jsonb,text,text,text)', 'request_daily_rollover()', 'reset_daily_board(text,text)', 'security_summary(text)',
                 'processing_board(text)', 'carry_push(bigint,jsonb,uuid)', 'carry_claim(bigint,integer,text,uuid)',

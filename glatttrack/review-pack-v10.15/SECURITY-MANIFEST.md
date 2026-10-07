@@ -178,6 +178,8 @@ New tables (no grant to anon / authenticated): `animals_carry` (kept slaughter d
 | `leader_recovery_code_new(p_token)` | team leader only | `_session_role = manager`, `_is_real_manager` | unauthorized |
 | `leader_recovery_status(p_token)` | team leader / owner | `_session_role` | unauthorized |
 | `leader_device_replace(p_code, p_recovery)` | anyone, from a non-station device, with BOTH the team-leader code and the recovery code | bcrypt checks, `login_attempts` brake (5 / hour / address) | station_device, code_invalid, no_recovery_code, locked |
+| `plant_server_status(p_token)` | team leader / owner | `_session_role`; read-only | unauthorized |
+| `_gt_standbys()` | internal only (revoked from public / anon / authenticated) | — | — |
 
 - Shared inner + outer screen: `_stage_allowed('outer')` and `_nc_outer_allowed()` accept an `inner` device only when `screenConfig = '1both'`; `_derive_actor` uses the shared screen's one list for outer rulings in that mode. Internal helpers `_gt_one_inspection()`, `_leader_recovery_norm(text)`: no grant to anon / authenticated.
 - `leader_device_recovery(reason)` (server only) still exists for the installer.

@@ -14706,6 +14706,50 @@ end $_$;
 revoke execute on function manufacturer_set_billing(text, boolean, numeric, text, text) from public;
 grant execute on function manufacturer_set_billing(text, boolean, numeric, text, text) to anon, authenticated;
 
+-- ── 22. the plant's resilience: standby server, UPS ─────────────────────────────
+-- A plant server can run with a HOT STANDBY (a second server that receives every
+-- change at once, Postgres streaming replication) behind one floating address,
+-- and on a UPS. The tools in plant-server/ (outside the database) write what they
+-- see into plant_state: standbyExpected, upsStatus / upsAt, lastFailoverAt — and
+-- the server names itself with the setting gt.server_name ('A' / 'B').
+--   plant_server_status(p_token) → {ok, server, role primary|standby, standbyExpected,
+--        standbys:[{name, state, sync, lagSeconds}], syncMode, ups:{status, at}, lastFailoverAt}
+--   system_health attention: standby_down, standby_lag, ups_on_battery, ups_low_battery;
+--                 info: standby_async (the standby is down and the server works alone), failover_recent
+create or replace function _gt_standbys() returns jsonb
+language plpgsql stable security definer set search_path = public, extensions, pg_temp as $$
+declare v jsonb;
+begin
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'name', application_name, 'state', state, 'sync', sync_state,
+           'lagSeconds', round(coalesce(extract(epoch from replay_lag), 0)::numeric, 1))), '[]'::jsonb)
+    into v from pg_stat_replication;
+  return v;
+exception when others then
+  return '[]'::jsonb;                          -- no right to see the replication view (cloud test server)
+end $$;
+revoke execute on function _gt_standbys() from public, anon, authenticated;
+
+create or replace function plant_server_status(p_token text) returns jsonb
+language plpgsql stable security definer set search_path = public, extensions, pg_temp as $$
+begin
+  if coalesce(_session_role(p_token), '') not in ('manager', 'owner') then
+    return jsonb_build_object('ok', false, 'error', 'unauthorized');
+  end if;
+  return jsonb_build_object('ok', true,
+    'server', nullif(current_setting('gt.server_name', true), ''),
+    'role', case when pg_is_in_recovery() then 'standby' else 'primary' end,
+    'standbyExpected', coalesce((select value from plant_state where key = 'standbyExpected'), '') = '1',
+    'standbys', _gt_standbys(),
+    'syncMode', current_setting('synchronous_standby_names', true),
+    'ups', jsonb_build_object('status', (select value from plant_state where key = 'upsStatus'),
+                              'at', (select value from plant_state where key = 'upsAt')),
+    'lastFailoverAt', (select value from plant_state where key = 'lastFailoverAt'));
+end $$;
+revoke execute on function plant_server_status(text) from public;
+grant execute on function plant_server_status(text) to anon, authenticated;
+revoke execute on function _gt_standbys() from public, anon, authenticated;
+
 -- ── system_health: processing boards waiting, rollover waiting, label mismatches ──
 create or replace function system_health(p_token text) returns jsonb
 language plpgsql security definer set search_path = public, extensions, pg_temp as $$
@@ -14716,6 +14760,7 @@ declare
   v_attn text[] := '{}'; v_info text[] := '{}';
   v_offline int; v_failed int; v_revoked int; v_brakes int; v_locks int;
   v_boards int; v_oldest date; v_wait timestamptz; v_mismatch int; v_order int; v_leaders int;
+  v_stb jsonb; v_ups text; v_ups_at timestamptz; v_fo timestamptz;
 begin
   if v_role not in ('manager', 'owner') then
     return jsonb_build_object('ok', false, 'error', 'unauthorized');
@@ -14786,12 +14831,33 @@ begin
     v_attn := v_attn || 'leader_recovery_missing'::text;            -- without it a lost team-leader device needs the server
   end if;
   if exists (select 1 from plant_state where key = 'workerListsCheck') then v_info := v_info || 'worker_lists_check'::text; end if;
+  -- §22 the plant's standby server and UPS (written by the plant-server tools)
+  v_stb := _gt_standbys();
+  if not pg_is_in_recovery() and coalesce((select value from plant_state where key = 'standbyExpected'), '') = '1' then
+    if not exists (select 1 from jsonb_array_elements(v_stb) x where x ->> 'state' = 'streaming') then
+      v_attn := v_attn || 'standby_down'::text;
+      if coalesce(current_setting('synchronous_standby_names', true), '') = '' then v_info := v_info || 'standby_async'::text; end if;
+    elsif exists (select 1 from jsonb_array_elements(v_stb) x where (x ->> 'lagSeconds')::numeric > 30) then
+      v_attn := v_attn || 'standby_lag'::text;
+    end if;
+  end if;
+  v_ups := (select value from plant_state where key = 'upsStatus');
+  v_ups_at := _ts_or_null((select value from plant_state where key = 'upsAt'));
+  if v_ups_at > now() - interval '1 day' then
+    if v_ups = 'lowbattery' then v_attn := v_attn || 'ups_low_battery'::text;
+    elsif v_ups = 'onbattery' then v_attn := v_attn || 'ups_on_battery'::text; end if;
+  end if;
+  v_fo := _ts_or_null((select value from plant_state where key = 'lastFailoverAt'));
+  if v_fo > now() - interval '7 days' then v_info := v_info || 'failover_recent'::text; end if;
 
   return jsonb_build_object(
     'ok', true,
     'schemaStep', (select value from plant_state where key = 'schemaStep'),
     'serverTime', now(),
     'devices', v_devs || jsonb_build_object('leader', v_leaders),
+    'server', jsonb_build_object('name', nullif(current_setting('gt.server_name', true), ''),
+                                 'role', case when pg_is_in_recovery() then 'standby' else 'primary' end,
+                                 'standbys', v_stb, 'ups', v_ups, 'lastFailoverAt', v_fo),
     'testMode', jsonb_build_object('on', v_tm, 'on_at', case when v_tm then v_on_at end,
                                    'expires_at', case when v_tm then v_on_at + _test_mode_max() end),
     'lastBackupVerifiedAt', v_ver,
@@ -15114,6 +15180,8 @@ begin
     problems := problems || 'leader_account_add callable by the app'::text; end if;
   if has_function_privilege('anon', '_gt_one_inspection()', 'execute') or has_function_privilege('anon', '_leader_recovery_norm(text)', 'execute') then
     problems := problems || 'an internal function callable by the app'::text; end if;
+  if has_function_privilege('anon', '_gt_standbys()', 'execute') then
+    problems := problems || '_gt_standbys callable by the app'::text; end if;
   if pg_get_functiondef('_stage_allowed(text)'::regprocedure) !~ '_gt_one_inspection' then
     problems := problems || 'shared inner + outer screen missing in _stage_allowed'::text; end if;
   if (select value from plant_state where key = 'schemaStep')::int < 46 then
