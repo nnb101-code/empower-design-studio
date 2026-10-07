@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict yfaCzkUsUE3fzAMcDqdZNt6VnXgfZMlthpQWeoTHOdL0TgGaq2F4aM6fIf7QtY4
+\restrict dJ9TN7N8ee1RudUtEPxMTONSSmxLw25rLhyvsd1BEhzwhL8gAQ4EGFM7Jfpa85I
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -5851,6 +5851,7 @@ declare
   v_offline int; v_failed int; v_revoked int; v_brakes int; v_locks int;
   v_boards int; v_oldest date; v_wait timestamptz; v_mismatch int; v_order int; v_leaders int;
   v_stb jsonb; v_ups text; v_ups_at timestamptz; v_fo timestamptz;
+  v_night jsonb; v_night_at timestamptz;
 begin
   if v_role not in ('manager', 'owner') then
     return jsonb_build_object('ok', false, 'error', 'unauthorized');
@@ -5939,6 +5940,20 @@ begin
   end if;
   v_fo := _ts_or_null((select value from plant_state where key = 'lastFailoverAt'));
   if v_fo > now() - interval '7 days' then v_info := v_info || 'failover_recent'::text; end if;
+  -- v10.16: the nightly check (plant-server/nightly-check.sh, before work) — its problems, what it
+  -- fixed by itself, and a warning when it did not run (on a plant server only)
+  begin v_night := (select value from plant_state where key = 'nightlyCheck')::jsonb; exception when others then v_night := null; end;
+  v_night_at := _ts_or_null(v_night ->> 'at');
+  if v_night_at is not null and v_night_at > now() - interval '30 hours' then
+    if jsonb_typeof(v_night -> 'problems') = 'array' and jsonb_array_length(v_night -> 'problems') > 0 then
+      v_attn := v_attn || 'nightly_check_problems'::text;
+    end if;
+    if jsonb_typeof(v_night -> 'fixed') = 'array' and jsonb_array_length(v_night -> 'fixed') > 0 then
+      v_info := v_info || 'nightly_check_fixed'::text;
+    end if;
+  elsif v_plant or v_night_at is not null then
+    v_attn := v_attn || 'nightly_check_missing'::text;
+  end if;
 
   return jsonb_build_object(
     'ok', true,
@@ -5958,6 +5973,8 @@ begin
     'security', v_sec,
     'processing', jsonb_build_object('openBoards', v_boards, 'oldestDay', v_oldest,
                                      'rolloverWaitingSince', v_wait, 'unfinishedOnBoard', _board_unfinished()),
+    'nightly', case when v_night is not null then jsonb_build_object('at', v_night -> 'at', 'ok', v_night -> 'ok',
+                     'problems', v_night -> 'problems', 'fixed', v_night -> 'fixed', 'checks', v_night -> 'checks') end,
     'attention', to_jsonb(v_attn),
     'info', to_jsonb(v_info));
 end $$;
@@ -9778,5 +9795,5 @@ GRANT ALL ON TABLE public.system_flags TO service_role;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict yfaCzkUsUE3fzAMcDqdZNt6VnXgfZMlthpQWeoTHOdL0TgGaq2F4aM6fIf7QtY4
+\unrestrict dJ9TN7N8ee1RudUtEPxMTONSSmxLw25rLhyvsd1BEhzwhL8gAQ4EGFM7Jfpa85I
 

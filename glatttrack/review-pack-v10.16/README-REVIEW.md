@@ -9,7 +9,7 @@ This pack is the CURRENT state. Review these files only.
 | `active-schema-snapshot.sql` | **Audit this first.** `pg_dump --schema-only` (public + gt_rls) of a clean database built from `glatttrack-schema-full.sql`. Exactly one ACTIVE definition of each function, trigger, RLS policy and grant. |
 | `setup-supabase-step46-order-and-processing-days.sql` | The new migration (run after step 45). |
 | `STEP46-CHANGES.md` | What step 46 / app v10.6 changed (Hebrew). |
-| `security-selftest.sql` + `security-selftest-result.txt` | Release gate: **131 / 131**. One statement (one DO block) whose changes are all undone inside it (see v10.15 below). |
+| `security-selftest.sql` + `security-selftest-result.txt` | Release gate: **132 / 132**. One statement (one DO block) whose changes are all undone inside it (see v10.15 below). |
 | `SECURITY-MANIFEST.md` | Permission map (step 45 observed table) + a step-46 section. |
 | `active-security-manifest.sql` + `-result.txt` | Prints the active security surface. |
 | `kosher-app-v10.16.html` | The app (UI, offline store, sync client). `GT_MIN_SCHEMA = 46`. |
@@ -36,6 +36,8 @@ Every A-finding was confirmed first, then fixed, then tested (browser tests are 
 | B6 | keepalived secret in the kit | Yes | see A6 | — |
 
 Also new in v10.16 (app only, read-only — no new server path): Summaries tab — weight per farm / type / farm × type / inspector, a "same farm, same type, by date" comparison (with previous period / last year), sortable rankings, a per-worker table (slaughterer nevela / shot, inner treif, outer glatt / treif). Data: `archive_days` (team leader / owner) as before.
+
+Also new in v10.16: **nightly check before work** (`plant-server/nightly-check.sh`, systemd timer). 12 checks; fixes ONLY a fixed safe list (restart a stuck API service, a fresh checked backup, clear old backups / logs when the disk is short, step the clock); everything else is reported to `plant_state.nightlyCheck` → `system_health` attention `nightly_check_problems` / `nightly_check_missing` (did not run for 30 h on a plant server), info `nightly_check_fixed`, and an optional outbound alert command. The app's "explain" button sends the report (no kashrut data) to the plant's AI edge function — explanation only, the AI never acts. Self-test fixture made independent of the plant's own state (legs sorting switched on, earlier open processing days set aside — all rolled back): it failed on a real-looking database otherwise. Self-test: + "nightly check" → **132 / 132**.
 
 Still open (not changed in v10.16, please re-check our reasoning):
 - **B1** rate limit per IP needs the nginx config that strips / sets `x-gt-client-ip` — the nginx file is still to be written (plant-server kit).

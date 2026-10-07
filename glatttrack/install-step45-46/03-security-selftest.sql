@@ -324,6 +324,7 @@ begin
             -- the checks start from the same plant switches on every server (the
             -- step-46 checks switch the esophagus check on where they need it)
             'esophagusEnabled', false,
+            'legsMode', true, 'legsSortEnabled', true,   -- (v10.16) the legs-sort checks need the sorting on
             'screenConfig', '1in1out')       -- (the shared-screen check switches it itself)
      - 'esoFromIdx'
    where id = 1;
@@ -348,6 +349,10 @@ begin
     outer_open_by_device = null, outer_open_at = null, not_chalak_outer = false,
     board_epoch = _board_epoch()
   where id between 900 and 999;
+  -- (v10.16) earlier slaughter days still in processing on this server are set aside for the
+  -- test (undone at the end) — otherwise the processing stations correctly work on those days
+  -- and the checks on today's board would see them refused
+  delete from animals_carry;
   perform set_config('gt.reset_in_progress', 'false', true);
 end $$;
 $gt29$;
@@ -2384,6 +2389,21 @@ begin
   ok := ok and not (r -> 'attention' ? 'standby_down') and not (r -> 'attention' ? 'ups_on_battery');
   perform pg_temp.rec('standby server and UPS: health warns (standby expected but not streaming, UPS on battery / low battery, a recent failover); the status only for team leader / owner', ok,
     concat_ws(' | ', r2::text, r3::text));
+  -- v10.16: the nightly check's report — problems → attention; fixed → info; not run for a day → attention
+  insert into plant_state (key, value) values ('nightlyCheck', jsonb_build_object('at', now(), 'ok', false,
+      'problems', jsonb_build_array('backup: no checked backup'), 'fixed', jsonb_build_array('api: restarted'), 'checks', '[]'::jsonb)::text)
+    on conflict (key) do update set value = excluded.value;
+  r := pg_temp.api('{}', format('select system_health(%L)', pg_temp.v('mgr')));
+  update plant_state set value = jsonb_build_object('at', now() - interval '40 hours', 'ok', true, 'problems', '[]'::jsonb, 'fixed', '[]'::jsonb)::text where key = 'nightlyCheck';
+  r2 := pg_temp.api('{}', format('select system_health(%L)', pg_temp.v('mgr')));
+  update plant_state set value = jsonb_build_object('at', now(), 'ok', true, 'problems', '[]'::jsonb, 'fixed', '[]'::jsonb)::text where key = 'nightlyCheck';
+  r3 := pg_temp.api('{}', format('select system_health(%L)', pg_temp.v('mgr')));
+  delete from plant_state where key = 'nightlyCheck';
+  perform pg_temp.rec('nightly check: its problems and what it fixed show on system health; a check that did not run for a day is a warning',
+    r -> 'attention' ? 'nightly_check_problems' and r -> 'info' ? 'nightly_check_fixed' and r #>> '{nightly,problems,0}' = 'backup: no checked backup'
+    and r2 -> 'attention' ? 'nightly_check_missing'
+    and not (r3 -> 'attention' ? 'nightly_check_problems') and not (r3 -> 'attention' ? 'nightly_check_missing'),
+    concat_ws(' | ', r -> 'attention', r2 -> 'attention', r3 -> 'attention'));
 end $$
 $gtn9$;
     v_step := 'the ACTIVE security surface against the expected manifest';

@@ -10583,6 +10583,23 @@ async function mgrAiSend(){
   }
 }
 
+// v10.16: the AI assistant explains the nightly check's report in plain words (it only explains —
+// the fixes themselves are done only by the plant server's fixed, safe list)
+function gtNightlyExplain(){
+  const ng=(window._gtHealth||{}).nightly; if(!ng) return;
+  const box=(html)=>{ let m=document.getElementById('gtAiModal');
+    if(!m){ m=document.createElement('div'); m.id='gtAiModal'; m.className='overlay'; m.style.zIndex='99990'; document.body.appendChild(m); }
+    m.innerHTML=`<div class="gt-box" style="max-width:480px;max-height:80vh;overflow:auto;direction:${lang==='he'?'rtl':'ltr'};"><h3>🤖 ${escapeHtml(L('בדיקת הלילה — הסבר','Nightly check — explained','Revisión nocturna — explicación'))}</h3>${html}
+      <div style="margin-top:12px;text-align:center;"><button onclick="document.getElementById('gtAiModal').classList.remove('open')" style="padding:8px 18px;border-radius:10px;border:none;background:var(--gold);color:#111;font-weight:800;cursor:pointer;">${escapeHtml(L('סגור','Close','Cerrar'))}</button></div></div>`;
+    m.classList.add('open'); };
+  box('<div class="gt-hint">'+escapeHtml(L('חושב…','Thinking…','Pensando…'))+'</div>');
+  const ask='זה הדוח של בדיקת הלילה של שרת המפעל, לפני תחילת העבודה. הסבר בעברית פשוטה ובקצרה, לראש צוות שאינו איש מחשבים: מה כל בעיה אומרת, האם אפשר להתחיל לעבוד, ומה לעשות או למי לפנות. אל תמציא פעולות שלא מופיעות בדוח. הדוח: '+JSON.stringify({at:ng.at,problems:ng.problems||[],fixed:ng.fixed||[],checks:ng.checks||[]});
+  const noAi=()=>box('<div style="font-size:14px;line-height:1.7;">'+escapeHtml(L('עוזר ה-AI לא זמין בשרת הזה (צריך חיבור לאינטרנט ומפתח AI בשרת). הבעיות עצמן מפורטות בשורה "בדיקת לילה" במסך הבריאות.','The AI assistant is not available on this server (needs internet and an AI key on the server). The problems themselves are listed in the "Nightly check" row.','El asistente AI no está disponible en este servidor.'))+'</div>');
+  if(!window.sb || !window.sb.functions) return noAi();
+  Promise.resolve(window.sb.functions.invoke('ai-assist',{ body:{ system:'אתה עוזר טכני למערכת GlattTrack לניהול שחיטה כשרה. ענה בעברית פשוטה, קצר וברור. אל תציע לשנות נתוני כשרות.', messages:[{role:'user',content:ask}] } }))
+    .then(({data,error})=>{ const t=!error && data && data.content && data.content[0] && data.content[0].text; if(!t) return noAi();
+      box('<div style="font-size:14px;line-height:1.8;white-space:pre-wrap;">'+escapeHtml(t)+'</div>'); }, noAi);
+}
 async function mgrAiAnalyzeProblems(){
   if(_isOwnerSession()) return;                                   // the owner only watches
   const s=KS.getSettings();
@@ -14883,6 +14900,10 @@ function _gtHealthCodeText(c){
     worker_lists_check:['רשימות העובדים הופרדו לרשימה לכל מסך. עובדים מהרשימות הישנות (בודקים / משגיחים) הועתקו לכל המסכים של הרשימה הישנה — בדוק בהגדרות ← משתמשים והסר מי שלא שייך. ההודעה תיעלם אחרי שמירה.','Worker lists are now one per screen. Workers of the old shared lists were copied to every screen of that list — check Settings → Users and remove who does not belong. This notice goes away after saving.','Las listas de trabajadores son ahora una por pantalla. Revise Ajustes → Usuarios.'],
     leader_recovery_missing:['אין קוד שחזור לראש הצוות. בלעדיו, אם המכשיר של ראש הצוות יאבד, צריך את המתקין. יוצרים קוד: הגדרות ← מערכת ← קוד שחזור.','There is no team-leader recovery code. Without it a lost team-leader device needs the installer. Make one: Settings → System → Recovery code.','No hay código de recuperación. Créelo en Ajustes → Sistema.'],
     one_leader_device:['יש רק מכשיר ראש צוות אחד. אם הוא יאבד או יתקלקל, אף ראש צוות לא יוכל להיכנס עד שהמתקין יפתח מחדש בשרת. מומלץ לצמד מכשיר ראש צוות נוסף.','There is only one team-leader device. If it is lost or broken, no team leader can log in until the installer reopens it on the server. Pair a second team-leader device.','Solo hay un dispositivo de jefe de equipo. Si se pierde o se rompe, ningún jefe podrá entrar hasta que el instalador lo reabra en el servidor. Empareje un segundo dispositivo.'],
+    // v10.16: the nightly check (before work)
+    nightly_check_problems:['בדיקת הלילה מצאה בעיות שלא תוקנו לבד — פירוט בשורה "בדיקת לילה" במסך הבריאות.','The nightly check found problems it could not fix — see the "Nightly check" row on the health screen.','La revisión nocturna encontró problemas.'],
+    nightly_check_fixed:['בדיקת הלילה תיקנה לבד בעיות — פירוט בשורה "בדיקת לילה".','The nightly check fixed problems by itself — see the "Nightly check" row.','La revisión nocturna corrigió problemas.'],
+    nightly_check_missing:['בדיקת הלילה לא רצה ביממה האחרונה — לבדוק את שרת המפעל.','The nightly check did not run in the last day — check the plant server.','La revisión nocturna no se ejecutó.'],
     // step 46 §22: the plant's standby server and UPS
     standby_down:['שרת הגיבוי (השרת החלופי) לא מחובר. העבודה ממשיכה רגיל על השרת הראשי, אבל אם גם הוא ייפול — אין שרת שיחליף אותו. יש לבדוק את שרת הגיבוי.','The standby server is not connected. Work goes on normally on the main server, but if it fails too there is nothing to take over. Check the standby server.','El servidor de respaldo no está conectado. Revíselo.'],
     standby_lag:['שרת הגיבוי מפגר אחרי השרת הראשי ביותר מ-30 שניות — יש לבדוק את הרשת בין השרתים','The standby server is more than 30 seconds behind the main server — check the network between the servers','El servidor de respaldo va más de 30 s atrasado'],
@@ -14988,6 +15009,20 @@ function mgrRenderHealth(){
          : st ? L('שרת גיבוי: מחובר','standby: connected','respaldo: conectado')+(st.lagSeconds>1?' ('+st.lagSeconds+L(' שנ׳ פיגור',' s behind',' s')+')':'')
          : L('בלי שרת גיבוי','no standby','sin respaldo'));
     x+=row(svA('standby_down')||svA('standby_lag')?'r':(st?'g':'y'), L('שרתים','Servers','Servidores'), svTxt);
+  }
+  // v10.16: the nightly check — what it found, what it fixed by itself, an AI explanation on request
+  const ng=h.nightly;
+  if(ng || svA('nightly_check_missing')){
+    const pr=(ng&&Array.isArray(ng.problems))?ng.problems:[], fx=(ng&&Array.isArray(ng.fixed))?ng.fixed:[];
+    const when=ng&&ng.at?new Date(ng.at).toLocaleString(lang==='he'?'he-IL':'en-GB',{day:'numeric',month:'numeric',hour:'2-digit',minute:'2-digit'}):'';
+    const txt=svA('nightly_check_missing')?L('לא רצה ביממה האחרונה','did not run in the last day','no se ejecutó')
+      :(pr.length?pr.length+' '+L('בעיות','problems','problemas'):L('הכל תקין','all good','todo bien'))+(fx.length?' · '+fx.length+' '+L('תוקנו לבד','fixed by itself','corregidos'):'')+(when?' · '+when:'');
+    x+=row(svA('nightly_check_missing')||pr.length?'r':(fx.length?'y':'g'), L('בדיקת לילה','Nightly check','Revisión nocturna'), txt);
+    if(pr.length||fx.length){
+      x+='<div style="font-size:12px;line-height:1.7;margin:2px 0 8px;padding:8px 10px;border-radius:8px;background:var(--panel2);">'+
+         pr.map(p=>'<div style="color:var(--red-light);">⚠ '+E(p)+'</div>').join('')+fx.map(f=>'<div style="color:var(--green);">✔ '+E(f)+'</div>').join('')+
+         (KS.getManagerRole()==='manager'?'<button onclick="gtNightlyExplain()" style="margin-top:6px;padding:6px 12px;border-radius:8px;border:1px solid var(--blue);background:transparent;color:var(--blue);font-weight:700;cursor:pointer;">🤖 '+E(L('הסבר לי מה לעשות','Explain what to do','Explicar qué hacer'))+'</button>':'')+'</div>';
+    }
   }
   if(sv.ups || svA('ups_on_battery') || svA('ups_low_battery')){
     const u=svA('ups_low_battery')?'low':svA('ups_on_battery')?'bat':'ok';
