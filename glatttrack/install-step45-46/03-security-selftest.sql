@@ -1,6 +1,6 @@
 -- ============================================================================
 -- GlattTrack — security self-test (run any time; changes NOTHING)
--- VERSION 9 — one statement, no temporary tables, nothing the Supabase SQL Editor
+-- VERSION 10 — one statement, no temporary tables, nothing the Supabase SQL Editor
 --             mistakes for a new table (so it shows no "RLS" window and adds nothing)
 -- ============================================================================
 -- Simulates requests exactly as they arrive through the API (PostgREST: the
@@ -843,6 +843,18 @@ begin
   ok := ok and pg_temp.ok(r) and r2 ->> 'error' = 'already_ruled';
   perform pg_temp.rec('a "not chalak" animal (slaughter / inner / outer) can only be ruled kosher or treif; ruled → can''t be sent', ok,
     concat_ws(' | ', left(r::text, 40), r2 ->> 'error', r5 ->> 'error'));
+  -- v10.17: an animal only SENT to the rabbinate screen may also be ruled רבנות חלק (rabChalak);
+  -- one marked "not chalak" at the maw check may not; a push can't change a sent one to glatt
+  r  := pg_temp.api(pg_temp.dev('OUT1'), format('select set_not_chalak_outer(943, %s)', pg_temp.ep()));
+  r2 := pg_temp.api(pg_temp.dev('OUT2'), pg_temp.q_claim(943, 'outer', 'rabChalak', '', ''));
+  r4 := pg_temp.api(pg_temp.dev('OUT2'), pg_temp.q_push(943, jsonb_build_object('outer_status', 'glatt', 'outer_time', (pg_temp.ar(943)).outer_time + 5)));
+  r3 := pg_temp.api(pg_temp.dev('OUT2'), pg_temp.q_claim(939, 'outer', 'rabChalak', '', ''));
+  ok := pg_temp.ok(r) and pg_temp.claimed(r2) and (pg_temp.ar(943)).outer_status = 'rabChalak'
+        and _kosher_ready(pg_temp.ar(943)) and pg_temp.claimed(r3)
+        and r4 ->> 'error' = 'invalid_value' and (pg_temp.ar(943)).outer_status = 'rabChalak'
+        and not _nc_outer_value_ok(pg_temp.ar(942), 'rabChalak') and not _nc_outer_value_ok(pg_temp.ar(941), 'rabChalak');
+  perform pg_temp.rec('rabbinate screen: a sent animal may be ruled רבנות חלק (and is kosher-ready); a shochet / maw "not chalak" may not', ok,
+    concat_ws(' | ', left(r::text, 40), left(r2::text, 60), left(r3::text, 60), r4 ->> 'error'));
 end $$;
 $gt39$;
     v_step := 'identity chaos: old key after a replacement, fake actor / role';

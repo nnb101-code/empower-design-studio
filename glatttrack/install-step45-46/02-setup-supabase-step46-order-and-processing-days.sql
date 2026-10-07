@@ -25,6 +25,8 @@
 --      an outer tablet rules outer only (step ≤ 45 let either rule both).
 --      The rabbinate send (set_not_chalak_outer): outer tablet only, as before —
 --      and only for an animal that reached the outer inspector (inner confirmed).
+--      It is routing to the rabbinate screen, not a ruling: there רבנות חלק / רבנות כשר /
+--      טרף (v10.17, §25); a shochet / maw "not chalak" stays רבנות כשר / טרף only.
 --   3. KASHRUT CONFIGURATION:
 --      • the manufacturer (support access open) may change technical settings
 --        only (printers, scanners, beep, language, weight capture, error log);
@@ -152,10 +154,26 @@ $$;
 revoke execute on function _is_nc(animals_pilot) from public, anon, authenticated;
 
 -- ruled kosher and still kosher (the app's isKosherReady)
+-- marked "not chalak" by the shochet or the inner inspector (not only sent to the rabbinate screen)
+create or replace function _nc_fixed(a animals_pilot) returns boolean
+language sql immutable set search_path = public, extensions, pg_temp as $$
+  select a.slaughter = 'notChalak' or coalesce(a.not_chalak_inner, false);
+$$;
+revoke execute on function _nc_fixed(animals_pilot) from public, anon, authenticated;
+
+-- may this outer ruling be given to this animal? A "not chalak" animal: רבנות כשר ('kosher') or
+-- treif; one that was only sent to the rabbinate screen also רבנות חלק ('rabChalak'). (v10.17)
+create or replace function _nc_outer_value_ok(a animals_pilot, v text) returns boolean
+language sql immutable set search_path = public, extensions, pg_temp as $$
+  select v is null or not coalesce(_is_nc(a), false) or v in ('kosher', 'treif')
+         or (v = 'rabChalak' and not coalesce(_nc_fixed(a), false));
+$$;
+revoke execute on function _nc_outer_value_ok(animals_pilot, text) from public, anon, authenticated;
+
 create or replace function _kosher_ready(a animals_pilot) returns boolean
 language sql stable security definer set search_path = public, extensions, pg_temp as $$
   select coalesce(a.outer_status is not null
-                  and (not _is_nc(a) or a.outer_status = 'kosher')
+                  and _nc_outer_value_ok(a, a.outer_status)
                   and a.outer_status = any(_kosher_statuses())
                   and coalesce(a.slaughter, '') not in ('nevela', 'shot')
                   and a.inner_status = 'confirmed', false);
@@ -540,9 +558,9 @@ begin
     end if;
   end if;
 
-  -- a "not chalak" animal: only kosher (rabbinate) or treif
-  if p_stage = 'outer' and a.outer_status is null and p_value not in ('kosher', 'treif')
-     and (a.slaughter = 'notChalak' or coalesce(a.not_chalak_inner, false) or coalesce(a.not_chalak_outer, false)) then
+  -- a "not chalak" animal: only רבנות כשר (kosher) or treif — one only SENT to the rabbinate
+  -- screen may also be ruled רבנות חלק (§25)
+  if p_stage = 'outer' and a.outer_status is null and not _nc_outer_value_ok(a, p_value) then
     v_res := jsonb_build_object('claimed', false, 'error', 'bad_value', 'reason', 'nc_kosher_or_treif_only',
                                 'row', to_jsonb(a), 'serverNow', v_now);
     perform _cmd_put(p_command_id, v_dev, 'claim_animal_stage', v_res);
@@ -3229,6 +3247,29 @@ end $$;
 revoke execute on function animal_card(text, date, integer) from public;
 grant execute on function animal_card(text, date, integer) to anon, authenticated;
 
+-- ── 25. the rabbinate screen (v10.17) ─────────────────────────────────────────
+-- "Send to the rabbinate screen" (set_not_chalak_outer) is routing from the glatt outer screen to the
+-- rabbinate outer screen, not a ruling. There the animal is ruled רבנות חלק, רבנות כשר or טרף.
+-- An animal marked "לא חלק רבנות" by the shochet or at the maw check stays רבנות כשר or טרף only.
+-- The same rule on every write path: claim_animal_stage (above) and any push / correction (this trigger).
+create or replace function _animals_nc_outer_value() returns trigger
+language plpgsql security definer set search_path = public, extensions, pg_temp as $$
+begin
+  if current_setting('gt.reset_in_progress', true) = 'true' then return new; end if;
+  if not _is_api_request() or _request_is_service_role()
+     or coalesce(current_setting('app.device_admin', true), '') = 'on' then
+    return new;
+  end if;
+  if new.outer_status is not null
+     and (tg_op = 'INSERT' or new.outer_status is distinct from old.outer_status)
+     and not _nc_outer_value_ok(new, new.outer_status) then
+    raise exception 'GT:INVALID_VALUE a "not chalak" animal can only be ruled kosher or treif (nc_kosher_or_treif_only)'
+      using errcode = '23514';
+  end if;
+  return new;
+end $$;
+revoke execute on function _animals_nc_outer_value() from public, anon, authenticated;
+
 -- ── self-check ──────────────────────────────────────────────────────────────
 do $$
 declare problems text[] := '{}';
@@ -3268,6 +3309,10 @@ begin
     problems := problems || '_worker_gate callable by the app'::text; end if;
   if pg_get_functiondef('_stage_allowed(text)'::regprocedure) !~ '_gt_one_inspection' then
     problems := problems || 'shared inner + outer screen missing in _stage_allowed'::text; end if;
+  if not _nc_outer_value_ok(jsonb_populate_record(null::animals_pilot, '{"id":5,"slaughter":"slaughtered","not_chalak_outer":true}'), 'rabChalak')
+     or _nc_outer_value_ok(jsonb_populate_record(null::animals_pilot, '{"id":5,"slaughter":"notChalak"}'), 'rabChalak')
+     or _nc_outer_value_ok(jsonb_populate_record(null::animals_pilot, '{"id":5,"slaughter":"slaughtered","not_chalak_outer":true}'), 'glatt') then
+    problems := problems || 'rabbinate screen rulings (v10.17)'::text; end if;
   if (select value from plant_state where key = 'schemaStep')::int < 46 then
     problems := problems || 'schemaStep not 46'::text; end if;
   if array_length(problems, 1) > 0 then
