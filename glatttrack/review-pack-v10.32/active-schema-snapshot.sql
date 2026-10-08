@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict y1jdZS4ByMSgmu8ZPWFZBel75fL9EIqo5ltCCmyIqIbSkMb0psknenLZMZe1sPg
+\restrict pUOM1SA7kxORzz4yJTP6val88EowArX5i4yGPtVENtPoXkIMdtmhb9ychJrU9u1
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -219,6 +219,10 @@ begin
   if v_b is null and (coalesce(new.parts_print_count, 0) > coalesce(old.parts_print_count, 0)
                       or (not coalesce(old.parts_scanned, false) and coalesce(new.parts_scanned, false))) then
     v_st := 'parts'; v_b := _hold_block(v_ep, old.id, 'parts');
+  end if;
+  if v_b is null then                                                  -- v10.32: a held part is not printed
+    v_st := 'parts'; v_b := _parts_print_block(v_ep, old.id, old.tongue_sticker, new.tongue_sticker, old.cheek_sticker,
+                                               new.cheek_sticker, old.parts_print_count, new.parts_print_count);
   end if;
   if v_b is null and not coalesce(old.stamped, false) and coalesce(new.stamped, false) then
     v_st := 'stamps'; v_b := _hold_block(v_ep, old.id, 'stamps');
@@ -1791,6 +1795,32 @@ $$;
 ALTER FUNCTION public._hold_block(p_epoch bigint, p_id integer, p_station text, p_part text) OWNER TO postgres;
 
 --
+-- Name: _hold_caller_error(text); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public._hold_caller_error(p_station text) RETURNS text
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $$
+declare v_role text := _caller_device_role();
+begin
+  if v_role is not null and (_hold_station_of_role(v_role) = p_station
+                             or (p_station = 'outer' and v_role = 'inner' and _gt_one_inspection())) then
+    begin
+      perform _worker_gate(v_role);
+    exception when sqlstate 'GTW01' then
+      return 'worker_login_required';
+    end;
+    return null;
+  end if;
+  if _test_mode_on() and _request_has_manager() then return null; end if;
+  return 'wrong_station';
+end $$;
+
+
+ALTER FUNCTION public._hold_caller_error(p_station text) OWNER TO postgres;
+
+--
 -- Name: _hold_station_of_role(text); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -2276,6 +2306,34 @@ end $$;
 
 
 ALTER FUNCTION public._note_revoked_write(p_dev text) OWNER TO postgres;
+
+--
+-- Name: _parts_print_block(bigint, integer, boolean, boolean, boolean, boolean, integer, integer); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public._parts_print_block(p_epoch bigint, p_id integer, o_tongue boolean, n_tongue boolean, o_cheek boolean, n_cheek boolean, o_count integer, n_count integer) RETURNS text
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $$
+declare v text;
+begin
+  if not coalesce(o_tongue, false) and coalesce(n_tongue, false) then
+    v := _hold_block(p_epoch, p_id, 'parts', 'tongue'); if v is not null then return v; end if;
+  end if;
+  if not coalesce(o_cheek, false) and coalesce(n_cheek, false) then
+    v := coalesce(_hold_block(p_epoch, p_id, 'parts', 'cheek1'), _hold_block(p_epoch, p_id, 'parts', 'cheek2'));
+    if v is not null then return v; end if;
+  end if;
+  if coalesce(n_count, 0) > coalesce(o_count, 0) and coalesce(n_count, 0) >= 3 then
+    v := coalesce(_hold_block(p_epoch, p_id, 'parts', 'tongue'), _hold_block(p_epoch, p_id, 'parts', 'cheek1'),
+                  _hold_block(p_epoch, p_id, 'parts', 'cheek2'));
+    if v is not null then return v; end if;
+  end if;
+  return null;
+end $$;
+
+
+ALTER FUNCTION public._parts_print_block(p_epoch bigint, p_id integer, o_tongue boolean, n_tongue boolean, o_cheek boolean, n_cheek boolean, o_count integer, n_count integer) OWNER TO postgres;
 
 --
 -- Name: _plant_state_test_mode_trg(); Type: FUNCTION; Schema: public; Owner: postgres
@@ -3968,6 +4026,10 @@ begin
           end if;
           -- v10.26: a USDA hold / an open "?" stops the station (a held half is not weighed)
           v_reason := _hold_block(c.board_epoch, v_cur, _proc_station_of_group(g));
+          if v_reason is null and g = 'parts' then                    -- v10.32: a held part is not printed
+            v_reason := _parts_print_block(c.board_epoch, v_cur, c.tongue_sticker, n.tongue_sticker, c.cheek_sticker,
+                                           n.cheek_sticker, c.parts_print_count, n.parts_print_count);
+          end if;
           if v_reason is null and g = 'weights' and n.weight_right is distinct from c.weight_right and n.weight_right is not null then
             v_reason := _hold_block(c.board_epoch, v_cur, 'stamps', 'right');
           end if;
@@ -4952,9 +5014,8 @@ begin
   if v_res is not null then return v_res; end if;
   select * into h from animal_holds where id = p_hold for update;
   if h.id is null then return jsonb_build_object('ok', false, 'error', 'bad_id'); end if;
-  if _hold_station_of_role(_caller_device_role()) is distinct from h.station then
-    return jsonb_build_object('ok', false, 'error', 'wrong_station');
-  end if;
+  v_actor := _hold_caller_error(h.station);                         -- v10.32: worker login + shared screen
+  if v_actor is not null then return jsonb_build_object('ok', false, 'error', v_actor); end if;
   if h.resolved_at is not null then
     return jsonb_build_object('ok', true, 'hold', to_jsonb(h), 'already', true);
   end if;
@@ -5002,10 +5063,8 @@ begin
   end if;
   v_dev := _call_device(null);
   if v_dev is null then return jsonb_build_object('ok', false, 'error', _no_device_error()); end if;
-  v_role := _caller_device_role();
-  if _hold_station_of_role(v_role) is distinct from p_station then
-    return jsonb_build_object('ok', false, 'error', 'wrong_station');
-  end if;
+  v_role := _hold_caller_error(p_station);                          -- v10.32: worker login + shared screen
+  if v_role is not null then return jsonb_build_object('ok', false, 'error', v_role); end if;
   v_res := _cmd_get(p_command_id, v_dev, 'hold_set');
   if v_res is not null then return v_res; end if;
   if p_board is null then
@@ -9252,6 +9311,13 @@ REVOKE ALL ON FUNCTION public._hold_block(p_epoch bigint, p_id integer, p_statio
 
 
 --
+-- Name: FUNCTION _hold_caller_error(p_station text); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public._hold_caller_error(p_station text) FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION _hold_station_of_role(p_role text); Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -9457,6 +9523,13 @@ REVOKE ALL ON FUNCTION public._no_device_error() FROM PUBLIC;
 --
 
 REVOKE ALL ON FUNCTION public._note_revoked_write(p_dev text) FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION _parts_print_block(p_epoch bigint, p_id integer, o_tongue boolean, n_tongue boolean, o_cheek boolean, n_cheek boolean, o_count integer, n_count integer); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public._parts_print_block(p_epoch bigint, p_id integer, o_tongue boolean, n_tongue boolean, o_cheek boolean, n_cheek boolean, o_count integer, n_count integer) FROM PUBLIC;
 
 
 --
@@ -10620,5 +10693,5 @@ GRANT ALL ON TABLE public.system_flags TO service_role;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict y1jdZS4ByMSgmu8ZPWFZBel75fL9EIqo5ltCCmyIqIbSkMb0psknenLZMZe1sPg
+\unrestrict pUOM1SA7kxORzz4yJTP6val88EowArX5i4yGPtVENtPoXkIMdtmhb9ychJrU9u1
 

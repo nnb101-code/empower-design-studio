@@ -1,4 +1,4 @@
-# GlattTrack — review pack (app v10.31, server schema step 46)
+# GlattTrack — review pack (app v10.32, server schema step 46)
 
 This pack is the CURRENT state. Review these files only.
 
@@ -9,14 +9,22 @@ This pack is the CURRENT state. Review these files only.
 | `active-schema-snapshot.sql` | **Audit this first.** `pg_dump --schema-only` (public + gt_rls) of a clean database built from `glatttrack-schema-full.sql`. Exactly one ACTIVE definition of each function, trigger, RLS policy and grant. |
 | `setup-supabase-step46-order-and-processing-days.sql` | The new migration (run after step 45). |
 | `STEP46-CHANGES.md` | What step 46 / app v10.6 changed (Hebrew). |
-| `security-selftest.sql` + `security-selftest-result.txt` | Release gate: **138 / 138**. One statement (one DO block) whose changes are all undone inside it (see v10.15 below). |
+| `security-selftest.sql` + `security-selftest-result.txt` | Release gate: **141 / 141**. One statement (one DO block) whose changes are all undone inside it (see v10.15 below). |
 | `SECURITY-MANIFEST.md` | Permission map (step 45 observed table) + a step-46 section. |
 | `active-security-manifest.sql` + `-result.txt` | Prints the active security surface. |
-| `kosher-app-v10.31.html` | The app (UI, offline store, sync client). `GT_MIN_SCHEMA = 46`. |
+| `kosher-app-v10.32.html` | The app (UI, offline store, sync client). `GT_MIN_SCHEMA = 46`. |
 | `setup-supabase-step44/45/46-*.sql` | The last three migrations. |
 | `glatttrack-schema-full.sql` | Full install script (base + steps 1–46, history included; last definition wins). |
 | `test-mode-on.sql` / `test-mode-off.sql` | The owner's SQL-only test switch. |
 | `plant-server/` | Plant resilience kit (bash, runs as root on the plant servers, NOT in the database): standby server, floating address, UPS, nightly checked backup. Guide: `PLANT-RESILIENCE-HE.md`. |
+
+## Fixed in v10.32 (server 02 + app) — after the v10.31 review
+
+- **A1 — "?" / USDA through the worker login.** `hold_set` and `hold_resolve` now call `_hold_caller_error(p_station)`: a paired tablet of that station, and on a screen whose workers log in with a code (`loginModeByRole` = code / both) only with a live worker session (`_worker_gate`; the refusal is returned as `{"ok":false,"error":"worker_login_required"}`, nothing is written). The app shows "log in with your code, then tap again" and opens the screen's login.
+- **F1 — one shared inner + outer screen.** `_hold_caller_error` lets its inner tablet put / close an `outer` hold when `_gt_one_inspection()` (the same rule as `_stage_allowed('outer')`), after its worker's login; any other configuration → `wrong_station`.
+- **A2 — a held part is not printed, on the server too.** The existing columns now mean: `tongue_sticker` = the tongue sticker is out, `cheek_sticker` = both cheek stickers are out, `parts_print_count` = how many stickers are out. `_parts_print_block()` (used by the `b_animals_hold_guard` trigger and by `carry_push` for an older processing day) refuses: the tongue flag while the tongue is on USDA hold (open or condemned); the cheeks flag while a cheek is; and the count reaching 3 while any small part is. The app (`_partsRecordPrinted`) sends the real count and flags: tongue held → count 2 + cheeks; after the release → count 3 + tongue. A held part is also left out of a reprint. Known limit (no new columns): with one cheek held, the server knows "cheeks not both out" and which cheek is held (the hold row), not a per-cheek printed flag.
+- Self-test **141 / 141**: 3 new checks (worker login for "?" / USDA put and close; shared screen outer "?"; held part not printed + released part recorded). The old check that pushed the full set while the tongue was held now pushes the two cheeks only. The 3 new checks FAIL on the v10.31 server (138 / 141) and pass on v10.32. Fresh install (`glatttrack-schema-full.sql`, rebuilt with the current step 46) + a second run of 02: 141 / 141.
+- Browser: `browser-tests/hold-worker-login-part-print.test.js` — tongue on USDA → print shows "cheek 1 + cheek 2", server `2 / tongue=false / cheeks=true`; tapping the number again → reprint window (not a second set); release → "printed now: tongue", server `3 / true / true`; the parts screen switched to code login → USDA refused, the login screen opens, nothing written.
 
 ## Changed in v10.31 (app only)
 

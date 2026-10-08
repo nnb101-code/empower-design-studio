@@ -1316,6 +1316,10 @@ begin
           end if;
           -- v10.26: a USDA hold / an open "?" stops the station (a held half is not weighed)
           v_reason := _hold_block(c.board_epoch, v_cur, _proc_station_of_group(g));
+          if v_reason is null and g = 'parts' then                    -- v10.32: a held part is not printed
+            v_reason := _parts_print_block(c.board_epoch, v_cur, c.tongue_sticker, n.tongue_sticker, c.cheek_sticker,
+                                           n.cheek_sticker, c.parts_print_count, n.parts_print_count);
+          end if;
           if v_reason is null and g = 'weights' and n.weight_right is distinct from c.weight_right and n.weight_right is not null then
             v_reason := _hold_block(c.board_epoch, v_cur, 'stamps', 'right');
           end if;
@@ -3461,6 +3465,55 @@ language sql immutable set search_path = public, extensions, pg_temp as $$
 $$;
 revoke execute on function _hold_station_of_role(text) from public, anon, authenticated;
 
+-- v10.32 (review A1 + F1): may this caller put / close a hold of p_station?
+--   * a paired tablet of that station — and, on a screen whose workers log in with a code
+--     (loginModeByRole = code / both), only with a live worker session (same gate as a ruling)
+--   * one shared inner + outer screen (the plant's choice): its inner tablet also holds for outer
+--   * test mode: the team leader acts as every station
+-- returns null (allowed) or the error code
+create or replace function _hold_caller_error(p_station text) returns text
+language plpgsql stable security definer set search_path = public, extensions, pg_temp as $$
+declare v_role text := _caller_device_role();
+begin
+  if v_role is not null and (_hold_station_of_role(v_role) = p_station
+                             or (p_station = 'outer' and v_role = 'inner' and _gt_one_inspection())) then
+    begin
+      perform _worker_gate(v_role);
+    exception when sqlstate 'GTW01' then
+      return 'worker_login_required';
+    end;
+    return null;
+  end if;
+  if _test_mode_on() and _request_has_manager() then return null; end if;
+  return 'wrong_station';
+end $$;
+revoke execute on function _hold_caller_error(text) from public, anon, authenticated;
+
+-- v10.32 (review A2): which small part was really printed. tongue_sticker = the tongue sticker is
+-- out; cheek_sticker = both cheek stickers are out; parts_print_count = how many stickers are out.
+-- A part on USDA hold (open or condemned) is not printed: its flag may not turn on, and the count
+-- may not reach the full set (3) while one is held.
+create or replace function _parts_print_block(p_epoch bigint, p_id integer, o_tongue boolean, n_tongue boolean,
+                                              o_cheek boolean, n_cheek boolean, o_count integer, n_count integer) returns text
+language plpgsql stable security definer set search_path = public, extensions, pg_temp as $$
+declare v text;
+begin
+  if not coalesce(o_tongue, false) and coalesce(n_tongue, false) then
+    v := _hold_block(p_epoch, p_id, 'parts', 'tongue'); if v is not null then return v; end if;
+  end if;
+  if not coalesce(o_cheek, false) and coalesce(n_cheek, false) then
+    v := coalesce(_hold_block(p_epoch, p_id, 'parts', 'cheek1'), _hold_block(p_epoch, p_id, 'parts', 'cheek2'));
+    if v is not null then return v; end if;
+  end if;
+  if coalesce(n_count, 0) > coalesce(o_count, 0) and coalesce(n_count, 0) >= 3 then
+    v := coalesce(_hold_block(p_epoch, p_id, 'parts', 'tongue'), _hold_block(p_epoch, p_id, 'parts', 'cheek1'),
+                  _hold_block(p_epoch, p_id, 'parts', 'cheek2'));
+    if v is not null then return v; end if;
+  end if;
+  return null;
+end $$;
+revoke execute on function _parts_print_block(bigint, integer, boolean, boolean, boolean, boolean, integer, integer) from public, anon, authenticated;
+
 -- an open "?" of the shochet on this number (the esophagus and the legs stickers may go on)
 create or replace function _slaughter_q_open(a animals_pilot) returns boolean
 language sql stable security definer set search_path = public, extensions, pg_temp as $$
@@ -3663,6 +3716,10 @@ begin
                       or (not coalesce(old.parts_scanned, false) and coalesce(new.parts_scanned, false))) then
     v_st := 'parts'; v_b := _hold_block(v_ep, old.id, 'parts');
   end if;
+  if v_b is null then                                                  -- v10.32: a held part is not printed
+    v_st := 'parts'; v_b := _parts_print_block(v_ep, old.id, old.tongue_sticker, new.tongue_sticker, old.cheek_sticker,
+                                               new.cheek_sticker, old.parts_print_count, new.parts_print_count);
+  end if;
   if v_b is null and not coalesce(old.stamped, false) and coalesce(new.stamped, false) then
     v_st := 'stamps'; v_b := _hold_block(v_ep, old.id, 'stamps');
   end if;
@@ -3702,11 +3759,8 @@ begin
   end if;
   v_dev := _call_device(null);
   if v_dev is null then return jsonb_build_object('ok', false, 'error', _no_device_error()); end if;
-  v_role := _caller_device_role();
-  if _hold_station_of_role(v_role) is distinct from p_station
-     and not (_test_mode_on() and _request_has_manager()) then      -- test mode: the team leader acts as every station
-    return jsonb_build_object('ok', false, 'error', 'wrong_station');
-  end if;
+  v_role := _hold_caller_error(p_station);                          -- v10.32: worker login + shared screen
+  if v_role is not null then return jsonb_build_object('ok', false, 'error', v_role); end if;
   v_res := _cmd_get(p_command_id, v_dev, 'hold_set');
   if v_res is not null then return v_res; end if;
   if p_board is null then
@@ -3762,10 +3816,8 @@ begin
   if v_res is not null then return v_res; end if;
   select * into h from animal_holds where id = p_hold for update;
   if h.id is null then return jsonb_build_object('ok', false, 'error', 'bad_id'); end if;
-  if _hold_station_of_role(_caller_device_role()) is distinct from h.station
-     and not (_test_mode_on() and _request_has_manager()) then
-    return jsonb_build_object('ok', false, 'error', 'wrong_station');
-  end if;
+  v_actor := _hold_caller_error(h.station);                         -- v10.32: worker login + shared screen
+  if v_actor is not null then return jsonb_build_object('ok', false, 'error', v_actor); end if;
   if h.resolved_at is not null then
     return jsonb_build_object('ok', true, 'hold', to_jsonb(h), 'already', true);
   end if;

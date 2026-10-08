@@ -4277,6 +4277,15 @@ const KS = (function(){
   // on the higher count instead of one silently overwriting the other's
   // progress; previously this only lived in a device-local field plus a
   // write-only settings.partsCounts copy that nothing ever read back.
+  // v10.32: what was really printed — the count and which parts (a part on USDA hold is not printed)
+  function setPartsPrinted(idx, count, tongue, cheeks){
+    const a = _A()[idx]; if(!a) return;
+    a.partsPrintCount = Math.max(a.partsPrintCount||0, count);
+    if(tongue) a.tongueSticker = true;
+    if(cheeks) a.cheekSticker = true;
+    _commitA();
+    _procPush(idx);
+  }
   function setPartsPrintCount(idx, count){
     const a = _A()[idx]; if(!a) return;
     a.partsPrintCount = count;
@@ -4631,7 +4640,7 @@ const KS = (function(){
     syncNow: ()=>_sbCatchUp(),
     syncQueue: ()=>_loadSyncQueue(),
     syncPump: ()=>_syncPump(),
-    setPartsScanned, setPartsPrintCount, setPartsPrintedAs, setStampedAs,
+    setPartsScanned, setPartsPrintCount, setPartsPrinted, setPartsPrintedAs, setStampedAs,
     setWeight,
     setWeightStage,
     skipWeight,
@@ -4829,6 +4838,7 @@ async function gtHoldPut(idx, st, kind, part){
   const d=r && r.data;
   if(!d || !d.ok){
     _gtFlags.holds=_gtFlags.holds.filter(h=>h!==loc); _gtFlags.sig=''; gtRerenderAll();
+    if(d && d.error==='worker_login_required') return _gtHoldNeedsLogin();
     KS.notice(L('לא סומן: ','Not marked: ','No se marcó: ')+gtErrText((d&&d.error)||(r&&r.error)||'network'));
     return false;
   }
@@ -4836,11 +4846,20 @@ async function gtHoldPut(idx, st, kind, part){
   gtFlagsPull();
   return true;
 }
+// v10.32: a screen whose workers log in with a code — "?" / USDA only after the worker's login
+function _gtHoldNeedsLogin(){
+  KS.notice(L('צריך להיכנס עם הקוד לפני סימון "?" או USDA. אחרי הכניסה — לוחצים שוב.','Log in with your code before marking "?" or USDA. After the login, tap again.','Ingrese con su código antes de marcar "?" o USDA. Después, toque de nuevo.'));
+  const msg=L('🔑 צריך להיכנס עם הקוד לפני סימון "?" או USDA. אחרי הכניסה — לוחצים שוב.','🔑 Log in with your code before marking "?" or USDA. After the login, tap again.','🔑 Ingrese con su código antes de marcar "?" o USDA. Después, toque de nuevo.');
+  try{ if(window._gtNeedWorkerLogin) window._gtNeedWorkerLogin(); }catch(e){}
+  // (a "?" / USDA is not kept on the tablet like a ruling — the worker taps it again after the login)
+  setTimeout(()=>{ try{ window.gtStatusSet && window.gtStatusSet('worker', msg, {color:'red', ttl:20000}); }catch(e){} }, 300);
+  return false;
+}
 async function gtHoldResolve(id, resolution, after){
   gtSheetClose();
   let r=null; try{ r=await window.sb.rpc('hold_resolve',{p_hold:id,p_resolution:resolution,p_command_id:_gtUuid()}); }catch(e){}
   const d=r && r.data;
-  if(!d || !d.ok){ KS.notice(gtErrText((d&&d.error)||(r&&r.error)||'network')); return; }
+  if(!d || !d.ok){ if(d && d.error==='worker_login_required') return _gtHoldNeedsLogin(); KS.notice(gtErrText((d&&d.error)||(r&&r.error)||'network')); return; }
   _gtFlags.sig=''; await gtFlagsPull(); gtRerenderAll();
   if(after) try{ after(d.hold); }catch(e){}
 }
@@ -4910,6 +4929,7 @@ function gtAfterRelease(h){
       try{ showPartsPrint(h.animal_id, a.outerStatus, false, {cheek1:1,cheek2:2,tongue:3}[h.part]);
            _ppBreak(h.part==='tongue'?0:1, h.part==='tongue'?1:0);
            const sn=document.getElementById('ppPartsInfo'); if(sn){ sn.textContent=L('הודפס עכשיו: ','Printed now: ','Impreso ahora: ')+_gtL(GT_PART_NAME[h.part])+L(' (שוחרר מ-USDA)',' (released from USDA)',' (liberado de USDA)'); sn.style.color='#9BE7B0'; sn.style.fontWeight='800'; } }catch(e){}
+      try{ _partsRecordPrinted(h.animal_id); }catch(e){}                    // v10.32: the server learns it is out now
       try{ KS.addAuditLog({type:'parts_print_after_release', animal:h.animal_id+1, part:h.part}); }catch(e){}
     }
   }
@@ -5119,7 +5139,7 @@ function _gtDoneAfterHtml(stage, a){
     +'</div>';
 }
 
-var GT_APP_VERSION='v10.31';
+var GT_APP_VERSION='v10.32';
 document.addEventListener('DOMContentLoaded',()=>{ try{ document.querySelectorAll('.gt-ver').forEach(e=>e.textContent=GT_APP_VERSION); }catch(e){} });
 function escapeHtml(str){
   return String(str==null?'':str).replace(/[&<>"']/g, c=>({
@@ -12630,7 +12650,7 @@ No se pueden imprimir etiquetas kosher.`)
   // A ruling made on this device and not yet sent to the server → no kosher stickers yet
   if(_gtRulingPending(idx)){ showPartsError(_gtRulingPendingTitle(), _gtRulingPendingText(idx)); return; }
   // Already printed all 3 → offer reprint. Between 1-2 → continue to next sticker.
-  if((a.partsPrintCount||0)>=3 && !_partsNeedsReprint(a)){
+  if(((a.partsPrintCount||0)>=3 || a.partsScanned) && !_partsNeedsReprint(a)){   // v10.32: also a set printed without a held part
     partsReprintWarn(idx);
     return;
   }
@@ -12721,11 +12741,18 @@ function showPartsPrint(idx,status,isReprint=false,stickerNum=1){
 // Track per-animal print counts in KS state (synced via animals_pilot —
 // see setPartsPrintCount/maxWins merge; no longer duplicated into
 // settings.partsCounts, which nothing ever read back)
+// v10.32: the small parts on USDA hold now (open or condemned) — they are not printed
+function _partsHeldNow(idx){ try{ return gtPartHolds(idx,'parts').filter(h=>h.open||h.resolution==='condemned').map(h=>h.part); }catch(e){ return []; } }
+function _partsRecordPrinted(idx){
+  const held=_partsHeldNow(idx), out=['cheek1','cheek2','tongue'].filter(p=>!held.includes(p));
+  KS.setPartsPrinted(idx, out.length, out.includes('tongue'), out.includes('cheek1') && out.includes('cheek2'));
+  return out;
+}
 function partsAddPrint(idx){
   const a=KS.getAnimal(idx);
   if(_gtRulingPending(idx)){ showPartsError(_gtRulingPendingTitle(), _gtRulingPendingText(idx)); return; }
-  // all 3 stickers at once (an animal that already had 1-2 printed gets the rest)
-  KS.setPartsPrintCount(idx, 3);
+  // all 3 stickers at once — except a part on USDA hold (v10.32: the server is told which parts are out)
+  _partsRecordPrinted(idx);
   KS.setPartsScanned(idx);
   KS.setPartsPrintedAs(idx,_printedAsKey(a));
   showPartsPrint(idx,a.outerStatus,false,0);
@@ -12745,7 +12772,8 @@ function partsReprintWarn(idx){
   const statusLabels={glatt:"גלאט",beit:"בית יוסף",kosher:"כשר",mk:"MK"};
   const cnt=a.partsPrintCount||0;
   const stickerNames=lang==="he"?["לחי 1","לחי 2","לשון"]:lang==="es"?["Mejilla 1","Mejilla 2","Lengua"]:["Cheek 1","Cheek 2","Tongue"];
-  const printed=cnt>0?stickerNames.slice(0,cnt).join(", "):L("אין","none","ninguna");
+  const _held=_partsHeldNow(idx), _out=['cheek1','cheek2','tongue'].map((p,i)=>_held.includes(p)?null:stickerNames[i]).filter(Boolean);
+  const printed=cnt>0?_out.slice(0,cnt).join(", "):L("אין","none","ninguna");
   document.getElementById("partsRpDesc").innerHTML=
     L("בהמה #","Animal #","Animal #")+(idx+1)+" — "+escapeHtml(statusDisplayName(a.outerStatus,a)||a.outerStatus)+
     "<br>"+L("הודפסו עד כה: ","Printed so far: ","Impresas hasta ahora: ")+cnt+"/3 ("+printed+")"+
@@ -12772,6 +12800,7 @@ function partsDoReprint(){
   logs.push({screen:"חלקים",idx:partsReprintIdx+1,sticker:cnt+"/3",time:new Date().toLocaleTimeString("he-IL")});
   KS.updateSettings({reprintLog:logs});
   showPartsPrint(partsReprintIdx,a.outerStatus,true,cnt);
+  try{ const _h=_partsHeldNow(partsReprintIdx); if(_h.length) _ppBreak(['cheek1','cheek2'].filter(p=>!_h.includes(p)).length, _h.includes('tongue')?0:1); }catch(e){}   // v10.32: a held part is not reprinted
   partsReprintIdx=-1;
   setTimeout(()=>focusScan(),1500);
 }

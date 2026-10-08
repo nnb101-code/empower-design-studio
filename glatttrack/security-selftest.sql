@@ -2487,7 +2487,7 @@ begin
   -- USDA on a part / half: only that part waits; a "?" at a processing station holds that station
   perform pg_temp.prep(987, 'outer');
   r  := pg_temp.api(pg_temp.dev('PARTS'), format('select hold_set(%s, ''parts'', ''usda'', ''tongue'')', 987));
-  r2 := pg_temp.api(pg_temp.dev('PARTS'), pg_temp.q_push(987, '{"parts_print_count":3,"parts_printed_as":"glatt","parts_scanned":true}'));
+  r2 := pg_temp.api(pg_temp.dev('PARTS'), pg_temp.q_push(987, '{"parts_print_count":2,"cheek_sticker":true,"parts_printed_as":"glatt","parts_scanned":true}'));   -- v10.32: the two cheeks only
   r3 := pg_temp.api(pg_temp.dev('STAMPS'), format('select hold_set(%s, ''stamps'', ''usda'', ''left'')', 987));
   r4 := pg_temp.api(pg_temp.dev('STAMPS'), pg_temp.q_push(987, '{"weight_left":120.5}'));
   r5 := pg_temp.api(pg_temp.dev('STAMPS'), pg_temp.q_push(987, '{"weight_right":121.5}'));
@@ -2506,6 +2506,69 @@ begin
               pg_temp.api('{}', 'select hold_set(989, ''parts'', ''usda'')')::text));
 end $$;
 $gt71$;
+    v_step := 'v10.32 holds: worker login, shared screen, a held part is not printed';
+    execute $gt72$
+-- ── v10.32 holds: worker login, shared screen, a held part is not printed ─────
+do $$
+declare r jsonb; r2 jsonb; r3 jsonb; r4 jsonb; r5 jsonb; ok boolean; h bigint; s0 jsonb; tok text; hw jsonb;
+begin
+  select settings into s0 from settings_pilot where id = 1;
+  delete from login_attempts;
+  -- (A1) a screen whose workers log in with a code: "?" / USDA only with its worker's login
+  update settings_pilot set settings = settings || jsonb_build_object(
+      'users', coalesce(settings -> 'users', '[]'::jsonb) || jsonb_build_array(
+         jsonb_build_object('name', 'Parts 1032', 'role', 'parts', 'codeHash', encode(digest('gt-worker:620201', 'sha256'), 'hex')),
+         jsonb_build_object('name', 'Inner 1032', 'role', 'inner', 'codeHash', encode(digest('gt-worker:620202', 'sha256'), 'hex'))),
+      'loginModeByRole', coalesce(settings -> 'loginModeByRole', '{}'::jsonb) || '{"parts":"code","inner":"code"}'::jsonb) where id = 1;
+  perform pg_temp.prep(940, 'outer');
+  r  := pg_temp.api(pg_temp.dev('PARTS'), 'select hold_set(940, ''parts'', ''usda'', ''whole'')');
+  tok := (pg_temp.api(pg_temp.dev('PARTS'), 'select worker_login(''parts'', ''620201'')')) ->> 'token';
+  hw := pg_temp.dev('PARTS') || jsonb_build_object('x-worker-token', tok);
+  r2 := pg_temp.api(hw, 'select hold_set(940, ''parts'', ''usda'', ''whole'')');
+  h  := (r2 #>> '{hold,id}')::bigint;
+  r3 := pg_temp.api(pg_temp.dev('PARTS'), format('select hold_resolve(%s, ''released'')', h));
+  r4 := pg_temp.api(hw, format('select hold_resolve(%s, ''released'')', h));
+  ok := r ->> 'error' = 'worker_login_required' and tok is not null and pg_temp.ok(r2)
+        and r3 ->> 'error' = 'worker_login_required' and pg_temp.ok(r4) and r4 #>> '{hold,resolution}' = 'released'
+        and (select created_by from animal_holds where id = h) = 'Parts 1032';
+  perform pg_temp.rec('v10.32 "?" / USDA on a code screen: refused without the worker''s login (put and close); with it, done and named', ok,
+    concat_ws(' | ', r::text, left(r2::text, 60), r3::text, left(r4::text, 60), (select created_by from animal_holds where id = h)));
+  -- (F1) one shared inner + outer screen: its inner tablet also holds for outer (after its login)
+  update settings_pilot set settings = settings || '{"screenConfig":"1both","esophagusEnabled":false}'::jsonb where id = 1;
+  perform pg_temp.prep(941, 'inner');
+  r  := pg_temp.api(pg_temp.dev('IN1'), 'select hold_set(941, ''outer'', ''question'')');
+  tok := (pg_temp.api(pg_temp.dev('IN1'), 'select worker_login(''inner'', ''620202'')')) ->> 'token';
+  hw := pg_temp.dev('IN1') || jsonb_build_object('x-worker-token', tok);
+  r2 := pg_temp.api(hw, 'select hold_set(941, ''outer'', ''question'')');
+  r3 := pg_temp.api(hw, format('select hold_resolve(%s, ''cancelled'')', (r2 #>> '{hold,id}')::bigint));
+  update settings_pilot set settings = settings || '{"screenConfig":"1in1out"}'::jsonb where id = 1;
+  r4 := pg_temp.api(hw, 'select hold_set(941, ''outer'', ''question'')');
+  ok := r ->> 'error' = 'worker_login_required' and pg_temp.ok(r2) and pg_temp.ok(r3) and r4 ->> 'error' = 'wrong_station';
+  perform pg_temp.rec('v10.32 shared inner + outer screen: its inner tablet puts / closes an outer "?" (after its login); any other configuration → wrong station', ok,
+    concat_ws(' | ', r::text, left(r2::text, 60), left(r3::text, 60), r4::text));
+  update settings_pilot set settings = s0 where id = 1;
+  delete from login_attempts;
+  -- (A2) a part on USDA hold is not printed: its flag may not turn on, the count may not reach 3
+  perform pg_temp.prep(942, 'outer'); perform pg_temp.prep(943, 'outer');
+  r  := pg_temp.api(pg_temp.dev('PARTS'), 'select hold_set(942, ''parts'', ''usda'', ''tongue'')');
+  h  := (r #>> '{hold,id}')::bigint;
+  r2 := pg_temp.api(pg_temp.dev('PARTS'), pg_temp.q_push(942, '{"parts_print_count":3,"parts_printed_as":"glatt","parts_scanned":true}'));
+  r3 := pg_temp.api(pg_temp.dev('PARTS'), pg_temp.q_push(942, '{"tongue_sticker":true}'));
+  r4 := pg_temp.api(pg_temp.dev('PARTS'), pg_temp.q_push(942, '{"parts_print_count":2,"cheek_sticker":true,"parts_printed_as":"glatt","parts_scanned":true}'));
+  ok := pg_temp.ok(r) and r2 ->> 'error' = 'held' and r3 ->> 'error' = 'held' and pg_temp.ok(r4)
+        and (pg_temp.ar(942)).parts_print_count = 2 and (pg_temp.ar(942)).cheek_sticker and not coalesce((pg_temp.ar(942)).tongue_sticker, false);
+  perform pg_temp.api(pg_temp.dev('PARTS'), format('select hold_resolve(%s, ''released'')', h));
+  r5 := pg_temp.api(pg_temp.dev('PARTS'), pg_temp.q_push(942, '{"parts_print_count":3,"tongue_sticker":true}'));
+  ok := ok and pg_temp.ok(r5) and (pg_temp.ar(942)).parts_print_count = 3 and (pg_temp.ar(942)).tongue_sticker;
+  -- a held cheek: the tongue (and the other cheek) print; "both cheeks out" waits
+  perform pg_temp.api(pg_temp.dev('PARTS'), 'select hold_set(943, ''parts'', ''usda'', ''cheek1'')');
+  r  := pg_temp.api(pg_temp.dev('PARTS'), pg_temp.q_push(943, '{"cheek_sticker":true,"parts_printed_as":"glatt","parts_scanned":true}'));
+  r2 := pg_temp.api(pg_temp.dev('PARTS'), pg_temp.q_push(943, '{"parts_print_count":2,"tongue_sticker":true,"parts_printed_as":"glatt","parts_scanned":true}'));
+  ok := ok and r ->> 'error' = 'held' and pg_temp.ok(r2) and (pg_temp.ar(943)).tongue_sticker and not coalesce((pg_temp.ar(943)).cheek_sticker, false);
+  perform pg_temp.rec('v10.32 a part on USDA hold is not printed on the server: the full set (3) and that part''s flag refused; the other parts recorded; after the release the part and the full set are recorded', ok,
+    concat_ws(' | ', r2::text, r3::text, left(r4::text, 50), left(r5::text, 50), (pg_temp.ar(942)).parts_print_count, r::text));
+end $$;
+$gt72$;
     v_step := 'the ACTIVE security surface against the expected manifest';
     execute $gt70$
 -- ── the ACTIVE security surface against the expected manifest ───────────────
