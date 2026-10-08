@@ -649,7 +649,7 @@ $gt37$;
     execute $gt38$
 -- ── corrections ──────────────────────────────────────────────────────────────
 do $$
-declare r jsonb; r2 jsonb; r3 jsonb; r4 jsonb; r5 jsonb; ok boolean;
+declare r jsonb; r2 jsonb; r3 jsonb; r4 jsonb; r5 jsonb; r6 jsonb; r7 jsonb; r8 jsonb; ok boolean;
 begin
   -- same tablet, right away → allowed (all four stages; inner reopen too)
   perform pg_temp.api(pg_temp.dev('SL1'), pg_temp.q_claim(914, 'slaughter', 'slaughtered', '', ''));
@@ -716,9 +716,8 @@ begin
 
   -- a change after the next stations worked: allowed, recorded for the team leader ("⚠ השתנה"),
   -- shown to every screen (board_flags) until the team leader marks it handled (change_ack)
+  -- (v10.32: before the outer ruling — after it the earlier stations change nothing, checked below)
   perform pg_temp.prep(927, 'inner');
-  perform pg_temp.api(pg_temp.dev('OUT1'), pg_temp.q_claim(927, 'outer', 'glatt', '', ''));
-  perform pg_temp.api(pg_temp.dev('PARTS'), pg_temp.q_push(927, '{"parts_print_count":3,"parts_printed_as":"glatt","parts_scanned":true}'));
   r := pg_temp.api(pg_temp.dev('SL1'), pg_temp.q_push(927, jsonb_build_object('slaughter', 'nevela', 'slaughter_time', (pg_temp.ar(927)).slaughter_time + 5)));
   perform pg_temp.prep(928, 'inner');
   perform pg_temp.api(pg_temp.dev('OUT2'), pg_temp.q_claim(928, 'outer', 'glatt', '', ''));
@@ -730,14 +729,24 @@ begin
   r5 := pg_temp.api(pg_temp.dev('SL1'), format('select change_ack(%L, 1)', 'nope'));
   ok := pg_temp.ok(r) and (pg_temp.ar(927)).slaughter = 'nevela' and pg_temp.ok(r2) and (pg_temp.ar(928)).outer_status = 'treif'
         and exists (select 1 from animal_changes where animal_id = 927 and stage = 'slaughter' and old_value = 'slaughtered'
-                       and new_value = 'nevela' and done ->> 'outer' = 'glatt' and (done ->> 'partsPrinted')::int = 3)
+                       and new_value = 'nevela' and done ->> 'inner' = 'confirmed')
         and exists (select 1 from animal_changes where animal_id = 928 and stage = 'outer' and done ->> 'stamped' = 'true')
         and exists (select 1 from jsonb_array_elements(r3 -> 'changes') x where (x ->> 'n')::int = 928 and x ->> 'ackAt' is null)
         and pg_temp.ok(r4) and (select ack_at from animal_changes where animal_id = 927 and stage = 'slaughter' order by id desc limit 1) is not null
         and r5 ->> 'error' = 'unauthorized'
         and not exists (select 1 from animal_changes where animal_id in (916, 919));   -- nothing later had happened there
-  perform pg_temp.rec('v10.26 a change after the next stations worked: allowed, recorded (what was done), shown, handled by the team leader', ok,
-    concat_ws(' | ', left(r::text, 50), left(r2::text, 50), left(r3::text, 80), r4::text, r5::text));
+  -- v10.32 (owner): once the outer inspector ruled, slaughter / esophagus / inner change nothing (outer_ruled)
+  perform pg_temp.prep(889, 'outer');
+  perform set_config('gt.reset_in_progress', 'true', true);
+  update animals_pilot set eso_checked = true, eso_result = 'ok' where id = 889;
+  perform set_config('gt.reset_in_progress', '', true);
+  r6 := pg_temp.api(pg_temp.dev('SL1'), pg_temp.q_push(889, jsonb_build_object('slaughter', 'nevela', 'slaughter_time', (pg_temp.ar(889)).slaughter_time + 5)));
+  r7 := pg_temp.api(pg_temp.dev('ESO1'), format('select eso_change(889, ''nevela'', %L, %s)', pg_temp.devid('ESO1'), pg_temp.ep()));
+  r8 := pg_temp.api(pg_temp.dev('IN1'), pg_temp.q_push(889, jsonb_build_object('inner_status', 'treif', 'inner_time', (pg_temp.ar(889)).inner_time + 5)));
+  ok := ok and r6 ->> 'error' = 'outer_ruled' and r7 ->> 'error' = 'outer_ruled' and r8 ->> 'error' = 'outer_ruled'
+        and (pg_temp.ar(889)).slaughter = 'slaughtered' and (pg_temp.ar(889)).eso_result = 'ok' and (pg_temp.ar(889)).inner_status = 'confirmed';
+  perform pg_temp.rec('v10.26 a change after the next stations worked: allowed, recorded (what was done), shown, handled by the team leader; v10.32: after the outer ruling slaughter / esophagus / inner change nothing', ok,
+    concat_ws(' | ', left(r::text, 50), left(r2::text, 50), left(r3::text, 80), r4::text, r5::text, r6 ->> 'error', r7 ->> 'error', r8 ->> 'error'));
 
   -- lung check: abandoned only by the tablet that opened it; 10-minute takeover still works
   perform pg_temp.prep(934, 'slaughter'); perform pg_temp.prep(935, 'slaughter'); perform pg_temp.prep(936, 'slaughter');
@@ -1351,7 +1360,15 @@ begin
   ok := ok and pg_temp.api(pg_temp.dev('ESO1'), 'select hold_set(983, ''eso'', ''usda'', ''right'')') ->> 'error' = 'bad_value'
            and pg_temp.api(pg_temp.dev('IN1'), 'select hold_set(983, ''inner'', ''usda'', ''left'')') ->> 'error' = 'bad_value'
            and pg_temp.api(pg_temp.dev('LEGS'), 'select hold_set(983, ''legs'', ''usda'', ''right'')') ->> 'error' = 'bad_value';
-  perform pg_temp.rec('v10.32 test mode expired: the same team-leader session puts no "?" / USDA; a station tablet carrying it gets nothing beyond its own station; a USDA half only at outer / stamps (the animal is split after the inner check)', ok,
+  -- USDA belongs to the area the animal is in: slaughtered, esophagus not yet → esophagus only (not legs / inner / stamps)
+  -- (the esophagus screen may be off in this plant's settings — then the first area is legs)
+  perform pg_temp.prep(890, 'slaughter');
+  ok := ok and _usda_zone(pg_temp.ar(890)) in ('eso', 'legs')
+           and pg_temp.api(pg_temp.dev('IN1'), 'select hold_set(890, ''inner'', ''usda'', ''whole'')') ->> 'error' = 'wrong_zone'
+           and pg_temp.api(pg_temp.dev('STAMPS'), 'select hold_set(890, ''stamps'', ''usda'', ''whole'')') ->> 'zone' = _usda_zone(pg_temp.ar(890))
+           and pg_temp.ok(pg_temp.api(pg_temp.dev(case _usda_zone(pg_temp.ar(890)) when 'eso' then 'ESO1' else 'LEGS' end),
+                          format('select hold_set(890, %L, ''usda'', ''whole'')', _usda_zone(pg_temp.ar(890)))));
+  perform pg_temp.rec('v10.32 test mode expired: the same team-leader session puts no "?" / USDA; a station tablet carrying it gets nothing beyond its own station; a USDA half only at outer / stamps (the animal is split after the inner check); USDA only by the station of the area the animal is in', ok,
     concat_ws(' | ', r::text, r2::text, r3::text, r4::text));
   perform pg_temp.testmode(false);
 end $$;
@@ -2483,6 +2500,9 @@ begin
 
   -- USDA, the whole animal: every station stops; only the station that put it releases / condemns
   perform pg_temp.prep(985, 'outer'); perform pg_temp.prep(986, 'outer');
+  perform set_config('gt.reset_in_progress', 'true', true);          -- (v10.32: USDA by the station of the area — past legs → stamps)
+  update animals_pilot set eso_checked = true, eso_result = 'ok', legs_stickers = true, head_stickers = true where id in (985, 986, 987);
+  perform set_config('gt.reset_in_progress', '', true);
   r  := pg_temp.api(pg_temp.dev('PARTS'), format('select hold_set(%s, ''parts'', ''usda'', ''whole'')', 985));
   h  := (r #>> '{hold,id}')::bigint;
   r2 := pg_temp.api(pg_temp.dev('PARTS'), pg_temp.q_push(985, '{"parts_print_count":3,"parts_printed_as":"glatt","parts_scanned":true}'));
@@ -2505,6 +2525,9 @@ begin
 
   -- USDA on a part / half: only that part waits; a "?" at a processing station holds that station
   perform pg_temp.prep(987, 'outer');
+  perform set_config('gt.reset_in_progress', 'true', true);
+  update animals_pilot set eso_checked = true, eso_result = 'ok', legs_stickers = true, head_stickers = true where id = 987;
+  perform set_config('gt.reset_in_progress', '', true);
   r  := pg_temp.api(pg_temp.dev('PARTS'), format('select hold_set(%s, ''parts'', ''usda'', ''tongue'')', 987));
   r2 := pg_temp.api(pg_temp.dev('PARTS'), pg_temp.q_push(987, '{"parts_print_count":2,"cheek_sticker":true,"parts_printed_as":"glatt","parts_scanned":true}'));   -- v10.32: the two cheeks only
   r3 := pg_temp.api(pg_temp.dev('STAMPS'), format('select hold_set(%s, ''stamps'', ''usda'', ''left'')', 987));
@@ -2539,11 +2562,11 @@ begin
          jsonb_build_object('name', 'Parts 1032', 'role', 'parts', 'codeHash', encode(digest('gt-worker:620201', 'sha256'), 'hex')),
          jsonb_build_object('name', 'Inner 1032', 'role', 'inner', 'codeHash', encode(digest('gt-worker:620202', 'sha256'), 'hex'))),
       'loginModeByRole', coalesce(settings -> 'loginModeByRole', '{}'::jsonb) || '{"parts":"code","inner":"code"}'::jsonb) where id = 1;
-  perform pg_temp.prep(940, 'outer');
-  r  := pg_temp.api(pg_temp.dev('PARTS'), 'select hold_set(940, ''parts'', ''usda'', ''whole'')');
+  perform pg_temp.prep(881, 'outer');
+  r  := pg_temp.api(pg_temp.dev('PARTS'), 'select hold_set(881, ''parts'', ''usda'', ''whole'')');
   tok := (pg_temp.api(pg_temp.dev('PARTS'), 'select worker_login(''parts'', ''620201'')')) ->> 'token';
   hw := pg_temp.dev('PARTS') || jsonb_build_object('x-worker-token', tok);
-  r2 := pg_temp.api(hw, 'select hold_set(940, ''parts'', ''usda'', ''whole'')');
+  r2 := pg_temp.api(hw, 'select hold_set(881, ''parts'', ''usda'', ''whole'')');
   h  := (r2 #>> '{hold,id}')::bigint;
   r3 := pg_temp.api(pg_temp.dev('PARTS'), format('select hold_resolve(%s, ''released'')', h));
   r4 := pg_temp.api(hw, format('select hold_resolve(%s, ''released'')', h));
@@ -2554,59 +2577,59 @@ begin
     concat_ws(' | ', r::text, left(r2::text, 60), r3::text, left(r4::text, 60), (select created_by from animal_holds where id = h)));
   -- (F1) one shared inner + outer screen: its inner tablet also holds for outer (after its login)
   update settings_pilot set settings = settings || '{"screenConfig":"1both","esophagusEnabled":false}'::jsonb where id = 1;
-  perform pg_temp.prep(941, 'inner');
-  r  := pg_temp.api(pg_temp.dev('IN1'), 'select hold_set(941, ''outer'', ''question'')');
+  perform pg_temp.prep(882, 'inner');
+  r  := pg_temp.api(pg_temp.dev('IN1'), 'select hold_set(882, ''outer'', ''question'')');
   tok := (pg_temp.api(pg_temp.dev('IN1'), 'select worker_login(''inner'', ''620202'')')) ->> 'token';
   hw := pg_temp.dev('IN1') || jsonb_build_object('x-worker-token', tok);
-  r2 := pg_temp.api(hw, 'select hold_set(941, ''outer'', ''question'')');
+  r2 := pg_temp.api(hw, 'select hold_set(882, ''outer'', ''question'')');
   r3 := pg_temp.api(hw, format('select hold_resolve(%s, ''cancelled'')', (r2 #>> '{hold,id}')::bigint));
   update settings_pilot set settings = settings || '{"screenConfig":"1in1out"}'::jsonb where id = 1;
-  r4 := pg_temp.api(hw, 'select hold_set(941, ''outer'', ''question'')');
+  r4 := pg_temp.api(hw, 'select hold_set(882, ''outer'', ''question'')');
   ok := r ->> 'error' = 'worker_login_required' and pg_temp.ok(r2) and pg_temp.ok(r3) and r4 ->> 'error' = 'wrong_station';
   perform pg_temp.rec('v10.32 shared inner + outer screen: its inner tablet puts / closes an outer "?" (after its login); any other configuration → wrong station', ok,
     concat_ws(' | ', r::text, left(r2::text, 60), left(r3::text, 60), r4::text));
   update settings_pilot set settings = s0 where id = 1;
   delete from login_attempts;
   -- (A2) a part on USDA hold is not printed: its flag may not turn on, the count may not reach 3
-  perform pg_temp.prep(942, 'outer'); perform pg_temp.prep(943, 'outer');
-  r  := pg_temp.api(pg_temp.dev('PARTS'), 'select hold_set(942, ''parts'', ''usda'', ''tongue'')');
+  perform pg_temp.prep(883, 'outer'); perform pg_temp.prep(884, 'outer');
+  r  := pg_temp.api(pg_temp.dev('PARTS'), 'select hold_set(883, ''parts'', ''usda'', ''tongue'')');
   h  := (r #>> '{hold,id}')::bigint;
-  r2 := pg_temp.api(pg_temp.dev('PARTS'), pg_temp.q_push(942, '{"parts_print_count":3,"parts_printed_as":"glatt","parts_scanned":true}'));
-  r3 := pg_temp.api(pg_temp.dev('PARTS'), pg_temp.q_push(942, '{"tongue_sticker":true}'));
-  r4 := pg_temp.api(pg_temp.dev('PARTS'), pg_temp.q_push(942, '{"parts_print_count":2,"cheek_sticker":true,"parts_printed_as":"glatt","parts_scanned":true}'));
+  r2 := pg_temp.api(pg_temp.dev('PARTS'), pg_temp.q_push(883, '{"parts_print_count":3,"parts_printed_as":"glatt","parts_scanned":true}'));
+  r3 := pg_temp.api(pg_temp.dev('PARTS'), pg_temp.q_push(883, '{"tongue_sticker":true}'));
+  r4 := pg_temp.api(pg_temp.dev('PARTS'), pg_temp.q_push(883, '{"parts_print_count":2,"cheek_sticker":true,"parts_printed_as":"glatt","parts_scanned":true}'));
   ok := pg_temp.ok(r) and r2 ->> 'error' = 'held' and r3 ->> 'error' = 'held' and pg_temp.ok(r4)
-        and (pg_temp.ar(942)).parts_print_count = 2 and (pg_temp.ar(942)).cheek_sticker and not coalesce((pg_temp.ar(942)).tongue_sticker, false);
+        and (pg_temp.ar(883)).parts_print_count = 2 and (pg_temp.ar(883)).cheek_sticker and not coalesce((pg_temp.ar(883)).tongue_sticker, false);
   perform pg_temp.api(pg_temp.dev('PARTS'), format('select hold_resolve(%s, ''released'')', h));
-  r5 := pg_temp.api(pg_temp.dev('PARTS'), pg_temp.q_push(942, '{"parts_print_count":3,"tongue_sticker":true}'));
-  ok := ok and pg_temp.ok(r5) and (pg_temp.ar(942)).parts_print_count = 3 and (pg_temp.ar(942)).tongue_sticker;
+  r5 := pg_temp.api(pg_temp.dev('PARTS'), pg_temp.q_push(883, '{"parts_print_count":3,"tongue_sticker":true}'));
+  ok := ok and pg_temp.ok(r5) and (pg_temp.ar(883)).parts_print_count = 3 and (pg_temp.ar(883)).tongue_sticker;
   -- a held cheek: the tongue (and the other cheek) print; "both cheeks out" waits
-  perform pg_temp.api(pg_temp.dev('PARTS'), 'select hold_set(943, ''parts'', ''usda'', ''cheek1'')');
-  r  := pg_temp.api(pg_temp.dev('PARTS'), pg_temp.q_push(943, '{"cheek_sticker":true,"parts_printed_as":"glatt","parts_scanned":true}'));
-  r2 := pg_temp.api(pg_temp.dev('PARTS'), pg_temp.q_push(943, '{"parts_print_count":2,"tongue_sticker":true,"parts_printed_as":"glatt","parts_scanned":true}'));
-  ok := ok and r ->> 'error' = 'held' and pg_temp.ok(r2) and (pg_temp.ar(943)).tongue_sticker and not coalesce((pg_temp.ar(943)).cheek_sticker, false);
+  perform pg_temp.api(pg_temp.dev('PARTS'), 'select hold_set(884, ''parts'', ''usda'', ''cheek1'')');
+  r  := pg_temp.api(pg_temp.dev('PARTS'), pg_temp.q_push(884, '{"cheek_sticker":true,"parts_printed_as":"glatt","parts_scanned":true}'));
+  r2 := pg_temp.api(pg_temp.dev('PARTS'), pg_temp.q_push(884, '{"parts_print_count":2,"tongue_sticker":true,"parts_printed_as":"glatt","parts_scanned":true}'));
+  ok := ok and r ->> 'error' = 'held' and pg_temp.ok(r2) and (pg_temp.ar(884)).tongue_sticker and not coalesce((pg_temp.ar(884)).cheek_sticker, false);
   -- an inner "?" is answered when its window (e.g. the maw) is decided — before the lungs; the esophagus has no "answered"
-  perform pg_temp.prep(944, 'slaughter'); perform pg_temp.api(pg_temp.dev('ESO1'), pg_temp.q_claim(944, 'eso', 'ok', '', ''));
-  r  := pg_temp.api(pg_temp.dev('IN1'), 'select hold_set(944, ''inner'', ''question'')');
+  perform pg_temp.prep(885, 'slaughter'); perform pg_temp.api(pg_temp.dev('ESO1'), pg_temp.q_claim(885, 'eso', 'ok', '', ''));
+  r  := pg_temp.api(pg_temp.dev('IN1'), 'select hold_set(885, ''inner'', ''question'')');
   r2 := pg_temp.api(pg_temp.dev('IN1'), format('select hold_resolve(%s, ''answered'')', (r #>> '{hold,id}')::bigint));
   -- (the window of an inner "?" is kept on the server; asked again in another window, the same "?" moves there)
-  r4 := pg_temp.api(pg_temp.dev('IN1'), 'select hold_set(946, ''inner'', ''question'', ''maw'')');
-  r5 := pg_temp.api(pg_temp.dev('IN1'), 'select hold_set(946, ''inner'', ''question'', ''lung'')');
+  r4 := pg_temp.api(pg_temp.dev('IN1'), 'select hold_set(887, ''inner'', ''question'', ''maw'')');
+  r5 := pg_temp.api(pg_temp.dev('IN1'), 'select hold_set(887, ''inner'', ''question'', ''lung'')');
   ok := ok and pg_temp.ok(r4) and r4 #>> '{hold,part}' = 'maw' and pg_temp.ok(r5) and r5 #>> '{hold,part}' = 'lung'
         and r5 #>> '{hold,id}' = r4 #>> '{hold,id}'
-        and (select count(*) from animal_holds where animal_id = 946 and station = 'inner' and resolved_at is null) = 1
-        and pg_temp.api(pg_temp.dev('ESO1'), 'select hold_set(946, ''eso'', ''question'', ''maw'')') ->> 'error' = 'bad_value';
-  r3 := pg_temp.api(pg_temp.dev('ESO1'), 'select hold_set(945, ''eso'', ''question'')');
-  ok := ok and pg_temp.ok(r) and pg_temp.ok(r2) and r2 #>> '{hold,resolution}' = 'answered' and (pg_temp.ar(944)).inner_status is null
+        and (select count(*) from animal_holds where animal_id = 887 and station = 'inner' and resolved_at is null) = 1
+        and pg_temp.api(pg_temp.dev('ESO1'), 'select hold_set(887, ''eso'', ''question'', ''maw'')') ->> 'error' = 'bad_value';
+  r3 := pg_temp.api(pg_temp.dev('ESO1'), 'select hold_set(886, ''eso'', ''question'')');
+  ok := ok and pg_temp.ok(r) and pg_temp.ok(r2) and r2 #>> '{hold,resolution}' = 'answered' and (pg_temp.ar(885)).inner_status is null
         and pg_temp.api(pg_temp.dev('ESO1'), format('select hold_resolve(%s, ''answered'')', (r3 #>> '{hold,id}')::bigint)) ->> 'error' = 'bad_value';
   -- an open esophagus "?": the number has not passed the esophagus — no legs / head stickers, no lungs
-  perform pg_temp.prep(947, 'slaughter');
-  r  := pg_temp.api(pg_temp.dev('ESO1'), 'select hold_set(947, ''eso'', ''question'')');
-  r2 := pg_temp.api(pg_temp.dev('LEGS'), pg_temp.q_push(947, '{"legs_stickers":true,"head_stickers":true}'));
-  r3 := pg_temp.api(pg_temp.dev('IN1'), pg_temp.q_claim(947, 'inner_start', 'in_progress', '', ''));
+  perform pg_temp.prep(888, 'slaughter');
+  r  := pg_temp.api(pg_temp.dev('ESO1'), 'select hold_set(888, ''eso'', ''question'')');
+  r2 := pg_temp.api(pg_temp.dev('LEGS'), pg_temp.q_push(888, '{"legs_stickers":true,"head_stickers":true}'));
+  r3 := pg_temp.api(pg_temp.dev('IN1'), pg_temp.q_claim(888, 'inner_start', 'in_progress', '', ''));
   ok := ok and pg_temp.ok(r) and r2 ->> 'error' = 'out_of_order' and r3 ->> 'error' = 'out_of_order'
-        and not coalesce((pg_temp.ar(947)).legs_stickers, false) and (pg_temp.ar(947)).inner_status is null;
+        and not coalesce((pg_temp.ar(888)).legs_stickers, false) and (pg_temp.ar(888)).inner_status is null;
   perform pg_temp.rec('v10.32 a part on USDA hold is not printed on the server: the full set (3) and that part''s flag refused; the other parts recorded; after the release the part and the full set are recorded; an inner "?" answered when its window is decided; an open esophagus "?" stops the legs stickers and the lungs', ok,
-    concat_ws(' | ', r4::text, r5::text, r2::text, r3::text, (pg_temp.ar(942)).parts_print_count, r::text));
+    concat_ws(' | ', r4::text, r5::text, r2::text, r3::text, (pg_temp.ar(883)).parts_print_count, r::text));
 end $$;
 $gt72$;
     v_step := 'the ACTIVE security surface against the expected manifest';

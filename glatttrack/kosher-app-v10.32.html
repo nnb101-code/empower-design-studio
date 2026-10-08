@@ -4955,6 +4955,7 @@ function _gtUsdaConfirm(st){
 }
 async function gtUsdaDo(st,part){
   const idx=_gtReadNum(); if(idx<0){ KS.notice(L('מספר לא תקין','Invalid number','Número inválido')); return; }
+  if(!_gtUsdaMine(st, idx)){ _gtUsdaNotMine(idx); return; }      // v10.32: the area rule (the server refuses too)
   gtSheetClose();
   if(await gtHoldPut(idx, st, 'usda', part)) KS.notice('USDA HOLD — #'+(idx+1)+' · '+_gtL(GT_PART_NAME[part])+L(' — ממשיכים.',' — go on.',' — siga.'));
 }
@@ -5041,7 +5042,7 @@ function gtTopBarsInit(){
     const st=GT_SCREEN_STATION[id], mid=bar.querySelector('.tb-mid');
     const box=document.createElement('div'); box.className='gt-tb'; box.setAttribute('data-no-i18n','');
     box.innerHTML=(st!=='slaughter' && st!=='inner' ? `<button class="gt-tbb gt-tbq" data-gt-q data-gt-st="${st}"></button>` : '')
-      +(st!=='slaughter' ? `<button class="gt-tbb gt-tbu" onclick="gtUsdaStart('${st}')">USDA HOLD</button>` : '')
+      +(st!=='slaughter' && (st!=='outer' || !_gtScreenUsed('stamps')) ? `<button class="gt-tbb gt-tbu" onclick="gtUsdaStart('${st}')">USDA HOLD</button>` : '')   /* v10.32: after the inner check USDA belongs to stamps */
       +`<button class="gt-tbb gt-tbl" onclick="gtHeldList('${st}')" data-gt-count="${st}" style="display:none"></button>`;
     if(mid) bar.insertBefore(box, mid); else bar.appendChild(box);
     const qb=box.querySelector('[data-gt-q]'); if(qb) _gtQButtonWire(qb, st);
@@ -5074,9 +5075,42 @@ function gtWindowQInit(){
   add(document.querySelector('#decModal .dec-box'), 'gtQOuter', ()=>gtWindowQuestion('outer'));
   gtUsdaInChangeWindows();
 }
+// v10.32 (owner): a USDA hold belongs to the area the animal is in now (same rule as the server's _usda_zone):
+// slaughter→esophagus: esophagus · esophagus→legs: legs · legs→inner: inner · after inner: stamps. Parts: its own.
+function _gtScreenUsed(sc){ try{ const p=KS.getSettings().screensPlan; return (p && Array.isArray(p.screens)) ? p.screens.includes(sc) : true; }catch(e){ return true; } }
+function _gtUsdaZone(i){
+  const x=KS.getAnimal(i); if(!x || !x.slaughter) return null;
+  const alive=(x.slaughter==='slaughtered'||x.slaughter==='notChalak');
+  if(alive && KS.getSettings().esophagusEnabled && _esoApplies(x) && !x.esoChecked) return 'eso';
+  if(_gtScreenUsed('legs') && !x.headStickers) return 'legs';
+  if(!alive) return null;
+  if(!(x.innerStatus==='confirmed'||x.innerStatus==='treif')) return 'inner';
+  return _gtScreenUsed('stamps') ? 'stamps' : 'outer';
+}
+function _gtUsdaMine(st, i){ return st==='parts' || _gtUsdaZone(i)===st; }
+function _gtUsdaNotMine(i){
+  const z=_gtUsdaZone(i);
+  KS.notice('#'+(i+1)+' — '+(z ? L('ה-USDA של המספר הזה שייך עכשיו לתחנת ','this number\'s USDA hold belongs now to the station: ','la retención USDA de este número corresponde ahora a: ')+_gtL(GT_ST_NAME[z]||[z,z,z])
+                                  : L('אין USDA למספר הזה.','No USDA hold for this number.','No hay retención USDA para este número.')));
+}
+// show the change window's USDA button only to the station whose area the number is in
+function _gtUsdaChgRefresh(){
+  const map={esoWarnModal:['eso',()=>esoChangeIdx],inWarnModal:['inner',()=>inChangeIdx],outWarnModal:['outer',()=>outChangeIdx],
+             lgRpModal:['legs',()=>lgReprintIdx],partsRpModal:['parts',()=>partsReprintIdx],stampsRpModal:['stamps',()=>stampsRpIdx]};
+  Object.keys(map).forEach(mid=>{ const b=document.querySelector('#'+mid+' .gt-usda-chg'); if(!b) return;
+    let i=-1; try{ i=map[mid][1](); }catch(e){} b.style.display=(i>=0 && _gtUsdaMine(map[mid][0], i)) ? 'block' : 'none'; });
+}
+function _gtUsdaWrapOpeners(){
+  if(window._gtUsdaWrapped) return; window._gtUsdaWrapped=true;
+  ['esoOpenChangeWarn','inOpenChangeWarn','outOpenChangeWarn','lgReprintWarn','partsReprintWarn','stampsTapAnimal'].forEach(fn=>{
+    const o=window[fn]; if(typeof o!=='function') return;
+    window[fn]=function(){ const r=o.apply(this, arguments); try{ _gtUsdaChgRefresh(); }catch(e){} return r; };
+  });
+}
 // v10.32 (owner): an animal already past this station (e.g. it fell to the floor 5 numbers later) — tap
 // it, and the change window also offers USDA HOLD for that number.
 function gtUsdaInChangeWindows(){
+  _gtUsdaWrapOpeners();
   const map=[['esoWarnModal','eso',()=>esoChangeIdx],['inWarnModal','inner',()=>inChangeIdx],['outWarnModal','outer',()=>outChangeIdx],
              ['lgRpModal','legs',()=>lgReprintIdx],['partsRpModal','parts',()=>partsReprintIdx],['stampsRpModal','stamps',()=>stampsRpIdx]];
   map.forEach(([mid, st, getIdx])=>{
@@ -5085,7 +5119,7 @@ function gtUsdaInChangeWindows(){
     const b=document.createElement('button'); b.className='gt-usda-chg'; b.setAttribute('data-no-i18n','');
     b.style.cssText='display:block;width:100%;margin-top:12px;padding:12px;border-radius:12px;border:2px solid #B39DFF;background:#6A3FB5;color:#fff;font:800 17px Arial;cursor:pointer';
     b.textContent='USDA HOLD';
-    b.onclick=()=>{ let i=-1; try{ i=getIdx(); }catch(e){} m.classList.remove('open'); gtUsdaStart(st, i); };
+    b.onclick=()=>{ let i=-1; try{ i=getIdx(); }catch(e){} if(i>=0 && !_gtUsdaMine(st, i)){ _gtUsdaNotMine(i); return; } m.classList.remove('open'); gtUsdaStart(st, i); };
     box.appendChild(b);
   });
 }
@@ -5279,6 +5313,8 @@ var _GT_ERR = {
   no_recovery_code:['אין קוד שחזור שמור. צריך את המתקין.','There is no saved recovery code. The installer is needed.','No hay código de recuperación. Se necesita al instalador.'],
   rate_limited:['יותר מדי ניסיונות — המתן כמה דקות ונסה שוב.','Too many attempts — wait a few minutes and try again.','Demasiados intentos — espere unos minutos e intente de nuevo.'],
   moved_on:['לא ניתן לשנות פסיקה זו: כבר עברת לעבוד על בהמה אחרת מאז שנקבעה. שינוי אפשרי רק כל עוד לא התקדמת הלאה.','Cannot change this ruling: you already worked on a different animal since it was set. Changes are only possible before moving on.','No se puede cambiar este dictamen: ya trabajaste en otro animal desde que se definió. Solo se puede cambiar antes de avanzar.'],
+  outer_ruled:['כבר נפסק בבדיקת חוץ — אי אפשר לשנות. השינוי לא נרשם.','Already ruled by the outer inspector — it cannot be changed. The change was not recorded.','Ya dictaminado en el control externo — no se puede cambiar.'],
+  wrong_zone:['ה-USDA של המספר הזה שייך לתחנה של האזור שבו הבהמה נמצאת עכשיו.','The USDA hold of this number belongs to the station of the area the animal is in now.','La retención USDA de este número corresponde a la estación de la zona donde está el animal.'],
   correction_not_allowed:['לא ניתן לשנות פסיקה זו בשלב הזה — השינוי לא נרשם.','This ruling can no longer be changed at this stage — the change was not recorded.','Este dictamen ya no se puede cambiar en esta etapa — el cambio no se registró.'],
   not_found:['לא נמצאה בהמה כזו ביום הזה.','No such animal on that day.','No se encontró ese animal ese día.'],
   bad_id:['מספר בהמה לא תקין.','Invalid animal number.','Número de animal no válido.'],
@@ -5313,7 +5349,7 @@ function gtErrCode(e){
   if(c==='PGRST202' || c==='42883') return 'missing_fn';
   const k = s.trim().toLowerCase();
   if(Object.prototype.hasOwnProperty.call(_GT_ERR, k)) return k;
-  const w = s.match(/\b(wrong_station|stale_board|device_not_paired|unauthorized|code_invalid|rate_limited|moved_on|correction_not_allowed|bad_id|bad_picture|no_device|setup_code_required|eso_locked|nc_kosher_or_treif_only|already_ruled|held|bad_settings|invalid_value|not_checked|reason_required|worker_login_required)\b/);
+  const w = s.match(/\b(wrong_station|stale_board|device_not_paired|unauthorized|code_invalid|rate_limited|moved_on|correction_not_allowed|bad_id|bad_picture|no_device|setup_code_required|eso_locked|nc_kosher_or_treif_only|already_ruled|held|bad_settings|invalid_value|not_checked|reason_required|worker_login_required|outer_ruled|wrong_zone)\b/);
   if(w) return w[1];
   if(c==='42501') return 'permission_denied';
   if(typeof e==='object' && !c && /fetch|network|timeout|load failed|offline/i.test(s)) return 'network';
@@ -6922,6 +6958,9 @@ function _gtIsEsoStation(){
 function _gtCorrectionBlock(stage, idx){
   // v10.26: a ruling can always be changed by the station (any of its tablets), after a warning
   // that says what the next stations already did; the server records it (⚠ for the team leader)
+  { const _a=KS.getAnimal(idx);                 // v10.32 (owner): after the outer ruling the earlier stations change nothing
+    if(_a && _a.outerStatus && ['slaughter','eso','inner'].includes(stage))
+      return L('בהמה #'+(idx+1)+' — כבר נפסקה בבדיקת חוץ. אי אפשר לשנות.','Animal #'+(idx+1)+' — already ruled by the outer inspector. It cannot be changed.','Animal #'+(idx+1)+' — ya dictaminado en el control externo. No se puede cambiar.'); }
   if(KS.getAnimal(idx)) return null;
   const a=KS.getAnimal(idx);
   const P=L('בהמה #'+(idx+1)+' — ','Animal #'+(idx+1)+' — ','Animal #'+(idx+1)+' — ');

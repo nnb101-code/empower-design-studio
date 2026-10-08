@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict us5acrSLLvRPuQxm2WGg3SKA3o29P29uoeYYvA4kJrdf8NlEVbTrN7GRDdZAZzG
+\restrict oC0hFyb9COICJT5bpq1JDuog7yFRI9umoqnuXcKTQW2BCzwkLuyCTp10p8kCugp
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -1049,6 +1049,8 @@ CREATE FUNCTION public._correction_check(p_stage text, a public.animals_pilot, p
     AS $$
 declare v_by text; v_role text;
 begin
+  -- v10.32 (owner): once the outer inspector ruled, the earlier stations change nothing any more
+  if p_stage in ('slaughter', 'eso', 'inner') and a.outer_status is not null then return 'outer_ruled'; end if;
   if p_dev is null then return 'correction_not_allowed'; end if;
   v_by := case p_stage when 'slaughter' then a.slaughter_by_device when 'eso' then a.eso_by_device
                        when 'inner' then a.inner_by_device when 'outer' then a.outer_by_device end;
@@ -1705,6 +1707,21 @@ $$;
 
 
 ALTER FUNCTION public._gt_one_inspection() OWNER TO postgres;
+
+--
+-- Name: _gt_screen_used(text); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public._gt_screen_used(p_screen text) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $$
+  select case when jsonb_typeof(_gt_settings() #> '{screensPlan,screens}') = 'array'
+              then (_gt_settings() #> '{screensPlan,screens}') ? p_screen else true end;
+$$;
+
+
+ALTER FUNCTION public._gt_screen_used(p_screen text) OWNER TO postgres;
 
 --
 -- Name: _gt_settings(); Type: FUNCTION; Schema: public; Owner: postgres
@@ -2616,6 +2633,10 @@ begin
   if p_err = 'moved_on' then
     raise exception 'GT:MOVED_ON correction-blocked: already moved on — % status is locked', p_stage using errcode = 'P0001';
   end if;
+  if p_err = 'outer_ruled' then        -- v10.32
+    raise exception 'GT:OUTER_RULED outer_ruled: the outer inspector already ruled — the % ruling can no longer be changed', p_stage
+      using errcode = 'P0001';
+  end if;
   raise exception 'GT:CORRECTION_NOT_ALLOWED correction-blocked: only the station that made this % ruling can change it, right away, before the next stage', p_stage
     using errcode = 'P0001';
 end $$;
@@ -3385,6 +3406,27 @@ end $$;
 ALTER FUNCTION public._ts_or_null(p text) OWNER TO postgres;
 
 --
+-- Name: _usda_zone(public.animals_pilot); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public._usda_zone(a public.animals_pilot) RETURNS text
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $$
+declare v_alive boolean := a.slaughter in ('slaughtered', 'notChalak');
+begin
+  if a.slaughter is null then return null; end if;
+  if v_alive and _eso_required(a.id) and not coalesce(a.eso_checked, false) then return 'eso'; end if;
+  if _gt_screen_used('legs') and not coalesce(a.head_stickers, false) then return 'legs'; end if;
+  if not v_alive then return null; end if;                       -- nevela / shot: nothing further
+  if a.inner_status is null or a.inner_status not in ('confirmed', 'treif') then return 'inner'; end if;
+  return case when _gt_screen_used('stamps') then 'stamps' else 'outer' end;
+end $$;
+
+
+ALTER FUNCTION public._usda_zone(a public.animals_pilot) OWNER TO postgres;
+
+--
 -- Name: _worker_code_hash(text); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -3637,7 +3679,7 @@ begin
   end;
 
   if v_err is not null then
-    if v_err in ('moved_on', 'correction_not_allowed', 'eso_locked') then
+    if v_err in ('moved_on', 'correction_not_allowed', 'eso_locked', 'outer_ruled') then
       perform _log_correction_rejected(v_dev, v_cur, null, v_err, jsonb_build_object('via', 'animal_push'));
     end if;
     if v_err in ('out_of_order', 'earlier_day_open') then
@@ -5081,6 +5123,10 @@ begin
     v_ep := a.board_epoch;
   end if;
   if v_ep is null then return jsonb_build_object('ok', false, 'error', 'stale_board'); end if;
+  -- v10.32: a USDA hold only by the station of the area the animal is in (the parts station: its own parts)
+  if p_kind = 'usda' and p_station <> 'parts' and _usda_zone(a) is distinct from p_station then
+    return jsonb_build_object('ok', false, 'error', 'wrong_zone', 'zone', _usda_zone(a));
+  end if;
   -- a question only while the station has not ruled the number
   if p_kind = 'question' and ((p_station = 'slaughter' and a.slaughter is not null)
                               or (p_station = 'eso' and coalesce(a.eso_checked, false))
@@ -9299,6 +9345,13 @@ REVOKE ALL ON FUNCTION public._gt_one_inspection() FROM PUBLIC;
 
 
 --
+-- Name: FUNCTION _gt_screen_used(p_screen text); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public._gt_screen_used(p_screen text) FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION _gt_settings(); Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -9872,6 +9925,13 @@ REVOKE ALL ON FUNCTION public._test_mode_on_at() FROM PUBLIC;
 --
 
 REVOKE ALL ON FUNCTION public._ts_or_null(p text) FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION _usda_zone(a public.animals_pilot); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public._usda_zone(a public.animals_pilot) FROM PUBLIC;
 
 
 --
@@ -10709,5 +10769,5 @@ GRANT ALL ON TABLE public.system_flags TO service_role;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict us5acrSLLvRPuQxm2WGg3SKA3o29P29uoeYYvA4kJrdf8NlEVbTrN7GRDdZAZzG
+\unrestrict oC0hFyb9COICJT5bpq1JDuog7yFRI9umoqnuXcKTQW2BCzwkLuyCTp10p8kCugp
 
