@@ -193,6 +193,7 @@ revoke execute on function _printed_as_key(animals_pilot) from public, anon, aut
 -- Why a stage may NOT act on this animal yet (null = it may). p_stage:
 -- 'eso', 'inner', 'outer', 'legs_stickers', 'legs', 'parts', 'stamped', 'weights'.
 -- p_today: the row is on today's board (the esophagus rule of today applies).
+-- (v10.26: replaced further down, §27–§29)
 create or replace function _stage_order_error(p_stage text, a animals_pilot, p_today boolean default true) returns text
 language plpgsql stable security definer set search_path = public, extensions, pg_temp as $$
 declare v_alive boolean := coalesce(a.slaughter in ('slaughtered', 'notChalak'), false);
@@ -268,6 +269,7 @@ $$;
 revoke execute on function _proc_stations() from public, anon, authenticated;
 
 -- is there still work for this station on this animal? (the app's own "pending" tests)
+-- (v10.26: replaced further down, §27–§29)
 create or replace function _proc_pending(p_station text, a animals_pilot, p_today boolean default false) returns boolean
 language plpgsql stable security definer set search_path = public, extensions, pg_temp as $$
 begin
@@ -323,6 +325,7 @@ $$;
 revoke execute on function _proc_board_lock(bigint) from public, anon, authenticated;
 
 -- a board no station needs any more: its final state goes back into its archive row
+-- (v10.26: replaced further down, §27–§29)
 create or replace function _proc_finalize(p_board bigint default null) returns integer
 language plpgsql security definer set search_path = public, extensions, pg_temp as $$
 declare b record; n int := 0; v_open boolean; st text;
@@ -375,8 +378,8 @@ begin
   -- first rulings: the earlier stages must be there
   if not coalesce(old.eso_checked, false) and coalesce(new.eso_checked, false) then
     v_stage := 'eso';
-    v_err := case when old.slaughter not in ('slaughtered', 'notChalak') or old.slaughter is null then 'not_slaughtered'
-                  when new.inner_status is not null or new.outer_status is not null then 'later_stage_started' end;
+    v_err := _stage_order_error('eso', old, true);     -- v10.26: also a number with the shochet's open "?"
+    if v_err is null and (new.inner_status is not null or new.outer_status is not null) then v_err := 'later_stage_started'; end if;
   end if;
   -- (a value that is not valid at all is left to the table's own checks: invalid_value)
   if v_err is null and old.inner_status is null and new.inner_status is not null and _gt_value_ok('inner', new.inner_status) then
@@ -546,6 +549,14 @@ begin
       perform _cmd_put(p_command_id, v_dev, 'claim_animal_stage', v_res);
       return v_res;
     end if;
+    -- v10.26: a USDA hold / the station's open "?" (a ruling of the station's own "?" goes ahead)
+    v_order := _hold_block(coalesce(a.board_epoch, v_epoch), p_id,
+                           case p_stage when 'inner_start' then 'inner' when 'stamped' then _proc_station_of_group('stamped') else p_stage end);
+    if v_order is not null then
+      v_res := jsonb_build_object('claimed', false, 'error', 'held', 'reason', v_order, 'row', to_jsonb(a), 'serverNow', v_now);
+      perform _cmd_put(p_command_id, v_dev, 'claim_animal_stage', v_res);
+      return v_res;
+    end if;
     if p_stage in ('legs', 'stamped') then
       v_open := _proc_open_board(case when p_stage = 'legs' then 'legs' else _proc_station_of_group('stamped') end);
       if v_open is not null then
@@ -562,6 +573,13 @@ begin
   -- screen may also be ruled רבנות חלק (§25)
   if p_stage = 'outer' and a.outer_status is null and not _nc_outer_value_ok(a, p_value) then
     v_res := jsonb_build_object('claimed', false, 'error', 'bad_value', 'reason', 'nc_kosher_or_treif_only',
+                                'row', to_jsonb(a), 'serverNow', v_now);
+    perform _cmd_put(p_command_id, v_dev, 'claim_animal_stage', v_res);
+    return v_res;
+  end if;
+
+  if p_stage = 'slaughter' and a.slaughter is null and _hold_block(coalesce(a.board_epoch, v_epoch), p_id, 'slaughter') is not null then
+    v_res := jsonb_build_object('claimed', false, 'error', 'held', 'reason', _hold_block(coalesce(a.board_epoch, v_epoch), p_id, 'slaughter'),
                                 'row', to_jsonb(a), 'serverNow', v_now);
     perform _cmd_put(p_command_id, v_dev, 'claim_animal_stage', v_res);
     return v_res;
@@ -753,6 +771,7 @@ begin
              || case when v_cur is not null then jsonb_build_object('id', v_cur,
                      'row', (select to_jsonb(a) from animals_pilot a where a.id = v_cur)) else '{}'::jsonb end
              || case when v_err = 'out_of_order' then jsonb_build_object('reason', substring(v_msg from 'reason=([a-z_]+)')) else '{}'::jsonb end
+             || case when v_err = 'held' then jsonb_build_object('reason', substring(v_msg from 'hold=([a-z_]+)')) else '{}'::jsonb end
              || case when v_err = 'earlier_day_open' then jsonb_build_object('board', substring(v_msg from 'board=(\d+)')::bigint,
                                                                              'day', substring(v_msg from 'day=([0-9-]+)')) else '{}'::jsonb end
              || case when v_err = 'server_error' then jsonb_build_object('message', left(v_msg, 200)) else '{}'::jsonb end;
@@ -982,6 +1001,7 @@ begin
 end $$;
 revoke execute on function _board_business_date() from public, anon, authenticated;
 
+-- (v10.26: replaced further down, §27–§29)
 create or replace function _do_board_reset(p_reason text, p_business_date date) returns void
 language plpgsql security definer set search_path = public, extensions, pg_temp as $$
 declare v_epoch bigint := (extract(epoch from clock_timestamp()) * 1000)::bigint;
@@ -1055,6 +1075,7 @@ revoke execute on function _do_board_reset(text, date) from public, anon, authen
 
 -- ── 5. daily rollover: never in the middle of work ──────────────────────────
 -- slaughtered animals that have not reached their last ruling (lungs treif, or outer)
+-- (v10.26: replaced further down, §27–§29)
 create or replace function _board_unfinished() returns integer
 language sql stable security definer set search_path = public, extensions, pg_temp as $$
   select count(*)::int from animals_pilot
@@ -1293,6 +1314,17 @@ begin
           if v_reason is not null then
             raise exception 'GT:OUT_OF_ORDER out-of-order: stage=% reason=%', g, v_reason using errcode = 'P0001';
           end if;
+          -- v10.26: a USDA hold / an open "?" stops the station (a held half is not weighed)
+          v_reason := _hold_block(c.board_epoch, v_cur, _proc_station_of_group(g));
+          if v_reason is null and g = 'weights' and n.weight_right is distinct from c.weight_right and n.weight_right is not null then
+            v_reason := _hold_block(c.board_epoch, v_cur, 'stamps', 'right');
+          end if;
+          if v_reason is null and g = 'weights' and n.weight_left is distinct from c.weight_left and n.weight_left is not null then
+            v_reason := _hold_block(c.board_epoch, v_cur, 'stamps', 'left');
+          end if;
+          if v_reason is not null then
+            raise exception 'GT:HELD held: station=% hold=%', _proc_station_of_group(g), v_reason using errcode = 'P0001';
+          end if;
           -- no skipping: this board must be the station's current one
           v_open := _proc_open_board(_proc_station_of_group(g));
           if v_open is distinct from p_board then
@@ -1341,6 +1373,7 @@ begin
              || case when v_cur is not null then jsonb_build_object('id', v_cur,
                      'row', (select to_jsonb(x) from animals_carry x where x.board_id = p_board and x.id = v_cur)) else '{}'::jsonb end
              || case when v_err = 'out_of_order' then jsonb_build_object('reason', substring(v_msg from 'reason=([a-z_]+)')) else '{}'::jsonb end
+             || case when v_err = 'held' then jsonb_build_object('reason', substring(v_msg from 'hold=([a-z_]+)')) else '{}'::jsonb end
              || case when v_err = 'earlier_day_open' then jsonb_build_object('open_board', substring(v_msg from 'board=(\d+)')::bigint,
                                                                              'day', substring(v_msg from 'day=([0-9-]+)')) else '{}'::jsonb end
              || case when v_err = 'server_error' then jsonb_build_object('message', left(v_msg, 200)) else '{}'::jsonb end;
@@ -1386,6 +1419,9 @@ begin
   v_open := _proc_open_board(v_station);
   if v_reason is not null then
     v_res := jsonb_build_object('claimed', false, 'error', 'out_of_order', 'reason', v_reason, 'row', to_jsonb(c), 'board', p_board);
+  elsif _hold_block(c.board_epoch, p_id, v_station) is not null then          -- v10.26: USDA hold / open "?"
+    v_res := jsonb_build_object('claimed', false, 'error', 'held', 'reason', _hold_block(c.board_epoch, p_id, v_station),
+                                'row', to_jsonb(c), 'board', p_board);
   elsif v_open is distinct from p_board then
     v_res := jsonb_build_object('claimed', false, 'error', case when v_open is null then 'board_closed' else 'earlier_day_open' end,
                                 'board', p_board, 'open_board', v_open, 'row', to_jsonb(c));
@@ -1428,6 +1464,9 @@ begin
   insert into processing_day_closed (board_id, station, closed_by, reason, pending_left)
   values (p_board, p_station, _session_name(p_token), left(trim(p_reason), 200), v_left)
   on conflict (board_id, station) do nothing;
+  update animal_holds set resolved_at = now(), resolution = 'board_closed', resolved_by = _session_name(p_token)
+   where resolved_at is null and station = p_station
+     and board_epoch in (select distinct board_epoch from animals_carry where board_id = p_board);
   perform _admin_audit(p_token, 'processing_day_close', p_station,
                        jsonb_build_object('board', p_board, 'pendingLeft', v_left, 'reason', left(trim(p_reason), 200)));
   perform _proc_finalize(p_board);
@@ -1533,6 +1572,7 @@ revoke execute on function worker_login(text, text, text) from public;
 grant execute on function worker_login(text, text, text) to anon, authenticated;
 
 -- ── 8. a ruling's time changes only with the ruling ───────────────────────────
+-- (v10.26: replaced further down, §27–§29)
 create or replace function animals_pilot_guard_corrections() returns trigger
 language plpgsql security definer set search_path = public, extensions, pg_temp as $$
 declare v_dev text; v_eso boolean; v_inner_final boolean;
@@ -3338,6 +3378,794 @@ end $$;
 revoke execute on function seals_get(text, bigint) from public;
 grant execute on function seals_get(text, bigint) to anon, authenticated;
 
+-- ════════════════════════════════════════════════════════════════════════════
+-- §27–§29 (v10.26): "?" question and USDA hold on every station; a ruling can
+-- always be changed (after a warning in the app); changes made after the next
+-- station already worked are recorded for the team leader ("⚠ השתנה").
+-- ════════════════════════════════════════════════════════════════════════════
+--   HOLDS (animal_holds), per slaughter-day board (board_epoch) and number:
+--     kind 'question' — the station's own question ("?"): the station goes on to
+--       the next number; the number waits for that station's ruling.
+--         slaughter : the number has no slaughter ruling yet. The esophagus may
+--                     still rule it, and legs / head stickers may be printed (the
+--                     scanners show "?" until the ruling). Inner / outer wait.
+--                     When the shochet rules it — or the esophagus rules it nevela —
+--                     the question is closed ('ruled'). A later slaughter ruling of
+--                     nevela / shot makes the animal nevela / shot, whatever the
+--                     esophagus said.
+--         esophagus / inner / outer : the number waits for that station's ruling;
+--                     the ruling closes the question.
+--         legs / parts / stamps : the number waits at that station until the
+--                     station answers it ('answered').
+--     kind 'usda' — a USDA hold; part: whole | right | left (half) | cheek1 |
+--       cheek2 | tongue. A WHOLE-animal hold stops the animal at every station
+--       (no ruling, no sticker, no stamp, no weight). A part / half hold stops
+--       only that part: parts stickers of the other parts print; a held half is
+--       not weighed. Only the station that put the hold releases it ('released':
+--       back in line, first) or condemns it ('condemned': that meat does not go
+--       on; the kashrut ruling does not change; reported apart from treif).
+--     Who: a paired tablet of that station, for its own station only.
+--     A held / condemned number does not hold a processing station on an older
+--     day (it moves on); the day stays on the server until every hold on it is
+--     closed. The daily rollover waits for an open slaughter question.
+--   CHANGES: a ruling can be changed by any tablet of the same station, at any
+--     time (no more "moved on" / "only the tablet that ruled" / "the next
+--     station already started"). The braking of many changes stays. A change made
+--     after a later station already worked (esophagus, lungs, outer, stickers,
+--     stamps, weights) is written to animal_changes; every screen shows the number
+--     with "⚠ השתנה" until the team leader marks it handled (change_ack).
+--   RPCs: hold_set, hold_resolve, board_flags, change_ack.
+-- ════════════════════════════════════════════════════════════════════════════
+
+-- an event in the animals' chain (any stage)
+create or replace function _gt_event(p_animal_no integer, p_stage text, p_action text, p_payload jsonb, p_actor text, p_device text)
+returns void language plpgsql security definer set search_path = public, extensions, pg_temp as $$
+declare v_prev text := coalesce(current_setting('app.device_admin', true), '');
+begin
+  perform set_config('app.device_admin', 'on', true);
+  insert into events_pilot (event_id, animal_no, stage, action, payload, actor, device_id, occurred_at)
+  values (gen_random_uuid(), p_animal_no, p_stage, p_action, coalesce(p_payload, '{}'::jsonb), p_actor,
+          coalesce(p_device, 'server'), now()::text);
+  perform set_config('app.device_admin', v_prev, true);
+end $$;
+revoke execute on function _gt_event(integer, text, text, jsonb, text, text) from public, anon, authenticated;
+
+-- ── §27 holds ───────────────────────────────────────────────────────────────
+create table if not exists animal_holds (
+  id                 bigserial primary key,
+  board_epoch        bigint  not null,
+  animal_id          integer not null check (animal_id between 0 and 999),
+  station            text    not null check (station in ('slaughter', 'eso', 'inner', 'outer', 'legs', 'parts', 'stamps')),
+  kind               text    not null check (kind in ('question', 'usda')),
+  part               text    not null default 'whole' check (part in ('whole', 'right', 'left', 'cheek1', 'cheek2', 'tongue')),
+  created_at         timestamptz not null default now(),
+  created_by         text,
+  created_by_device  text,
+  resolved_at        timestamptz,
+  resolution         text check (resolution in ('ruled', 'answered', 'released', 'condemned', 'cancelled', 'board_closed')),
+  resolved_by        text,
+  resolved_by_device text,
+  note               text
+);
+create unique index if not exists animal_holds_open_uq on animal_holds (board_epoch, animal_id, station, kind, part) where resolved_at is null;
+create index if not exists animal_holds_board_idx on animal_holds (board_epoch, animal_id);
+alter table animal_holds enable row level security;
+revoke all on animal_holds from public, anon, authenticated;
+
+-- the station a paired tablet works at (null: none / team leader / display)
+create or replace function _hold_station_of_role(p_role text) returns text
+language sql immutable set search_path = public, extensions, pg_temp as $$
+  select case p_role when 'slaughter' then 'slaughter' when 'esophagus' then 'eso' when 'inner' then 'inner'
+                     when 'outer' then 'outer' when 'legs' then 'legs' when 'parts' then 'parts' when 'stamps' then 'stamps' end;
+$$;
+revoke execute on function _hold_station_of_role(text) from public, anon, authenticated;
+
+-- an open "?" of the shochet on this number (the esophagus and the legs stickers may go on)
+create or replace function _slaughter_q_open(a animals_pilot) returns boolean
+language sql stable security definer set search_path = public, extensions, pg_temp as $$
+  select a.slaughter is null and exists (
+    select 1 from animal_holds h
+     where h.board_epoch = coalesce(a.board_epoch, _board_epoch()) and h.animal_id = a.id
+       and h.station = 'slaughter' and h.kind = 'question' and h.resolved_at is null);
+$$;
+revoke execute on function _slaughter_q_open(animals_pilot) from public, anon, authenticated;
+
+-- may this station work on this number (part)? null = yes; 'held' / 'condemned'
+create or replace function _hold_block(p_epoch bigint, p_id integer, p_station text, p_part text default null) returns text
+language sql stable security definer set search_path = public, extensions, pg_temp as $$
+  select case
+    when exists (select 1 from animal_holds h where h.board_epoch = p_epoch and h.animal_id = p_id and h.kind = 'usda'
+                    and h.part = 'whole' and h.resolved_at is null) then 'held'
+    when exists (select 1 from animal_holds h where h.board_epoch = p_epoch and h.animal_id = p_id and h.kind = 'usda'
+                    and h.part = 'whole' and h.resolution = 'condemned') then 'condemned'
+    when p_station in ('legs', 'parts', 'stamps')
+         and exists (select 1 from animal_holds h where h.board_epoch = p_epoch and h.animal_id = p_id and h.station = p_station
+                        and h.kind = 'question' and h.resolved_at is null) then 'held'
+    when p_part is not null and p_part <> 'whole'
+         and exists (select 1 from animal_holds h where h.board_epoch = p_epoch and h.animal_id = p_id and h.kind = 'usda'
+                        and h.part = p_part and h.resolved_at is null) then 'held'
+    when p_part is not null and p_part <> 'whole'
+         and exists (select 1 from animal_holds h where h.board_epoch = p_epoch and h.animal_id = p_id and h.kind = 'usda'
+                        and h.part = p_part and h.resolution = 'condemned') then 'condemned'
+  end;
+$$;
+revoke execute on function _hold_block(bigint, integer, text, text) from public, anon, authenticated;
+
+-- open holds on a board (a board with one is not archived)
+create or replace function _holds_open(p_epoch bigint) returns boolean
+language sql stable security definer set search_path = public, extensions, pg_temp as $$
+  select exists (select 1 from animal_holds where board_epoch = p_epoch and resolved_at is null);
+$$;
+revoke execute on function _holds_open(bigint) from public, anon, authenticated;
+
+-- stage order: a number with an open slaughter "?" may be checked at the esophagus and
+-- get its legs / head stickers (inner and outer wait for the shochet)
+create or replace function _stage_order_error(p_stage text, a animals_pilot, p_today boolean default true) returns text
+language plpgsql stable security definer set search_path = public, extensions, pg_temp as $$
+declare v_alive boolean := coalesce(a.slaughter in ('slaughtered', 'notChalak'), false);
+        v_q boolean := false;
+        v_eso_ok boolean;
+begin
+  if p_stage in ('eso', 'legs_stickers') and a.slaughter is null then v_q := _slaughter_q_open(a); end if;
+  v_eso_ok := not (v_alive or v_q)
+              or (coalesce(a.eso_checked, false) and a.eso_result = 'ok')
+              or (p_today and not _eso_required(a.id))
+              or (not p_today and (coalesce(a.eso_checked, false) or a.inner_status is not null));
+  case p_stage
+    when 'eso' then
+      if not (v_alive or v_q) then return 'not_slaughtered'; end if;
+      if a.inner_status is not null or a.outer_status is not null then return 'later_stage_started'; end if;
+    when 'inner' then
+      if not v_alive then return 'not_slaughtered'; end if;
+      if not v_eso_ok then return 'eso_not_passed'; end if;
+      if a.outer_status is not null then return 'later_stage_started'; end if;
+    when 'outer' then
+      if a.inner_status is distinct from 'confirmed' then return 'inner_not_confirmed'; end if;
+    when 'legs_stickers' then
+      if a.slaughter is null and not v_q then return 'not_slaughtered'; end if;
+      if not v_eso_ok then return 'eso_not_passed'; end if;
+    when 'legs', 'parts', 'stamped' then
+      if a.outer_status is null then return 'outer_not_ruled'; end if;
+    when 'weights' then
+      if a.outer_status is null and a.inner_status is distinct from 'treif' then return 'outer_not_ruled'; end if;
+    else
+      return null;
+  end case;
+  return null;
+end $$;
+revoke execute on function _stage_order_error(text, animals_pilot, boolean) from public, anon, authenticated;
+
+-- processing work left: a held / condemned number does not hold the station
+create or replace function _proc_pending(p_station text, a animals_pilot, p_today boolean default false) returns boolean
+language plpgsql stable security definer set search_path = public, extensions, pg_temp as $$
+declare v boolean;
+begin
+  if a.slaughter is null then return false; end if;
+  case p_station
+    when 'legs' then
+      v := (not coalesce(a.head_stickers, false) and _stage_order_error('legs_stickers', a, p_today) is null)
+          or (_gt_flag(_gt_settings(), 'legsSortEnabled', false) and _kosher_ready(a) and not coalesce(a.legs_sorted, false));
+    when 'parts' then
+      v := _kosher_ready(a)
+         and ((not coalesce(a.parts_scanned, false) and coalesce(a.parts_print_count, 0) < 3)
+              or (a.parts_printed_as is not null and a.parts_printed_as is distinct from _printed_as_key(a)));
+    when 'stamps' then
+      v := _kosher_ready(a)
+         and (not coalesce(a.stamped, false)
+              or (a.stamped_as is not null and a.stamped_as is distinct from _printed_as_key(a)));
+    else
+      return false;
+  end case;
+  if v and _hold_block(coalesce(a.board_epoch, _board_epoch()), a.id, p_station) is not null then return false; end if;
+  return v;
+end $$;
+revoke execute on function _proc_pending(text, animals_pilot, boolean) from public, anon, authenticated;
+
+-- a kept board leaves animals_carry only when no station needs it AND no hold on it is open
+create or replace function _proc_finalize(p_board bigint default null) returns integer
+language plpgsql security definer set search_path = public, extensions, pg_temp as $$
+declare b record; n int := 0; v_open boolean; st text;
+begin
+  for b in select distinct board_id from animals_carry where p_board is null or board_id = p_board order by board_id loop
+    perform _proc_board_lock(b.board_id);
+    continue when not exists (select 1 from animals_carry where board_id = b.board_id);   -- archived meanwhile
+    v_open := false;
+    foreach st in array _proc_stations() loop
+      if _proc_board_pending(st, b.board_id) > 0 then v_open := true; exit; end if;
+    end loop;
+    continue when v_open;
+    continue when exists (select 1 from animals_carry c join animal_holds h
+                            on h.board_epoch = c.board_epoch and h.animal_id = c.id and h.resolved_at is null
+                           where c.board_id = b.board_id);
+    update daily_board_archive d
+       set board = coalesce((select jsonb_agg(to_jsonb(c) - 'board_id' - 'slaughter_day' order by c.id)
+                               from animals_carry c where c.board_id = b.board_id), d.board)
+     where d.id = b.board_id;
+    delete from animals_carry where board_id = b.board_id;
+    delete from processing_day_closed where board_id = b.board_id;
+    n := n + 1;
+  end loop;
+  return n;
+end $$;
+revoke execute on function _proc_finalize(bigint) from public, anon, authenticated;
+
+-- the daily rollover also waits for an open slaughter "?"
+create or replace function _board_unfinished() returns integer
+language sql stable security definer set search_path = public, extensions, pg_temp as $$
+  select (select count(*)::int from animals_pilot
+           where slaughter in ('slaughtered', 'notChalak')
+             and inner_status is distinct from 'treif' and outer_status is null)
+       + (select count(*)::int from animals_pilot a where a.slaughter is null and _slaughter_q_open(a));
+$$;
+revoke execute on function _board_unfinished() from public, anon, authenticated;
+
+-- a question is closed by the station's own ruling (the slaughter one also by an esophagus nevela)
+create or replace function _animals_close_questions() returns trigger
+language plpgsql security definer set search_path = public, extensions, pg_temp as $$
+declare v_ep bigint := coalesce(new.board_epoch, _board_epoch()); v_dev text := coalesce(new.device_id, 'server');
+begin
+  if current_setting('gt.reset_in_progress', true) = 'true' then return new; end if;
+  if new.slaughter is not null and (tg_op = 'INSERT' or old.slaughter is null) then
+    update animal_holds set resolved_at = now(), resolution = 'ruled', resolved_by_device = v_dev,
+           note = case when new.eso_result = 'nevela' then 'eso_nevela' else new.slaughter end
+     where board_epoch = v_ep and animal_id = new.id and station = 'slaughter' and kind = 'question' and resolved_at is null;
+  end if;
+  if coalesce(new.eso_checked, false) and (tg_op = 'INSERT' or not coalesce(old.eso_checked, false)) then
+    update animal_holds set resolved_at = now(), resolution = 'ruled', resolved_by_device = v_dev, note = new.eso_result
+     where board_epoch = v_ep and animal_id = new.id and station = 'eso' and kind = 'question' and resolved_at is null;
+  end if;
+  if new.inner_status in ('confirmed', 'treif') and (tg_op = 'INSERT' or old.inner_status is distinct from new.inner_status) then
+    update animal_holds set resolved_at = now(), resolution = 'ruled', resolved_by_device = v_dev, note = new.inner_status
+     where board_epoch = v_ep and animal_id = new.id and station = 'inner' and kind = 'question' and resolved_at is null;
+  end if;
+  if new.outer_status is not null and (tg_op = 'INSERT' or old.outer_status is null) then
+    update animal_holds set resolved_at = now(), resolution = 'ruled', resolved_by_device = v_dev, note = new.outer_status
+     where board_epoch = v_ep and animal_id = new.id and station = 'outer' and kind = 'question' and resolved_at is null;
+  end if;
+  return new;
+end $$;
+revoke execute on function _animals_close_questions() from public, anon, authenticated;
+drop trigger if exists zzzzz_close_questions on animals_pilot;
+create trigger zzzzz_close_questions after insert or update on animals_pilot
+  for each row execute function _animals_close_questions();
+
+-- a hold stops the station's writes on today's board (checked with the order rules)
+create or replace function _animals_hold_guard() returns trigger
+language plpgsql security definer set search_path = public, extensions, pg_temp as $$
+declare v_ep bigint := coalesce(old.board_epoch, _board_epoch()); v_b text; v_st text;
+begin
+  if current_setting('gt.reset_in_progress', true) = 'true' then return new; end if;
+  if not _is_api_request() or _request_is_service_role()
+     or coalesce(current_setting('app.device_admin', true), '') = 'on' then
+    return new;
+  end if;
+  if tg_op = 'INSERT' then return new; end if;
+  -- first rulings (a change of a ruling is not stopped: it does not touch the meat)
+  if old.slaughter is null and new.slaughter is not null and new.eso_result is distinct from 'nevela' then
+    v_st := 'slaughter'; v_b := _hold_block(v_ep, old.id, 'slaughter');
+  end if;
+  if v_b is null and not coalesce(old.eso_checked, false) and coalesce(new.eso_checked, false) then
+    v_st := 'eso'; v_b := _hold_block(v_ep, old.id, 'eso');
+  end if;
+  if v_b is null and old.inner_status is null and new.inner_status is not null then
+    v_st := 'inner'; v_b := _hold_block(v_ep, old.id, 'inner');
+  end if;
+  if v_b is null and old.outer_status is null and new.outer_status is not null then
+    v_st := 'outer'; v_b := _hold_block(v_ep, old.id, 'outer');
+  end if;
+  if v_b is null and ((not coalesce(old.head_stickers, false) and coalesce(new.head_stickers, false))
+                      or (not coalesce(old.legs_stickers, false) and coalesce(new.legs_stickers, false))
+                      or (not coalesce(old.legs_sorted, false) and coalesce(new.legs_sorted, false))) then
+    v_st := 'legs'; v_b := _hold_block(v_ep, old.id, 'legs');
+  end if;
+  if v_b is null and (coalesce(new.parts_print_count, 0) > coalesce(old.parts_print_count, 0)
+                      or (not coalesce(old.parts_scanned, false) and coalesce(new.parts_scanned, false))) then
+    v_st := 'parts'; v_b := _hold_block(v_ep, old.id, 'parts');
+  end if;
+  if v_b is null and not coalesce(old.stamped, false) and coalesce(new.stamped, false) then
+    v_st := 'stamps'; v_b := _hold_block(v_ep, old.id, 'stamps');
+  end if;
+  if v_b is null and (new.weight_right is distinct from old.weight_right and new.weight_right is not null) then
+    v_st := 'stamps'; v_b := coalesce(_hold_block(v_ep, old.id, 'stamps'), _hold_block(v_ep, old.id, 'stamps', 'right'));
+  end if;
+  if v_b is null and (new.weight_left is distinct from old.weight_left and new.weight_left is not null) then
+    v_st := 'stamps'; v_b := coalesce(_hold_block(v_ep, old.id, 'stamps'), _hold_block(v_ep, old.id, 'stamps', 'left'));
+  end if;
+  if v_b is not null then
+    raise exception 'GT:HELD held: station=% hold=%', v_st, v_b using errcode = 'P0001';
+  end if;
+  return new;
+end $$;
+revoke execute on function _animals_hold_guard() from public, anon, authenticated;
+drop trigger if exists b_animals_hold_guard on animals_pilot;
+create trigger b_animals_hold_guard before update on animals_pilot
+  for each row execute function _animals_hold_guard();
+
+-- put a hold. p_board: a kept (older) board; null = today's board.
+create or replace function hold_set(p_id integer, p_station text, p_kind text, p_part text default 'whole',
+                                    p_board bigint default null, p_command_id uuid default null) returns jsonb
+language plpgsql security definer set search_path = public, extensions, pg_temp as $$
+declare v_dev text; v_role text; v_ep bigint; v_res jsonb; a animals_pilot; v_id bigint; v_part text := coalesce(nullif(p_part, ''), 'whole');
+        v_actor text;
+begin
+  if p_id is null or p_id < 0 or p_id > 999 then return jsonb_build_object('ok', false, 'error', 'bad_id'); end if;
+  if p_kind is null or p_kind not in ('question', 'usda') then return jsonb_build_object('ok', false, 'error', 'bad_value'); end if;
+  if p_station is null or p_station not in ('slaughter', 'eso', 'inner', 'outer', 'legs', 'parts', 'stamps') then
+    return jsonb_build_object('ok', false, 'error', 'bad_station');
+  end if;
+  if (p_kind = 'question' and v_part <> 'whole')
+     or (p_kind = 'usda' and not (v_part = 'whole'
+                                  or (p_station = 'parts' and v_part in ('cheek1', 'cheek2', 'tongue'))
+                                  or (p_station <> 'parts' and v_part in ('right', 'left')))) then
+    return jsonb_build_object('ok', false, 'error', 'bad_value');
+  end if;
+  v_dev := _call_device(null);
+  if v_dev is null then return jsonb_build_object('ok', false, 'error', _no_device_error()); end if;
+  v_role := _caller_device_role();
+  if _hold_station_of_role(v_role) is distinct from p_station then
+    return jsonb_build_object('ok', false, 'error', 'wrong_station');
+  end if;
+  v_res := _cmd_get(p_command_id, v_dev, 'hold_set');
+  if v_res is not null then return v_res; end if;
+  if p_board is null then
+    perform _board_write_lock();
+    v_ep := _board_epoch();
+    insert into animals_pilot (id, board_epoch) values (p_id, v_ep) on conflict (id) do nothing;
+    select * into a from animals_pilot where id = p_id;
+  else
+    perform _proc_board_lock(p_board);
+    if p_station not in ('legs', 'parts', 'stamps') then return jsonb_build_object('ok', false, 'error', 'bad_station'); end if;
+    select _carry_row(c) into a from animals_carry c where c.board_id = p_board and c.id = p_id;
+    if a.id is null then return jsonb_build_object('ok', false, 'error', 'board_closed'); end if;
+    v_ep := a.board_epoch;
+  end if;
+  if v_ep is null then return jsonb_build_object('ok', false, 'error', 'stale_board'); end if;
+  -- a question only while the station has not ruled the number
+  if p_kind = 'question' and ((p_station = 'slaughter' and a.slaughter is not null)
+                              or (p_station = 'eso' and coalesce(a.eso_checked, false))
+                              or (p_station = 'inner' and a.inner_status in ('confirmed', 'treif'))
+                              or (p_station = 'outer' and a.outer_status is not null)) then
+    v_res := jsonb_build_object('ok', false, 'error', 'already_ruled', 'row', to_jsonb(a));
+    perform _cmd_put(p_command_id, v_dev, 'hold_set', v_res);
+    return v_res;
+  end if;
+  v_actor := _derive_actor(case p_station when 'eso' then 'eso' when 'stamps' then 'stamped' else p_station end, null);
+  insert into animal_holds (board_epoch, animal_id, station, kind, part, created_by, created_by_device)
+  values (v_ep, p_id, p_station, p_kind, v_part, v_actor, v_dev)
+  on conflict (board_epoch, animal_id, station, kind, part) where resolved_at is null do nothing
+  returning id into v_id;
+  if v_id is null then
+    select id into v_id from animal_holds where board_epoch = v_ep and animal_id = p_id and station = p_station
+       and kind = p_kind and part = v_part and resolved_at is null;
+  else
+    perform _gt_event(p_id + 1, p_station, 'hold_set', jsonb_build_object('kind', p_kind, 'part', v_part, 'hold', v_id, 'board', p_board), v_actor, v_dev);
+  end if;
+  v_res := jsonb_build_object('ok', true, 'hold', (select to_jsonb(h) from animal_holds h where h.id = v_id));
+  perform _cmd_put(p_command_id, v_dev, 'hold_set', v_res);
+  return v_res;
+end $$;
+revoke execute on function hold_set(integer, text, text, text, bigint, uuid) from public;
+grant execute on function hold_set(integer, text, text, text, bigint, uuid) to anon, authenticated;
+
+-- close a hold, by a tablet of the station that put it:
+--   usda     → 'released' (back in line) or 'condemned'
+--   question → 'answered' (legs / parts / stamps) or 'cancelled' (a "?" put by mistake)
+create or replace function hold_resolve(p_hold bigint, p_resolution text, p_command_id uuid default null) returns jsonb
+language plpgsql security definer set search_path = public, extensions, pg_temp as $$
+declare v_dev text; v_res jsonb; h animal_holds%rowtype; v_actor text;
+begin
+  v_dev := _call_device(null);
+  if v_dev is null then return jsonb_build_object('ok', false, 'error', _no_device_error()); end if;
+  v_res := _cmd_get(p_command_id, v_dev, 'hold_resolve');
+  if v_res is not null then return v_res; end if;
+  select * into h from animal_holds where id = p_hold for update;
+  if h.id is null then return jsonb_build_object('ok', false, 'error', 'bad_id'); end if;
+  if _hold_station_of_role(_caller_device_role()) is distinct from h.station then
+    return jsonb_build_object('ok', false, 'error', 'wrong_station');
+  end if;
+  if h.resolved_at is not null then
+    return jsonb_build_object('ok', true, 'hold', to_jsonb(h), 'already', true);
+  end if;
+  if not ((h.kind = 'usda' and p_resolution in ('released', 'condemned'))
+          or (h.kind = 'question' and (p_resolution = 'cancelled'
+                                       or (p_resolution = 'answered' and h.station in ('legs', 'parts', 'stamps'))))) then
+    return jsonb_build_object('ok', false, 'error', 'bad_value');
+  end if;
+  v_actor := _derive_actor(case h.station when 'eso' then 'eso' when 'stamps' then 'stamped' else h.station end, null);
+  update animal_holds set resolved_at = now(), resolution = p_resolution, resolved_by = v_actor, resolved_by_device = v_dev
+   where id = h.id returning * into h;
+  perform _gt_event(h.animal_id + 1, h.station, 'hold_' || p_resolution,
+                    jsonb_build_object('kind', h.kind, 'part', h.part, 'hold', h.id), v_actor, v_dev);
+  -- a board kept only for this hold may now be archived
+  perform _proc_finalize(c.board_id) from (select distinct board_id from animals_carry where board_epoch = h.board_epoch) c;
+  v_res := jsonb_build_object('ok', true, 'hold', to_jsonb(h));
+  perform _cmd_put(p_command_id, v_dev, 'hold_resolve', v_res);
+  return v_res;
+end $$;
+revoke execute on function hold_resolve(bigint, text, uuid) from public;
+grant execute on function hold_resolve(bigint, text, uuid) to anon, authenticated;
+
+-- ── §28 a change after the next station worked ──────────────────────────────
+create table if not exists animal_changes (
+  id          bigserial primary key,
+  board_epoch bigint  not null,
+  animal_id   integer not null,
+  stage       text    not null,
+  old_value   text,
+  new_value   text,
+  done        jsonb   not null default '{}'::jsonb,   -- what the later stations had already done
+  by_device   text,
+  at          timestamptz not null default now(),
+  ack_at      timestamptz,
+  ack_by      text
+);
+create index if not exists animal_changes_board_idx on animal_changes (board_epoch, animal_id);
+alter table animal_changes enable row level security;
+revoke all on animal_changes from public, anon, authenticated;
+
+-- what the stations after p_stage already did on this animal (empty = nothing)
+create or replace function _gt_done_after(p_stage text, a animals_pilot) returns jsonb
+language sql immutable set search_path = public, extensions, pg_temp as $$
+  select jsonb_strip_nulls(jsonb_build_object(
+    'eso',     case when p_stage = 'slaughter' and coalesce(a.eso_checked, false) then a.eso_result end,
+    'inner',   case when p_stage in ('slaughter', 'eso') and a.inner_status in ('confirmed', 'treif') then a.inner_status end,
+    'outer',   case when p_stage in ('slaughter', 'eso', 'inner') then a.outer_status end,
+    'legsStickers', case when p_stage in ('slaughter', 'eso') and (coalesce(a.legs_stickers, false) or coalesce(a.head_stickers, false)) then true end,
+    'legsSorted', case when coalesce(a.legs_sorted, false) then true end,
+    'partsPrinted', case when coalesce(a.parts_print_count, 0) > 0 then a.parts_print_count end,
+    'partsAs', a.parts_printed_as,
+    'stamped', case when coalesce(a.stamped, false) then true end,
+    'stampedAs', a.stamped_as,
+    'weighed', case when a.weight_right is not null or a.weight_left is not null then true end));
+$$;
+revoke execute on function _gt_done_after(text, animals_pilot) from public, anon, authenticated;
+
+create or replace function _gt_note_change(p_stage text, o animals_pilot, p_old text, p_new text, p_dev text) returns void
+language plpgsql security definer set search_path = public, extensions, pg_temp as $$
+declare v_done jsonb := _gt_done_after(p_stage, o);
+begin
+  if p_old is not distinct from p_new or v_done = '{}'::jsonb then return; end if;
+  insert into animal_changes (board_epoch, animal_id, stage, old_value, new_value, done, by_device)
+  values (coalesce(o.board_epoch, _board_epoch()), o.id, p_stage, p_old, p_new, v_done, p_dev);
+  perform _gt_event(o.id + 1, p_stage, 'changed_after_next',
+                    jsonb_build_object('from', p_old, 'to', p_new, 'done', v_done), null, p_dev);
+end $$;
+revoke execute on function _gt_note_change(text, animals_pilot, text, text, text) from public, anon, authenticated;
+
+-- a change: any tablet of the station, at any time (the app warns first)
+create or replace function _correction_check(p_stage text, a animals_pilot, p_dev text) returns text
+language plpgsql security definer set search_path = public, extensions, pg_temp as $$
+declare v_by text; v_role text;
+begin
+  if p_dev is null then return 'correction_not_allowed'; end if;
+  v_by := case p_stage when 'slaughter' then a.slaughter_by_device when 'eso' then a.eso_by_device
+                       when 'inner' then a.inner_by_device when 'outer' then a.outer_by_device end;
+  if v_by is not distinct from p_dev then return null; end if;
+  select assigned_role into v_role from devices_pilot where id = p_dev and coalesce(device_status, 'active') <> 'retired';
+  if coalesce((case p_stage
+       when 'slaughter' then v_role = 'slaughter'
+       when 'eso'       then v_role in ('esophagus', 'slaughter')
+       when 'inner'     then v_role = 'inner' or (v_role = 'outer' and _gt_one_inspection())
+       when 'outer'     then v_role = 'outer' or (v_role = 'inner' and _gt_one_inspection())
+       else false end), false) then
+    return null;
+  end if;
+  return 'correction_not_allowed';
+end $$;
+revoke execute on function _correction_check(text, animals_pilot, text) from public, anon, authenticated;
+
+-- the correction trigger: the station rule above; a change after a later station worked is recorded
+create or replace function animals_pilot_guard_corrections() returns trigger
+language plpgsql security definer set search_path = public, extensions, pg_temp as $$
+declare v_dev text; v_eso boolean; v_inner_final boolean;
+begin
+  if current_setting('gt.reset_in_progress', true) = 'true' then
+    return new;
+  end if;
+  v_eso := coalesce(current_setting('gt.eso_ruling', true), '') = 'true'
+           or coalesce(current_setting('gt.eso_upsert_row', true), '') = new.id::text;
+  if coalesce(current_setting('gt.eso_upsert_row', true), '') <> '' then
+    perform set_config('gt.eso_upsert_row', '', true);
+  end if;
+  if not _is_api_request() or _request_is_service_role()
+     or coalesce(current_setting('app.device_admin', true), '') = 'on' then
+    return new;
+  end if;
+  v_dev := _acting_device();
+
+  -- a ruling's time changes only with the ruling itself (step 46)
+  if not v_eso and old.slaughter is not null and new.slaughter_time is distinct from old.slaughter_time
+     and (new.slaughter, new.slaughtered_by, new.slaughter_by_device)
+         is not distinct from (old.slaughter, old.slaughtered_by, old.slaughter_by_device) then
+    new.slaughter_time := old.slaughter_time;
+  end if;
+  if old.inner_status in ('confirmed', 'treif') and new.inner_time is distinct from old.inner_time
+     and (new.inner_status, new.inner_by, new.inner_by_device, coalesce(new.not_chalak_inner, false))
+         is not distinct from (old.inner_status, old.inner_by, old.inner_by_device, coalesce(old.not_chalak_inner, false)) then
+    new.inner_time := old.inner_time;
+  end if;
+  if old.outer_status is not null and new.outer_time is distinct from old.outer_time
+     and (new.outer_status, new.outer_by, new.outer_by_device)
+         is not distinct from (old.outer_status, old.outer_by, old.outer_by_device) then
+    new.outer_time := old.outer_time;
+  end if;
+
+  if old.eso_result = 'nevela' and new.slaughter is distinct from old.slaughter and not v_eso then
+    raise exception 'GT:ESO_LOCKED correction-blocked: failed the esophagus check — only the esophagus screen can change it'
+      using errcode = 'P0001';
+  end if;
+  if not v_eso and old.slaughter is not null
+     and (new.slaughter, new.slaughtered_by, new.slaughter_by_device)
+         is distinct from (old.slaughter, old.slaughtered_by, old.slaughter_by_device) then
+    perform _raise_correction(_correction_check('slaughter', old, v_dev), 'slaughter');
+    perform _gt_note_change('slaughter', old, old.slaughter, new.slaughter, v_dev);
+  end if;
+  if coalesce(old.eso_checked, false)
+     and (new.eso_result is distinct from old.eso_result or new.eso_by_device is distinct from old.eso_by_device) then
+    perform _raise_correction(_correction_check('eso', old, v_dev), 'esophagus');
+    perform _gt_note_change('eso', old, old.eso_result, new.eso_result, v_dev);
+  end if;
+  v_inner_final := old.inner_status in ('confirmed', 'treif');
+  if v_inner_final
+     and ((new.inner_status, new.inner_by, new.inner_by_device) is distinct from (old.inner_status, old.inner_by, old.inner_by_device)
+          or coalesce(new.not_chalak_inner, false) is distinct from coalesce(old.not_chalak_inner, false)
+          or (old.maw is not null and new.maw is distinct from old.maw)
+          or (old.rumen is not null and new.rumen is distinct from old.rumen)) then
+    perform _raise_correction(_correction_check('inner', old, v_dev), 'inner');
+    perform _gt_note_change('inner', old,
+      old.inner_status || case when coalesce(old.not_chalak_inner, false) then '/notChalak' else '' end,
+      new.inner_status || case when coalesce(new.not_chalak_inner, false) then '/notChalak' else '' end, v_dev);
+  end if;
+  if old.outer_status is not null
+     and (new.outer_status, new.outer_by, new.outer_by_device) is distinct from (old.outer_status, old.outer_by, old.outer_by_device) then
+    perform _raise_correction(_correction_check('outer', old, v_dev), 'outer');
+    perform _gt_note_change('outer', old, old.outer_status, new.outer_status, v_dev);
+  end if;
+  return new;
+end $$;
+revoke execute on function animals_pilot_guard_corrections() from public, anon, authenticated;
+
+-- the esophagus change: any esophagus tablet, any time; back to "ok" for a number the
+-- shochet had not ruled yet (an open "?") gives it back its "?"
+create or replace function eso_change(p_id integer, p_result text, p_device_id text, p_epoch bigint, p_command_id uuid)
+returns jsonb language plpgsql security definer set search_path = public, extensions, pg_temp as $$
+declare
+  v_now bigint := (extract(epoch from clock_timestamp()) * 1000)::bigint;
+  a animals_pilot%rowtype;
+  v_rows integer := 0;
+  v_epoch bigint := _board_epoch();
+  v_dev text;
+  v_err text;
+  v_res jsonb;
+  v_wait int;
+  v_q boolean;
+begin
+  if p_result is null or p_result not in ('ok','nevela') then
+    return jsonb_build_object('ok', false, 'error', 'bad_result');
+  end if;
+  if p_id is null or p_id < 0 or p_id > 999 then
+    return jsonb_build_object('ok', false, 'error', 'bad_id');
+  end if;
+  perform _board_write_lock();
+  v_epoch := _board_epoch();
+  if v_epoch is not null and (p_epoch is null or p_epoch < v_epoch) then
+    return jsonb_build_object('ok', false, 'error', 'stale_board', 'boardEpoch', v_epoch);
+  end if;
+  v_dev := _call_device(p_device_id);
+  if v_dev is null then return jsonb_build_object('ok', false, 'error', _no_device_error()); end if;
+  if not _stage_allowed('eso') then
+    return jsonb_build_object('ok', false, 'error', 'wrong_station');
+  end if;
+  v_res := _cmd_get(p_command_id, v_dev, 'eso_change');
+  if v_res is not null then return v_res; end if;
+  select * into a from animals_pilot where id = p_id for update;
+  if a.id is null or a.eso_checked is distinct from true then
+    v_res := jsonb_build_object('ok', false, 'error', 'not_checked');
+    perform _cmd_put(p_command_id, v_dev, 'eso_change', v_res);
+    return v_res;
+  end if;
+  if coalesce(a.board_epoch, 0) > coalesce(v_epoch, 0) then
+    return jsonb_build_object('ok', false, 'error', 'stale_board', 'boardEpoch', a.board_epoch);
+  end if;
+  if a.eso_result = p_result then
+    v_res := jsonb_build_object('ok', true, 'row', to_jsonb(a));
+    perform _cmd_put(p_command_id, v_dev, 'eso_change', v_res);
+    return v_res;
+  end if;
+  if _is_api_request() and not _request_is_service_role() then
+    v_wait := _correction_braked(v_dev);
+    if v_wait is not null then
+      return jsonb_build_object('ok', false, 'error', 'rate_limited', 'retry_after', v_wait, 'row', to_jsonb(a));
+    end if;
+    v_err := _correction_check('eso', a, v_dev);
+    if v_err is not null then
+      perform _log_correction_rejected(v_dev, p_id, 'esophagus', v_err,
+                                       jsonb_build_object('from', a.eso_result, 'to', p_result, 'via', 'eso_change'));
+      v_res := jsonb_build_object('ok', false, 'error', v_err, 'row', to_jsonb(a));
+      perform _cmd_put(p_command_id, v_dev, 'eso_change', v_res);
+      return v_res;
+    end if;
+  end if;
+  -- the shochet's "?" was closed by this esophagus nevela: back to ok → the "?" is open again
+  v_q := p_result = 'ok' and a.eso_prev_slaughter is null and exists (
+           select 1 from animal_holds h where h.board_epoch = coalesce(a.board_epoch, v_epoch) and h.animal_id = a.id
+              and h.station = 'slaughter' and h.kind = 'question' and h.resolution = 'ruled' and h.note = 'eso_nevela');
+  perform _gt_note_change('eso', a, a.eso_result, p_result, v_dev);
+  perform set_config('gt.eso_ruling', 'true', true);
+  if p_result = 'nevela' then
+    update animals_pilot
+       set eso_result = 'nevela', eso_prev_slaughter = slaughter, slaughter = 'nevela',
+           slaughter_time = greatest(v_now, coalesce(slaughter_time, 0) + 1), slaughter_by_device = v_dev,
+           eso_by_device = coalesce(eso_by_device, v_dev),
+           device_id = v_dev, updated_at = now()
+     where id = p_id and coalesce(board_epoch, 0) <= coalesce(v_epoch, 0);
+  elsif v_q then
+    -- the slaughter columns go back to "not ruled yet" (the merge rules never clear a ruling, so
+    -- this one row is written past them; nothing else on it changes)
+    perform set_config('gt.reset_in_progress', 'true', true);
+    update animals_pilot
+       set eso_result = 'ok', slaughter = null, slaughtered_by = null, slaughter_time = null, slaughter_by_device = null,
+           eso_prev_slaughter = null, eso_by_device = coalesce(eso_by_device, v_dev),
+           device_id = v_dev, updated_at = clock_timestamp()
+     where id = p_id and coalesce(board_epoch, 0) <= coalesce(v_epoch, 0);
+    perform set_config('gt.reset_in_progress', 'false', true);
+    insert into animal_holds (board_epoch, animal_id, station, kind, part, created_by, created_by_device, note)
+    select coalesce(a.board_epoch, v_epoch), a.id, 'slaughter', 'question', 'whole', h.created_by, h.created_by_device, 'reopened'
+      from animal_holds h where h.board_epoch = coalesce(a.board_epoch, v_epoch) and h.animal_id = a.id
+       and h.station = 'slaughter' and h.kind = 'question' and h.note = 'eso_nevela'
+     order by h.id desc limit 1
+    on conflict do nothing;
+  else
+    update animals_pilot
+       set eso_result = 'ok', slaughter = coalesce(eso_prev_slaughter, 'slaughtered'),
+           slaughter_time = greatest(v_now, coalesce(slaughter_time, 0) + 1), slaughter_by_device = v_dev,
+           eso_by_device = coalesce(eso_by_device, v_dev),
+           device_id = v_dev, updated_at = now()
+     where id = p_id and coalesce(board_epoch, 0) <= coalesce(v_epoch, 0);
+  end if;
+  get diagnostics v_rows = row_count;
+  perform set_config('gt.eso_ruling', '', true);
+  select * into a from animals_pilot where id = p_id;
+  v_res := jsonb_build_object('ok', v_rows = 1, 'row', to_jsonb(a));
+  perform _cmd_put(p_command_id, v_dev, 'eso_change', v_res);
+  return v_res;
+end $$;
+revoke execute on function eso_change(integer, text, text, bigint, uuid) from public;
+grant execute on function eso_change(integer, text, text, bigint, uuid) to anon, authenticated;
+
+-- the team leader marks a change handled (the stickers were collected, …)
+create or replace function change_ack(p_token text, p_id bigint) returns jsonb
+language plpgsql security definer set search_path = public, extensions, pg_temp as $$
+declare c animal_changes%rowtype;
+begin
+  if coalesce(_session_role(p_token), '') <> 'manager' or not _is_real_manager(p_token) then
+    return jsonb_build_object('ok', false, 'error', 'unauthorized');
+  end if;
+  update animal_changes set ack_at = now(), ack_by = _session_name(p_token)
+   where id = p_id and ack_at is null returning * into c;
+  if c.id is null then return jsonb_build_object('ok', false, 'error', 'bad_id'); end if;
+  perform _gt_event(c.animal_id + 1, c.stage, 'change_handled', jsonb_build_object('change', c.id), _session_name(p_token),
+                    coalesce(_current_device_id(), 'team-leader'));
+  return jsonb_build_object('ok', true);
+end $$;
+revoke execute on function change_ack(text, bigint) from public;
+grant execute on function change_ack(text, bigint) to anon, authenticated;
+
+-- ── §29 what every screen shows: open holds, closed ones of the day, changes not handled ──
+create or replace function board_flags(p_token text default null) returns jsonb
+language plpgsql stable security definer set search_path = public, extensions, pg_temp as $$
+declare v_ep bigint := _board_epoch();
+begin
+  if _current_device_id() is null and coalesce(_session_role(p_token), '') not in ('manager', 'owner') then
+    return jsonb_build_object('ok', false, 'error', 'unauthorized');
+  end if;
+  return jsonb_build_object('ok', true, 'boardEpoch', v_ep,
+    'holds', coalesce((select jsonb_agg(jsonb_build_object(
+                 'id', h.id, 'epoch', h.board_epoch, 'n', h.animal_id, 'station', h.station, 'kind', h.kind, 'part', h.part,
+                 'at', h.created_at, 'by', h.created_by, 'open', h.resolved_at is null, 'resolution', h.resolution,
+                 'resolvedAt', h.resolved_at, 'note', h.note,
+                 'board', (select c.board_id from animals_carry c where c.board_epoch = h.board_epoch limit 1),
+                 'day', (select c.slaughter_day from animals_carry c where c.board_epoch = h.board_epoch limit 1))
+               order by h.id)
+             from animal_holds h
+            where h.resolved_at is null
+               or (h.board_epoch = v_ep)
+               or (h.resolution = 'condemned' and exists (select 1 from animals_carry c where c.board_epoch = h.board_epoch))
+               or (h.resolution = 'released' and h.resolved_at > now() - interval '2 days'
+                   and exists (select 1 from animals_carry c where c.board_epoch = h.board_epoch))), '[]'::jsonb),
+    'changes', coalesce((select jsonb_agg(jsonb_build_object(
+                 'id', c.id, 'epoch', c.board_epoch, 'n', c.animal_id, 'stage', c.stage, 'from', c.old_value, 'to', c.new_value,
+                 'done', c.done, 'at', c.at, 'ackAt', c.ack_at, 'ackBy', c.ack_by) order by c.id)
+             from animal_changes c
+            where c.ack_at is null or (c.board_epoch = v_ep and c.ack_at > now() - interval '1 day')), '[]'::jsonb));
+end $$;
+revoke execute on function board_flags(text) from public;
+grant execute on function board_flags(text) to anon, authenticated;
+
+-- the daily reset: a board with an open hold is kept for processing; holds of a
+-- board that is not kept are closed ('board_closed')
+create or replace function _do_board_reset(p_reason text, p_business_date date) returns void
+language plpgsql security definer set search_path = public, extensions, pg_temp as $$
+declare v_epoch bigint := (extract(epoch from clock_timestamp()) * 1000)::bigint;
+        v_old_epoch bigint := _board_epoch();
+        v_day date := coalesce(p_business_date, _board_business_date());
+        v_board bigint; v_carry boolean := false; st text;
+begin
+  insert into daily_board_archive (business_date, reason, animals_count, board, statuses)
+  select v_day, p_reason, count(*), coalesce(jsonb_agg(to_jsonb(a) order by a.id), '[]'::jsonb),
+         jsonb_build_object('customStatuses', coalesce(_gt_settings() -> 'customStatuses', '[]'::jsonb),
+                            'disabledStatuses', coalesce(_gt_settings() -> 'disabledStatuses', '[]'::jsonb),
+                            'kosher', to_jsonb(_kosher_statuses()))
+    from animals_pilot a
+   where a.slaughter is not null or a.inner_status is not null or a.outer_status is not null
+  returning id into v_board;
+
+  foreach st in array _proc_stations() loop
+    if exists (select 1 from animals_pilot a where _proc_pending(st, a, true)) then v_carry := true; exit; end if;
+  end loop;
+  -- v10.26: an open processing hold (USDA / "?") keeps the board too
+  if not v_carry and v_old_epoch is not null and exists (
+       select 1 from animal_holds h join animals_pilot a on a.id = h.animal_id and a.slaughter is not null
+        where h.board_epoch = v_old_epoch and h.resolved_at is null) then
+    v_carry := true;
+  end if;
+  if v_carry then
+    insert into animals_carry
+    select a.*, v_board, v_day from animals_pilot a where a.slaughter is not null;
+  end if;
+  if v_old_epoch is not null then
+    update animal_holds set resolved_at = now(), resolution = 'board_closed'
+     where board_epoch = v_old_epoch and resolved_at is null
+       and (not v_carry or not exists (select 1 from animals_carry c where c.board_id = v_board and c.id = animal_holds.animal_id));
+  end if;
+  perform _proc_finalize(null);
+
+  perform set_config('gt.reset_in_progress', 'true', true);
+  perform set_config('app.device_admin', 'on', true);
+
+  insert into plant_state (key, value) values ('boardEpoch', v_epoch::text)
+    on conflict (key) do update set value = excluded.value, updated_at = now();
+
+  update animals_pilot set
+    slaughter = null, slaughtered_by = null, slaughter_time = null, slaughter_by_device = null,
+    legs_stickers = false, head_stickers = false,
+    maw = null, rumen = null,
+    inner_status = null, inner_by = null, inner_time = null, inner_by_device = null,
+    not_chalak_inner = false, not_chalak_outer = false,
+    outer_status = null, outer_by = null, outer_time = null, outer_by_device = null,
+    parts_scanned = false, tongue_sticker = false, cheek_sticker = false,
+    weight_right = null, weight_left = null,
+    weight_stage2 = null, weight_stage3 = null,
+    weight_right_skipped = false, weight_left_skipped = false,
+    weight_stage2_skipped = false, weight_stage3_skipped = false,
+    eso_checked = false, eso_result = null, eso_prev_slaughter = null, eso_by_device = null,
+    legs_sorted = false,
+    stamped = false, stamped_as = null,
+    parts_print_count = 0, parts_printed_as = null,
+    board_epoch = v_epoch,
+    updated_at = clock_timestamp()
+  where true;
+
+  delete from device_stage_cursor where true;
+  update devices_pilot set cursor_slaughter = null, cursor_inner = null, cursor_outer = null, cursor_eso = null
+   where cursor_slaughter is not null or cursor_inner is not null or cursor_outer is not null or cursor_eso is not null;
+
+  perform set_config('gt.reset_in_progress', 'false', true);
+  perform set_config('app.device_admin', '', true);
+
+  insert into settings_pilot (id, settings, device_id, updated_at)
+  values (1, jsonb_build_object('lastServerResetAt', now()::text, 'lastServerResetReason', p_reason,
+                                'boardEpoch', v_epoch, 'dailyIntake', '[]'::jsonb, 'activeUserByRole', '{}'::jsonb),
+          'server', now())
+  on conflict (id) do update
+    set settings = coalesce(settings_pilot.settings, '{}'::jsonb)
+                   || jsonb_build_object('lastServerResetAt', now()::text, 'lastServerResetReason', p_reason,
+                                         'boardEpoch', v_epoch, 'dailyIntake', '[]'::jsonb, 'activeUserByRole', '{}'::jsonb),
+        device_id = 'server',
+        updated_at = now();
+end $$;
+revoke execute on function _do_board_reset(text, date) from public, anon, authenticated;
+
 -- ── self-check ──────────────────────────────────────────────────────────────
 do $$
 declare problems text[] := '{}';
@@ -3383,6 +4211,12 @@ begin
     problems := problems || 'rabbinate screen rulings (v10.17)'::text; end if;
   if has_table_privilege('anon', 'kashrut_seals', 'select') or has_function_privilege('anon', '_seal_key_ok(text)', 'execute') then
     problems := problems || 'kashrut seals readable directly by the app (v10.22)'::text; end if;
+  if has_table_privilege('anon', 'animal_holds', 'select') or has_table_privilege('anon', 'animal_changes', 'select')
+     or has_function_privilege('anon', '_hold_block(bigint,integer,text,text)', 'execute') then
+    problems := problems || 'holds / changes readable directly by the app (v10.26)'::text; end if;
+  if not exists (select 1 from pg_trigger where tgrelid = 'animals_pilot'::regclass and tgname = 'b_animals_hold_guard' and tgenabled <> 'D')
+     or not exists (select 1 from pg_trigger where tgrelid = 'animals_pilot'::regclass and tgname = 'zzzzz_close_questions' and tgenabled <> 'D') then
+    problems := problems || 'hold triggers missing (v10.26)'::text; end if;
   if (select value from plant_state where key = 'schemaStep')::int < 46 then
     problems := problems || 'schemaStep not 46'::text; end if;
   if array_length(problems, 1) > 0 then

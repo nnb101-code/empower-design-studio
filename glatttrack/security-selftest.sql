@@ -649,7 +649,7 @@ $gt37$;
     execute $gt38$
 -- ── corrections ──────────────────────────────────────────────────────────────
 do $$
-declare r jsonb; r2 jsonb; r3 jsonb; r4 jsonb; ok boolean;
+declare r jsonb; r2 jsonb; r3 jsonb; r4 jsonb; r5 jsonb; ok boolean;
 begin
   -- same tablet, right away → allowed (all four stages; inner reopen too)
   perform pg_temp.api(pg_temp.dev('SL1'), pg_temp.q_claim(914, 'slaughter', 'slaughtered', '', ''));
@@ -673,101 +673,71 @@ begin
   perform pg_temp.rec('correction by the same tablet right away: allowed', ok,
     concat_ws(' | ', left(r::text, 60), left(r2::text, 60), left(r3::text, 60), left(r4::text, 60)));
 
-  -- the tablet moved on (ruled another animal after this one) → refused
+  -- v10.26: a change is allowed at any time — also after the tablet moved on to other animals
   perform pg_temp.api(pg_temp.dev('SL1'), pg_temp.q_claim(916, 'slaughter', 'slaughtered', '', ''));
   perform pg_temp.api(pg_temp.dev('SL1'), pg_temp.q_claim(917, 'slaughter', 'slaughtered', '', ''));
   r := pg_temp.api(pg_temp.dev('SL1'), pg_temp.q_push(916, jsonb_build_object('slaughter', 'shot', 'slaughter_time', (pg_temp.ar(916)).slaughter_time + 5)));
-  perform pg_temp.api(pg_temp.dev('ESO1'), pg_temp.q_claim(916, 'eso', 'ok', '', ''));
+  perform pg_temp.prep(918, 'slaughter');
   perform pg_temp.api(pg_temp.dev('ESO1'), pg_temp.q_claim(917, 'eso', 'ok', '', ''));
-  r2 := pg_temp.api(pg_temp.dev('ESO1'), format('select eso_change(916, ''nevela'', ''x'', %s)', pg_temp.ep()));
-  perform pg_temp.prep(918, 'slaughter'); perform pg_temp.prep(919, 'slaughter');
-  perform pg_temp.prep(920, 'inner'); perform pg_temp.prep(921, 'inner');
-  perform pg_temp.api(pg_temp.dev('IN1'), pg_temp.q_claim(918, 'inner', 'confirmed', '', ''));
-  perform pg_temp.api(pg_temp.dev('IN1'), pg_temp.q_claim(919, 'inner_start', 'in_progress', '', ''));
-  r3 := pg_temp.api(pg_temp.dev('IN1'), pg_temp.q_push(918, jsonb_build_object('inner_status', 'treif', 'inner_time', (pg_temp.ar(918)).inner_time + 5)));
-  perform pg_temp.api(pg_temp.dev('OUT1'), pg_temp.q_claim(920, 'outer', 'glatt', '', ''));
+  perform pg_temp.api(pg_temp.dev('ESO1'), pg_temp.q_claim(918, 'eso', 'ok', '', ''));
+  r2 := pg_temp.api(pg_temp.dev('ESO1'), format('select eso_change(917, ''nevela'', ''x'', %s)', pg_temp.ep()));
+  perform pg_temp.prep(919, 'slaughter'); perform pg_temp.prep(920, 'slaughter');
+  perform pg_temp.prep(921, 'inner'); perform pg_temp.prep(922, 'inner');
+  perform pg_temp.api(pg_temp.dev('IN1'), pg_temp.q_claim(919, 'inner', 'confirmed', '', ''));
+  perform pg_temp.api(pg_temp.dev('IN1'), pg_temp.q_claim(920, 'inner_start', 'in_progress', '', ''));
+  r3 := pg_temp.api(pg_temp.dev('IN1'), pg_temp.q_push(919, jsonb_build_object('inner_status', 'treif', 'inner_time', (pg_temp.ar(919)).inner_time + 5)));
   perform pg_temp.api(pg_temp.dev('OUT1'), pg_temp.q_claim(921, 'outer', 'glatt', '', ''));
-  r4 := pg_temp.api(pg_temp.dev('OUT1'), pg_temp.q_push(920, jsonb_build_object('outer_status', 'treif', 'outer_time', (pg_temp.ar(920)).outer_time + 5)));
-  ok := r ->> 'error' = 'moved_on' and r2 ->> 'error' = 'moved_on' and r3 ->> 'error' = 'moved_on' and r4 ->> 'error' = 'moved_on'
-        and (pg_temp.ar(916)).slaughter = 'slaughtered' and (pg_temp.ar(916)).eso_result = 'ok'
-        and (pg_temp.ar(918)).inner_status = 'confirmed' and (pg_temp.ar(920)).outer_status = 'glatt'
-        and r -> 'row' ->> 'slaughter' = 'slaughtered';
-  perform pg_temp.rec('correction after the tablet moved on: refused (moved_on, server row returned)', ok,
-    concat_ws(' | ', r ->> 'error', r2 ->> 'error', r3 ->> 'error', r4 ->> 'error'));
+  perform pg_temp.api(pg_temp.dev('OUT1'), pg_temp.q_claim(922, 'outer', 'glatt', '', ''));
+  r4 := pg_temp.api(pg_temp.dev('OUT1'), pg_temp.q_push(921, jsonb_build_object('outer_status', 'treif', 'outer_time', (pg_temp.ar(921)).outer_time + 5)));
+  ok := pg_temp.ok(r) and pg_temp.ok(r2) and pg_temp.ok(r3) and pg_temp.ok(r4)
+        and (pg_temp.ar(916)).slaughter = 'shot' and (pg_temp.ar(917)).eso_result = 'nevela' and (pg_temp.ar(917)).slaughter = 'nevela'
+        and (pg_temp.ar(919)).inner_status = 'treif' and (pg_temp.ar(921)).outer_status = 'treif';
+  perform pg_temp.rec('v10.26 a change after the tablet moved on: allowed (slaughter, esophagus, inner, outer)', ok,
+    concat_ws(' | ', left(r::text, 60), left(r2::text, 60), left(r3::text, 60), left(r4::text, 60)));
 
-  -- judged by TIME, not by number: a late (lower-numbered) animal
-  perform pg_temp.prep(922, 'inner'); perform pg_temp.prep(923, 'inner'); perform pg_temp.prep(924, 'inner');
-  perform pg_temp.api(pg_temp.dev('OUT2'), pg_temp.q_claim(923, 'outer', 'kosher', '', ''));
-  perform pg_temp.api(pg_temp.dev('OUT2'), pg_temp.q_claim(924, 'outer', 'kosher', '', ''));
-  perform pg_temp.api(pg_temp.dev('OUT2'), pg_temp.q_claim(922, 'outer', 'kosher', '', ''));        -- #922 arrives late
-  r  := pg_temp.api(pg_temp.dev('OUT2'), pg_temp.q_push(922, jsonb_build_object('outer_status', 'treif', 'outer_time', (pg_temp.ar(922)).outer_time + 5)));
-  r2 := pg_temp.api(pg_temp.dev('OUT2'), pg_temp.q_push(924, jsonb_build_object('outer_status', 'treif', 'outer_time', (pg_temp.ar(924)).outer_time + 5)));
-  perform pg_temp.api(pg_temp.dev('SL2'), pg_temp.q_claim(926, 'slaughter', 'slaughtered', '', ''));
-  perform pg_temp.api(pg_temp.dev('SL2'), pg_temp.q_claim(925, 'slaughter', 'slaughtered', '', ''));
-  r3 := pg_temp.api(pg_temp.dev('SL2'), pg_temp.q_push(925, jsonb_build_object('slaughter', 'shot', 'slaughter_time', (pg_temp.ar(925)).slaughter_time + 5)));
-  r4 := pg_temp.api(pg_temp.dev('SL2'), pg_temp.q_push(926, jsonb_build_object('slaughter', 'shot', 'slaughter_time', (pg_temp.ar(926)).slaughter_time + 5)));
-  ok := pg_temp.ok(r) and (pg_temp.ar(922)).outer_status = 'treif' and r2 ->> 'error' = 'moved_on' and (pg_temp.ar(924)).outer_status = 'kosher'
-        and pg_temp.ok(r3) and (pg_temp.ar(925)).slaughter = 'shot' and r4 ->> 'error' = 'moved_on'
-        and (select animal_id from device_stage_cursor where device_id = pg_temp.devid('OUT2') and stage = 'outer') = 922;
-  perform pg_temp.rec('moved on is judged by time: a late animal can be ruled and corrected right away; the higher one is locked', ok,
-    concat_ws(' | ', left(r::text, 40), r2 ->> 'error', left(r3::text, 40), r4 ->> 'error'));
-
-  -- another tablet / another station → refused
-  r  := pg_temp.api(pg_temp.dev('OUT2'), pg_temp.q_push(921, jsonb_build_object('outer_status', 'treif', 'outer_time', (pg_temp.ar(921)).outer_time + 5, 'outer_by_device', pg_temp.devid('OUT1'))));
-  r2 := pg_temp.api(pg_temp.dev('IN2'), pg_temp.q_push(921, jsonb_build_object('outer_status', 'treif', 'outer_time', (pg_temp.ar(921)).outer_time + 5)));
-  r3 := pg_temp.api(pg_temp.dev('SL2'), pg_temp.q_push(917, jsonb_build_object('slaughter', 'shot', 'slaughter_time', (pg_temp.ar(917)).slaughter_time + 5)));
-  r4 := pg_temp.api(pg_temp.dev('ESO2'), format('select eso_change(917, ''nevela'', %L, %s)', pg_temp.devid('ESO1'), pg_temp.ep()));
+  -- another tablet of the SAME station: allowed; a tablet with no ruling rights: refused and logged
+  r  := pg_temp.api(pg_temp.dev('SL2'), pg_temp.q_push(916, jsonb_build_object('slaughter', 'slaughtered', 'slaughter_time', (pg_temp.ar(916)).slaughter_time + 5)));
+  r2 := pg_temp.api(pg_temp.dev('OUT2'), pg_temp.q_push(922, jsonb_build_object('outer_status', 'beit', 'outer_time', (pg_temp.ar(922)).outer_time + 5)));
+  r3 := pg_temp.api(pg_temp.dev('ESO2'), format('select eso_change(917, ''ok'', %L, %s)', pg_temp.devid('ESO2'), pg_temp.ep()));
+  r4 := pg_temp.api(pg_temp.dev('IN2'), pg_temp.q_push(922, jsonb_build_object('outer_status', 'treif', 'outer_time', (pg_temp.ar(922)).outer_time + 9)));
+  perform pg_temp.testmode(true);
+  r5 := pg_temp.api(pg_temp.mgr(), pg_temp.q_push(922, jsonb_build_object('outer_status', 'kosher', 'outer_time', (pg_temp.ar(922)).outer_time + 12)));
+  perform pg_temp.testmode(false);
   -- (step 46: an inner tablet has no outer rights at all — its outer value is simply not applied)
-  ok := r ->> 'error' = 'correction_not_allowed' and pg_temp.ok(r2)
-        and r3 ->> 'error' = 'correction_not_allowed' and r4 ->> 'error' = 'correction_not_allowed'
-        and (pg_temp.ar(921)).outer_status = 'glatt' and (pg_temp.ar(917)).slaughter = 'slaughtered' and (pg_temp.ar(917)).eso_result = 'ok';
-  perform pg_temp.rec('correction by another tablet / station: refused (correction_not_allowed)', ok,
-    concat_ws(' | ', r ->> 'error', r2 ->> 'error', r3 ->> 'error', r4 ->> 'error'));
+  ok := pg_temp.ok(r) and (pg_temp.ar(916)).slaughter = 'slaughtered'
+        and pg_temp.ok(r2) and (pg_temp.ar(922)).outer_status = 'beit'
+        and pg_temp.ok(r3) and (pg_temp.ar(917)).eso_result = 'ok' and (pg_temp.ar(917)).slaughter = 'slaughtered'
+        and pg_temp.ok(r4) and r5 ->> 'error' = 'correction_not_allowed';
+  perform pg_temp.rec('v10.26 a change by another tablet of the same station: allowed; no ruling rights: refused (correction_not_allowed)', ok,
+    concat_ws(' | ', left(r::text, 50), left(r2::text, 50), left(r3::text, 50), r5 ->> 'error'));
   perform pg_temp.rec('refused corrections are logged (event log + brake counter)',
-    exists (select 1 from events_pilot where stage = 'security' and action = 'correction_rejected' and animal_no = 919
-                                           and device_id = pg_temp.devid('IN1'))
-    and exists (select 1 from events_pilot where stage = 'security' and action = 'correction_rejected' and animal_no = 921
-                                           and device_id = pg_temp.devid('OUT1'))
-    and (select count(*) from rate_events where kind = 'correction_rejected' and key = pg_temp.devid('OUT2')) >= 1);
+    exists (select 1 from events_pilot where stage = 'security' and action = 'correction_rejected' and animal_no = 923)
+    and (select count(*) from rate_events where kind = 'correction_rejected' and key like 'mgr-%') >= 1);
 
-  -- a later stage already acted → refused, even for the tablet that ruled
-  perform pg_temp.api(pg_temp.dev('SL1'), pg_temp.q_claim(927, 'slaughter', 'slaughtered', '', ''));
-  perform pg_temp.api(pg_temp.dev('IN1'), pg_temp.q_claim(927, 'inner_start', 'in_progress', '', ''));
-  r := pg_temp.api(pg_temp.dev('SL1'), pg_temp.q_push(927, jsonb_build_object('slaughter', 'shot', 'slaughter_time', (pg_temp.ar(927)).slaughter_time + 5)));
-  perform pg_temp.prep(928, 'slaughter'); perform pg_temp.prep(929, 'slaughter');
-  perform pg_temp.api(pg_temp.dev('ESO1'), pg_temp.q_claim(928, 'eso', 'ok', '', ''));
-  perform pg_temp.api(pg_temp.dev('IN2'), pg_temp.q_claim(928, 'inner_start', 'in_progress', '', ''));
-  r2 := pg_temp.api(pg_temp.dev('ESO1'), format('select eso_change(928, ''nevela'', ''x'', %s)', pg_temp.ep()));
-  perform pg_temp.api(pg_temp.dev('IN1'), pg_temp.q_claim(929, 'inner', 'confirmed', '', ''));
-  perform pg_temp.api(pg_temp.dev('OUT1'), pg_temp.q_claim(929, 'outer', 'kosher', '', ''));
-  r3 := pg_temp.api(pg_temp.dev('IN1'), pg_temp.q_push(929, jsonb_build_object('inner_status', 'in_progress', 'inner_time', (pg_temp.ar(929)).inner_time + 5)));
-  r4 := pg_temp.api(pg_temp.dev('IN1'), pg_temp.q_push(929, jsonb_build_object('maw', 'treif', 'not_chalak_inner', true, 'inner_time', (pg_temp.ar(929)).inner_time + 6)));
-  ok := r ->> 'error' = 'correction_not_allowed' and r2 ->> 'error' = 'correction_not_allowed'
-        and r3 ->> 'error' = 'correction_not_allowed' and r4 ->> 'error' = 'correction_not_allowed'
-        and (pg_temp.ar(927)).slaughter = 'slaughtered' and (pg_temp.ar(929)).inner_status = 'confirmed';
-  perform pg_temp.rec('correction after a later stage acted: refused', ok,
-    concat_ws(' | ', r ->> 'error', r2 ->> 'error', r3 ->> 'error', r4 ->> 'error'));
-
-  -- outer ruling after parts print / stamp / legs sort → refused; stickers only → allowed
-  perform pg_temp.prep(930, 'inner'); perform pg_temp.prep(931, 'inner'); perform pg_temp.prep(932, 'inner'); perform pg_temp.prep(933, 'inner');
-  perform pg_temp.api(pg_temp.dev('OUT1'), pg_temp.q_claim(930, 'outer', 'glatt', '', ''));
-  perform pg_temp.api(pg_temp.dev('PARTS'), pg_temp.q_push(930, '{"parts_print_count":1,"parts_printed_as":"glatt"}'));
-  r := pg_temp.api(pg_temp.dev('OUT1'), pg_temp.q_push(930, jsonb_build_object('outer_status', 'treif', 'outer_time', (pg_temp.ar(930)).outer_time + 5)));
-  perform pg_temp.api(pg_temp.dev('OUT1'), pg_temp.q_claim(931, 'outer', 'glatt', '', ''));
-  perform pg_temp.api(pg_temp.dev('STAMPS'), pg_temp.q_claim(931, 'stamped', 'true', '', ''));
-  r2 := pg_temp.api(pg_temp.dev('OUT1'), pg_temp.q_push(931, jsonb_build_object('outer_status', 'treif', 'outer_time', (pg_temp.ar(931)).outer_time + 5)));
-  perform pg_temp.api(pg_temp.dev('OUT1'), pg_temp.q_claim(932, 'outer', 'glatt', '', ''));
-  perform pg_temp.api(pg_temp.dev('LEGS'), pg_temp.q_claim(932, 'legs', 'true', '', ''));
-  r3 := pg_temp.api(pg_temp.dev('OUT1'), pg_temp.q_push(932, jsonb_build_object('outer_status', 'treif', 'outer_time', (pg_temp.ar(932)).outer_time + 5)));
-  perform pg_temp.api(pg_temp.dev('OUT1'), pg_temp.q_claim(933, 'outer', 'glatt', '', ''));
-  perform pg_temp.api(pg_temp.dev('LEGS'), pg_temp.q_push(933, '{"legs_stickers":true,"head_stickers":true}'));
-  r4 := pg_temp.api(pg_temp.dev('OUT1'), pg_temp.q_push(933, jsonb_build_object('outer_status', 'beit', 'outer_time', (pg_temp.ar(933)).outer_time + 5)));
-  ok := r ->> 'error' = 'correction_not_allowed' and r2 ->> 'error' = 'correction_not_allowed'
-        and r3 ->> 'error' = 'correction_not_allowed' and pg_temp.ok(r4)
-        and (pg_temp.ar(930)).outer_status = 'glatt' and (pg_temp.ar(931)).stamped and (pg_temp.ar(932)).legs_sorted
-        and (pg_temp.ar(933)).outer_status = 'beit';
-  perform pg_temp.rec('outer correction after print / stamp / legs sort: refused (stickers only: allowed)', ok,
-    concat_ws(' | ', r ->> 'error', r2 ->> 'error', r3 ->> 'error', left(r4::text, 40)));
+  -- a change after the next stations worked: allowed, recorded for the team leader ("⚠ השתנה"),
+  -- shown to every screen (board_flags) until the team leader marks it handled (change_ack)
+  perform pg_temp.prep(927, 'inner');
+  perform pg_temp.api(pg_temp.dev('OUT1'), pg_temp.q_claim(927, 'outer', 'glatt', '', ''));
+  perform pg_temp.api(pg_temp.dev('PARTS'), pg_temp.q_push(927, '{"parts_print_count":3,"parts_printed_as":"glatt","parts_scanned":true}'));
+  r := pg_temp.api(pg_temp.dev('SL1'), pg_temp.q_push(927, jsonb_build_object('slaughter', 'nevela', 'slaughter_time', (pg_temp.ar(927)).slaughter_time + 5)));
+  perform pg_temp.prep(928, 'inner');
+  perform pg_temp.api(pg_temp.dev('OUT2'), pg_temp.q_claim(928, 'outer', 'glatt', '', ''));
+  perform pg_temp.api(pg_temp.dev('STAMPS'), pg_temp.q_claim(928, 'stamped', 'true', '', ''));
+  r2 := pg_temp.api(pg_temp.dev('OUT1'), pg_temp.q_push(928, jsonb_build_object('outer_status', 'treif', 'outer_time', (pg_temp.ar(928)).outer_time + 5)));
+  r3 := pg_temp.api(pg_temp.dev('SL1'), 'select board_flags()');
+  r4 := pg_temp.api('{}', format('select change_ack(%L, %s)', pg_temp.v('mgr'),
+                      (select id from animal_changes where animal_id = 927 and stage = 'slaughter' order by id desc limit 1)));
+  r5 := pg_temp.api(pg_temp.dev('SL1'), format('select change_ack(%L, 1)', 'nope'));
+  ok := pg_temp.ok(r) and (pg_temp.ar(927)).slaughter = 'nevela' and pg_temp.ok(r2) and (pg_temp.ar(928)).outer_status = 'treif'
+        and exists (select 1 from animal_changes where animal_id = 927 and stage = 'slaughter' and old_value = 'slaughtered'
+                       and new_value = 'nevela' and done ->> 'outer' = 'glatt' and (done ->> 'partsPrinted')::int = 3)
+        and exists (select 1 from animal_changes where animal_id = 928 and stage = 'outer' and done ->> 'stamped' = 'true')
+        and exists (select 1 from jsonb_array_elements(r3 -> 'changes') x where (x ->> 'n')::int = 928 and x ->> 'ackAt' is null)
+        and pg_temp.ok(r4) and (select ack_at from animal_changes where animal_id = 927 and stage = 'slaughter' order by id desc limit 1) is not null
+        and r5 ->> 'error' = 'unauthorized'
+        and not exists (select 1 from animal_changes where animal_id in (916, 919));   -- nothing later had happened there
+  perform pg_temp.rec('v10.26 a change after the next stations worked: allowed, recorded (what was done), shown, handled by the team leader', ok,
+    concat_ws(' | ', left(r::text, 50), left(r2::text, 50), left(r3::text, 80), r4::text, r5::text));
 
   -- lung check: abandoned only by the tablet that opened it; 10-minute takeover still works
   perform pg_temp.prep(934, 'slaughter'); perform pg_temp.prep(935, 'slaughter'); perform pg_temp.prep(936, 'slaughter');
@@ -1066,14 +1036,16 @@ do $$
 declare r jsonb; r2 jsonb; i int; ok boolean; v_last jsonb;
 begin
   -- a tablet that keeps trying refused corrections is braked (first rulings still go)
+  -- (v10.26: a slaughter change after the esophagus failed the animal is still refused: eso_locked)
   perform pg_temp.api(pg_temp.dev('BRK'), pg_temp.q_claim(946, 'slaughter', 'slaughtered', '', ''));
   perform pg_temp.api(pg_temp.dev('BRK'), pg_temp.q_claim(947, 'slaughter', 'slaughtered', '', ''));
+  perform pg_temp.api(pg_temp.dev('ESO1'), pg_temp.q_claim(946, 'eso', 'nevela', '', ''));
   for i in 1 .. 10 loop
     v_last := pg_temp.api(pg_temp.dev('BRK'), pg_temp.q_push(946, jsonb_build_object('slaughter', 'shot', 'slaughter_time', (pg_temp.ar(946)).slaughter_time + i)));
   end loop;
   r  := pg_temp.api(pg_temp.dev('BRK'), pg_temp.q_push(946, jsonb_build_object('slaughter', 'shot', 'slaughter_time', (pg_temp.ar(946)).slaughter_time + 99)));
   r2 := pg_temp.api(pg_temp.dev('BRK'), pg_temp.q_claim(948, 'slaughter', 'slaughtered', '', ''));
-  ok := v_last ->> 'error' = 'moved_on' and r ->> 'error' = 'rate_limited' and (r ->> 'retry_after')::int > 0 and pg_temp.claimed(r2);
+  ok := v_last ->> 'error' = 'eso_locked' and r ->> 'error' = 'rate_limited' and (r ->> 'retry_after')::int > 0 and pg_temp.claimed(r2);
   perform pg_temp.rec('refused corrections: logged and braked per device (10 in 10 min → rate_limited)', ok,
     concat_ws(' | ', v_last ->> 'error', r::text, r2 ->> 'claimed'));
   -- manufacturer logins: at most 6 an hour
@@ -1882,11 +1854,11 @@ begin
   perform pg_temp.api(pg_temp.dev('OUT2'), pg_temp.q_claim(973, 'outer', 'glatt', '', ''));
   t0 := (pg_temp.ar(972)).outer_time;
   r  := pg_temp.api(pg_temp.dev('OUT2'), pg_temp.q_push(972, jsonb_build_object('outer_time', t0 + 5)));
-  r2 := pg_temp.api(pg_temp.dev('OUT2'), pg_temp.q_push(972, jsonb_build_object('outer_status', 'treif', 'outer_time', t0 + 10)));
   ok := pg_temp.ok(r) and (pg_temp.ar(972)).outer_time = t0
-        and (select animal_id from device_stage_cursor where device_id = pg_temp.devid('OUT2') and stage = 'outer') = 973
-        and r2 ->> 'error' = 'moved_on' and (pg_temp.ar(972)).outer_status = 'glatt';
-  perform pg_temp.rec('step 46 time-only: moving a ruling''s time keeps it and the "last animal" cursor — the correction after moving on stays refused', ok,
+        and (select animal_id from device_stage_cursor where device_id = pg_temp.devid('OUT2') and stage = 'outer') = 973;
+  r2 := pg_temp.api(pg_temp.dev('OUT2'), pg_temp.q_push(972, jsonb_build_object('outer_status', 'treif', 'outer_time', t0 + 10)));
+  ok := ok and pg_temp.ok(r2) and (pg_temp.ar(972)).outer_status = 'treif';     -- v10.26: the change itself is allowed
+  perform pg_temp.rec('step 46 time-only: moving a ruling''s time alone keeps the recorded time and the "last animal" cursor', ok,
     concat_ws(' | ', left(r::text, 80), r2 ->> 'error'));
 
   -- outer after parts printed; another station (inner) on the outer time; slaughter after the lungs; inner after outer
@@ -2428,6 +2400,112 @@ begin
     concat_ws(' | ', left(r::text, 80), r2::text, r3::text, r4::text));
 end $$
 $gtn9$;
+    v_step := 'v10.26 holds: "?" question and USDA hold';
+    execute $gt71$
+-- ── v10.26 holds: "?" question and USDA hold ────────────────────────────────
+do $$
+declare r jsonb; r2 jsonb; r3 jsonb; r4 jsonb; r5 jsonb; r6 jsonb; ok boolean; h bigint;
+begin
+  -- the station tablets used here are back on their stations (earlier checks unpaired / replaced some)
+  perform set_config('app.device_admin', 'on', true);
+  update devices_pilot d set assigned_role = x.role, assigned_index = x.idx, device_status = 'active', paired_at = now()
+    from (values ('SL1', 'slaughter', 90), ('ESO1', 'esophagus', 90), ('IN1', 'inner', 90), ('OUT2', 'outer', 91),
+                 ('LEGS', 'legs', 90), ('PARTS', 'parts', 90), ('STAMPS', 'stamps', 90)) x(name, role, idx)
+   where d.id = pg_temp.devid(x.name);
+  update device_credentials set revoked = false
+   where device_id in (select pg_temp.devid(n) from unnest(array['SL1','ESO1','IN1','OUT2','LEGS','PARTS','STAMPS']) n);
+  perform set_config('app.device_admin', '', true);
+  -- the shochet's "?": the next numbers go on; the esophagus and the legs stickers may act on it,
+  -- the lungs wait; another station can't put a slaughter "?"; the shochet's ruling closes it
+  r  := pg_temp.api(pg_temp.dev('SL1'), format('select hold_set(%s, ''slaughter'', ''question'')', 980));
+  r2 := pg_temp.api(pg_temp.dev('ESO1'), format('select hold_set(%s, ''slaughter'', ''question'')', 981));
+  perform pg_temp.api(pg_temp.dev('SL1'), pg_temp.q_claim(981, 'slaughter', 'slaughtered', '', ''));
+  r3 := pg_temp.api(pg_temp.dev('ESO1'), pg_temp.q_claim(980, 'eso', 'ok', '', ''));
+  r4 := pg_temp.api(pg_temp.dev('LEGS'), pg_temp.q_push(980, '{"legs_stickers":true,"head_stickers":true}'));
+  r5 := pg_temp.api(pg_temp.dev('IN1'), pg_temp.q_claim(980, 'inner_start', 'in_progress', '', ''));
+  ok := pg_temp.ok(r) and r2 ->> 'error' = 'wrong_station' and pg_temp.claimed(r3) and pg_temp.ok(r4)
+        and r5 ->> 'error' = 'out_of_order' and (pg_temp.ar(980)).slaughter is null and (pg_temp.ar(980)).legs_stickers
+        and _board_unfinished() >= 1
+        and exists (select 1 from jsonb_array_elements((pg_temp.api(pg_temp.dev('LEGS'), 'select board_flags()')) -> 'holds') x
+                     where (x ->> 'n')::int = 980 and x ->> 'kind' = 'question' and (x ->> 'open')::boolean);
+  r6 := pg_temp.api(pg_temp.dev('SL1'), pg_temp.q_claim(980, 'slaughter', 'nevela', '', ''));
+  ok := ok and pg_temp.claimed(r6) and (pg_temp.ar(980)).slaughter = 'nevela' and (pg_temp.ar(980)).eso_result = 'ok'
+        and exists (select 1 from animal_holds where animal_id = 980 and station = 'slaughter' and resolution = 'ruled' and note = 'nevela')
+        and pg_temp.api(pg_temp.dev('SL1'), format('select hold_set(%s, ''slaughter'', ''question'')', 980)) ->> 'error' = 'already_ruled';
+  perform pg_temp.rec('v10.26 slaughter "?": next numbers go on; esophagus + legs stickers may act, lungs wait; only the slaughter screen; its ruling (nevela) closes it and wins over the esophagus', ok,
+    concat_ws(' | ', left(r::text, 60), r2::text, left(r3::text, 40), left(r4::text, 40), r5 ->> 'reason', left(r6::text, 40)));
+
+  -- an esophagus nevela closes the shochet's "?"; changed back to ok, the "?" is open again
+  perform pg_temp.api(pg_temp.dev('SL1'), format('select hold_set(%s, ''slaughter'', ''question'')', 982));
+  r  := pg_temp.api(pg_temp.dev('ESO1'), pg_temp.q_claim(982, 'eso', 'nevela', '', ''));
+  ok := pg_temp.claimed(r) and (pg_temp.ar(982)).slaughter = 'nevela'
+        and not exists (select 1 from animal_holds where animal_id = 982 and resolved_at is null);
+  r2 := pg_temp.api(pg_temp.dev('ESO1'), format('select eso_change(982, ''ok'', %L, %s)', pg_temp.devid('ESO1'), pg_temp.ep()));
+  ok := ok and pg_temp.ok(r2) and (pg_temp.ar(982)).slaughter is null and (pg_temp.ar(982)).eso_result = 'ok'
+        and exists (select 1 from animal_holds where animal_id = 982 and station = 'slaughter' and kind = 'question' and resolved_at is null);
+  perform pg_temp.rec('v10.26 esophagus nevela on a "?" number closes the "?"; back to ok reopens it (no made-up slaughter ruling)', ok,
+    concat_ws(' | ', r ->> 'claimed', r ->> 'error', (pg_temp.ar(982)).slaughter, (pg_temp.ar(982)).eso_result,
+              (select string_agg(coalesce(resolution,'OPEN')||':'||coalesce(note,''), ',') from animal_holds where animal_id = 982), r2 ->> 'ok', r2 ->> 'error'));
+
+  -- a "?" of the lungs / outer: the station's own ruling closes it; the next station waits
+  perform pg_temp.prep(983, 'slaughter'); perform pg_temp.prep(984, 'inner');
+  r  := pg_temp.api(pg_temp.dev('IN1'), format('select hold_set(%s, ''inner'', ''question'')', 983));
+  r2 := pg_temp.api(pg_temp.dev('OUT2'), format('select hold_set(%s, ''outer'', ''question'')', 984));
+  r3 := pg_temp.api(pg_temp.dev('PARTS'), pg_temp.q_push(984, '{"parts_print_count":3,"parts_printed_as":"glatt"}'));
+  perform pg_temp.api(pg_temp.dev('ESO1'), pg_temp.q_claim(983, 'eso', 'ok', '', ''));
+  r4 := pg_temp.api(pg_temp.dev('IN1'), pg_temp.q_claim(983, 'inner', 'confirmed', '', ''));
+  perform pg_temp.api(pg_temp.dev('OUT2'), pg_temp.q_claim(984, 'outer', 'glatt', '', ''));
+  ok := pg_temp.ok(r) and pg_temp.ok(r2) and r3 ->> 'error' = 'out_of_order'
+        and not exists (select 1 from animal_holds where animal_id in (983, 984) and resolved_at is null)
+        and (select count(*) from animal_holds where animal_id in (983, 984) and resolution = 'ruled') = 2;
+  perform pg_temp.rec('v10.26 lungs / outer "?": the station''s own ruling (any tablet of it) closes it; the next stations wait', ok,
+    concat_ws(' | ', r ->> 'ok', r2 ->> 'ok', r3 ->> 'error', r4 ->> 'claimed', r4 ->> 'error', r4 ->> 'reason', (pg_temp.ar(983)).inner_status, (pg_temp.ar(984)).outer_status,
+              (select string_agg(animal_id||':'||coalesce(resolution,'OPEN'), ',') from animal_holds where animal_id in (983, 984))));
+
+  -- USDA, the whole animal: every station stops; only the station that put it releases / condemns
+  perform pg_temp.prep(985, 'outer'); perform pg_temp.prep(986, 'outer');
+  r  := pg_temp.api(pg_temp.dev('PARTS'), format('select hold_set(%s, ''parts'', ''usda'', ''whole'')', 985));
+  h  := (r #>> '{hold,id}')::bigint;
+  r2 := pg_temp.api(pg_temp.dev('PARTS'), pg_temp.q_push(985, '{"parts_print_count":3,"parts_printed_as":"glatt","parts_scanned":true}'));
+  r3 := pg_temp.api(pg_temp.dev('STAMPS'), pg_temp.q_claim(985, 'stamped', 'true', '', ''));
+  r4 := pg_temp.api(pg_temp.dev('STAMPS'), format('select hold_resolve(%s, ''released'')', h));
+  ok := pg_temp.ok(r) and r2 ->> 'error' = 'held' and r3 ->> 'error' = 'held' and r4 ->> 'error' = 'wrong_station'
+        and not _proc_pending('parts', pg_temp.ar(985), true)
+        and pg_temp.api(pg_temp.dev('PARTS'), format('select hold_set(%s, ''parts'', ''usda'', ''left'')', 985)) ->> 'error' = 'bad_value';
+  r5 := pg_temp.api(pg_temp.dev('PARTS'), format('select hold_resolve(%s, ''released'')', h));
+  r6 := pg_temp.api(pg_temp.dev('STAMPS'), pg_temp.q_claim(985, 'stamped', 'true', '', ''));
+  ok := ok and pg_temp.ok(r5) and pg_temp.claimed(r6) and _proc_pending('parts', pg_temp.ar(985), true);
+  -- condemned: that meat does not go on (and holds no station); the kashrut ruling stays
+  r  := pg_temp.api(pg_temp.dev('STAMPS'), format('select hold_set(%s, ''stamps'', ''usda'', ''whole'')', 986));
+  r2 := pg_temp.api(pg_temp.dev('STAMPS'), format('select hold_resolve(%s, ''condemned'')', (r #>> '{hold,id}')::bigint));
+  r3 := pg_temp.api(pg_temp.dev('PARTS'), pg_temp.q_push(986, '{"parts_print_count":3,"parts_printed_as":"glatt"}'));
+  ok := ok and pg_temp.ok(r2) and r3 ->> 'error' = 'held' and r3 ->> 'reason' = 'condemned'
+        and (pg_temp.ar(986)).outer_status = 'glatt' and not _proc_pending('stamps', pg_temp.ar(986), true);
+  perform pg_temp.rec('v10.26 USDA hold of the whole animal: every station stops; only its station releases (back in line) or condemns (stops for good, ruling kept)', ok,
+    concat_ws(' | ', r2::text, r3::text, left(r6::text, 40)));
+
+  -- USDA on a part / half: only that part waits; a "?" at a processing station holds that station
+  perform pg_temp.prep(987, 'outer');
+  r  := pg_temp.api(pg_temp.dev('PARTS'), format('select hold_set(%s, ''parts'', ''usda'', ''tongue'')', 987));
+  r2 := pg_temp.api(pg_temp.dev('PARTS'), pg_temp.q_push(987, '{"parts_print_count":3,"parts_printed_as":"glatt","parts_scanned":true}'));
+  r3 := pg_temp.api(pg_temp.dev('STAMPS'), format('select hold_set(%s, ''stamps'', ''usda'', ''left'')', 987));
+  r4 := pg_temp.api(pg_temp.dev('STAMPS'), pg_temp.q_push(987, '{"weight_left":120.5}'));
+  r5 := pg_temp.api(pg_temp.dev('STAMPS'), pg_temp.q_push(987, '{"weight_right":121.5}'));
+  perform pg_temp.prep(988, 'outer');
+  r6 := pg_temp.api(pg_temp.dev('LEGS'), format('select hold_set(%s, ''legs'', ''question'')', 988));
+  ok := pg_temp.ok(r) and pg_temp.ok(r2) and pg_temp.ok(r3) and r4 ->> 'error' = 'held' and pg_temp.ok(r5)
+        and (pg_temp.ar(987)).weight_right = 121.5 and (pg_temp.ar(987)).weight_left is null;
+  r4 := pg_temp.api(pg_temp.dev('LEGS'), pg_temp.q_claim(988, 'legs', 'true', '', ''));
+  r5 := pg_temp.api(pg_temp.dev('LEGS'), format('select hold_resolve(%s, ''answered'')', (r6 #>> '{hold,id}')::bigint));
+  r2 := pg_temp.api(pg_temp.dev('LEGS'), pg_temp.q_claim(988, 'legs', 'true', '', ''));
+  r3 := pg_temp.api(pg_temp.dev('DISP'), 'select hold_set(989, ''parts'', ''usda'')');
+  ok := ok and r4 ->> 'error' = 'held' and pg_temp.ok(r5) and pg_temp.claimed(r2) and r3 ->> 'error' in ('wrong_station', 'device_not_paired')
+        and pg_temp.api('{}', 'select hold_set(989, ''parts'', ''usda'')') ->> 'ok' = 'false';
+  perform pg_temp.rec('v10.26 USDA on a part / half: only that part waits (other parts print, the other half is weighed); a processing "?" holds its station until answered; no device / display → refused', ok,
+    concat_ws(' | ', (pg_temp.ar(987)).weight_right, (pg_temp.ar(987)).weight_left, r4 ->> 'claimed', r4 ->> 'error', r4 ->> 'reason', r5 ->> 'ok', r5 #>> '{hold,resolution}', r2 ->> 'claimed', r2 ->> 'error', r2 ->> 'reason', r3::text,
+              pg_temp.api('{}', 'select hold_set(989, ''parts'', ''usda'')')::text));
+end $$;
+$gt71$;
     v_step := 'the ACTIVE security surface against the expected manifest';
     execute $gt70$
 -- ── the ACTIVE security surface against the expected manifest ───────────────
@@ -2530,7 +2608,7 @@ begin
                 'eso_change(integer,text,text,bigint)', 'eso_change(integer,text,text,bigint,uuid)', 'event_append(jsonb)',
                 'lung_drawing_get(integer)', 'lung_drawing_set(integer,bigint,text)', 'manager_add(text,text,text)',
                 'manager_add_owner(text,text,text)', 'manager_deactivate(text,uuid)', 'manager_list(text)', 'manager_login(text)',
-                'manager_logout(text)', 'manager_session_check(text)', 'leader_recovery_code_new(text)', 'leader_recovery_status(text)', 'leader_device_replace(text,text)', 'plant_server_status(text)', 'animal_card(text,date,integer)', 'seal_set(text,text,text)', 'seals_get(text,bigint)', 'manufacturer_set_billing(text,boolean,numeric,text,text)',
+                'manager_logout(text)', 'manager_session_check(text)', 'leader_recovery_code_new(text)', 'leader_recovery_status(text)', 'leader_device_replace(text,text)', 'plant_server_status(text)', 'animal_card(text,date,integer)', 'seal_set(text,text,text)', 'seals_get(text,bigint)', 'hold_set(integer,text,text,text,bigint,uuid)', 'hold_resolve(bigint,text,uuid)', 'board_flags(text)', 'change_ack(text,bigint)', 'manufacturer_set_billing(text,boolean,numeric,text,text)',
                 'outer_open(integer,bigint,boolean,text)', 'outer_open(integer,bigint,boolean,text,uuid)', 'plant_status_snapshot()', 'plant_setup_needed()',
                 'push_settings(jsonb,text,text,text)', 'request_daily_rollover()', 'reset_daily_board(text,text)', 'security_summary(text)',
                 'processing_board(text)', 'carry_push(bigint,jsonb,uuid)', 'carry_claim(bigint,integer,text,uuid)',
