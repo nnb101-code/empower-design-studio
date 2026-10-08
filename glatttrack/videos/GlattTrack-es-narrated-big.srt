@@ -175,69 +175,69 @@ El número se actualiza: la pantalla muestra el dictamen actual del servidor.
 Pata tres: treif, en rojo.
 
 45
-00:08:39,342 --> 00:08:42,971
+00:08:39,224 --> 00:08:42,852
 La tableta de partes pequeñas: mejillas y lengua.
 
 46
-00:08:42,971 --> 00:08:47,361
+00:08:42,852 --> 00:08:47,242
 El animal tres es treif. La pantalla se niega a imprimir.
 
 47
-00:08:50,086 --> 00:08:56,124
-Retención USDA: la lengua del animal uno se cayó. Marque la lengua. No hace falta motivo.
+00:08:50,040 --> 00:08:56,954
+Retención USDA: la lengua del animal uno se cayó. Elija la lengua y toque marcar. No hace falta motivo.
 
 48
-00:09:01,360 --> 00:09:07,376
+00:09:04,348 --> 00:09:10,364
 Animal uno: se imprimen las dos mejillas. La lengua está retenida, así que no se imprime.
 
 49
-00:09:10,409 --> 00:09:15,804
+00:09:13,551 --> 00:09:18,954
 La etiqueta de partes: el dictamen en hebreo y en inglés, y el sello kosher de MK.
 
 50
-00:09:15,804 --> 00:09:20,933
+00:09:18,954 --> 00:09:24,083
 USDA la liberó. Toque liberar, y la etiqueta de la lengua se imprime ahora.
 
 51
-00:09:26,755 --> 00:09:29,755
+00:09:29,939 --> 00:09:32,939
 Animal dos: Beit Yosef.
 
 52
-00:09:32,293 --> 00:09:35,318
+00:09:35,614 --> 00:09:38,639
 Beit Yosef, con sus cuatro sellos kosher.
 
 53
-00:09:50,015 --> 00:09:53,476
+00:09:52,215 --> 00:09:55,676
 La tableta de sellos y pesaje, para la canal principal.
 
 54
-00:09:53,476 --> 00:09:58,516
+00:09:55,676 --> 00:10:00,716
 Escanee la etiqueta del animal. Se imprimen cinco sellos, según el dictamen.
 
 55
-00:10:02,809 --> 00:10:06,967
+00:10:05,009 --> 00:10:09,167
 El sello del animal uno: MK, con su sello kosher.
 
 56
-00:10:07,627 --> 00:10:13,271
+00:10:09,827 --> 00:10:15,471
 Pesaje: escanee la etiqueta de peso, lado derecho y luego lado izquierdo.
 
 57
-00:10:18,705 --> 00:10:23,153
+00:10:20,905 --> 00:10:25,353
 El animal uno está sellado y pesado. Seguimos con el siguiente.
 
 58
-00:10:32,280 --> 00:10:37,420
+00:10:34,480 --> 00:10:39,620
 De vuelta con el jefe de equipo: la ficha del animal uno, con toda su historia.
 
 59
-00:10:38,442 --> 00:10:42,147
+00:10:40,642 --> 00:10:44,347
 Cada acción: quién, cuándo y desde qué tableta.
 
 60
-00:10:42,262 --> 00:10:45,089
+00:10:44,462 --> 00:10:47,289
 Ejemplos de etiquetas, de todo tipo.
 
 61
-00:10:45,089 --> 00:10:51,680
+00:10:47,289 --> 00:10:53,880
 Arriba: patas y cabeza, antes del dictamen. Abajo: partes y sellos, con los sellos kosher de la planta.

@@ -105,6 +105,9 @@ async function station(b, role, clip, fn) {
 }
 const login = (p, role) => tap(p, `[onclick="${{ slaughter: 'slLogin', esophagus: 'esoLogin', legs: 'lgLogin', inner: 'inLogin', outer: 'outLogin', parts: 'partsLogin', stamps: 'stampsLogin' }[role]}()"]`, 1500);
 
+function boardAsBefore() {
+  execSync(`psql -h /tmp -p 5433 -U postgres -d gtapp -qc "begin; select set_config('gt.reset_in_progress','true',true); update animals_pilot set slaughter='slaughtered', slaughter_time=(extract(epoch from now())*1000)::bigint-3600000+id*60000, eso_checked=true, eso_result='ok', legs_stickers=true, head_stickers=true where id between 0 and 6; update animals_pilot set slaughter='nevela' where id=5; update animals_pilot set inner_status='confirmed', inner_time=(extract(epoch from now())*1000)::bigint-2000000 where id in (0,1,3,4,6); update animals_pilot set inner_status='treif' where id=2; update animals_pilot set outer_status=v.s, outer_time=(extract(epoch from now())*1000)::bigint-1000000 from (values (0,'mk'),(1,'beit'),(3,'glatt'),(4,'kosher'),(6,'glatt')) v(i,s) where id=v.i; commit;"`);
+}
 const scenes = {
   async install(b) {
     execSync('bash ' + __dirname + '/../mkinst.sh');
@@ -204,7 +207,7 @@ const scenes = {
   async rabbinate(b) {
     const Q = j => execSync(`psql -h /tmp -p 5433 -U postgres -d gtapp -qc "update settings_pilot set settings = settings || '${j}'::jsonb"`);
     // (when recorded alone: the board as the earlier scenes leave it) + animal 8, marked "not chalak" by the shochet, lungs checked
-    if (ONLY) execSync(`psql -h /tmp -p 5433 -U postgres -d gtapp -qc "begin; select set_config('gt.reset_in_progress','true',true); update animals_pilot set slaughter='slaughtered', slaughter_time=(extract(epoch from now())*1000)::bigint-3600000+id*60000, eso_checked=true, eso_result='ok', legs_stickers=true, head_stickers=true where id between 0 and 6; update animals_pilot set slaughter='nevela' where id=5; update animals_pilot set inner_status='confirmed', inner_time=(extract(epoch from now())*1000)::bigint-2000000 where id in (0,1,3,4,6); update animals_pilot set inner_status='treif' where id=2; update animals_pilot set outer_status=v.s, outer_time=(extract(epoch from now())*1000)::bigint-1000000 from (values (0,'mk'),(1,'beit'),(3,'glatt'),(4,'kosher'),(6,'glatt')) v(i,s) where id=v.i; commit;"`);
+    if (ONLY) boardAsBefore();
     execSync(`psql -h /tmp -p 5433 -U postgres -d gtapp -qc "begin; select set_config('gt.reset_in_progress','true',true); update animals_pilot set slaughter='notChalak', slaughter_time=(extract(epoch from now())*1000)::bigint-900000, eso_checked=true, eso_result='ok', legs_stickers=true, head_stickers=true, inner_status='confirmed', inner_time=(extract(epoch from now())*1000)::bigint-600000 where id=7; commit;"`);
     Q('{\\"screenConfig\\":\\"1in2out\\",\\"notChalakEnabled\\":true}');
     try { await station(b, 'outer', '06b-rabbinate', async p => {
@@ -226,13 +229,14 @@ const scenes = {
       await p.evaluate(() => document.querySelectorAll('.overlay.open').forEach(o => o.classList.remove('open')));
     }
   }); },
-  async parts(b) { await station(b, 'parts', '08-parts', async p => {
+  async parts(b) { if (ONLY) boardAsBefore(); await station(b, 'parts', '08-parts', async p => {
     await login(p, 'parts'); await cap(p, 'p1', 1000);
     await cap(p, 'p2', 800); await tap(p, cell(3), 2400);
     await p.evaluate(() => document.querySelectorAll('.overlay.open').forEach(o => o.classList.remove('open')));
     await cap(p, 'p5', 900); await tap(p, '#scParts .gt-tbu', 1200);
     await p.fill('#gtHoldNum', '1'); await p.waitForTimeout(500);
-    await tap(p, '#gtSheet .gt-row .gt-sb >> nth=3', 2400);
+    await tap(p, '#gtSheet .gt-up[data-part="tongue"]', 1200);
+    await tap(p, '#gtUsdaOk', 2400);
     await cap(p, 'p3', 800); await tap(p, cell(1), 2600);
     await showSticker(p, 0, 'kosher', 'k_parts1');
     await cap(p, 'p6', 900); await tap(p, '#scParts .gt-tbl', 1500);

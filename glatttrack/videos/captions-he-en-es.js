@@ -46,7 +46,7 @@ module.exports = {
   p1: ["טאבלט חלקים קטנים — לחיים ולשון", "The small parts tablet: cheeks and tongue.", "La tableta de partes pequeñas: mejillas y lengua."],
   p2: ["בהמה 3 טרף — המסך מסרב להדפיס", "Animal three is treif. The screen refuses to print.", "El animal tres es treif. La pantalla se niega a imprimir."],
   p3: ["בהמה 1 — מודפסות שתי הלחיים. הלשון מעוכבת — לא מודפסת", "Animal one: both cheeks print. The tongue is held, so it does not print.", "Animal uno: se imprimen las dos mejillas. La lengua está retenida, así que no se imprime."],
-  p5: ["USDA HOLD: הלשון של בהמה 1 נפלה — מסמנים \"לשון\". בלי סיבה", "USDA hold: the tongue of animal one fell. Mark the tongue. No reason is needed.", "Retención USDA: la lengua del animal uno se cayó. Marque la lengua. No hace falta motivo."],
+  p5: ["USDA HOLD: הלשון של בהמה 1 נפלה — בוחרים \"לשון\" ולוחצים \"סמן\". בלי סיבה", "USDA hold: the tongue of animal one fell. Choose the tongue, then tap mark. No reason is needed.", "Retención USDA: la lengua del animal uno se cayó. Elija la lengua y toque marcar. No hace falta motivo."],
   p6: ["USDA שחררו — לוחצים \"שחרור\", והלשון מודפסת עכשיו", "USDA released it. Tap release, and the tongue sticker prints now.", "USDA la liberó. Toque liberar, y la etiqueta de la lengua se imprime ahora."],
   p4: ["בהמה 2 — בית יוסף", "Animal two: Beit Yosef.", "Animal dos: Beit Yosef."],
   st1: ["טאבלט חותמות ושקילה — החלק הגדול של הבהמה", "The stamps and weighing tablet, for the main carcass.", "La tableta de sellos y pesaje, para la canal principal."],
