@@ -5071,11 +5071,14 @@ function gtWindowQInit(){
 // (the open items: on this tablet, which holds the animal's lung check)
 function _gtQStepsAll(){ try{ return JSON.parse(localStorage.getItem('gt_inner_qsteps')||'{}')||{}; }catch(e){ return {}; } }
 function _gtQKey(i){ return String(_gtFlags.epoch||'')+':'+i; }
-function gtInnerQSteps(i){ const m=_gtQStepsAll(); return Array.isArray(m[_gtQKey(i)]) ? m[_gtQKey(i)] : []; }
+// v10.32 (owner): a number shows only the window its "?" was asked in. Since v10.31 a "?" closes the
+// number at once, so there is one window; a list left by v10.29 / v10.30 (which went on to the next
+// window) is cut to its last one.
+function gtInnerQSteps(i){ const m=_gtQStepsAll(), a=m[_gtQKey(i)]; return Array.isArray(a) && a.length ? a.slice(-1) : []; }
 function _gtQStepsSet(i, arr){ try{ const m=_gtQStepsAll(); if(arr && arr.length) m[_gtQKey(i)]=arr; else delete m[_gtQKey(i)];
   Object.keys(m).forEach(k=>{ if(!k.startsWith(String(_gtFlags.epoch||'')+':')) delete m[k]; });   // other days: gone
   localStorage.setItem('gt_inner_qsteps', JSON.stringify(m)); }catch(e){} }
-function _gtQStepAdd(i, step){ const a=gtInnerQSteps(i); if(!a.includes(step)) a.push(step); _gtQStepsSet(i, a); }
+function _gtQStepAdd(i, step){ _gtQStepsSet(i, [step]); }   // v10.32: only the window of this "?"
 function _gtQStepDone(i, step){ _gtQStepsSet(i, gtInnerQSteps(i).filter(x=>x!==step)); }
 const GT_QSTEP_NAME={rumen:['כרסים','Rumen','Panza'],maw:['בית הכוסות','Maw','Cuajar'],lung:['ריאה','Lungs','Pulmones']};
 async function gtInnerQuestion(where){
