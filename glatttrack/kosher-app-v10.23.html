@@ -1592,6 +1592,13 @@ const LUNG_B64="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICA
           <div style="margin-top:8px;font-size:11px;color:var(--muted);">הסרת סטטוס תסיר אותו מכל המסכים</div>
         </div>
 
+        <!-- v10.23: the kashrut mark pictures, one per kosher status (printed on parts / stamps stickers) -->
+        <div class="mgr-sec">🖼 תמונות סימני כשרות למדבקות</div>
+        <div class="mgr-card">
+          <div style="font-size:11px;color:var(--muted);margin-bottom:8px;">התמונה של כל סטטוס מודפסת על מדבקות החלקים והחותמות. נשמרת בשרת ומגיעה לכל טאבלט מדפיס.</div>
+          <div id="sealUploadGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:10px;"></div>
+        </div>
+
         <!-- Lung image -->
         <div class="mgr-sec">תמונת ריאה לבדיקה</div>
         <div class="mgr-card">
@@ -4634,7 +4641,7 @@ const KS = (function(){
 // every device via settings_pilot — unescaped, a name containing markup
 // would run on every device that renders the list, not just the one it was
 // typed on.
-var GT_APP_VERSION='v10.22';
+var GT_APP_VERSION='v10.23';
 document.addEventListener('DOMContentLoaded',()=>{ try{ document.querySelectorAll('.gt-ver').forEach(e=>e.textContent=GT_APP_VERSION); }catch(e){} });
 function escapeHtml(str){
   return String(str==null?'':str).replace(/[&<>"']/g, c=>({
@@ -8769,7 +8776,7 @@ const _GT_SET_GROUPS = [
     open: () => { try{ mgrRenderPlan(); }catch(e){} try{ mgrRenderStationsPanel(); }catch(e){} try{ mgrRenderDevicesPanel(); }catch(e){} } },
   { k: 'users', ic: '👷', t: ['עובדים וחשבונות', 'Workers & accounts', 'Trabajadores y cuentas'], secs: ['משתמשים', '#mgrOwnersTitle'],
     open: () => { try{ mgrUserTab(mgrCurrentUserRole || 'slaughter'); mgrRenderOwners(); }catch(e){} } },
-  { k: 'kashrut', ic: '✡️', t: ['כשרות', 'Kashrut', 'Kashrut'], secs: ['סטטוסי כשרות וסימנים', 'רבנות (אופציות מתקדמות)', 'בדיקות פנים וחוץ', 'תמונת ריאה לבדיקה'],
+  { k: 'kashrut', ic: '✡️', t: ['כשרות', 'Kashrut', 'Kashrut'], secs: ['סטטוסי כשרות וסימנים', '🖼 תמונות סימני כשרות למדבקות', 'רבנות (אופציות מתקדמות)', 'בדיקות פנים וחוץ', 'תמונת ריאה לבדיקה'],
     open: () => {} },
   { k: 'stations', ic: '🏭', t: ['התנהגות המסכים', 'How the screens work', 'Funcionamiento de pantallas'], secs: ['שחיטה', '#slKeysTitle', '#cnSetTitle', 'רגלים', 'חלקים קטנים', 'חותמות', 'שיטות קליטת משקל (חותמות)', 'בקרת משקל — ON/OFF נפרד לכל שלב', 'קולר / אריזה'],
     open: () => { try{ mgrRenderWeightControls(); }catch(e){} try{ const wm = KS.getSettings().weightMethods || { qr: false, barcode: true, ocr: true };
@@ -10091,6 +10098,7 @@ function mgrUpdateSealUploads(){
   grid.innerHTML=html;
 }
 function mgrSealChosen(type,input){
+  return mgrUploadSeal(type,input);   // v10.23: the same small PNG as everywhere (the server keeps it)
   const file=input.files[0];if(!file)return;
   const reader=new FileReader();
   reader.onload=function(e){
@@ -10128,6 +10136,7 @@ function mgrUploadSeal(type,input){
       s.customSeals[type]=dataUrl;
       KS.updateSettings({customSeals:s.customSeals});
       mgrUpdateStatusToggles(); // refresh the per-status previews
+      try{ mgrUpdateSealUploads(); mgrRenderPrintPreview(); }catch(x){}
     };
     img.onerror=function(){
       // Not decodable as image — store raw and still refresh
@@ -14578,9 +14587,12 @@ async function _gtSealsPull(){
     const r = await window.sb.rpc('seals_get', { p_token: tok, p_version: _gtSealsSynced ? _gtSealsVer() : null });
     if(r.error || !r.data || !r.data.ok || r.data.same) return;
     const srv = r.data.seals || {}, local = KS.getSettings().customSeals || {};
-    // a team leader who had seals only on this device (before v10.22): send them up once
-    if(tok && KS.getManagerRole()==='manager' && !Object.keys(srv).length && Object.keys(local).length){
-      _gtSealsSynced = {}; Object.keys(local).forEach(k => _gtSealPush(k, local[k])); return;
+    // The server never had marks (version 0) but this device has some (made before v10.22):
+    // keep them here — never erase them — and a team leader sends them up.
+    if(!Object.keys(srv).length && Object.keys(local).length && !(Number(r.data.version) > 0)){
+      _gtSealsSynced = {};
+      if(tok && KS.getManagerRole()==='manager') Object.keys(local).forEach(k => _gtSealPush(k, local[k]));
+      return;
     }
     _gtSealsSynced = Object.assign({}, srv);
     try{ localStorage.setItem('gt_seals_ver', String(r.data.version)); }catch(x){}
