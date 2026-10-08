@@ -6,20 +6,21 @@ const fs = require('fs');
 const { execSync } = require('child_process');
 const LANG = process.env.LANG_V || 'he';
 const APP = process.env.APP;
-const OUT = __dirname + '/raw3-' + LANG; fs.mkdirSync(OUT, { recursive: true });
+const OUT = __dirname + '/raw5-' + LANG; fs.mkdirSync(OUT, { recursive: true });
 const MAIN = 'http://localhost:8083/', INST = 'http://localhost:8084/';
-const C = require('./caps3.js');
-const DUR = JSON.parse(fs.readFileSync(__dirname + '/voice-en/durations.json'));
+const C = require('./caps4.js');
+const DUR = JSON.parse(fs.readFileSync(__dirname + '/voice-en5/durations.json'));
 const ONLY = process.env.ONLY ? process.env.ONLY.split(',') : null;
-const VP = { width: 1024, height: 700 };
+const VP = { width: 800, height: 560 };   // small CSS screen, recorded at 2x: big and sharp on a phone
+const VS = { width: 1600, height: 1120 };
 const LOG = {};          // clip → [{t, key}]
 const SCR = ['Slaughter','Esophagus','Legs','Inner','Outer','Parts','Stamps'];
 
 const OVERLAY = () => {
   const css = document.createElement('style');
-  css.textContent = `#gtCap{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);z-index:2147483647;max-width:92%;
-    background:rgba(10,14,24,.93);color:#fff;border:2px solid #E8B84A;border-radius:14px;padding:10px 22px;
-    font:600 23px/1.35 Arial,sans-serif;text-align:center;pointer-events:none;box-shadow:0 6px 24px rgba(0,0,0,.5)}
+  css.textContent = `#gtCap{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);z-index:2147483647;max-width:95%;
+    background:rgba(10,14,24,.93);color:#fff;border:2px solid #E8B84A;border-radius:14px;padding:8px 18px;
+    font:700 25px/1.3 Arial,sans-serif;text-align:center;pointer-events:none;box-shadow:0 6px 24px rgba(0,0,0,.5)}
     #gtCap:empty{display:none}
     #gtFinger{position:fixed;width:46px;height:46px;margin:-23px 0 0 -23px;border-radius:50%;z-index:2147483646;pointer-events:none;
     background:rgba(255,215,0,.35);border:3px solid #FFD700;transition:left .45s ease,top .45s ease,transform .15s;display:none}
@@ -29,6 +30,8 @@ const OVERLAY = () => {
     const c = document.createElement('div'); c.id = 'gtCap'; c.setAttribute('data-no-i18n', ''); document.body.appendChild(c);
     const f = document.createElement('div'); f.id = 'gtFinger'; document.body.appendChild(f); };
   add();
+  window._gtLicShown = true;   // the one-time license request window is not part of this film
+  const t = setInterval(() => { if (window.gtStatusSet && !window.gtStatusSet.__v) { const o = window.gtStatusSet; window.gtStatusSet = function (k, txt) { if (/Realtime/i.test(String(txt || ''))) return; return o.apply(this, arguments); }; window.gtStatusSet.__v = 1; clearInterval(t); } }, 20);
 };
 async function useApp(ctx) {
   await ctx.route(u => { const x = new URL(u); return x.pathname === '/' || x.pathname.startsWith('/index'); },
@@ -60,8 +63,8 @@ const state = p => p.evaluate(() => ({ screen: (document.querySelector('.screen.
 async function showSticker(p, idx, kind, key) {
   await p.evaluate(([idx, kind, en]) => {
     let b = document.getElementById('gtStk');
-    if (!b) { b = document.createElement('div'); b.id = 'gtStk'; b.setAttribute('data-no-i18n', ''); b.style.cssText = 'position:fixed;inset:0;z-index:2147483600;background:rgba(0,0,0,.8);display:flex;align-items:center;justify-content:center;gap:34px;padding-bottom:90px'; document.body.appendChild(b); }
-    b.innerHTML = '<div style="width:440px;height:440px;display:flex;align-items:center;justify-content:center"><div id="gtStkIn" style="transform:scale(1.75)"></div></div><div id="gtStkQr" style="background:#fff;color:#111;border-radius:12px;padding:14px 18px;font:15px/1.7 Arial;min-width:260px;max-width:330px"></div>';
+    if (!b) { b = document.createElement('div'); b.id = 'gtStk'; b.setAttribute('data-no-i18n', ''); b.style.cssText = 'position:fixed;inset:0;z-index:2147483600;background:rgba(0,0,0,.8);display:flex;align-items:center;justify-content:center;gap:20px;padding-bottom:110px'; document.body.appendChild(b); }
+    b.innerHTML = '<div style="width:330px;height:330px;display:flex;align-items:center;justify-content:center"><div id="gtStkIn" style="transform:scale(1.35)"></div></div><div id="gtStkQr" style="background:#fff;color:#111;border-radius:12px;padding:10px 14px;font:15px/1.6 Arial;min-width:230px;max-width:290px"></div>';
     b.style.display = 'flex';
     renderSticker('gtStkIn', idx, kind, false);
     const pay = buildStickerPayload(idx) || '';
@@ -76,7 +79,7 @@ async function showSticker(p, idx, kind, key) {
 }
 
 async function ctxFor(b, clip, init) {
-  const ctx = await b.newContext({ viewport: VP, recordVideo: { dir: OUT, size: VP } });
+  const ctx = await b.newContext({ viewport: VP, deviceScaleFactor: 2, recordVideo: { dir: OUT, size: VS } });
   await ctx.addInitScript(init.fn, init.arg); await ctx.addInitScript(OVERLAY); await useApp(ctx);
   const p = await ctx.newPage(); p.__clip = clip; p.__t0 = Date.now();
   p.on('dialog', d => d.accept()); p.on('pageerror', e => console.log('  pageerror', clip, e.message));
@@ -141,15 +144,19 @@ const scenes = {
   async slaughter(b) { await station(b, 'slaughter', '02-slaughter', async p => {
     await login(p, 'slaughter'); await cap(p, 's1');
     for (let i = 0; i < 4; i++) await tap(p, '#tSlBtnS', 1300);
+    await cap(p, 's4q', 900); await tap(p, '#tSlBtnQ', 2600);
+    await cap(p, 's5q', 1200);
     await cap(p, 's2', 900); await tap(p, '#tSlBtnN', 1300); await tap(p, '#tSlBtnS', 1300);
-    await cap(p, 's3', 1200); await tap(p, cell(6), 2400);
+    await cap(p, 's6q', 900); await tap(p, cell(5), 1600);
+    await tap(p, '#gtSheet .gt-row .gt-sb >> nth=0', 2200);
+    await cap(p, 's3', 1200); await tap(p, cell(7), 2400);
     await p.evaluate(() => document.querySelectorAll('.overlay.open').forEach(o => o.classList.remove('open')));
   }); },
   async esophagus(b) { await station(b, 'esophagus', '03-esophagus', async p => {
     await cap(p, 'e1', 1500); await login(p, 'esophagus');
     await cap(p, 'e2', 1000); await tap(p, cell(3), 2400);
     await cap(p, 'e3', 1000);
-    for (const n of [1, 2, 3, 4, 6]) { await tap(p, cell(n), 900); await tap(p, `[onclick="esoDecide('ok')"]`, 1000); }
+    for (const n of [1, 2, 3, 4, 5, 7]) { await tap(p, cell(n), 900); await tap(p, `[onclick="esoDecide('ok')"]`, 1000); }
   }); },
   async legs(b) { await station(b, 'legs', '04-legs', async p => {
     await login(p, 'legs'); await cap(p, 'l1', 2000);
@@ -158,8 +165,8 @@ const scenes = {
     await cap(p, 'l3', 800); await tap(p, cell(1), 1800);
     await showSticker(p, 0, 'head', 'k_head');
     await cap(p, 'l4', 800);
-    for (const n of [2, 3, 4, 5, 6]) { await tap(p, cell(n), 1900); await tap(p, cell(n), 1900); }
-    await showSticker(p, 4, 'legs', 'k_nev');
+    for (const n of [2, 3, 4, 5, 6, 7]) { await tap(p, cell(n), 1900); await tap(p, cell(n), 1900); }
+    await showSticker(p, 5, 'legs', 'k_nev');
   }); },
   async inner(b) { await station(b, 'inner', '05-inner', async p => {
     await login(p, 'inner'); await cap(p, 'in1', 1000);
@@ -173,16 +180,26 @@ const scenes = {
     await cap(p, 'in5', 1000); await tap(p, '#tLConfirm', 1500);
     await open(2); await tap(p, '#tMawK', 900); await tap(p, cell(2), 1200); await tap(p, '#tLConfirm', 1300);
     await cap(p, 'in6', 1000); await open(3); await tap(p, '#tMawT', 1600); await tap(p, '#tMawT', 1600);
+    // v10.29: a question in one window — only that item, and on to the next window
+    await cap(p, 'in8', 1000); await tap(p, cell(4), 1200);
+    await tap(p, '#gtQRumen', 1500);
+    await tap(p, '#tMawK', 1600);
+    await tap(p, '#tLConfirm', 2400);
+    await cap(p, 'in9', 1500);
     await cap(p, 'in7', 800);
-    for (const n of [4, 6]) { await open(n); await tap(p, '#tMawK', 900); await tap(p, cell(n), 1200); await tap(p, '#tLConfirm', 1200); }
+    for (const n of [5, 7]) { await open(n); await tap(p, '#tMawK', 900); await tap(p, cell(n), 1200); await tap(p, '#tLConfirm', 1200); }
+    await cap(p, 'in10', 900); await tap(p, cell(4), 1300);
+    await tap(p, `[onclick="rumenDecide('k')"]`, 1600);
+    await tap(p, '#tLConfirm', 2000);
   }); },
   async outer(b) { await station(b, 'outer', '06-outer', async p => {
     await login(p, 'outer'); await cap(p, 'o1', 1000);
-    await tap(p, cell(1), 2600); await cap(p, 'o2', 800); await tap(p, '#decModal .dec-btns button:has-text("גלאט")', 1300);
+    await tap(p, cell(1), 2600); await cap(p, 'o2', 800); await tap(p, '#decModal .dec-btns button:has-text("MK")', 1300);
     await cap(p, 'o3', 800);
     await tap(p, cell(2), 1300); await tap(p, '#decModal .dec-btns button:has-text("בית יוסף")', 1300);
     await tap(p, cell(4), 1300); await tap(p, '#decModal .dec-btns button:has-text("גלאט")', 1300);
-    await tap(p, cell(6), 1300); await tap(p, '#decModal .dec-btns button:has-text("כשר")', 1300);
+    await tap(p, cell(5), 1300); await tap(p, '#decModal .dec-btns button:has-text("כשר")', 1300);
+    await tap(p, cell(7), 1300); await tap(p, '#decModal .dec-btns button:has-text("גלאט")', 1300);
     await cap(p, 'o4', 2500);
   }); },
   async legsSort(b) { await station(b, 'legs', '07-legs-sort', async p => {
@@ -201,8 +218,13 @@ const scenes = {
     await login(p, 'parts'); await cap(p, 'p1', 1000);
     await cap(p, 'p2', 800); await tap(p, cell(3), 2400);
     await p.evaluate(() => document.querySelectorAll('.overlay.open').forEach(o => o.classList.remove('open')));
-    await cap(p, 'p3', 800); await tap(p, cell(1), 2400);
+    await cap(p, 'p5', 900); await tap(p, '#scParts .gt-tbu', 1200);
+    await p.fill('#gtHoldNum', '1'); await p.waitForTimeout(500);
+    await tap(p, '#gtSheet .gt-row .gt-sb >> nth=3', 2400);
+    await cap(p, 'p3', 800); await tap(p, cell(1), 2600);
     await showSticker(p, 0, 'kosher', 'k_parts1');
+    await cap(p, 'p6', 900); await tap(p, '#scParts .gt-tbl', 1500);
+    await tap(p, '#gtSheet .gt-hrow .gt-sb >> nth=0', 3200);
     await cap(p, 'p4', 600); await tap(p, cell(2), 2400);
     await showSticker(p, 1, 'kosher', 'k_parts2');
   }); },
@@ -230,14 +252,15 @@ const scenes = {
     for (let i = 0; i < 20; i++) { await p.waitForTimeout(800); const ok = await p.evaluate(async () => { try { const r = await window.sb.rpc('system_health', { p_token: KS.getManagerToken() }); return !!(r.data && r.data.ok); } catch (e) { return false; } }); if (ok) break; }
     await p.evaluate(() => { document.querySelectorAll('.overlay.open').forEach(o => o.classList.remove('open')); try { gtWizardClose(true); } catch (e) { } });
     await p.waitForTimeout(1500);
+    await p.evaluate(() => document.querySelectorAll('.overlay.open').forEach(o => o.classList.remove('open')));
     await tap(p, `[onclick*="mgrTab('search')"]`, 600);
     await p.evaluate(() => { try { gtAnimalCard(null, 0); } catch (e) { } }); await p.waitForTimeout(3000);
     await cap(p, 't1', 3000);
     await p.mouse.wheel(0, 400); await p.waitForTimeout(1500);
     await cap(p, 't2', 2500);
     await p.evaluate(() => document.querySelectorAll('.overlay.open').forEach(o => o.classList.remove('open')));
-    await p.evaluate(en => { const b = document.createElement('div'); b.setAttribute('data-no-i18n', ''); b.style.cssText = 'position:fixed;inset:0;z-index:2147483600;background:#2a2f3a;display:flex;flex-wrap:wrap;gap:10px;padding:14px;align-content:flex-start;overflow:hidden'; document.body.appendChild(b);
-      const items = [['legs','slaughtered'],['legs','notChalak'],['legs','nevela'],['kosher','glatt'],['kosher','beit'],['kosher','kosher'],['kosher','mk'],['kosher','kosherRab']];
+    await p.evaluate(en => { const b = document.createElement('div'); b.setAttribute('data-no-i18n', ''); b.style.cssText = 'position:fixed;left:0;top:0;width:1000px;z-index:2147483600;background:#2a2f3a;display:flex;flex-wrap:wrap;gap:10px;padding:14px;align-content:flex-start;overflow:hidden;transform:scale(.78);transform-origin:top left;height:715px'; document.body.appendChild(b);
+      const items = [['legs','slaughtered'],['legs','notChalak'],['legs','nevela'],['kosher','beit'],['kosher','mk']];
       items.forEach((it, i) => { const d = document.createElement('div'); d.id = 'g' + i; b.appendChild(d); renderSticker('g' + i, i, it[0], { status: it[1], num: i + 1 }); }); }, LANG === 'en');
     await p.waitForTimeout(600);
     await cap(p, 't3', 1500); await cap(p, 't4', 5000);
@@ -246,9 +269,10 @@ const scenes = {
 };
 
 (async () => {
-  const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
-  for (const [k, fn] of Object.entries(scenes)) { if (ONLY && !ONLY.includes(k)) continue; console.log('scene', k); await fn(browser); }
+  const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium', args: ['--force-device-scale-factor=2'] });
+  const f = OUT + '/captions.json';
+  for (const [k, fn] of Object.entries(scenes)) { if (ONLY && !ONLY.includes(k)) continue; console.log('scene', k);
+    try { await fn(browser); } catch (e) { console.log('  SCENE FAIL', k, e.message.split('\n')[0]); }
+    const old = fs.existsSync(f) ? JSON.parse(fs.readFileSync(f)) : {}; fs.writeFileSync(f, JSON.stringify(Object.assign(old, LOG), null, 1)); }
   await browser.close();
-  const f = OUT + '/captions.json'; const old = fs.existsSync(f) ? JSON.parse(fs.readFileSync(f)) : {};
-  fs.writeFileSync(f, JSON.stringify(Object.assign(old, LOG), null, 1));
 })();
