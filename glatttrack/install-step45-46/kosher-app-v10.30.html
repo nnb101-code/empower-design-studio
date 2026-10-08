@@ -4904,6 +4904,7 @@ function gtAfterRelease(h){
     const a=KS.getAnimal(h.animal_id);
     if(a && ((a.partsPrintCount||0)>=3 || a.partsScanned)){
       try{ showPartsPrint(h.animal_id, a.outerStatus, false, {cheek1:1,cheek2:2,tongue:3}[h.part]);
+           _ppBreak(h.part==='tongue'?0:1, h.part==='tongue'?1:0);
            const sn=document.getElementById('ppPartsInfo'); if(sn){ sn.textContent=L('הודפס עכשיו: ','Printed now: ','Impreso ahora: ')+_gtL(GT_PART_NAME[h.part])+L(' (שוחרר מ-USDA)',' (released from USDA)',' (liberado de USDA)'); sn.style.color='#9BE7B0'; sn.style.fontWeight='800'; } }catch(e){}
       try{ KS.addAuditLog({type:'parts_print_after_release', animal:h.animal_id+1, part:h.part}); }catch(e){}
     }
@@ -12689,7 +12690,14 @@ function showPartsError(title,desc){
   if(area){area.style.borderColor="var(--red)";setTimeout(()=>{area.style.borderColor="var(--border2)";},1000);}
 }
 
+// v10.30: how many stickers this print really makes (a part on USDA hold is not printed)
+function _ppBreak(cheeks, tongue){
+  const n=(k)=>k===1?L('1 מדבקה','1 sticker','1 etiqueta'):L(k+' מדבקות',k+' stickers',k+' etiquetas');
+  const set=(id,t)=>{ const e=document.getElementById(id); if(e) e.textContent=t; };
+  set('ppCheekN', n(cheeks)); set('ppTongueN', n(tongue)); set('ppTotalN', n(cheeks+tongue));
+}
 function showPartsPrint(idx,status,isReprint=false,stickerNum=1){
+  _ppBreak(2,1);
   const statusLabels={glatt:"גלאט",beit:"בית יוסף",kosher:"כשר",mk:"MK"};
   const statusColors={glatt:"var(--glatt)",beit:"var(--beit)",kosher:"var(--kosher)",mk:"var(--mk)"};
   document.getElementById("ppPartsNum").textContent="#"+(idx+1);
@@ -12740,6 +12748,7 @@ function partsAddPrint(idx){
   try{ const _ph=gtPartHolds(idx,'parts').filter(h=>h.open||h.resolution==='condemned');
     if(_ph.length){ const sn=document.getElementById('ppPartsInfo');
       const all=['cheek1','cheek2','tongue'], held=_ph.map(h=>h.part), out=all.filter(p=>!held.includes(p));
+      _ppBreak(out.filter(p=>p!=='tongue').length, out.includes('tongue')?1:0);
       if(sn){ sn.textContent=L('הודפס: ','Printed: ','Impreso: ')+out.map(p=>_gtL(GT_PART_NAME[p])).join(' + ')+L(' · מעוכב USDA: ',' · USDA hold: ',' · retenido USDA: ')+held.map(p=>_gtL(GT_PART_NAME[p])).join(', '); sn.style.color='#C5B3FF'; sn.style.fontWeight='800'; }
       KS.addAuditLog({type:'parts_printed_without', animal:idx+1, held}); } }catch(e){}
 }
@@ -15362,9 +15371,9 @@ window.addEventListener("touchcancel",function(){isDrawing=false;},true);
     <div style="font-size:12px;color:var(--muted);margin-bottom:14px" id="ppPartsInfo"></div>
     <div class="gt-noprint" id="ppPartsNoPrinter"></div>
     <div style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:14px;font-size:12px;color:var(--muted);direction:rtl;text-align:right">
-      <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span>לחיים:</span><span style="color:var(--text);font-weight:600">2 מדבקות</span></div>
-      <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span>לשון:</span><span style="color:var(--text);font-weight:600">1 מדבקה</span></div>
-      <div style="display:flex;justify-content:space-between;border-top:1px solid var(--border);padding-top:4px"><span>סה״כ מודפס עכשיו:</span><span style="color:var(--gold);font-weight:800">3 מדבקות</span></div>
+      <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span>לחיים:</span><span id="ppCheekN" data-no-i18n style="color:var(--text);font-weight:600">2 מדבקות</span></div>
+      <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span>לשון:</span><span id="ppTongueN" data-no-i18n style="color:var(--text);font-weight:600">1 מדבקה</span></div>
+      <div style="display:flex;justify-content:space-between;border-top:1px solid var(--border);padding-top:4px"><span>סה״כ מודפס עכשיו:</span><span id="ppTotalN" data-no-i18n style="color:var(--gold);font-weight:800">3 מדבקות</span></div>
     </div>
     <div style="height:4px;background:var(--border);border-radius:2px;margin-bottom:14px;overflow:hidden">
       <div id="ppPartsBar" style="height:100%;background:var(--gold);border-radius:2px;width:100%;transition:width 3s linear;"></div>
