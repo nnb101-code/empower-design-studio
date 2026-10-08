@@ -140,7 +140,7 @@ NOTICE:  PASS  v10.26 USDA hold of the whole animal: every station stops; only i
 NOTICE:  PASS  v10.26 USDA on a part / half: only that part waits (other parts print, the other half is weighed); a processing "?" holds its station until answered; no device / display → refused
 NOTICE:  PASS  v10.32 "?" / USDA on a code screen: refused without the worker's login (put and close); with it, done and named
 NOTICE:  PASS  v10.32 shared inner + outer screen: its inner tablet puts / closes an outer "?" (after its login); any other configuration → wrong station
-NOTICE:  PASS  v10.32 a part on USDA hold is not printed on the server: the full set (3) and that part's flag refused; the other parts recorded; after the release the part and the full set are recorded
+NOTICE:  PASS  v10.32 a part on USDA hold is not printed on the server: the full set (3) and that part's flag refused; the other parts recorded; after the release the part and the full set are recorded; an inner "?" answered when its window is decided
 NOTICE:  PASS  ACTIVE security surface matches the expected manifest (triggers, policies, grants, definer settings)
 NOTICE:  PASS  kashrut seals: team leader sets, a printing tablet reads; a tablet can't set; bad picture / key refused; no device → refused
 NOTICE:  ----------------------------------------------------------------------------------------------------

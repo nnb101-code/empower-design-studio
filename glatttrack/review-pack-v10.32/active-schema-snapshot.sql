@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict i6VhVhGT9gAOTDLeEzyXFustjXofB543htfJdgTbgzyqfDFPLTJXL8I6wb7aXh3
+\restrict aYF6SDk9kJbTffH51eDRe5UM0pRmBc4XXDc2n5CaUdgcGDsBJLgFAhRn9zoEM3O
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -5021,7 +5021,7 @@ begin
   end if;
   if not ((h.kind = 'usda' and p_resolution in ('released', 'condemned'))
           or (h.kind = 'question' and (p_resolution = 'cancelled'
-                                       or (p_resolution = 'answered' and h.station in ('legs', 'parts', 'stamps'))))) then
+                                       or (p_resolution = 'answered' and h.station in ('legs', 'parts', 'stamps', 'inner'))))) then   -- v10.32: inner — the window of the "?" was decided
     return jsonb_build_object('ok', false, 'error', 'bad_value');
   end if;
   v_actor := _derive_actor(case h.station when 'eso' then 'eso' when 'stamps' then 'stamped' else h.station end, null);
@@ -10693,5 +10693,5 @@ GRANT ALL ON TABLE public.system_flags TO service_role;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict i6VhVhGT9gAOTDLeEzyXFustjXofB543htfJdgTbgzyqfDFPLTJXL8I6wb7aXh3
+\unrestrict aYF6SDk9kJbTffH51eDRe5UM0pRmBc4XXDc2n5CaUdgcGDsBJLgFAhRn9zoEM3O
 

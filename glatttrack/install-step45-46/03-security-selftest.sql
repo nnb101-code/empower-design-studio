@@ -2584,7 +2584,14 @@ begin
   r  := pg_temp.api(pg_temp.dev('PARTS'), pg_temp.q_push(943, '{"cheek_sticker":true,"parts_printed_as":"glatt","parts_scanned":true}'));
   r2 := pg_temp.api(pg_temp.dev('PARTS'), pg_temp.q_push(943, '{"parts_print_count":2,"tongue_sticker":true,"parts_printed_as":"glatt","parts_scanned":true}'));
   ok := ok and r ->> 'error' = 'held' and pg_temp.ok(r2) and (pg_temp.ar(943)).tongue_sticker and not coalesce((pg_temp.ar(943)).cheek_sticker, false);
-  perform pg_temp.rec('v10.32 a part on USDA hold is not printed on the server: the full set (3) and that part''s flag refused; the other parts recorded; after the release the part and the full set are recorded', ok,
+  -- an inner "?" is answered when its window (e.g. the maw) is decided — before the lungs; the esophagus has no "answered"
+  perform pg_temp.prep(944, 'slaughter'); perform pg_temp.api(pg_temp.dev('ESO1'), pg_temp.q_claim(944, 'eso', 'ok', '', ''));
+  r  := pg_temp.api(pg_temp.dev('IN1'), 'select hold_set(944, ''inner'', ''question'')');
+  r2 := pg_temp.api(pg_temp.dev('IN1'), format('select hold_resolve(%s, ''answered'')', (r #>> '{hold,id}')::bigint));
+  r3 := pg_temp.api(pg_temp.dev('ESO1'), 'select hold_set(945, ''eso'', ''question'')');
+  ok := ok and pg_temp.ok(r) and pg_temp.ok(r2) and r2 #>> '{hold,resolution}' = 'answered' and (pg_temp.ar(944)).inner_status is null
+        and pg_temp.api(pg_temp.dev('ESO1'), format('select hold_resolve(%s, ''answered'')', (r3 #>> '{hold,id}')::bigint)) ->> 'error' = 'bad_value';
+  perform pg_temp.rec('v10.32 a part on USDA hold is not printed on the server: the full set (3) and that part''s flag refused; the other parts recorded; after the release the part and the full set are recorded; an inner "?" answered when its window is decided', ok,
     concat_ws(' | ', r2::text, r3::text, left(r4::text, 50), left(r5::text, 50), (pg_temp.ar(942)).parts_print_count, r::text));
 end $$;
 $gt72$;
