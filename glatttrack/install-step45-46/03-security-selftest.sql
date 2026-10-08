@@ -944,7 +944,11 @@ begin
       (array['users', '"moshe"']), (array['dailyIntake', '[{"farm":"A","type":"B","qty":5000}]']),
       (array['dailyIntake', '[3]']), (array['customStatuses', '[{"he":"x"}]']), (array['lang', '"fr"']),
       (array['legStickerCount', 'true']), (array['headStickerCount', '5000'])) x(a) loop
-    r := pg_temp.api(pg_temp.mgr(), format('select push_settings(%L::jsonb, ''x'', %L)', jsonb_build_object(t[1], t[2]::jsonb), pg_temp.v('mgr')));
+    -- (v10.32: the plant's own statuses are kept in the list — one in use on the board may not be removed: status_in_use)
+    r := pg_temp.api(pg_temp.mgr(), format('select push_settings(%L::jsonb, ''x'', %L)',
+           jsonb_build_object(t[1], case when t[1] = 'customStatuses'
+                                         then (select coalesce(settings -> 'customStatuses', '[]'::jsonb) from settings_pilot where id = 1) || t[2]::jsonb
+                                         else t[2]::jsonb end), pg_temp.v('mgr')));
     ok := ok and r ->> 'error' = 'bad_settings' and r ->> 'key' = t[1];
     det := det || t[1] || '=' || t[2] || '→' || coalesce(r ->> 'error', 'accepted') || '; ';
   end loop;
@@ -960,7 +964,8 @@ begin
                   || jsonb_build_array(jsonb_build_object('name', 'Selftest New', 'role', 'רגלים'),
                                        jsonb_build_object('name', 'Selftest Hash', 'role', 'inner', 'codeHash', repeat('a', 64), 'hv', 2)),
          'dailyIntake', jsonb_build_array(jsonb_build_object('farm', 'Farm A', 'type', 'Bull', 'qty', 40)),
-         'customStatuses', jsonb_build_array(jsonb_build_object('key', 'custom_1727000000000', 'he', 'x', 'en', 'x', 'es', 'x', 'color', '#FF6B35', 'kosher', false)),
+         'customStatuses', (select coalesce(settings -> 'customStatuses', '[]'::jsonb) from settings_pilot where id = 1)   -- the plant's own kept (v10.32)
+                           || jsonb_build_array(jsonb_build_object('key', 'custom_1727000000000', 'he', 'x', 'en', 'x', 'es', 'x', 'color', '#FF6B35', 'kosher', false)),
          'disabledStatuses', jsonb_build_array('mk'), 'statusColorOverrides', jsonb_build_object('glatt', '#00ff00'),
          'weightMethods', jsonb_build_object('qr', false, 'barcode', true, 'ocr', true),
          'archiveSettings', jsonb_build_object('slaughter', true, 'lungs', false, 'log', true),
