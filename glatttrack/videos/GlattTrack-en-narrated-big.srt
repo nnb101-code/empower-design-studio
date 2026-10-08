@@ -155,89 +155,89 @@ Animal two: Beit Yosef. Four: Glatt. Five: kosher. Seven: Glatt.
 The ruling is made. Back to the legs tablet, for sorting.
 
 40
-00:07:26,410 --> 00:07:32,667
-The rabbinate screen, outer inspector two. It also has the question button, like every screen.
+00:07:26,421 --> 00:07:33,095
+The rabbinate screen, outer inspector two. Animal eight was marked not chalak at slaughter, so it blinks here.
 
 41
-00:07:34,483 --> 00:07:39,860
-Here you type the animal number and tap mark question. The number waits, and blinks.
+00:07:35,822 --> 00:07:41,548
+A question? One tap on the question button marks eight, and it blinks. No typing.
 
 42
-00:07:50,194 --> 00:07:54,593
+00:07:49,794 --> 00:07:54,193
 Leg sorting: scan the sticker that was printed before the ruling.
 
 43
-00:07:55,805 --> 00:08:00,517
+00:07:55,405 --> 00:08:00,117
 The number is updated: the screen shows the current ruling from the server.
 
 44
-00:08:05,760 --> 00:08:08,760
+00:08:05,360 --> 00:08:08,360
 Leg three: treif, in red.
 
 45
-00:08:15,989 --> 00:08:18,732
+00:08:15,589 --> 00:08:18,332
 The small parts tablet: cheeks and tongue.
 
 46
-00:08:18,732 --> 00:08:22,762
+00:08:18,332 --> 00:08:22,362
 Animal three is treif. The screen refuses to print.
 
 47
-00:08:25,491 --> 00:08:31,424
+00:08:25,091 --> 00:08:31,024
 USDA hold: the tongue of animal one fell. Mark the tongue. No reason is needed.
 
 48
-00:08:36,773 --> 00:08:41,538
+00:08:36,373 --> 00:08:41,138
 Animal one: both cheeks print. The tongue is held, so it does not print.
 
 49
-00:08:44,594 --> 00:08:49,403
+00:08:44,194 --> 00:08:49,003
 The parts sticker: the ruling in Hebrew and English, and the MK kashrut mark.
 
 50
-00:08:49,403 --> 00:08:54,259
+00:08:49,003 --> 00:08:53,859
 USDA released it. Tap release, and the tongue sticker prints now.
 
 51
-00:09:00,069 --> 00:09:03,069
+00:08:59,669 --> 00:09:02,669
 Animal two: Beit Yosef.
 
 52
-00:09:05,357 --> 00:09:08,911
+00:09:04,957 --> 00:09:08,511
 Beit Yosef, with its four kashrut marks.
 
 53
-00:09:21,976 --> 00:09:25,095
+00:09:21,576 --> 00:09:24,695
 The stamps and weighing tablet, for the main carcass.
 
 54
-00:09:25,095 --> 00:09:29,799
+00:09:24,695 --> 00:09:29,399
 Scan the animal's sticker. Five stamps print, by the ruling.
 
 55
-00:09:34,034 --> 00:09:38,184
+00:09:33,634 --> 00:09:37,784
 The stamp of animal one: MK, with its kashrut mark.
 
 56
-00:09:38,838 --> 00:09:43,312
+00:09:38,438 --> 00:09:42,912
 Weighing: scan the weight label, right side and then left side.
 
 57
-00:09:48,713 --> 00:09:52,534
+00:09:48,313 --> 00:09:52,134
 Animal one is stamped and weighed. On to the next.
 
 58
-00:10:01,200 --> 00:10:05,952
+00:10:00,800 --> 00:10:05,552
 Back with the team leader: the card of animal one, with its whole history.
 
 59
-00:10:06,960 --> 00:10:11,069
+00:10:06,560 --> 00:10:10,669
 Every action: who, when, and from which tablet.
 
 60
-00:10:11,184 --> 00:10:13,370
+00:10:10,784 --> 00:10:12,970
 Sample stickers, every kind.
 
 61
-00:10:13,370 --> 00:10:20,120
+00:10:12,970 --> 00:10:19,720
 Top row: legs and head, before the ruling. Bottom row: parts and stamps, with the plant's kashrut marks.

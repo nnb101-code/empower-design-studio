@@ -155,89 +155,89 @@ Animal dos: Beit Yosef. Cuatro: Glatt. Cinco: kosher. Siete: Glatt.
 El dictamen está hecho. Volvemos a la tableta de patas, para clasificar.
 
 40
-00:07:47,775 --> 00:07:54,499
-La pantalla del rabinato, inspector externo dos. También tiene el botón de pregunta, como cada pantalla.
+00:07:47,508 --> 00:07:54,754
+La pantalla del rabinato, inspector externo dos. El animal ocho se marcó no jalak en la faena, y parpadea aquí.
 
 41
-00:07:56,322 --> 00:08:02,326
-Aquí se escribe el número del animal y se toca marcar pregunta. El número espera, y parpadea.
+00:07:57,432 --> 00:08:03,471
+¿Una pregunta? Un toque en el botón de pregunta marca el ocho, y parpadea. Sin escribir.
 
 42
-00:08:12,862 --> 00:08:18,280
+00:08:11,942 --> 00:08:17,360
 Clasificación de patas: escanee la etiqueta que se imprimió antes del dictamen.
 
 43
-00:08:19,653 --> 00:08:24,867
+00:08:18,733 --> 00:08:23,947
 El número se actualiza: la pantalla muestra el dictamen actual del servidor.
 
 44
-00:08:29,999 --> 00:08:32,999
+00:08:29,079 --> 00:08:32,079
 Pata tres: treif, en rojo.
 
 45
-00:08:40,262 --> 00:08:43,891
+00:08:39,342 --> 00:08:42,971
 La tableta de partes pequeñas: mejillas y lengua.
 
 46
-00:08:43,891 --> 00:08:48,281
+00:08:42,971 --> 00:08:47,361
 El animal tres es treif. La pantalla se niega a imprimir.
 
 47
-00:08:51,006 --> 00:08:57,044
+00:08:50,086 --> 00:08:56,124
 Retención USDA: la lengua del animal uno se cayó. Marque la lengua. No hace falta motivo.
 
 48
-00:09:02,280 --> 00:09:08,296
+00:09:01,360 --> 00:09:07,376
 Animal uno: se imprimen las dos mejillas. La lengua está retenida, así que no se imprime.
 
 49
-00:09:11,329 --> 00:09:16,724
+00:09:10,409 --> 00:09:15,804
 La etiqueta de partes: el dictamen en hebreo y en inglés, y el sello kosher de MK.
 
 50
-00:09:16,724 --> 00:09:21,853
+00:09:15,804 --> 00:09:20,933
 USDA la liberó. Toque liberar, y la etiqueta de la lengua se imprime ahora.
 
 51
-00:09:27,675 --> 00:09:30,675
+00:09:26,755 --> 00:09:29,755
 Animal dos: Beit Yosef.
 
 52
-00:09:33,213 --> 00:09:36,238
+00:09:32,293 --> 00:09:35,318
 Beit Yosef, con sus cuatro sellos kosher.
 
 53
-00:09:50,935 --> 00:09:54,396
+00:09:50,015 --> 00:09:53,476
 La tableta de sellos y pesaje, para la canal principal.
 
 54
-00:09:54,396 --> 00:09:59,436
+00:09:53,476 --> 00:09:58,516
 Escanee la etiqueta del animal. Se imprimen cinco sellos, según el dictamen.
 
 55
-00:10:03,729 --> 00:10:07,887
+00:10:02,809 --> 00:10:06,967
 El sello del animal uno: MK, con su sello kosher.
 
 56
-00:10:08,547 --> 00:10:14,191
+00:10:07,627 --> 00:10:13,271
 Pesaje: escanee la etiqueta de peso, lado derecho y luego lado izquierdo.
 
 57
-00:10:19,625 --> 00:10:24,073
+00:10:18,705 --> 00:10:23,153
 El animal uno está sellado y pesado. Seguimos con el siguiente.
 
 58
-00:10:33,200 --> 00:10:38,340
+00:10:32,280 --> 00:10:37,420
 De vuelta con el jefe de equipo: la ficha del animal uno, con toda su historia.
 
 59
-00:10:39,362 --> 00:10:43,067
+00:10:38,442 --> 00:10:42,147
 Cada acción: quién, cuándo y desde qué tableta.
 
 60
-00:10:43,182 --> 00:10:46,009
+00:10:42,262 --> 00:10:45,089
 Ejemplos de etiquetas, de todo tipo.
 
 61
-00:10:46,009 --> 00:10:52,600
+00:10:45,089 --> 00:10:51,680
 Arriba: patas y cabeza, antes del dictamen. Abajo: partes y sellos, con los sellos kosher de la planta.
