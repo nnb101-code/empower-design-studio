@@ -2636,7 +2636,9 @@ begin
   select coalesce(jsonb_agg(jsonb_build_object(
            'name', application_name, 'state', state, 'sync', sync_state,
            'lagSeconds', round(coalesce(extract(epoch from replay_lag), 0)::numeric, 1))), '[]'::jsonb)
-    into v from pg_stat_replication;
+    into v from pg_stat_replication r
+   where not exists (select 1 from pg_replication_slots s       -- a logical sender (Supabase Realtime, CDC) is not a standby
+                      where s.active_pid = r.pid and s.slot_type = 'logical');
   return v;
 exception when others then
   return '[]'::jsonb;                          -- no right to see the replication view (cloud test server)
