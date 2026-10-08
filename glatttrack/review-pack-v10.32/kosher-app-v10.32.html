@@ -9074,7 +9074,8 @@ function gtAnHtml(acc, K, C){
     kpi(pct(K.glattPct), 'גלאט', 'var(--green)', dl(K.glattPct, k => k.glattPct, { points: true, goodUp: true })) +
     kpi(pct(K.kosherPct), L('כשר (כל הדרגות)', 'Kosher (all grades)', 'Kosher (todos)'), 'var(--gold)', dl(K.kosherPct, k => k.kosherPct, { points: true, goodUp: true })) +
     kpi(pct(K.treifPct), 'טרף', 'var(--red-light)', dl(K.treifPct, k => k.treifPct, { points: true, goodUp: false })) +
-    kpi(_gtNum(K.nev), L('נבלה / ירוי', 'Nevela / shot', 'Nevelá / baleado'), 'var(--red-light)', dl(K.nev, k => k.nev, { goodUp: false })) +
+    kpi(_gtNum(K.nevela), L('נבלה', 'Nevela', 'Nevelá'), 'var(--red-light)', dl(K.nevela, k => k.nevela, { goodUp: false })) +
+    kpi(_gtNum(K.shot), L('ירוי', 'Shot', 'Baleado'), '#A8AEB8', dl(K.shot, k => k.shot, { goodUp: false })) +
     kpi(_gtNum(K.kg) + ' ' + L('ק״ג', 'kg', 'kg'), L('משקל', 'Weight', 'Peso') + ' · ' + _gtNum(K.weighed) + ' ' + L('נשקלו', 'weighed', 'pesados'), 'var(--blue)', dl(K.kg, k => k.kg, {})) +
     (K.price ? kpi(escapeHtml(gtMoney(K.cur, K.charge, 0)), L('חיוב', 'Charge', 'Cargo'), 'var(--gold)', dl(K.charge, k => k.charge, {})) : '') +
     '</div>';
@@ -9085,20 +9086,22 @@ function gtAnHtml(acc, K, C){
   const rowsDef = [['glatt', acc.glatt, c => c.acc.glatt], ['beit', acc.beit, c => c.acc.beit], ['kosher', acc.kosher, c => c.acc.kosher],
                    ['rabKosher', acc.rabKosher, c => c.acc.rabKosher], ['mk', acc.mk, c => c.acc.mk]]
     .concat(Object.keys(Object.assign({}, acc.custom, ...C.map(c => c.acc.custom))).map(k => [k, acc.custom[k] || 0, c => c.acc.custom[k] || 0]))
-    .concat([['treif', acc.treif + acc.innerTreif, c => c.acc.treif + c.acc.innerTreif]]);
-  const ruled = K.graded + K.treif;
-  const bar = rowsDef.filter(r => r[1] > 0).map(([k, v]) => `<div title="${escapeHtml(nm(k === 'rabKosher' ? 'kosher' : k))}" style="width:${ruled ? v / ruled * 100 : 0}%;background:${k === 'rabKosher' ? '#C99A00' : col(k)};height:100%;"></div>`).join('');
+    .concat([['treif', acc.treif + acc.innerTreif, c => c.acc.treif + c.acc.innerTreif]])
+    // v10.32 (owner): nevela and shot are kashrut results too — each on its own row. ("not chalak" is not a
+    // result: it is a mark until the inspectors rule, so it is not counted here.)
+    .concat([['nevela', acc.nevela, c => c.acc.nevela], ['shot', acc.shot, c => c.acc.shot]]);
+  const _resNm = { nevela: L('נבלה', 'Nevela', 'Nevelá'), shot: L('ירוי', 'Shot', 'Baleado') }, _resCol = { nevela: '#8B1E1E', shot: '#8A8F98' };
+  const ruled = K.graded + K.treif + acc.nevela + acc.shot;          // every animal with a result
+  const _rn = k => _resNm[k] || (k === 'rabKosher' ? L('רבנות כשר', 'Rabbinate kosher', 'Kosher rabinato') : nm(k)), _rc = k => _resCol[k] || (k === 'rabKosher' ? '#C99A00' : col(k));
+  const bar = rowsDef.filter(r => r[1] > 0).map(([k, v]) => `<div title="${escapeHtml(_rn(k))}" style="width:${ruled ? v / ruled * 100 : 0}%;background:${_rc(k)};height:100%;"></div>`).join('');
   const tbl = `<div style="height:14px;border-radius:7px;overflow:hidden;display:flex;background:var(--border);margin-bottom:10px;">${bar}</div>
     <table class="gt-tbl"><tr><th></th><th>${L('כמות', 'Count', 'Cant.')}</th><th>%</th>${C.map(c => `<th>${escapeHtml(c.l)}</th>`).join('')}</tr>
-    ${rowsDef.filter(r => r[1] > 0 || C.some(c => r[2](c) > 0)).map(([k, v, f]) => `<tr><td><span style="color:${k === 'rabKosher' ? '#C99A00' : col(k)};">●</span> ${escapeHtml(k === 'rabKosher' ? L('רבנות כשר', 'Rabbinate kosher', 'Kosher rabinato') : nm(k))}</td><td>${_gtNum(v)}</td><td>${ruled ? _gtNum(v / ruled * 100, 1) + '%' : '—'}</td>${C.map(c => { const cr = c.K.graded + c.K.treif; return `<td>${_gtNum(f(c))}${cr ? ' <span class="gt-flat">(' + _gtNum(f(c) / cr * 100, 0) + '%)</span>' : ''}</td>`; }).join('')}</tr>`).join('')}
-    <tr><td>${L('ממתין לפסיקה', 'Waiting for a ruling', 'Esperando dictamen')}</td><td>${_gtNum(Math.max(0, acc.slaughtered - ruled))}</td><td></td>${C.map(() => '<td></td>').join('')}</tr></table>`;
-  h += sec('kashrut', '✅ ' + L('תוצאות כשרות', 'Kashrut results', 'Resultados de kashrut'), (K.glattPct == null ? '' : 'גלאט ' + pct(K.glattPct) + ' · ') + 'טרף ' + pct(K.treifPct), tbl);
-  // 2. nevela / shot / not chalak
-  h += sec('nevela', '⚠️ ' + L('נבלות, ירי ו"לא חלק"', 'Nevela, shot and not-chalak', 'Nevelá, baleado y no glatt'), _gtNum(K.nev) + ' ' + L('נבלה / ירוי', 'nevela / shot', 'nevelá / baleado'),
-    `<table class="gt-tbl"><tr><th></th><th>${L('כמות', 'Count', 'Cant.')}</th>${C.map(c => `<th>${escapeHtml(c.l)}</th>`).join('')}</tr>
-     <tr><td>${L('נבלה (בשחיטה)', 'Nevela (slaughter)', 'Nevelá (faena)')}</td><td>${_gtNum(acc.nevela)}</td>${C.map(c => `<td>${_gtNum(c.acc.nevela)} ${gtDelta(acc.nevela, c.acc.nevela, { goodUp: false })}</td>`).join('')}</tr>
-     <tr><td>${L('ירוי', 'Shot', 'Baleado')}</td><td>${_gtNum(acc.shot)}</td>${C.map(c => `<td>${_gtNum(c.acc.shot)} ${gtDelta(acc.shot, c.acc.shot, { goodUp: false })}</td>`).join('')}</tr>
-     <tr><td>${L('לא חלק (רבנות)', 'Not chalak (rabbinate)', 'No glatt (rabinato)')}</td><td>${_gtNum(acc.notChalak)}</td>${C.map(c => `<td>${_gtNum(c.acc.notChalak)}</td>`).join('')}</tr></table>`);
+    ${rowsDef.filter(r => r[1] > 0 || r[0] === 'nevela' || r[0] === 'shot' || C.some(c => r[2](c) > 0)).map(([k, v, f]) => `<tr><td><span style="color:${_rc(k)};">●</span> ${escapeHtml(_rn(k))}</td><td>${_gtNum(v)}</td><td>${ruled ? _gtNum(v / ruled * 100, 1) + '%' : '—'}</td>${C.map(c => { const cr = c.K.graded + c.K.treif + c.acc.nevela + c.acc.shot; return `<td>${_gtNum(f(c))}${cr ? ' <span class="gt-flat">(' + _gtNum(f(c) / cr * 100, 0) + '%)</span>' : ''}</td>`; }).join('')}</tr>`).join('')}
+    <tr><td>${L('ממתין לפסיקה', 'Waiting for a ruling', 'Esperando dictamen')}</td><td>${_gtNum(Math.max(0, acc.slaughtered - (K.graded + K.treif)))}</td><td></td>${C.map(() => '<td></td>').join('')}</tr></table>`;
+  h += sec('kashrut', '✅ ' + L('תוצאות כשרות', 'Kashrut results', 'Resultados de kashrut'),
+    (ruled ? 'גלאט ' + pct(acc.glatt / ruled * 100) + ' · טרף ' + pct((acc.treif + acc.innerTreif) / ruled * 100) + ' · ' : '')
+      + L('נבלה ', 'nevela ', 'nevelá ') + _gtNum(acc.nevela) + ' · ' + L('ירוי ', 'shot ', 'baleado ') + _gtNum(acc.shot), tbl);
+  // (v10.32: the separate "nevela, shot and not chalak" section is gone — nevela and shot are rows above)
   // 3–6. by farm / type / farm × type / outer inspector
   const bsum = b => { const e = Object.entries(b || {}).sort((x, y) => y[1].total - x[1].total); return e.length ? escapeHtml(e[0][0]) + ' · ' + _gtNum(e[0][1].total) + (e.length > 1 ? ' (+' + (e.length - 1) + ')' : '') : '—'; };
   const more = b => `<details style="margin-top:10px;"><summary style="font-size:12px;color:var(--muted);cursor:pointer;">${L('פירוט הדרגות', 'Grades in detail', 'Detalle de grados')}</summary><div style="margin-top:8px;">${_renderBucketBreakdown(b)}</div></details>`;
