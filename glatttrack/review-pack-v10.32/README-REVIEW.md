@@ -20,6 +20,8 @@ This pack is the CURRENT state. Review these files only.
 
 ## Fixed in v10.32 (server 02 + app) — after the v10.31 review
 
+- Owner's decision: the USDA HOLD window — choose what is held, then "Mark USDA HOLD" (no mark on the first tap). Halves (right / left) only at outer and stamps: the animal is split only after the inner check. `hold_set` now refuses a half from esophagus / inner / legs (`bad_value`); checked in the self-test.
+
 - Owner's decision: the top "? Question" button (esophagus, legs, outer, rabbinate, parts, stamps) marks the blinking number at once — one tap, no window (`gtQuestionNow` → `hold_set`), like the shochet's round button. A long press, or no blinking number, opens the small window to type another number (`gtQuestionStart`).
 
 - **LAN without WAN** (review §26): a tablet with the plant server reachable and NO internet. "No route" → fine. A hanging internet (no answer at all — common with a dead line behind a router) → the tablet NEVER opened: the CSS `@import` of Google Fonts blocked the first paint. Fixed: the fonts are added only after `load` (and `vendor/fonts/fonts.css` first on a plant server); system fonts until then. Checked in Chromium with every non-local host aborted / left hanging: the app is up in < 1 s and rulings reach the plant server.

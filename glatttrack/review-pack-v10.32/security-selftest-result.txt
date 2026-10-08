@@ -81,7 +81,7 @@ NOTICE:  PASS  chaos (a): after an inner takeover, the old tablet's queued comma
 NOTICE:  PASS  chaos (b): the old tablet resending a command id it already used gets the stored answer; nothing changes
 NOTICE:  PASS  test mode ON: switch-on time recorded + audited; info answers 8 hours left
 NOTICE:  PASS  chaos (f): test mode switched on 9 hours ago → off: the team leader cannot rule, server_test_mode false, flag set off + audited
-NOTICE:  PASS  v10.32 test mode expired: the same team-leader session puts no "?" / USDA; a station tablet carrying it gets nothing beyond its own station
+NOTICE:  PASS  v10.32 test mode expired: the same team-leader session puts no "?" / USDA; a station tablet carrying it gets nothing beyond its own station; a USDA half only at outer / stamps (the animal is split after the inner check)
 NOTICE:  PASS  reason_required: device replace / retire / reactivate / unpair without a reason are refused (normal pairing + rename need none); the reason is logged
 NOTICE:  PASS  reason_required: support access open / billing / force reload / manufacturer settings without a reason are refused (closing access needs none); the reason is audited
 NOTICE:  PASS  system_health: team leader / owner only; all sections; no backup ever on this server = info backup_unknown (not attention)

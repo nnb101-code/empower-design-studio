@@ -503,6 +503,7 @@ body{padding-top:var(--gt-bar-h,0px);box-sizing:border-box;}
 .gt-sheet-t{color:#E8B84A;font:800 26px Arial}.gt-sheet-s{font-size:16px;margin:6px 0 12px;color:#cdd5e3}
 .gt-row{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:10px}
 .gt-sb{min-width:130px;padding:12px 14px;border-radius:12px;border:2px solid;font:700 17px Arial;background:transparent;cursor:pointer}
+.gt-sb.gt-up.on{background:#B39DFF!important;color:#000!important;box-shadow:0 0 0 3px rgba(179,157,255,.35)}
 .gt-num{display:flex;gap:10px;align-items:center;justify-content:center;font-size:17px}
 .gt-num input{width:110px;font:800 24px Arial;text-align:center;border-radius:10px;border:2px solid #55607a;background:#0b1220;color:#fff;padding:6px}
 .gt-hrow{display:flex;justify-content:space-between;align-items:center;gap:10px;background:#1c2433;border-radius:10px;padding:8px 10px;margin:6px 0;text-align:start;flex-wrap:wrap}
@@ -4926,9 +4927,22 @@ async function gtSlQuestionNow(){
 // USDA HOLD — which number and what (the whole animal, a half, a part)
 function gtUsdaStart(st){
   const cur=_gtCurrentIdx(st);
-  const parts=st==='parts' ? ['whole','cheek1','cheek2','tongue'] : ['whole','right','left'];
-  gtSheet('USDA HOLD', L('מה מעוכב? (בלי סיבה) — רק התחנה הזו תשחרר או תפסול.','What is held? (no reason) — only this station releases or condemns it.','¿Qué se retiene? (sin motivo) — solo esta estación lo libera o lo condena.'),
-    _gtNumInput(cur)+'<div class="gt-row">'+parts.map(p=>_gtHBtn(_gtL(GT_PART_NAME[p]),'#B39DFF',`gtUsdaDo('${st}','${p}')`)).join('')+'</div><div class="gt-row">'+_gtHBtn(L('ביטול','Cancel','Cancelar'),'#9aa4b5','gtSheetClose()')+'</div>');
+  // v10.32 (owner): the animal is split into halves only after the inner check — halves only at outer / stamps
+  const parts=st==='parts' ? ['whole','cheek1','cheek2','tongue'] : (['outer','stamps'].includes(st) ? ['whole','right','left'] : ['whole']);
+  window._gtUsdaPart = parts.length===1 ? 'whole' : null;
+  gtSheet('USDA HOLD', L('מה מעוכב? בוחרים ולוחצים "סמן". (בלי סיבה) — רק התחנה הזו תשחרר או תפסול.','What is held? Choose, then tap "Mark". (No reason) — only this station releases or condemns it.','¿Qué se retiene? Elija y toque "Marcar". (Sin motivo) — solo esta estación lo libera o lo condena.'),
+    _gtNumInput(cur)+'<div class="gt-row">'+parts.map(p=>`<button class="gt-sb gt-up${parts.length===1?' on':''}" data-part="${p}" style="border-color:#B39DFF;color:#B39DFF" onclick="_gtUsdaPick(this)">${_gtL(GT_PART_NAME[p])}</button>`).join('')+'</div>'
+    +'<div class="gt-row">'+`<button class="gt-sb" id="gtUsdaOk" style="border-color:#B39DFF;background:#B39DFF;color:#000;${parts.length===1?'':'opacity:.35;'}" onclick="_gtUsdaConfirm('${st}')">${L('סמן USDA HOLD','Mark USDA HOLD','Marcar USDA HOLD')}</button>`
+    +_gtHBtn(L('ביטול','Cancel','Cancelar'),'#9aa4b5','gtSheetClose()')+'</div>');
+}
+function _gtUsdaPick(btn){
+  document.querySelectorAll('#gtSheet .gt-up').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on'); window._gtUsdaPart=btn.getAttribute('data-part');
+  const ok=document.getElementById('gtUsdaOk'); if(ok) ok.style.opacity='1';
+}
+function _gtUsdaConfirm(st){
+  if(!window._gtUsdaPart){ KS.notice(L('בוחרים קודם מה מעוכב.','First choose what is held.','Primero elija qué se retiene.')); return; }
+  gtUsdaDo(st, window._gtUsdaPart);
 }
 async function gtUsdaDo(st,part){
   const idx=_gtReadNum(); if(idx<0){ KS.notice(L('מספר לא תקין','Invalid number','Número inválido')); return; }

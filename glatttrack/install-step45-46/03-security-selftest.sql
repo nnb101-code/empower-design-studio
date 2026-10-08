@@ -1347,7 +1347,11 @@ begin
   r4 := pg_temp.api(pg_temp.dev('PARTS') || pg_temp.mgr(), 'select hold_set(983, ''outer'', ''question'')');
   ok := r ->> 'ok' = 'false' and r2 ->> 'ok' = 'false' and pg_temp.err(r3) = 'wrong_station' and r4 ->> 'error' = 'wrong_station'
         and (pg_temp.ar(983)).slaughter is null and not exists (select 1 from animal_holds where animal_id = 983 and resolved_at is null);
-  perform pg_temp.rec('v10.32 test mode expired: the same team-leader session puts no "?" / USDA; a station tablet carrying it gets nothing beyond its own station', ok,
+  -- the animal is split into halves only after the inner check: a half only at outer / stamps
+  ok := ok and pg_temp.api(pg_temp.dev('ESO1'), 'select hold_set(983, ''eso'', ''usda'', ''right'')') ->> 'error' = 'bad_value'
+           and pg_temp.api(pg_temp.dev('IN1'), 'select hold_set(983, ''inner'', ''usda'', ''left'')') ->> 'error' = 'bad_value'
+           and pg_temp.api(pg_temp.dev('LEGS'), 'select hold_set(983, ''legs'', ''usda'', ''right'')') ->> 'error' = 'bad_value';
+  perform pg_temp.rec('v10.32 test mode expired: the same team-leader session puts no "?" / USDA; a station tablet carrying it gets nothing beyond its own station; a USDA half only at outer / stamps (the animal is split after the inner check)', ok,
     concat_ws(' | ', r::text, r2::text, r3::text, r4::text));
   perform pg_temp.testmode(false);
 end $$;

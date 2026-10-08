@@ -15877,7 +15877,7 @@ begin
   if (p_kind = 'question' and v_part <> 'whole')
      or (p_kind = 'usda' and not (v_part = 'whole'
                                   or (p_station = 'parts' and v_part in ('cheek1', 'cheek2', 'tongue'))
-                                  or (p_station <> 'parts' and v_part in ('right', 'left')))) then
+                                  or (p_station in ('outer', 'stamps') and v_part in ('right', 'left')))) then   -- v10.32: halves only after the inner check
     return jsonb_build_object('ok', false, 'error', 'bad_value');
   end if;
   v_dev := _call_device(null);

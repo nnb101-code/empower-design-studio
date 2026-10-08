@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict pUOM1SA7kxORzz4yJTP6val88EowArX5i4yGPtVENtPoXkIMdtmhb9ychJrU9u1
+\restrict i6VhVhGT9gAOTDLeEzyXFustjXofB543htfJdgTbgzyqfDFPLTJXL8I6wb7aXh3
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -5058,7 +5058,7 @@ begin
   if (p_kind = 'question' and v_part <> 'whole')
      or (p_kind = 'usda' and not (v_part = 'whole'
                                   or (p_station = 'parts' and v_part in ('cheek1', 'cheek2', 'tongue'))
-                                  or (p_station <> 'parts' and v_part in ('right', 'left')))) then
+                                  or (p_station in ('outer', 'stamps') and v_part in ('right', 'left')))) then   -- v10.32: halves only after the inner check
     return jsonb_build_object('ok', false, 'error', 'bad_value');
   end if;
   v_dev := _call_device(null);
@@ -10693,5 +10693,5 @@ GRANT ALL ON TABLE public.system_flags TO service_role;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict pUOM1SA7kxORzz4yJTP6val88EowArX5i4yGPtVENtPoXkIMdtmhb9ychJrU9u1
+\unrestrict i6VhVhGT9gAOTDLeEzyXFustjXofB543htfJdgTbgzyqfDFPLTJXL8I6wb7aXh3
 
