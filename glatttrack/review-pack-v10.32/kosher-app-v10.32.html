@@ -481,12 +481,15 @@ body{padding-top:var(--gt-bar-h,0px);box-sizing:border-box;}
 
 .num-cell.gt-q .cn,.num-cell.gt-q .cl{color:#000!important}
 .num-cell.gt-q::after,.num-cell.gt-qb::after{content:'?';position:absolute;top:2px;left:6px;font:900 20px Arial;line-height:1;color:inherit}
-.num-cell.gt-usda{background:#6A3FB5!important;border-color:#C5B3FF!important;color:#fff!important;animation:none!important}
+.num-cell.gt-usda{background:#6A3FB5!important;border-color:#C5B3FF!important;color:#fff!important;animation:gtUBlink 1s steps(1,end) infinite!important}
+/* v10.32 (owner): a USDA hold blinks too, until the station releases or condemns it */
+@keyframes gtUBlink{0%{opacity:1;box-shadow:0 0 0 3px #B39DFF,0 0 22px #8B5CF6}50%{opacity:.3;box-shadow:none}}
 .num-cell.gt-usda .cn,.num-cell.gt-usda .cl{color:#fff!important}
 .num-cell.gt-usda::after{content:'USDA';position:absolute;top:3px;left:5px;font:800 10px Arial;color:#fff}
 .num-cell.gt-cond{background:#2b2140!important;border-color:#6b5a99!important;color:#bbb!important;animation:none!important}
 .num-cell.gt-cond .cn{text-decoration:line-through}
-.num-cell.gt-usda-part{box-shadow:inset 0 0 0 4px #8B5CF6!important}
+.num-cell.gt-usda-part{box-shadow:inset 0 0 0 4px #8B5CF6;animation:gtUPBlink 1s steps(1,end) infinite!important}
+@keyframes gtUPBlink{0%{box-shadow:inset 0 0 0 4px #8B5CF6,0 0 18px #8B5CF6}50%{box-shadow:inset 0 0 0 4px rgba(139,92,246,.15)}}
 .num-cell.gt-chg{outline:4px solid #FF5252!important;outline-offset:-4px}
 .num-cell{position:relative}
 .gt-tb{display:flex;gap:6px;align-items:center;flex-wrap:nowrap}
@@ -4931,8 +4934,8 @@ async function gtSlQuestionNow(){
     KS.notice(L('#'+(idx+1)+' — "?" שאלה. ממשיכים ל-'+(idx+2)+'. לפסיקה: לוחצים על '+(idx+1)+'.','#'+(idx+1)+' — "?" question. Go on to '+(idx+2)+'. To rule it: tap '+(idx+1)+'.','#'+(idx+1)+' — "?" pregunta. Siga con '+(idx+2)+'. Para dictaminar: toque '+(idx+1)+'.'));
 }
 // USDA HOLD — which number and what (the whole animal, a half, a part)
-function gtUsdaStart(st){
-  const cur=_gtCurrentIdx(st);
+function gtUsdaStart(st, idx){
+  const cur=(idx!=null && idx>=0) ? idx : _gtCurrentIdx(st);   // v10.32: from a change window — that number
   // v10.32 (owner): the animal is split into halves only after the inner check — halves only at outer / stamps
   const parts=st==='parts' ? ['whole','cheek1','cheek2','tongue'] : (['outer','stamps'].includes(st) ? ['whole','right','left'] : ['whole']);
   window._gtUsdaPart = parts.length===1 ? 'whole' : null;
@@ -5069,6 +5072,22 @@ function gtWindowQInit(){
   add(document.querySelector('#lungModal .lung-actions'), 'gtQLung', ()=>gtInnerQuestion('lung'), 'margin:0;flex:0 0 auto;');
   { const ok=document.querySelector(`#esoModal [onclick="esoDecide('ok')"]`); add(ok && ok.parentNode && ok.parentNode.parentNode, 'gtQEso', ()=>gtWindowQuestion('eso')); }
   add(document.querySelector('#decModal .dec-box'), 'gtQOuter', ()=>gtWindowQuestion('outer'));
+  gtUsdaInChangeWindows();
+}
+// v10.32 (owner): an animal already past this station (e.g. it fell to the floor 5 numbers later) — tap
+// it, and the change window also offers USDA HOLD for that number.
+function gtUsdaInChangeWindows(){
+  const map=[['esoWarnModal','eso',()=>esoChangeIdx],['inWarnModal','inner',()=>inChangeIdx],['outWarnModal','outer',()=>outChangeIdx],
+             ['lgRpModal','legs',()=>lgReprintIdx],['partsRpModal','parts',()=>partsReprintIdx],['stampsRpModal','stamps',()=>stampsRpIdx]];
+  map.forEach(([mid, st, getIdx])=>{
+    const m=document.getElementById(mid); if(!m || m.querySelector('.gt-usda-chg')) return;
+    const box=m.firstElementChild || m;
+    const b=document.createElement('button'); b.className='gt-usda-chg'; b.setAttribute('data-no-i18n','');
+    b.style.cssText='display:block;width:100%;margin-top:12px;padding:12px;border-radius:12px;border:2px solid #B39DFF;background:#6A3FB5;color:#fff;font:800 17px Arial;cursor:pointer';
+    b.textContent='USDA HOLD';
+    b.onclick=()=>{ let i=-1; try{ i=getIdx(); }catch(e){} m.classList.remove('open'); gtUsdaStart(st, i); };
+    box.appendChild(b);
+  });
 }
 // v10.29: "?" in a window marks only THAT item (rumen / maw / lungs) — at once, no confirm —
 // and the check goes straight on to the next window of the same animal. The animal waits
