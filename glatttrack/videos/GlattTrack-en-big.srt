@@ -1,0 +1,203 @@
+1
+00:00:00,523 --> 00:00:05,563
+An empty screen. We open the GlattTrack app on the team leader's tablet.
+
+2
+00:00:07,265 --> 00:00:13,763
+The app connects to the plant server. The server has no team leader yet, so this is the first installation.
+
+3
+00:00:15,012 --> 00:00:20,794
+Fill in the team leader's name, a personal code, and the server setup code from the installer.
+
+4
+00:00:26,400 --> 00:00:30,825
+The server checks the setup code and approves the installation.
+
+5
+00:00:36,329 --> 00:00:43,215
+This tablet is now registered as the team leader's device. The setup page opens, only this once.
+
+6
+00:00:44,744 --> 00:00:49,146
+A recovery code. It can be skipped and made later.
+
+7
+00:00:50,937 --> 00:00:59,213
+Choose the screens the plant uses: slaughter, esophagus, legs and head, inner, outer, small parts, and stamps. Then save.
+
+8
+00:01:11,852 --> 00:01:17,098
+Workers, pairing the tablets, the owner and the printers can be done now or later.
+
+9
+00:01:19,909 --> 00:01:25,576
+The team leader screen is open. Now, a working day, station by station.
+
+10
+00:01:29,929 --> 00:01:36,520
+The slaughter tablet. The shochet presses one button per animal, and the next number fills in by itself.
+
+11
+00:01:44,757 --> 00:01:47,757
+Animal five: nevela.
+
+12
+00:01:51,075 --> 00:01:56,150
+Tapping a marked number opens a correction, only before the next station has touched it.
+
+13
+00:02:04,396 --> 00:02:07,396
+The esophagus check tablet.
+
+14
+00:02:08,973 --> 00:02:13,156
+Trying to skip to animal three. The system does not allow it.
+
+15
+00:02:15,900 --> 00:02:19,268
+Tap the blinking animal and choose OK.
+
+16
+00:02:44,733 --> 00:02:49,889
+The legs and head tablet. Stickers are printed right after slaughter, before the ruling.
+
+17
+00:02:49,889 --> 00:02:53,072
+The first tap prints the leg stickers.
+
+18
+00:02:55,306 --> 00:03:01,661
+The legs sticker. Printed: the number, the Hebrew and Gregorian dates, and the time. In the QR code: everything.
+
+19
+00:03:01,661 --> 00:03:04,728
+The second tap prints the head sticker.
+
+20
+00:03:06,919 --> 00:03:09,997
+The head sticker has the same details.
+
+21
+00:03:11,753 --> 00:03:16,364
+Every animal in order. A nevela also gets a number sticker.
+
+22
+00:03:43,650 --> 00:03:46,650
+The nevela sticker.
+
+23
+00:04:01,543 --> 00:04:05,735
+The inner inspector's tablet. Tap the next animal in line.
+
+24
+00:04:07,097 --> 00:04:10,097
+Rumen check: kosher.
+
+25
+00:04:11,032 --> 00:04:14,032
+Maw: kosher.
+
+26
+00:04:14,798 --> 00:04:17,798
+The lung drawing: mark it with a finger.
+
+27
+00:04:22,329 --> 00:04:26,975
+Approve for the outer inspector. The animal moves on with its drawing.
+
+28
+00:04:38,777 --> 00:04:43,817
+Animal three is treif. The first tap asks, the second tap rules.
+
+29
+00:04:52,326 --> 00:04:56,371
+Animals two, four and six: kosher, and approve.
+
+30
+00:05:23,020 --> 00:05:28,450
+The outer inspector's tablet. The lung drawing is shown, and the inspector rules.
+
+31
+00:05:31,366 --> 00:05:34,366
+Animal one: Glatt.
+
+32
+00:05:35,403 --> 00:05:40,705
+Animal two: Beit Yosef. Animal four: Glatt. Animal six: kosher.
+
+33
+00:05:53,366 --> 00:05:57,415
+The ruling is made. Back to the legs tablet, for sorting.
+
+34
+00:06:06,440 --> 00:06:10,839
+Leg sorting: scan the sticker that was printed before the ruling.
+
+35
+00:06:12,324 --> 00:06:17,036
+The number is updated: the screen shows the current ruling from the server.
+
+36
+00:06:22,666 --> 00:06:25,666
+Leg three: treif, in red.
+
+37
+00:06:32,760 --> 00:06:35,503
+The small parts tablet: cheeks and tongue.
+
+38
+00:06:35,503 --> 00:06:39,533
+Animal three is treif. The screen refuses to print.
+
+39
+00:06:42,273 --> 00:06:47,717
+Animal one: one tap prints three stickers: cheek one, cheek two, and tongue.
+
+40
+00:06:50,626 --> 00:06:56,661
+The parts sticker: the ruling in Hebrew and English, and the kashrut mark. In this film, a sample mark.
+
+41
+00:06:56,661 --> 00:06:59,661
+Animal two: Beit Yosef.
+
+42
+00:07:01,997 --> 00:07:05,249
+Beit Yosef, with its own kashrut mark.
+
+43
+00:07:14,849 --> 00:07:17,949
+The stamps and weighing tablet, for the main carcass.
+
+44
+00:07:17,949 --> 00:07:22,653
+Scan the animal's sticker. Five stamps print, by the ruling.
+
+45
+00:07:27,177 --> 00:07:31,308
+The stamp of animal one, by its ruling, with the kashrut mark.
+
+46
+00:07:31,988 --> 00:07:36,462
+Weighing: scan the weight label, right side and then left side.
+
+47
+00:07:41,884 --> 00:07:45,705
+Animal one is stamped and weighed. On to the next.
+
+48
+00:07:54,120 --> 00:07:58,872
+Back with the team leader: the card of animal one, with its whole history.
+
+49
+00:07:59,879 --> 00:08:03,988
+Every action: who, when, and from which tablet.
+
+50
+00:08:04,105 --> 00:08:06,292
+Sample stickers, every kind.
+
+51
+00:08:06,292 --> 00:08:13,320
+Top row: legs and head, before the ruling. Bottom row: parts and stamps, after the ruling, with the kashrut mark.
