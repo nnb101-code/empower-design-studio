@@ -5035,7 +5035,7 @@ function _gtDoneAfterHtml(stage, a){
     +'</div>';
 }
 
-var GT_APP_VERSION='v10.26';
+var GT_APP_VERSION='v10.27';
 document.addEventListener('DOMContentLoaded',()=>{ try{ document.querySelectorAll('.gt-ver').forEach(e=>e.textContent=GT_APP_VERSION); }catch(e){} });
 function escapeHtml(str){
   return String(str==null?'':str).replace(/[&<>"']/g, c=>({
@@ -9377,7 +9377,28 @@ function updateMgr(){
 }
 
 // ── MONITOR ──
+// v10.27: "all the screens on one device" (test mode) — a card at the top of the team leader's
+// home tab, not only deep in Settings → System
+function gtTestHomeCard(){
+  const pane=document.getElementById('mgr-monitor'); if(!pane) return;
+  let c=document.getElementById('gtTestHome');
+  const show=(typeof KS!=='undefined') && KS.getManagerRole && KS.getManagerRole()==='manager';
+  if(!show){ if(c) c.style.display='none'; return; }
+  if(!c){ c=document.createElement('div'); c.id='gtTestHome'; c.setAttribute('data-no-i18n','');
+    c.style.cssText='margin-bottom:10px;padding:10px 12px;border:1px dashed var(--amber);border-radius:12px;display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;';
+    pane.insertBefore(c, pane.firstChild); }
+  c.style.display='';
+  const on=_gtTestModeOn();
+  c.innerHTML='<div style="font-size:14px;color:var(--text);"><b style="color:var(--amber);">🧪 '+escapeHtml(L('כל המסכים במכשיר אחד (מצב בדיקה)','All the screens on one device (test mode)','Todas las pantallas en un dispositivo (modo prueba)'))+'</b><br><span style="font-size:12px;color:var(--muted);">'
+    +escapeHtml(on?L('דלוק — עוברים בין המסכים דרך 🏠. נכבה לבד אחרי 8 שעות.','On — switch screens with 🏠. Turns itself off after 8 hours.','Activo — cambie de pantalla con 🏠. Se apaga solo a las 8 horas.')
+                  :L('זמני, לבדיקה. נכבה לבד אחרי 8 שעות.','Temporary, for testing. Turns itself off after 8 hours.','Temporal, para pruebas. Se apaga solo a las 8 horas.'))+'</span></div>'
+    +'<div style="display:flex;gap:8px;flex-wrap:wrap;">'
+    +(on?'<button onclick="goTo(\'scNav\')" style="min-height:42px;padding:8px 14px;border-radius:8px;background:var(--amber);border:none;color:#000;font-weight:800;cursor:pointer;">'+escapeHtml(L('🏠 לכל המסכים','🏠 To all the screens','🏠 A todas las pantallas'))+'</button>':'')
+    +'<button onclick="gtToggleTestMode().then(gtTestHomeCard)" style="min-height:42px;padding:8px 14px;border-radius:8px;background:transparent;border:1px solid var(--amber);color:var(--amber);font-weight:800;cursor:pointer;">'
+    +escapeHtml(on?L('כבה','Turn off','Apagar'):L('הפעל','Turn on','Activar'))+'</button></div>';
+}
 function mgrUpdateMonitor(){
+  try{ gtTestHomeCard(); }catch(e){}
   const a=KS.getAnimals();
   const alive=x=>x.slaughter==='slaughtered'||x.slaughter==='notChalak';
   const tot=a.filter(x=>x.slaughter!==null).length;
