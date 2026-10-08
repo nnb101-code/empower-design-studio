@@ -9,7 +9,7 @@ This pack is the CURRENT state. Review these files only.
 | `active-schema-snapshot.sql` | **Audit this first.** `pg_dump --schema-only` (public + gt_rls) of a clean database built from `glatttrack-schema-full.sql`. Exactly one ACTIVE definition of each function, trigger, RLS policy and grant. |
 | `setup-supabase-step46-order-and-processing-days.sql` | The new migration (run after step 45). |
 | `STEP46-CHANGES.md` | What step 46 / app v10.6 changed (Hebrew). |
-| `security-selftest.sql` + `security-selftest-result.txt` | Release gate: **135 / 135**. One statement (one DO block) whose changes are all undone inside it (see v10.15 below). |
+| `security-selftest.sql` + `security-selftest-result.txt` | Release gate: **138 / 138**. One statement (one DO block) whose changes are all undone inside it (see v10.15 below). |
 | `SECURITY-MANIFEST.md` | Permission map (step 45 observed table) + a step-46 section. |
 | `active-security-manifest.sql` + `-result.txt` | Prints the active security surface. |
 | `kosher-app-v10.31.html` | The app (UI, offline store, sync client). `GT_MIN_SCHEMA = 46`. |
@@ -19,6 +19,15 @@ This pack is the CURRENT state. Review these files only.
 | `plant-server/` | Plant resilience kit (bash, runs as root on the plant servers, NOT in the database): standby server, floating address, UPS, nightly checked backup. Guide: `PLANT-RESILIENCE-HE.md`. |
 
 ## Changed in v10.31 (app only)
+
+- A number on "?" (`.num-cell.gt-q` / `.gt-qb`) blinks all the time on every screen (opacity + glow keyframe `gtQBlink`; opacity is used because the cell's background is `!important`).
+- Inner check: "?" in any window (rumen / maw / lung) now closes the number at once with "?" (`gtInnerQuestion` → `_gtInnerWait`): every window closes, the number is not left as a float, the server hold (`hold_set`, station inner, kind question) is put. It no longer goes on to the next window (this reverses v10.29). Tapping the number later (`gtInnerResume`) opens the window that is "?" first. The v10.29 auto-open of the lungs in `mawDone` (`_qchain`) was removed.
+- The rabbinate screen (outer instance 1, role `kosher`, with 2 outer screens and "not chalak" on) has "? Question" on its top bar and "?" in its decision window, like every screen (same `scOuter` code; checked in the browser).
+- The slaughter screen no longer has the USDA HOLD button (`gtTopBarsInit` skips it for `slaughter`). The shochet's round "?" stays.
+- No server change: steps 02 / 03 are the same as v10.30 (138 / 138).
+- Browser test: `browser-tests/question-blink-inner-close-rabbinate.test.js`.
+
+## Changed in v10.30 (app only)
 
 - Language switch: `applyLang` now redraws the team leader's open tab (it was only redrawn when the tab was opened again), the clock line, and the status rows (health, processing day, test mode, holds cards); ~60 Hebrew-only texts got English / Spanish (`I18N_DOM`, plus `I18N_PARTS` for texts that hold a name). Audits in `browser-tests/language-*.test.js`: no Hebrew left right after the switch except kashrut status names (never translated by design) and people's names; the switch takes < 50 ms.
 

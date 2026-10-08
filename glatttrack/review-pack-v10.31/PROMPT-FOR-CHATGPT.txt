@@ -1,26 +1,27 @@
 מצורפת חבילת הבדיקה העדכנית של GlattTrack (אפליקציה v10.31, שרת שלב 46).
-זה סבב עשירי. אם עוד לא שלחת תשובה על סבב 9 (v10.16) — אפשר לענות על שניהם יחד.
-קודם תקרא את README-REVIEW.md, החלקים "Changed in v10.31", "Changed in v10.29", "Changed in v10.28", "Changed in v10.27", "Changed in v10.26", "Changed in v10.25", "Changed in v10.24", "Fixed in v10.23", "Changed in v10.22", "Changed in v10.21", "Fixed in v10.20", "Changed in v10.19", "Changed in v10.18" ו-"Changed in v10.17". אלה החלטות של בעל המערכת:
-- סטטוס כשרות מופיע תמיד בשם שבו נכתב, בכל שפה (MK נשאר MK בעברית, גלאט נשאר גלאט באנגלית ובספרדית).
-- אפשר להוסיף ולהסיר סטטוסים, ולהחזיר סטטוס שהוסר.
-- "שליחה לרבנות" היא שליחה ממסך הגלאט למסך הרבנות, לא סטטוס. סטטוסי הרבנות: רבנות חלק, רבנות כשר.
-- במדבקות הסטטוס מודפס בעברית ובאנגלית יחד.
-- הסימון נקרא "לא חלק". מדבקות רגליים וראש מודפסות לפני הפסיקה (בחוץ: מספר, תאריכים, שעה, ונבלה / לא חלק אם יש; ב-QR: כל הפרטים); הסורק קורא את המספר ומציג את הפסיקה העדכנית.
+זה סבב אחד-עשר. אם עוד לא שלחת תשובה על סבב קודם — אפשר לענות על כולם יחד.
+קודם תקרא את README-REVIEW.md, החלקים "Changed in v10.31" עד "Changed in v10.26" (מה שהשתנה מאז הסבב הקודם). אלה החלטות של בעל המערכת:
+- בכל מסך יש "?" (שאלה) ו-USDA HOLD — חוץ ממסך השחיטה, שבו יש רק "?" (בלי USDA).
+- מספר עם "?" מהבהב כל הזמן בכל מסך, עד שמחליטים עליו.
+- בבדיקת פנים: "?" בחלון (כרסים / בית הכוסות / ריאה) סוגר את המספר מיד. לא ממשיכים לחלון הבא. לחיצה חוזרת פותחת את החלון שבו היה ה-"?".
+- כל מסך משנה רק את הפסיקה שלו. שינוי סטטוס תמיד אפשרי, אחרי אזהרה, ונרשם (מי, מתי, מה היה).
+- משגיח הוושט רשאי לפסוק על מספר שיש עליו "?" בשחיטה. אם השחיטה תפסוק אחר כך נבלה — זה גובר.
+- USDA HOLD בלי סיבה. רק התחנה שעיכבה משחררת או פוסלת. חלק מעוכב לא מודפס.
+- סטטוס כשרות מופיע תמיד בשם שבו נכתב, בכל שפה. סטטוסי הרבנות: רבנות חלק, רבנות כשר.
 בדוק במיוחד:
-(000) v10.22: סימני הכשרות בשרת (seal_set / seals_get, טבלה kashrut_seals) — הרשאות, גודל, ומי יכול לקרוא.
-(00) v10.20: תיקון ההתקנה הראשונה (_gtSelfPairing) — האם יש עוד קריאה שיכולה לקבל unauthorized ברגע הרישום ולפעול לפיו.
-(0) האם יש מקום שמשתמש בסטטוס שמודפס ב-QR (S:) כאילו הוא הפסיקה.
-(1) הכלל החדש בשרת (_nc_outer_value_ok): בהמה שרק נשלחה למסך הרבנות — מותר רבנות חלק; בהמה שסומנה "לא חלק" בשחיטה או בבית הכוסות — רק רבנות כשר או טרף. האם יש מסלול כתיבה שעוקף אותו? האם _kosher_ready נכון עכשיו (מדבקות וחותמות לבהמה ברבנות חלק)?
-(2) האם יש מקום באפליקציה שעדיין מתרגם שם של סטטוס, או מציג שם אחר מזה שנכתב.
-(3) הסרה והחזרה של סטטוס: האם זה יכול לשנות פסיקה שכבר ניתנה (השרת חוסם שינוי "כשר/לא כשר" ומחיקה כשבהמה על הלוח נושאת את הסטטוס — status_in_use).
-(4) מה שנשאר פתוח מסבב 9 (B1, B3, B5) — האם ההחלטות סבירות.
-בדיקת האבטחה: 135/135 (מסד נקי מ-glatttrack-schema-full.sql, וגם בלי superuser).
+(1) העיכובים בשרת (טבלה animal_holds, הפונקציות hold_set, hold_resolve, board_flags, change_ack, והטריגרים b_animals_hold_guard ו-zzzzz_close_questions): מי יכול לשים / לשחרר עיכוב של תחנה אחרת? האם אפשר לעקוף עיכוב ולהדפיס / להחתים חלק מעוכב?
+(2) _correction_check: שינוי פסיקה מותר רק לטאבלט של אותה תחנה (או לראש צוות במצב בדיקה). האם יש מסלול שבו תחנה משנה פסיקה של תחנה אחרת?
+(3) מצב בדיקה (_test_mode_on + _request_has_manager): האם יש דרך להשתמש בו בלי מצב בדיקה פעיל או בלי ראש צוות?
+(4) הרצפים animal_holds_id_seq ו-animal_changes_id_seq — האם נשארה הרשאה ל-anon / authenticated.
+(5) באפליקציה: האם יש מקום שבו מספר עם "?" יכול לעבור הלאה (לחוץ / לחלקים / לחותמות) לפני שמחליטים עליו.
+(6) האם יש מקום באפליקציה שעדיין מתרגם שם של סטטוס כשרות, או מציג שם אחר מזה שנכתב.
+בדיקת האבטחה: 138/138 (מסד נקי מ-glatttrack-schema-full.sql, וגם בלי superuser; וגם על Supabase).
 
 Please review this pack according to README-REVIEW.md.
 
 Rules for the review:
 1. Audit the ACTIVE state in active-schema-snapshot.sql (one definition per function). Do not audit older step files or the history inside glatttrack-schema-full.sql as if it were active.
-2. Use SECURITY-MANIFEST.md and security-selftest-result.txt (135/135) to see what is already enforced and tested. Before reporting a vulnerability, check whether a self-test already covers it; if it does, say so and explain why you still think it is exploitable (with the exact function name and line from the snapshot).
+2. Use SECURITY-MANIFEST.md and security-selftest-result.txt (138/138) to see what is already enforced and tested. Before reporting a vulnerability, check whether a self-test already covers it; if it does, say so and explain why you still think it is exploitable (with the exact function name and line from the snapshot).
 3. Separate your findings into:
    A. Real, exploitable problems (with a concrete attack: which role, which call, which parameters, what wrong result).
    B. Defense-in-depth improvements (not exploitable today).
