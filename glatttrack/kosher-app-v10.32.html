@@ -5074,7 +5074,10 @@ function _gtQKey(i){ return String(_gtFlags.epoch||'')+':'+i; }
 // v10.32 (owner): a number shows only the window its "?" was asked in. Since v10.31 a "?" closes the
 // number at once, so there is one window; a list left by v10.29 / v10.30 (which went on to the next
 // window) is cut to its last one.
-function gtInnerQSteps(i){ const m=_gtQStepsAll(), a=m[_gtQKey(i)]; return Array.isArray(a) && a.length ? a.slice(-1) : []; }
+function gtInnerQSteps(i){
+  try{ const h=gtOwnQ(i,'inner'); if(h && ['rumen','maw','lung'].includes(h.part)) return [h.part]; }catch(e){}   // v10.32: from the server — every inner tablet
+  const m=_gtQStepsAll(), a=m[_gtQKey(i)]; return Array.isArray(a) && a.length ? a.slice(-1) : [];
+}
 function _gtQStepsSet(i, arr){ try{ const m=_gtQStepsAll(); if(arr && arr.length) m[_gtQKey(i)]=arr; else delete m[_gtQKey(i)];
   Object.keys(m).forEach(k=>{ if(!k.startsWith(String(_gtFlags.epoch||'')+':')) delete m[k]; });   // other days: gone
   localStorage.setItem('gt_inner_qsteps', JSON.stringify(m)); }catch(e){} }
@@ -5083,7 +5086,7 @@ function _gtQStepAdd(i, step){ _gtQStepsSet(i, [step]); }   // v10.32: only the 
 // the question is answered: the "?" comes off and the number is an ordinary one again ("waiting"
 // for the lungs). Asked on another tablet (window not known here): the first window decided answers it.
 function _gtInnerStepDecided(i, step){
-  const m=_gtQStepsAll(), a=m[_gtQKey(i)], was=(Array.isArray(a) && a.length) ? a[a.length-1] : null;
+  const _w=gtInnerQSteps(i), was=_w.length ? _w[0] : null;   // the server's window first, then this tablet's
   _gtQStepDone(i, step);
   const h=gtOwnQ(i,'inner');
   if(h && !h.local && h.id && (was===step || was===null)){
@@ -5099,7 +5102,7 @@ async function gtInnerQuestion(where){
   if(idx<0) return;
   _gtQStepAdd(idx, where);
   try{ KS.addAuditLog({type:'question_at', stage:'inner', step:where, animal:idx+1}); }catch(e){}
-  if(!gtOwnQ(idx,'inner')) gtHoldPut(idx,'inner','question','whole');        // the number waits (server)
+  { const _oq=gtOwnQ(idx,'inner'); if(!_oq || _oq.part!==where) gtHoldPut(idx,'inner','question',where); }   // v10.32: the number waits, with its window (server)
   // v10.31: a "?" in any window closes this number right away (no going on to the next window).
   // Tapping the number later opens the window that is "?" first.
   if(where==='lung'){ try{ minimizeLung(); }catch(e){} }

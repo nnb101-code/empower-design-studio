@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict aYF6SDk9kJbTffH51eDRe5UM0pRmBc4XXDc2n5CaUdgcGDsBJLgFAhRn9zoEM3O
+\restrict us5acrSLLvRPuQxm2WGg3SKA3o29P29uoeYYvA4kJrdf8NlEVbTrN7GRDdZAZzG
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -5055,7 +5055,8 @@ begin
   if p_station is null or p_station not in ('slaughter', 'eso', 'inner', 'outer', 'legs', 'parts', 'stamps') then
     return jsonb_build_object('ok', false, 'error', 'bad_station');
   end if;
-  if (p_kind = 'question' and v_part <> 'whole')
+  if (p_kind = 'question' and not (v_part = 'whole'
+                                   or (p_station = 'inner' and v_part in ('rumen', 'maw', 'lung'))))   -- v10.32: the window of an inner "?"
      or (p_kind = 'usda' and not (v_part = 'whole'
                                   or (p_station = 'parts' and v_part in ('cheek1', 'cheek2', 'tongue'))
                                   or (p_station in ('outer', 'stamps') and v_part in ('right', 'left')))) then   -- v10.32: halves only after the inner check
@@ -5090,6 +5091,21 @@ begin
     return v_res;
   end if;
   v_actor := _derive_actor(case p_station when 'eso' then 'eso' when 'stamps' then 'stamped' else p_station end, null);
+  -- v10.32: an inner "?" is kept with the window it was asked in (rumen / maw / lung), so every inner
+  -- tablet shows it and opens that window. One open inner "?" per number: asked again in another
+  -- window, the open one moves to that window.
+  if p_kind = 'question' and p_station = 'inner' then
+    update animal_holds set part = v_part
+     where board_epoch = v_ep and animal_id = p_id and station = 'inner' and kind = 'question' and resolved_at is null
+       and part <> v_part
+    returning id into v_id;
+    if v_id is not null then
+      perform _gt_event(p_id + 1, p_station, 'hold_moved', jsonb_build_object('kind', p_kind, 'part', v_part, 'hold', v_id), v_actor, v_dev);
+      v_res := jsonb_build_object('ok', true, 'hold', (select to_jsonb(h) from animal_holds h where h.id = v_id));
+      perform _cmd_put(p_command_id, v_dev, 'hold_set', v_res);
+      return v_res;
+    end if;
+  end if;
   insert into animal_holds (board_epoch, animal_id, station, kind, part, created_by, created_by_device)
   values (v_ep, p_id, p_station, p_kind, v_part, v_actor, v_dev)
   on conflict (board_epoch, animal_id, station, kind, part) where resolved_at is null do nothing
@@ -6893,7 +6909,7 @@ CREATE TABLE public.animal_holds (
     note text,
     CONSTRAINT animal_holds_animal_id_check CHECK (((animal_id >= 0) AND (animal_id <= 999))),
     CONSTRAINT animal_holds_kind_check CHECK ((kind = ANY (ARRAY['question'::text, 'usda'::text]))),
-    CONSTRAINT animal_holds_part_check CHECK ((part = ANY (ARRAY['whole'::text, 'right'::text, 'left'::text, 'cheek1'::text, 'cheek2'::text, 'tongue'::text]))),
+    CONSTRAINT animal_holds_part_check CHECK ((part = ANY (ARRAY['whole'::text, 'right'::text, 'left'::text, 'cheek1'::text, 'cheek2'::text, 'tongue'::text, 'rumen'::text, 'maw'::text, 'lung'::text]))),
     CONSTRAINT animal_holds_resolution_check CHECK ((resolution = ANY (ARRAY['ruled'::text, 'answered'::text, 'released'::text, 'condemned'::text, 'cancelled'::text, 'board_closed'::text]))),
     CONSTRAINT animal_holds_station_check CHECK ((station = ANY (ARRAY['slaughter'::text, 'eso'::text, 'inner'::text, 'outer'::text, 'legs'::text, 'parts'::text, 'stamps'::text])))
 );
@@ -10693,5 +10709,5 @@ GRANT ALL ON TABLE public.system_flags TO service_role;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict aYF6SDk9kJbTffH51eDRe5UM0pRmBc4XXDc2n5CaUdgcGDsBJLgFAhRn9zoEM3O
+\unrestrict us5acrSLLvRPuQxm2WGg3SKA3o29P29uoeYYvA4kJrdf8NlEVbTrN7GRDdZAZzG
 

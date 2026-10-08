@@ -2588,11 +2588,18 @@ begin
   perform pg_temp.prep(944, 'slaughter'); perform pg_temp.api(pg_temp.dev('ESO1'), pg_temp.q_claim(944, 'eso', 'ok', '', ''));
   r  := pg_temp.api(pg_temp.dev('IN1'), 'select hold_set(944, ''inner'', ''question'')');
   r2 := pg_temp.api(pg_temp.dev('IN1'), format('select hold_resolve(%s, ''answered'')', (r #>> '{hold,id}')::bigint));
+  -- (the window of an inner "?" is kept on the server; asked again in another window, the same "?" moves there)
+  r4 := pg_temp.api(pg_temp.dev('IN1'), 'select hold_set(946, ''inner'', ''question'', ''maw'')');
+  r5 := pg_temp.api(pg_temp.dev('IN1'), 'select hold_set(946, ''inner'', ''question'', ''lung'')');
+  ok := ok and pg_temp.ok(r4) and r4 #>> '{hold,part}' = 'maw' and pg_temp.ok(r5) and r5 #>> '{hold,part}' = 'lung'
+        and r5 #>> '{hold,id}' = r4 #>> '{hold,id}'
+        and (select count(*) from animal_holds where animal_id = 946 and station = 'inner' and resolved_at is null) = 1
+        and pg_temp.api(pg_temp.dev('ESO1'), 'select hold_set(946, ''eso'', ''question'', ''maw'')') ->> 'error' = 'bad_value';
   r3 := pg_temp.api(pg_temp.dev('ESO1'), 'select hold_set(945, ''eso'', ''question'')');
   ok := ok and pg_temp.ok(r) and pg_temp.ok(r2) and r2 #>> '{hold,resolution}' = 'answered' and (pg_temp.ar(944)).inner_status is null
         and pg_temp.api(pg_temp.dev('ESO1'), format('select hold_resolve(%s, ''answered'')', (r3 #>> '{hold,id}')::bigint)) ->> 'error' = 'bad_value';
   perform pg_temp.rec('v10.32 a part on USDA hold is not printed on the server: the full set (3) and that part''s flag refused; the other parts recorded; after the release the part and the full set are recorded; an inner "?" answered when its window is decided', ok,
-    concat_ws(' | ', r2::text, r3::text, left(r4::text, 50), left(r5::text, 50), (pg_temp.ar(942)).parts_print_count, r::text));
+    concat_ws(' | ', r4::text, r5::text, r2::text, r3::text, (pg_temp.ar(942)).parts_print_count, r::text));
 end $$;
 $gt72$;
     v_step := 'the ACTIVE security surface against the expected manifest';

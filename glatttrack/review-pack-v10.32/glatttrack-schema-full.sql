@@ -15564,7 +15564,7 @@ create table if not exists animal_holds (
   animal_id          integer not null check (animal_id between 0 and 999),
   station            text    not null check (station in ('slaughter', 'eso', 'inner', 'outer', 'legs', 'parts', 'stamps')),
   kind               text    not null check (kind in ('question', 'usda')),
-  part               text    not null default 'whole' check (part in ('whole', 'right', 'left', 'cheek1', 'cheek2', 'tongue')),
+  part               text    not null default 'whole' check (part in ('whole', 'right', 'left', 'cheek1', 'cheek2', 'tongue', 'rumen', 'maw', 'lung')),
   created_at         timestamptz not null default now(),
   created_by         text,
   created_by_device  text,
@@ -15574,6 +15574,10 @@ create table if not exists animal_holds (
   resolved_by_device text,
   note               text
 );
+-- v10.32: the window of an inner "?" (rumen / maw / lung) — for a server made before it
+alter table animal_holds drop constraint if exists animal_holds_part_check;
+alter table animal_holds add constraint animal_holds_part_check
+  check (part in ('whole', 'right', 'left', 'cheek1', 'cheek2', 'tongue', 'rumen', 'maw', 'lung'));
 create unique index if not exists animal_holds_open_uq on animal_holds (board_epoch, animal_id, station, kind, part) where resolved_at is null;
 create index if not exists animal_holds_board_idx on animal_holds (board_epoch, animal_id);
 alter table animal_holds enable row level security;
@@ -15874,7 +15878,8 @@ begin
   if p_station is null or p_station not in ('slaughter', 'eso', 'inner', 'outer', 'legs', 'parts', 'stamps') then
     return jsonb_build_object('ok', false, 'error', 'bad_station');
   end if;
-  if (p_kind = 'question' and v_part <> 'whole')
+  if (p_kind = 'question' and not (v_part = 'whole'
+                                   or (p_station = 'inner' and v_part in ('rumen', 'maw', 'lung'))))   -- v10.32: the window of an inner "?"
      or (p_kind = 'usda' and not (v_part = 'whole'
                                   or (p_station = 'parts' and v_part in ('cheek1', 'cheek2', 'tongue'))
                                   or (p_station in ('outer', 'stamps') and v_part in ('right', 'left')))) then   -- v10.32: halves only after the inner check
@@ -15909,6 +15914,21 @@ begin
     return v_res;
   end if;
   v_actor := _derive_actor(case p_station when 'eso' then 'eso' when 'stamps' then 'stamped' else p_station end, null);
+  -- v10.32: an inner "?" is kept with the window it was asked in (rumen / maw / lung), so every inner
+  -- tablet shows it and opens that window. One open inner "?" per number: asked again in another
+  -- window, the open one moves to that window.
+  if p_kind = 'question' and p_station = 'inner' then
+    update animal_holds set part = v_part
+     where board_epoch = v_ep and animal_id = p_id and station = 'inner' and kind = 'question' and resolved_at is null
+       and part <> v_part
+    returning id into v_id;
+    if v_id is not null then
+      perform _gt_event(p_id + 1, p_station, 'hold_moved', jsonb_build_object('kind', p_kind, 'part', v_part, 'hold', v_id), v_actor, v_dev);
+      v_res := jsonb_build_object('ok', true, 'hold', (select to_jsonb(h) from animal_holds h where h.id = v_id));
+      perform _cmd_put(p_command_id, v_dev, 'hold_set', v_res);
+      return v_res;
+    end if;
+  end if;
   insert into animal_holds (board_epoch, animal_id, station, kind, part, created_by, created_by_device)
   values (v_ep, p_id, p_station, p_kind, v_part, v_actor, v_dev)
   on conflict (board_epoch, animal_id, station, kind, part) where resolved_at is null do nothing

@@ -20,7 +20,7 @@ This pack is the CURRENT state. Review these files only.
 
 ## Fixed in v10.32 (server 02 + app) — after the v10.31 review
 
-- Owner's decision: an inner "?" is answered when the window it was asked in is decided (e.g. the maw turned out kosher): the app calls `hold_resolve(…, 'answered')` and the number is an ordinary one again (waiting for the lungs). `hold_resolve` now allows `answered` for inner too (before: legs / parts / stamps only); checked in the self-test. The number shows only the window of its "?" (an older multi-window list is cut to its last window).
+- Owner's decision: an inner "?" is answered when the window it was asked in is decided (e.g. the maw turned out kosher): the app calls `hold_resolve(…, 'answered')` and the number is an ordinary one again (waiting for the lungs). `hold_resolve` now allows `answered` for inner too (before: legs / parts / stamps only); checked in the self-test. The window of an inner "?" is kept on the server: `animal_holds.part` may be rumen / maw / lung for an inner question (constraint widened, re-runnable); `hold_set` asked again in another window moves the one open inner "?" there (event `hold_moved`). Every inner tablet shows and opens that window. The number shows only the window of its "?" (an older multi-window list is cut to its last window).
 
 - Owner's decision: the USDA HOLD window — choose what is held, then "Mark USDA HOLD" (no mark on the first tap). Halves (right / left) only at outer and stamps: the animal is split only after the inner check. `hold_set` now refuses a half from esophagus / inner / legs (`bad_value`); checked in the self-test.
 
