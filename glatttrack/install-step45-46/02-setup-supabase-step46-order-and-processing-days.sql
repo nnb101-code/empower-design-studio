@@ -3270,6 +3270,72 @@ begin
 end $$;
 revoke execute on function _animals_nc_outer_value() from public, anon, authenticated;
 
+-- ── 26. kashrut seals on the server (v10.22) ───────────────────────────────────
+-- Every kosher sticker (parts, stamps) carries the plant's kashrut seal for its ruling. The team
+-- leader uploads one picture per status; it is kept HERE so every printing tablet has it (before
+-- v10.22 the picture stayed on the team leader's own device only).
+create table if not exists kashrut_seals (
+  key        text primary key,
+  image      text not null,
+  updated_at timestamptz not null default now(),
+  updated_by text
+);
+alter table kashrut_seals enable row level security;
+revoke all on kashrut_seals from public, anon, authenticated;
+
+-- a status key a seal may belong to (the built-in rulings, רבנות כשר, or a plant's own status)
+create or replace function _seal_key_ok(k text) returns boolean
+language sql immutable set search_path = public, extensions, pg_temp as $$
+  select k in ('glatt', 'beit', 'kosher', 'mk', 'rabChalak', 'kosherRab') or k ~ '^custom_[A-Za-z0-9_-]{1,40}$';
+$$;
+revoke execute on function _seal_key_ok(text) from public, anon, authenticated;
+
+-- the team leader sets (or, with an empty picture, removes) the seal of one status
+create or replace function seal_set(p_token text, p_key text, p_image text) returns jsonb
+language plpgsql security definer set search_path = public, extensions, pg_temp as $$
+declare v_ver bigint;
+begin
+  if coalesce(_session_role(p_token), '') <> 'manager' or not _is_real_manager(p_token) then
+    return jsonb_build_object('ok', false, 'error', 'unauthorized');
+  end if;
+  if p_key is null or not _seal_key_ok(p_key) then return jsonb_build_object('ok', false, 'error', 'bad_id'); end if;
+  if coalesce(p_image, '') = '' then
+    delete from kashrut_seals where key = p_key;
+  else
+    if length(p_image) > 400000 or p_image !~ '^data:image/(png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$' then
+      return jsonb_build_object('ok', false, 'error', 'bad_picture');
+    end if;
+    insert into kashrut_seals (key, image, updated_at, updated_by) values (p_key, p_image, now(), _session_name(p_token))
+      on conflict (key) do update set image = excluded.image, updated_at = now(), updated_by = excluded.updated_by;
+  end if;
+  v_ver := (extract(epoch from clock_timestamp()) * 1000)::bigint;
+  insert into plant_state (key, value) values ('sealsVersion', v_ver::text)
+    on conflict (key) do update set value = excluded.value, updated_at = now();
+  perform _security_event(null, case when coalesce(p_image, '') = '' then 'kashrut_seal_removed' else 'kashrut_seal_set' end,
+                          jsonb_build_object('status', p_key), coalesce(_session_name(p_token), 'manager'), coalesce(_current_device_id(), 'team-leader'));
+  return jsonb_build_object('ok', true, 'version', v_ver);
+end $$;
+revoke execute on function seal_set(text, text, text) from public;
+grant execute on function seal_set(text, text, text) to anon, authenticated;
+
+-- the seals, for a paired tablet (it prints) or a team leader / owner; only when they changed
+-- since p_version (then only {ok, version, same:true})
+create or replace function seals_get(p_token text default null, p_version bigint default null) returns jsonb
+language plpgsql stable security definer set search_path = public, extensions, pg_temp as $$
+declare v_ver bigint := coalesce((select value from plant_state where key = 'sealsVersion')::bigint, 0);
+begin
+  if _current_device_id() is null and coalesce(_session_role(p_token), '') not in ('manager', 'owner') then
+    return jsonb_build_object('ok', false, 'error', 'unauthorized');
+  end if;
+  if p_version is not null and p_version = v_ver then
+    return jsonb_build_object('ok', true, 'version', v_ver, 'same', true);
+  end if;
+  return jsonb_build_object('ok', true, 'version', v_ver,
+    'seals', coalesce((select jsonb_object_agg(key, image) from kashrut_seals), '{}'::jsonb));
+end $$;
+revoke execute on function seals_get(text, bigint) from public;
+grant execute on function seals_get(text, bigint) to anon, authenticated;
+
 -- ── self-check ──────────────────────────────────────────────────────────────
 do $$
 declare problems text[] := '{}';
@@ -3313,6 +3379,8 @@ begin
      or _nc_outer_value_ok(jsonb_populate_record(null::animals_pilot, '{"id":5,"slaughter":"notChalak"}'), 'rabChalak')
      or _nc_outer_value_ok(jsonb_populate_record(null::animals_pilot, '{"id":5,"slaughter":"slaughtered","not_chalak_outer":true}'), 'glatt') then
     problems := problems || 'rabbinate screen rulings (v10.17)'::text; end if;
+  if has_table_privilege('anon', 'kashrut_seals', 'select') or has_function_privilege('anon', '_seal_key_ok(text)', 'execute') then
+    problems := problems || 'kashrut seals readable directly by the app (v10.22)'::text; end if;
   if (select value from plant_state where key = 'schemaStep')::int < 46 then
     problems := problems || 'schemaStep not 46'::text; end if;
   if array_length(problems, 1) > 0 then

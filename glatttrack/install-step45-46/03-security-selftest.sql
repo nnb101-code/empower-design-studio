@@ -2530,7 +2530,7 @@ begin
                 'eso_change(integer,text,text,bigint)', 'eso_change(integer,text,text,bigint,uuid)', 'event_append(jsonb)',
                 'lung_drawing_get(integer)', 'lung_drawing_set(integer,bigint,text)', 'manager_add(text,text,text)',
                 'manager_add_owner(text,text,text)', 'manager_deactivate(text,uuid)', 'manager_list(text)', 'manager_login(text)',
-                'manager_logout(text)', 'manager_session_check(text)', 'leader_recovery_code_new(text)', 'leader_recovery_status(text)', 'leader_device_replace(text,text)', 'plant_server_status(text)', 'animal_card(text,date,integer)', 'manufacturer_set_billing(text,boolean,numeric,text,text)',
+                'manager_logout(text)', 'manager_session_check(text)', 'leader_recovery_code_new(text)', 'leader_recovery_status(text)', 'leader_device_replace(text,text)', 'plant_server_status(text)', 'animal_card(text,date,integer)', 'seal_set(text,text,text)', 'seals_get(text,bigint)', 'manufacturer_set_billing(text,boolean,numeric,text,text)',
                 'outer_open(integer,bigint,boolean,text)', 'outer_open(integer,bigint,boolean,text,uuid)', 'plant_status_snapshot()', 'plant_setup_needed()',
                 'push_settings(jsonb,text,text,text)', 'request_daily_rollover()', 'reset_daily_board(text,text)', 'security_summary(text)',
                 'processing_board(text)', 'carry_push(bigint,jsonb,uuid)', 'carry_claim(bigint,integer,text,uuid)',
@@ -2564,6 +2564,23 @@ begin
   end loop;
   perform pg_temp.rec('ACTIVE security surface matches the expected manifest (triggers, policies, grants, definer settings)',
     array_length(problems, 1) is null, array_to_string(problems, ' ; '));
+
+  -- v10.22: kashrut seals live on the server — the team leader sets them, every printing tablet reads them
+  declare r1 jsonb; r2 jsonb; r3 jsonb; r4 jsonb; r5 jsonb; r6 jsonb; r7 jsonb; okk boolean;
+  begin
+    r1 := pg_temp.api(pg_temp.mgr(), format('select seal_set(%L, %L, %L)', pg_temp.v('mgr'), 'glatt', 'data:image/png;base64,iVBORw0KGgo='));
+    r2 := pg_temp.api(pg_temp.dev('SL1'), 'select seals_get(null, null)');
+    r3 := pg_temp.api(pg_temp.dev('OUT1'), format('select seal_set(%L, %L, %L)', 'x', 'glatt', 'data:image/png;base64,AAAA'));
+    r4 := pg_temp.api(pg_temp.mgr(), format('select seal_set(%L, %L, %L)', pg_temp.v('mgr'), 'glatt', 'javascript:alert(1)'));
+    r5 := pg_temp.api(pg_temp.mgr(), format('select seal_set(%L, %L, %L)', pg_temp.v('mgr'), 'nonsense key', 'data:image/png;base64,AAAA'));
+    r6 := pg_temp.api('{}', 'select seals_get(null, null)');
+    r7 := pg_temp.api(pg_temp.dev('SL1'), format('select seals_get(null, %s)', (r1 ->> 'version')));
+    okk := pg_temp.ok(r1) and (r2 -> 'seals' ->> 'glatt') = 'data:image/png;base64,iVBORw0KGgo='
+           and r3 ->> 'error' = 'unauthorized' and r4 ->> 'error' = 'bad_picture' and r5 ->> 'error' = 'bad_id'
+           and r6 ->> 'error' = 'unauthorized' and (r7 ->> 'same')::boolean;
+    perform pg_temp.rec('kashrut seals: team leader sets, a printing tablet reads; a tablet can''t set; bad picture / key refused; no device → refused', okk,
+      concat_ws(' | ', left(r1::text, 50), left(r2::text, 60), r3::text, r4::text, r5::text, r6::text, left(r7::text, 60)));
+  end;
 end $$;
 $gt70$;
 

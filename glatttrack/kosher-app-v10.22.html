@@ -4634,7 +4634,7 @@ const KS = (function(){
 // every device via settings_pilot — unescaped, a name containing markup
 // would run on every device that renders the list, not just the one it was
 // typed on.
-var GT_APP_VERSION='v10.21';
+var GT_APP_VERSION='v10.22';
 document.addEventListener('DOMContentLoaded',()=>{ try{ document.querySelectorAll('.gt-ver').forEach(e=>e.textContent=GT_APP_VERSION); }catch(e){} });
 function escapeHtml(str){
   return String(str==null?'':str).replace(/[&<>"']/g, c=>({
@@ -6964,7 +6964,8 @@ function renderSticker(containerId,idx,kind,sample){
         ${greg?`<div style="font-size:${dateFS}px;color:#333;" dir="ltr">${greg}</div>`:''}
         ${kind!=='kosher'&&slTime?`<div style="font-size:${dateFS}px;color:#000;" dir="ltr">${String(slTime.getHours()).padStart(2,'0')}:${String(slTime.getMinutes()).padStart(2,'0')}</div>`:''}
 ${(kind==='kosher'||['nevela','shot','notChalak'].includes(stRaw))?`        <div style="display:inline-block;margin-top:4px;font-size:${stFS}px;font-weight:700;color:#fff;background:${st[1]};border-radius:4px;padding:${Math.round(1*scale)}px ${Math.round(8*scale)}px;line-height:1.15;"><div>${escapeHtml(st[0])}</div>${st[2]&&st[2]!==st[0]?`<div dir="ltr" style="font-size:${Math.round(stFS*0.85)}px;">${escapeHtml(st[2])}</div>`:''}</div>`:''}
-        ${_safeImg(sealImg)?`<div style="margin-top:5px;"><img src="${_safeImg(sealImg)}" style="height:${sealH}px;width:auto;max-width:${Math.round(W*0.5)}px;object-fit:contain;"></div>`:''}
+        ${_safeImg(sealImg)?`<div style="margin-top:5px;"><img src="${_safeImg(sealImg)}" style="height:${sealH}px;width:auto;max-width:${Math.round(W*0.5)}px;object-fit:contain;"></div>`
+          :(kind==='kosher'?`<div style="margin-top:5px;border:2px dashed #d00;color:#d00;border-radius:6px;padding:${Math.round(3*scale)}px;font-size:${Math.round(8*scale)}px;font-weight:700;line-height:1.2;">חסר סימן כשרות<br>No kashrut mark</div>`:'')}
       </div>
       ${opt.showQR?`<canvas id="${containerId}_qr" width="${qrPX}" height="${qrPX}" style="width:${qrPX}px;height:${qrPX}px;flex-shrink:0;background:#fff;"></canvas>`:''}
     </div>`;
@@ -10065,6 +10066,8 @@ function mgrUpdateSealUploads(){
     {key:'rabChalak',he:'רבנות חלק',en:'Rabbinate Chalak',color:'#16A085'},
   ];
   const s=KS.getSettings();
+  if(s.notChalakEnabled) sealTypes.push({key:'kosherRab',he:'רבנות כשר',en:'Rabbinate Kosher',color:'#C99A00'});
+  (s.customStatuses||[]).filter(c=>c&&c.kosher===true&&!c.removed).forEach(c=>sealTypes.push({key:c.key,he:c.he||c.key,en:c.en||'',color:c.color||'#888'}));
   const seals=s.customSeals||{};
   // Each seal uses a unique input id - label wraps it directly (Android safe)
   let html='';
@@ -14549,6 +14552,63 @@ setTimeout(_maybeShowLicenseRequest, 2000); // let the app render first, then ch
     KS.updateSettings({disabledStatuses:[], _statusesFixed_v54:true});
   }
 })();
+// ── v10.22: kashrut seals live on the server ──────────────────────────────────
+// The team leader's seal pictures are sent to the server (seal_set); every tablet reads them
+// (seals_get) at start and every minute, so the parts / stamps tablets print the seal too.
+// Before v10.22 the pictures stayed on the team leader's own device.
+let _gtSealsSynced = null;            // the seals as the server last had them
+function _gtSealsVer(){ try{ return Number(localStorage.getItem('gt_seals_ver'))||null; }catch(e){ return null; } }
+function _gtSealPush(k, img){
+  if(!window.sb || !(KS.getManagerToken && KS.getManagerToken()) || KS.getManagerRole()!=='manager') return;
+  window.sb.rpc('seal_set', { p_token: KS.getManagerToken(), p_key: k, p_image: img || '' }).then(r => {
+    if(r.error || !r.data || !r.data.ok){
+      const e = (r.data && r.data.error) || r.error;
+      try{ ATalert(L('סימן הכשרות לא נשמר בשרת','The kashrut mark was not saved on the server','El sello no se guardó en el servidor')+' — '+gtErrText(e)); }catch(x){}
+      return;
+    }
+    _gtSealsSynced = Object.assign({}, _gtSealsSynced || {}); if(img) _gtSealsSynced[k] = img; else delete _gtSealsSynced[k];
+    try{ localStorage.setItem('gt_seals_ver', String(r.data.version)); }catch(x){}
+  }).catch(()=>{});
+}
+async function _gtSealsPull(){
+  if(!window.sb) return;
+  const tok = (KS.getManagerToken && KS.getManagerToken()) || null;
+  if(!tok && !(typeof _devToken==='function' && _devToken())) return;
+  try{
+    const r = await window.sb.rpc('seals_get', { p_token: tok, p_version: _gtSealsSynced ? _gtSealsVer() : null });
+    if(r.error || !r.data || !r.data.ok || r.data.same) return;
+    const srv = r.data.seals || {}, local = KS.getSettings().customSeals || {};
+    // a team leader who had seals only on this device (before v10.22): send them up once
+    if(tok && KS.getManagerRole()==='manager' && !Object.keys(srv).length && Object.keys(local).length){
+      _gtSealsSynced = {}; Object.keys(local).forEach(k => _gtSealPush(k, local[k])); return;
+    }
+    _gtSealsSynced = Object.assign({}, srv);
+    try{ localStorage.setItem('gt_seals_ver', String(r.data.version)); }catch(x){}
+    if(JSON.stringify(srv) !== JSON.stringify(local)){
+      window._gtSealsApplying = true; try{ KS.updateSettings({ customSeals: Object.assign({}, srv) }); } finally { window._gtSealsApplying = false; }
+      try{ mgrUpdateSealUploads(); mgrUpdateStatusToggles(); mgrRenderPrintPreview(); }catch(x){}
+    }
+  }catch(e){}
+}
+(function(){
+  const orig = KS.updateSettings;
+  KS.updateSettings = function(patch){
+    const res = orig.apply(this, arguments);
+    if(patch && patch.customSeals && !window._gtSealsApplying){
+      const now = patch.customSeals || {}, was = _gtSealsSynced || {};
+      new Set([...Object.keys(was), ...Object.keys(now)]).forEach(k => { if(was[k] !== now[k]) _gtSealPush(k, now[k] || ''); });
+    }
+    return res;
+  };
+  setTimeout(_gtSealsPull, 3000); setInterval(_gtSealsPull, 20000);   // cheap when nothing changed ('same')
+})();
+// the kosher statuses in use that have no kashrut mark yet (shown to the team leader)
+function _gtSealsMissing(){
+  const s = KS.getSettings(), seals = s.customSeals || {}, dis = _disabledStatusList(s);
+  const keys = getKosherStatuses().filter(k => !dis.includes(k) && !(s.removedDefaults||[]).includes(k) && !((s.customStatuses||[]).find(c=>c.key===k&&c.removed)));
+  if(s.notChalakEnabled) keys.push('kosherRab');
+  return keys.filter(k => !seals[k]).map(k => statusDisplayName(k));
+}
 // Load custom lung image if saved
 (function(){
   const s=KS.getSettings();
@@ -15110,6 +15170,7 @@ async function gtHealthRefresh(){
   const tok=KS.getManagerToken && KS.getManagerToken(); const role=KS.getManagerRole && KS.getManagerRole();
   if(!tok || (role!=='manager' && role!=='owner')){ window._gtHealth=null; _gtHealthStatusRow(); mgrRenderHealth(); return; }
   _gtHealthBusy=true;
+  try{ await _withTimeout(_gtSealsPull(), 8000); }catch(e){}   // the kashrut-marks row reads the server's marks
   try{
     const r=await _withTimeout(window.sb.rpc('system_health',{p_token:tok}),15000);
     _gtHealthAt=Date.now();
@@ -15157,6 +15218,7 @@ function mgrRenderHealth(){
   x+=row(errs===0?'g':'y', L('שגיאות ביומן המכשיר','Errors in this device\'s log','Errores en el registro del dispositivo'), errs);
   const step=Number(h.schemaStep)||null;
   x+=row('g', L('גרסת האפליקציה','App version','Versión de la app'), GT_APP_VERSION);
+  try{ const miss=_gtSealsMissing(); x+=row(miss.length?'r':'g', L('סימני כשרות למדבקות','Kashrut marks for the stickers','Sellos para las etiquetas'), miss.length?(L('חסר: ','missing: ','faltan: ')+miss.join(', ')):L('יש לכל הסטטוסים','every status has one','todos')); }catch(e){}
   x+=row(step==null?'y':(step>=GT_MIN_SCHEMA?'g':'r'), L('שלב השרת (נדרש / בשרת)','Server step (required / server)','Paso del servidor (requerido / servidor)'), GT_MIN_SCHEMA+' / '+(step==null?'?':step));
   if(!h.ok){
     const why=h.error==='missing_fn'?L('השרת לא מעודכן (צריך step45)','Server not updated (needs step45)','Servidor sin actualizar (step45)')
