@@ -1,6 +1,6 @@
-מצורפת חבילת הבדיקה העדכנית של GlattTrack (אפליקציה v10.30, שרת שלב 46).
+מצורפת חבילת הבדיקה העדכנית של GlattTrack (אפליקציה v10.31, שרת שלב 46).
 זה סבב עשירי. אם עוד לא שלחת תשובה על סבב 9 (v10.16) — אפשר לענות על שניהם יחד.
-קודם תקרא את README-REVIEW.md, החלקים "Changed in v10.30", "Changed in v10.29", "Changed in v10.28", "Changed in v10.27", "Changed in v10.26", "Changed in v10.25", "Changed in v10.24", "Fixed in v10.23", "Changed in v10.22", "Changed in v10.21", "Fixed in v10.20", "Changed in v10.19", "Changed in v10.18" ו-"Changed in v10.17". אלה החלטות של בעל המערכת:
+קודם תקרא את README-REVIEW.md, החלקים "Changed in v10.31", "Changed in v10.29", "Changed in v10.28", "Changed in v10.27", "Changed in v10.26", "Changed in v10.25", "Changed in v10.24", "Fixed in v10.23", "Changed in v10.22", "Changed in v10.21", "Fixed in v10.20", "Changed in v10.19", "Changed in v10.18" ו-"Changed in v10.17". אלה החלטות של בעל המערכת:
 - סטטוס כשרות מופיע תמיד בשם שבו נכתב, בכל שפה (MK נשאר MK בעברית, גלאט נשאר גלאט באנגלית ובספרדית).
 - אפשר להוסיף ולהסיר סטטוסים, ולהחזיר סטטוס שהוסר.
 - "שליחה לרבנות" היא שליחה ממסך הגלאט למסך הרבנות, לא סטטוס. סטטוסי הרבנות: רבנות חלק, רבנות כשר.

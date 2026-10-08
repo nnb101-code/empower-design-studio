@@ -455,7 +455,11 @@ body{padding-top:var(--gt-bar-h,0px);box-sizing:border-box;}
 .gt-vo-note{margin:6px 10px;padding:10px 12px;border-radius:10px;background:rgba(255,176,32,.16);border:1px solid var(--amber);color:var(--amber);font:700 14px/1.5 'Rubik',sans-serif;text-align:center;}
 
 /* v10.26: "?" question, USDA hold, a change after the next stations worked */
-.num-cell.gt-q{background:#FFC400!important;border-color:#FFE57F!important;color:#000!important;animation:none!important}
+.num-cell.gt-q{background:#FFC400!important;border-color:#FFE57F!important;color:#000!important;animation:gtQBlink 1s steps(1,end) infinite!important}
+/* v10.31: a "?" number blinks all the time, so it is not forgotten */
+.num-cell.gt-qb{animation:gtQBlink 1s steps(1,end) infinite!important}
+@keyframes gtQBlink{0%{opacity:1;box-shadow:0 0 0 3px #FFC400,0 0 22px #FFC400}50%{opacity:.25;box-shadow:none}}
+
 .num-cell.gt-q .cn,.num-cell.gt-q .cl{color:#000!important}
 .num-cell.gt-q::after,.num-cell.gt-qb::after{content:'?';position:absolute;top:2px;left:6px;font:900 20px Arial;line-height:1;color:inherit}
 .num-cell.gt-usda{background:#6A3FB5!important;border-color:#C5B3FF!important;color:#fff!important;animation:none!important}
@@ -4956,7 +4960,7 @@ function gtTopBarsInit(){
     const st=GT_SCREEN_STATION[id], mid=bar.querySelector('.tb-mid');
     const box=document.createElement('div'); box.className='gt-tb'; box.setAttribute('data-no-i18n','');
     box.innerHTML=(st!=='slaughter' && st!=='inner' ? `<button class="gt-tbb gt-tbq" data-gt-q onclick="gtQuestionStart('${st}')"></button>` : '')
-      +`<button class="gt-tbb gt-tbu" onclick="gtUsdaStart('${st}')">USDA HOLD</button>`
+      +(st!=='slaughter' ? `<button class="gt-tbb gt-tbu" onclick="gtUsdaStart('${st}')">USDA HOLD</button>` : '')
       +`<button class="gt-tbb gt-tbl" onclick="gtHeldList('${st}')" data-gt-count="${st}" style="display:none"></button>`;
     if(mid) bar.insertBefore(box, mid); else bar.appendChild(box);
   });
@@ -5007,39 +5011,23 @@ async function gtInnerQuestion(where){
   _gtQStepAdd(idx, where);
   try{ KS.addAuditLog({type:'question_at', stage:'inner', step:where, animal:idx+1}); }catch(e){}
   if(!gtOwnQ(idx,'inner')) gtHoldPut(idx,'inner','question','whole');        // the number waits (server)
-  if(where==='rumen'){
-    // → the maw window of the same animal (the rumen stays open)
-    document.getElementById('rumenModal').classList.remove('open');
-    try{ _inDisarmAll(); }catch(e){}
-    rumenSel=null;
-    openMawWindow(idx);
-    return;
-  }
-  if(where==='maw'){
-    // → the lungs of the same animal (the maw stays open)
-    document.getElementById('mawModal').classList.remove('open');
-    try{ _inDisarmAll(); }catch(e){}
-    inPendingMaw=-1;
-    if(KS.getSettings().lungEnabled!==false){
-      KS.setInnerInProgress(idx, false);
-      if(!inFloats.find(f=>f.idx===idx)) inFloats.push({idx, drawing:KS.getLungDrawing(idx)});
-      try{ if(KS.getSettings().floatsEnabled!==false) renderFloats(); }catch(e){}
-      inOpenLung(idx);
-    } else _gtInnerWait(idx);
-    return;
-  }
-  // lungs: the last window — the animal waits with its drawing
-  try{ minimizeLung(); }catch(e){}
+  // v10.31: a "?" in any window closes this number right away (no going on to the next window).
+  // Tapping the number later opens the window that is "?" first.
+  if(where==='lung'){ try{ minimizeLung(); }catch(e){} }
+  document.getElementById('rumenModal').classList.remove('open');
+  document.getElementById('mawModal').classList.remove('open');
+  try{ _inDisarmAll(); }catch(e){}
+  rumenSel=null; inPendingMaw=-1;
   _gtInnerWait(idx);
 }
-// the last window is done while an item is "?": the animal waits (not approved for outer)
+// a "?" closes the number: the animal waits (not approved for outer)
 function _gtInnerWait(idx){
   inFloats=inFloats.filter(f=>f.idx!==idx);
   try{ if(KS.getSettings().floatsEnabled!==false) renderFloats(); }catch(e){}
   document.getElementById('lungModal').classList.remove('open'); inPendingLung=-1;
   inManualPage=false;
   const open=gtInnerQSteps(idx).map(st=>_gtL(GT_QSTEP_NAME[st])).join(', ');
-  KS.notice(L('#'+(idx+1)+' מחכה — "?" על: '+open+'. ממשיכים לבהמה הבאה.','#'+(idx+1)+' waits — "?" on: '+open+'. Go on to the next animal.','#'+(idx+1)+' espera — "?" en: '+open+'. Siga con el siguiente.'));
+  KS.notice(L('#'+(idx+1)+' נסגר עם "?" על: '+open+'. ממשיכים לבהמה הבאה.','#'+(idx+1)+' closed with "?" on: '+open+'. Go on to the next animal.','#'+(idx+1)+' cerrado con "?" en: '+open+'. Siga con el siguiente.'));
   try{ inRenderGrid(); inUpdateSummary(); }catch(e){}
 }
 // a "?" number tapped: the window that is "?" first; then on, skipping what was decided
@@ -5131,7 +5119,7 @@ function _gtDoneAfterHtml(stage, a){
     +'</div>';
 }
 
-var GT_APP_VERSION='v10.30';
+var GT_APP_VERSION='v10.31';
 document.addEventListener('DOMContentLoaded',()=>{ try{ document.querySelectorAll('.gt-ver').forEach(e=>e.textContent=GT_APP_VERSION); }catch(e){} });
 function escapeHtml(str){
   return String(str==null?'':str).replace(/[&<>"']/g, c=>({
@@ -8190,10 +8178,7 @@ function mawDone(result){
     // open lung drawing
     KS.setInnerInProgress(pendIdx, notChalak);
     inRenderGrid();inUpdateSummary();inPendingMaw=-1;
-    // v10.29: after a "?" in this animal's check, the next window (lungs) opens right away
-    const _qchain=(typeof gtInnerQSteps==='function') && gtInnerQSteps(pendIdx).length>0;
-    if(_qchain && !inFloats.find(f=>f.idx===pendIdx)) inFloats.push({idx:pendIdx, drawing:KS.getLungDrawing(pendIdx)});
-    if(!floatsOn || _qchain) inOpenLung(pendIdx);
+    if(!floatsOn) inOpenLung(pendIdx);
   }else{
     // No lung check → confirm immediately so outer inspector can proceed.
     // notChalakInner is set directly here (not via its own commit) because

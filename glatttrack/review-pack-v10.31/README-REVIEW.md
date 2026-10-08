@@ -1,4 +1,4 @@
-# GlattTrack — review pack (app v10.30, server schema step 46)
+# GlattTrack — review pack (app v10.31, server schema step 46)
 
 This pack is the CURRENT state. Review these files only.
 
@@ -12,13 +12,13 @@ This pack is the CURRENT state. Review these files only.
 | `security-selftest.sql` + `security-selftest-result.txt` | Release gate: **135 / 135**. One statement (one DO block) whose changes are all undone inside it (see v10.15 below). |
 | `SECURITY-MANIFEST.md` | Permission map (step 45 observed table) + a step-46 section. |
 | `active-security-manifest.sql` + `-result.txt` | Prints the active security surface. |
-| `kosher-app-v10.30.html` | The app (UI, offline store, sync client). `GT_MIN_SCHEMA = 46`. |
+| `kosher-app-v10.31.html` | The app (UI, offline store, sync client). `GT_MIN_SCHEMA = 46`. |
 | `setup-supabase-step44/45/46-*.sql` | The last three migrations. |
 | `glatttrack-schema-full.sql` | Full install script (base + steps 1–46, history included; last definition wins). |
 | `test-mode-on.sql` / `test-mode-off.sql` | The owner's SQL-only test switch. |
 | `plant-server/` | Plant resilience kit (bash, runs as root on the plant servers, NOT in the database): standby server, floating address, UPS, nightly checked backup. Guide: `PLANT-RESILIENCE-HE.md`. |
 
-## Changed in v10.30 (app only)
+## Changed in v10.31 (app only)
 
 - Language switch: `applyLang` now redraws the team leader's open tab (it was only redrawn when the tab was opened again), the clock line, and the status rows (health, processing day, test mode, holds cards); ~60 Hebrew-only texts got English / Spanish (`I18N_DOM`, plus `I18N_PARTS` for texts that hold a name). Audits in `browser-tests/language-*.test.js`: no Hebrew left right after the switch except kashrut status names (never translated by design) and people's names; the switch takes < 50 ms.
 
