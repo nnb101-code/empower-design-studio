@@ -453,6 +453,39 @@ body{padding-top:var(--gt-bar-h,0px);box-sizing:border-box;}
 .screen.gt-view-only > *:not(.topbar):not(.gt-vo-note):not(.page-nav){pointer-events:none!important;opacity:.45;filter:grayscale(.5);}
 .screen.gt-view-only.gt-vo-watch > *:not(.topbar):not(.gt-vo-note):not(.page-nav){opacity:1;filter:none;}   /* the owner / plant view: watching, clearly */
 .gt-vo-note{margin:6px 10px;padding:10px 12px;border-radius:10px;background:rgba(255,176,32,.16);border:1px solid var(--amber);color:var(--amber);font:700 14px/1.5 'Rubik',sans-serif;text-align:center;}
+
+/* v10.26: "?" question, USDA hold, a change after the next stations worked */
+.num-cell.gt-q{background:#FFC400!important;border-color:#FFE57F!important;color:#000!important;animation:none!important}
+.num-cell.gt-q .cn,.num-cell.gt-q .cl{color:#000!important}
+.num-cell.gt-q::after,.num-cell.gt-qb::after{content:'?';position:absolute;top:2px;left:6px;font:900 20px Arial;line-height:1;color:inherit}
+.num-cell.gt-usda{background:#6A3FB5!important;border-color:#C5B3FF!important;color:#fff!important;animation:none!important}
+.num-cell.gt-usda .cn,.num-cell.gt-usda .cl{color:#fff!important}
+.num-cell.gt-usda::after{content:'USDA';position:absolute;top:3px;left:5px;font:800 10px Arial;color:#fff}
+.num-cell.gt-cond{background:#2b2140!important;border-color:#6b5a99!important;color:#bbb!important;animation:none!important}
+.num-cell.gt-cond .cn{text-decoration:line-through}
+.num-cell.gt-usda-part{box-shadow:inset 0 0 0 4px #8B5CF6!important}
+.num-cell.gt-chg{outline:4px solid #FF5252!important;outline-offset:-4px}
+.num-cell{position:relative}
+.gt-tb{display:flex;gap:6px;align-items:center;flex-wrap:nowrap}
+.gt-tbb{border-radius:11px;padding:7px 11px;font:800 14px Arial;cursor:pointer;border:2px solid;white-space:nowrap;width:auto;flex:0 0 auto}
+.gt-tbq{background:#FFC400;color:#000;border-color:#FFE57F}
+.gt-tbu{background:#6A3FB5;color:#fff;border-color:#C5B3FF}
+.gt-tbl{background:#1c2433;color:#E8EDF5;border-color:#55607a}
+.gt-slq{background:#FFC400!important;color:#000!important;box-shadow:0 0 24px rgba(255,196,0,.55)!important;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.gt-slq-m{font:900 40px Arial;line-height:1}.gt-slq-t{font:800 15px Arial}
+.gt-sheet-bg{position:fixed;inset:0;background:rgba(0,0,0,.66);z-index:99990;display:flex;align-items:center;justify-content:center;padding:12px}
+.gt-sheet{background:#111827;border:3px solid #D4A843;border-radius:18px;padding:18px 20px;max-width:760px;width:100%;max-height:90vh;overflow:auto;text-align:center;color:#fff;font-family:Arial}
+.gt-sheet-t{color:#E8B84A;font:800 26px Arial}.gt-sheet-s{font-size:16px;margin:6px 0 12px;color:#cdd5e3}
+.gt-row{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:10px}
+.gt-sb{min-width:130px;padding:12px 14px;border-radius:12px;border:2px solid;font:700 17px Arial;background:transparent;cursor:pointer}
+.gt-num{display:flex;gap:10px;align-items:center;justify-content:center;font-size:17px}
+.gt-num input{width:110px;font:800 24px Arial;text-align:center;border-radius:10px;border:2px solid #55607a;background:#0b1220;color:#fff;padding:6px}
+.gt-hrow{display:flex;justify-content:space-between;align-items:center;gap:10px;background:#1c2433;border-radius:10px;padding:8px 10px;margin:6px 0;text-align:start;flex-wrap:wrap}
+.gt-hrow .gt-sb{min-width:96px;padding:8px 10px;font-size:14px}
+.gt-muted{color:#9aa4b5;font-size:13px}
+.gt-tag{border-radius:6px;padding:1px 7px;font-weight:800}.gt-tag-q{background:#FFC400;color:#000}.gt-tag-u{background:#6A3FB5;color:#fff}.gt-tag-r{background:#E53935;color:#fff}
+.gt-oc-t{font:800 18px Arial;color:#E8B84A;margin-bottom:6px}.gt-oc-lock{color:#ff8a80;font-weight:700;margin-top:6px}
+#gtOpenCard{border:2px solid #E8B84A}
 </style>
 </head>
 <body>
@@ -4378,7 +4411,8 @@ const KS = (function(){
         a.esoPrevSlaughter=(a.slaughter==='nevela'?(a.esoPrevSlaughter||'slaughtered'):a.slaughter);
         a.slaughter='nevela';
       }else{
-        a.slaughter=a.esoPrevSlaughter||'slaughtered';
+        const _q=a.esoPrevSlaughter==null && typeof _gtFlags!=='undefined' && _gtFlags.holds.some(h=>h.n===idx && h.station==='slaughter' && h.kind==='question' && h.note==='eso_nevela');
+        a.slaughter=_q ? null : (a.esoPrevSlaughter||'slaughtered');   // v10.26: the shochet's "?" is open again
       }
       a.slaughterTime=_stamp(a.slaughterTime);          // so the change reaches every device
       a.slaughterByDevice=SB_DEVICE_ID;
@@ -4633,6 +4667,8 @@ const KS = (function(){
     pendingCount: ()=>{ try{ const q=_loadSyncQueue(); const s=new Set(q.animals); (q.ops||[]).forEach(o=>s.add(o.idx)); return s.size + Object.keys(_lungQ()).length; }catch(e){ return 0; } },
     verifyEventChain,
     rejectedEventsCount: ()=>_evRejectedLoad().length,
+    // v10.26: the kept slaughter day this processing tablet works on (null = today's board)
+    carryBoard: ()=>_inCarry() ? { id:_carry.board.id, day:_carry.board.day } : null,
   };
 })();
 
@@ -4641,7 +4677,365 @@ const KS = (function(){
 // every device via settings_pilot — unescaped, a name containing markup
 // would run on every device that renders the list, not just the one it was
 // typed on.
-var GT_APP_VERSION='v10.25';
+// ══ v10.26: "?" question and USDA hold on every station; changes after the next stations worked ══
+// The server keeps them (animal_holds / animal_changes); every screen reads them (board_flags)
+// every few seconds and shows them on the numbers:
+//   "?" (yellow)  — the station's own question: the station goes on to the next number; the
+//                   number waits for that station's ruling. The shochet's "?" also shows at the
+//                   other stations ("? שחיטה"); the esophagus may rule it and the legs stickers
+//                   may be printed — the lungs and outer wait.
+//   USDA (purple) — whole animal: no station touches it; a part / half: only that part waits.
+//                   Only the station that put it releases it (back in line, first) or condemns it.
+//   ⚠ השתנה (red frame) — a ruling changed after the next stations worked, until the team
+//                   leader marks it handled.
+var _gtFlags={holds:[],changes:[],epoch:null,ok:false,at:0,sig:''};
+var _gtFlagsBusy=false, _gtNext={};
+const GT_ST_NAME={slaughter:['שחיטה','Slaughter','Faena'],eso:['וושט','Esophagus','Esófago'],legs:['רגליים וראש','Legs & head','Patas y cabeza'],
+  inner:['פנים','Inner','Interno'],outer:['חוץ','Outer','Externo'],parts:['חלקים','Parts','Partes'],stamps:['חותמות ושקילה','Stamps & weighing','Sellos y pesaje']};
+const GT_PART_NAME={whole:['כל הבהמה','Whole animal','Animal entero'],right:['חצי ימין','Right half','Mitad derecha'],left:['חצי שמאל','Left half','Mitad izquierda'],
+  cheek1:['לחי 1','Cheek 1','Mejilla 1'],cheek2:['לחי 2','Cheek 2','Mejilla 2'],tongue:['לשון','Tongue','Lengua']};
+function _gtL(a){ return L(a[0],a[1],a[2]); }
+function _gtStationOfRole(r){ return ({slaughter:'slaughter',esophagus:'eso',inner:'inner',outer:'outer',legs:'legs',parts:'parts',stamps:'stamps'})[String(r||'').replace(/-\d+$/,'')]||null; }
+function _gtMyStation(){ try{ return _gtStationOfRole(localStorage.getItem('ks_kiosk_role')); }catch(e){ return null; } }
+function _gtCarry(){ try{ return (typeof KS.carryBoard==='function') ? KS.carryBoard() : null; }catch(e){ return null; } }
+function _gtOnBoard(h){
+  const cb=_gtCarry();
+  if(cb && ['legs','parts','stamps'].includes(_gtMyStation())) return h.board!=null && Number(h.board)===Number(cb.id);
+  return h.epoch!=null && _gtFlags.epoch!=null && Number(h.epoch)===Number(_gtFlags.epoch);
+}
+function gtHoldsOf(i){ return _gtFlags.holds.filter(h=>h.n===i && _gtOnBoard(h)); }
+function gtSlQ(i){ return gtHoldsOf(i).some(h=>h.open && h.station==='slaughter' && h.kind==='question'); }
+function _gtSlQx(x){ return !!x && x.slaughter==null && x.id!=null && gtSlQ(x.id); }
+function gtOwnQ(i,st){ return gtHoldsOf(i).find(h=>h.open && h.station===st && h.kind==='question')||null; }
+// what stops station st on number i (part: a half / a part of the animal)
+function gtHeldAt(i,st,part){
+  const hs=gtHoldsOf(i); let h;
+  h=hs.find(x=>x.kind==='usda' && x.part==='whole' && x.open); if(h) return h;
+  h=hs.find(x=>x.kind==='usda' && x.part==='whole' && x.resolution==='condemned'); if(h) return h;
+  if(['legs','parts','stamps'].includes(st)){ h=hs.find(x=>x.kind==='question' && x.station===st && x.open); if(h) return h; }
+  if(part && part!=='whole'){ h=hs.find(x=>x.kind==='usda' && x.part===part && (x.open || x.resolution==='condemned')); if(h) return h; }
+  return null;
+}
+// the station goes on past this number (held, or its own open question)
+function gtSkip(i,st){ return !!gtHeldAt(i,st) || !!gtOwnQ(i,st); }
+function gtPartHolds(i,st){ return gtHoldsOf(i).filter(x=>x.kind==='usda' && x.part!=='whole' && (st!=='parts' || ['cheek1','cheek2','tongue'].includes(x.part))
+                                                   && (st==='parts' ? true : ['right','left'].includes(x.part)) && (x.open || x.resolution==='condemned')); }
+function gtChange(i){ return _gtFlags.changes.find(c=>c.n===i && !c.ackAt && _gtFlags.epoch!=null && Number(c.epoch)===Number(_gtFlags.epoch) && !_gtCarry())||null; }
+
+async function gtFlagsPull(){
+  if(_gtFlagsBusy || !window.sb) return;
+  _gtFlagsBusy=true;
+  try{
+    let tok=null; try{ tok=KS.getManagerToken()||null; }catch(e){}
+    const r=await window.sb.rpc('board_flags',{p_token:tok});
+    const d=r && r.data;
+    if(d && d.ok){
+      const local=_gtFlags.holds.filter(h=>h.local && Date.now()-h.localAt<15000);   // just put, not on the server list yet
+      const holds=(d.holds||[]).concat(local.filter(l=>!(d.holds||[]).some(h=>h.n===l.n && h.station===l.station && h.kind===l.kind && h.part===l.part && h.open)));
+      const sig=JSON.stringify([holds.map(h=>[h.id,h.open,h.resolution]),(d.changes||[]).map(c=>[c.id,c.ackAt]),d.boardEpoch]);
+      const changed=sig!==_gtFlags.sig;
+      _gtFlags={holds,changes:d.changes||[],epoch:d.boardEpoch,ok:true,at:Date.now(),sig};
+      if(changed) gtRerenderAll();
+    }
+  }catch(e){}
+  finally{ _gtFlagsBusy=false; }
+}
+function gtRerenderAll(){
+  const tries=[()=>{slRenderGrid();slUpdateSummary();},()=>{esoRenderGrid();esoUpdateSummary();},()=>{lgRenderGrid();lgUpdateSummary();},()=>lgSortRenderGrid(),
+               ()=>{inRenderGrid();inUpdateSummary();},()=>{outRenderGrid();outUpdateSummary();},()=>{partsRenderGrid();partsUpdateSummary();},
+               ()=>{stampsRenderGrid();stampsUpdateSummary();},()=>gtTopBarsUpdate(),()=>gtOpenCardRender()];
+  tries.forEach(f=>{ try{ f(); }catch(e){} });
+}
+setTimeout(()=>{ try{ gtFlagsPull(); }catch(e){} }, 1500);
+setInterval(()=>{ try{ gtFlagsPull(); }catch(e){} }, 5000);
+
+// ── the grids: every station's numbers show "?" / USDA / ⚠ ──
+const GT_GRID_STATION={slGrid:'slaughter',esoGrid:'eso',lgGrid:'legs',lgSortGrid:'legs',inGrid:'inner',outGrid:'outer',partsGrid:'parts',stampsGrid:'stamps'};
+function _gtPartsLabel(hs){ return hs.map(h=>(h.resolution==='condemned'?'✕ ':'')+_gtL(GT_PART_NAME[h.part]||[h.part,h.part,h.part])).join(' · '); }
+function gtGridWrap(gridId,getCls,getLabel,getTap){
+  const st=GT_GRID_STATION[gridId];
+  if(!st || !_gtFlags.ok || (!_gtFlags.holds.length && !_gtFlags.changes.length)) return null;
+  const info=(i)=>{
+    const held=gtHeldAt(i,st), own=gtOwnQ(i,st), slq=gtSlQ(i), parts=gtPartHolds(i,st), chg=gtChange(i);
+    return {held,own,slq,parts,chg};
+  };
+  return [
+    (i)=>{ let c=getCls(i); const f=info(i);
+      const isNext=/^next/.test(c);
+      if(f.held) c=f.held.resolution==='condemned'?'gt-cond':(f.held.kind==='usda'?'gt-usda':'gt-q');
+      else if(f.own) c='gt-q';
+      else if(f.slq) c=(i===_gtNext[st] && (st==='eso'||st==='legs')) ? 'next gt-qb' : 'gt-q';
+      else if(f.parts.length) c+=' gt-usda-part';
+      if(f.chg) c+=' gt-chg';
+      return c; },
+    (i)=>{ const f=info(i); let l=getLabel(i);
+      if(f.held){
+        if(f.held.resolution==='condemned') l=L('נפסל USDA','USDA condemned','Condenado USDA');
+        else if(f.held.kind==='usda') l='USDA';
+        else l=L('שאלה','Question','Pregunta');
+      } else if(f.own) l=L('שאלה','Question','Pregunta');
+      else if(f.slq) l=L('שאלה בשחיטה','Slaughter question','Pregunta de faena');
+      else if(f.parts.length) l=(l?l+'<br>':'')+'USDA '+_gtPartsLabel(f.parts);
+      if(f.chg) l=(l?l+'<br>':'')+L('⚠ השתנה','⚠ Changed','⚠ Cambió');
+      return l; },
+    (i)=>{ const f=info(i);
+      if(f.held) return ()=>gtHeldTap(i,st,f.held);
+      if(f.own) return ()=>gtOwnQTap(i,st,f.own);
+      const t=getTap(i); if(t) return t;
+      if(f.slq && st==='eso') return ()=>{ if(i===_gtEsoFirst()) esoOpenDec(i); else showNoSkip(); };
+      if(f.slq && st==='legs') return ()=>lgTap(i);
+      if(f.parts.length && st==='parts') return ()=>gtHeldList(st);
+      return null; }
+  ];
+}
+function _gtEsoFirst(){ const a=KS.getAnimals(); for(let i=0;i<a.length;i++){ if(isEsoPendIdx(i)) return i; } return -1; }
+
+// ── the sheets ──
+function gtSheet(title, sub, body, opts){
+  gtSheetClose();
+  const bg=document.createElement('div'); bg.id='gtSheet'; bg.className='gt-sheet-bg';
+  bg.innerHTML=`<div class="gt-sheet" role="dialog"><div class="gt-sheet-t">${title}</div>${sub?`<div class="gt-sheet-s">${sub}</div>`:''}<div class="gt-sheet-b">${body}</div></div>`;
+  bg.addEventListener('click',e=>{ if(e.target===bg) gtSheetClose(); });
+  document.body.appendChild(bg);
+  return bg;
+}
+function gtSheetClose(){ const o=document.getElementById('gtSheet'); if(o) o.remove(); }
+function _gtHBtn(txt,col,act,fill){ return `<button class="gt-sb" style="border-color:${col};color:${fill?'#000':col};${fill?'background:'+col+';':''}" onclick="${act}">${txt}</button>`; }
+function _gtNumInput(def){ return `<div class="gt-num"><label>${L('מספר','Number','Número')}</label><input id="gtHoldNum" type="number" inputmode="numeric" min="1" max="${KS.getAnimals().length}" value="${def>=0?def+1:''}"></div>`; }
+function _gtReadNum(){ const v=parseInt((document.getElementById('gtHoldNum')||{}).value,10); return (v>=1 && v<=KS.getAnimals().length) ? v-1 : -1; }
+// the number this station is at (the blinking one)
+function _gtCurrentIdx(st){
+  const grid={slaughter:'slGrid',eso:'esoGrid',legs:(document.getElementById('lgSortView')&&document.getElementById('lgSortView').style.display!=='none')?'lgSortGrid':'lgGrid',
+              inner:'inGrid',outer:'outGrid',parts:'partsGrid',stamps:'stampsGrid'}[st];
+  const c=document.querySelector('#'+grid+' .num-cell.next, #'+grid+' .num-cell.next-nc, #'+grid+' .num-cell.next-nev');
+  if(c) return Number(c.dataset.idx);
+  if(_gtNext[st]!=null && _gtNext[st]>=0) return _gtNext[st];
+  return -1;
+}
+async function gtHoldPut(idx, st, kind, part){
+  if(!window.sb){ KS.notice(L('אין חיבור לשרת — לא סומן.','No server connection — not marked.','Sin conexión al servidor — no se marcó.')); return false; }
+  const cb=_gtCarry(), proc=['legs','parts','stamps'].includes(st);
+  const loc={id:'local-'+Date.now(), n:idx, station:st, kind, part:part||'whole', open:true, epoch:_gtFlags.epoch, board:(proc&&cb)?cb.id:null, local:true, localAt:Date.now()};
+  _gtFlags.holds=_gtFlags.holds.concat([loc]); _gtFlags.sig=''; gtRerenderAll();
+  let r=null; try{ r=await window.sb.rpc('hold_set',{p_id:idx,p_station:st,p_kind:kind,p_part:part||'whole',p_board:(proc&&cb)?cb.id:null,p_command_id:_gtUuid()}); }catch(e){}
+  const d=r && r.data;
+  if(!d || !d.ok){
+    _gtFlags.holds=_gtFlags.holds.filter(h=>h!==loc); _gtFlags.sig=''; gtRerenderAll();
+    KS.notice(L('לא סומן: ','Not marked: ','No se marcó: ')+gtErrText((d&&d.error)||(r&&r.error)||'network'));
+    return false;
+  }
+  try{ KS.addAuditLog({type:'hold_set', station:st, kind, part:part||'whole', animal:idx+1}); }catch(e){}
+  gtFlagsPull();
+  return true;
+}
+async function gtHoldResolve(id, resolution, after){
+  gtSheetClose();
+  let r=null; try{ r=await window.sb.rpc('hold_resolve',{p_hold:id,p_resolution:resolution,p_command_id:_gtUuid()}); }catch(e){}
+  const d=r && r.data;
+  if(!d || !d.ok){ KS.notice(gtErrText((d&&d.error)||(r&&r.error)||'network')); return; }
+  _gtFlags.sig=''; await gtFlagsPull(); gtRerenderAll();
+  if(after) try{ after(d.hold); }catch(e){}
+}
+function _gtUuid(){ try{ return crypto.randomUUID(); }catch(e){ return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,c=>{const r=Math.random()*16|0;return (c==='x'?r:(r&3|8)).toString(16);}); } }
+
+// "?" — the station's question on the current number (another number can be typed)
+function gtQuestionStart(st){
+  const cur=_gtCurrentIdx(st);
+  gtSheet(L('? שאלה','? Question','? Pregunta'),
+    L('המספר מחכה לתשובה, והתחנה ממשיכה למספר הבא. כשיש תשובה — לוחצים על המספר.','The number waits for the answer and the station goes on to the next one. When there is an answer, tap the number.','El número espera la respuesta y la estación sigue con el siguiente. Cuando haya respuesta, toque el número.'),
+    _gtNumInput(cur)+'<div class="gt-row">'+_gtHBtn(L('סמן ?','Mark ?','Marcar ?'),'#FFC400',`gtQuestionDo('${st}')`,true)+_gtHBtn(L('ביטול','Cancel','Cancelar'),'#9aa4b5','gtSheetClose()')+'</div>');
+}
+async function gtQuestionDo(st){
+  const idx=_gtReadNum(); if(idx<0){ KS.notice(L('מספר לא תקין','Invalid number','Número inválido')); return; }
+  gtSheetClose();
+  if(await gtHoldPut(idx, st, 'question', 'whole')) KS.notice(L('#'+(idx+1)+' סומן "?" — ממשיכים למספר הבא.','#'+(idx+1)+' marked "?" — go on to the next number.','#'+(idx+1)+' marcado "?" — siga con el siguiente.'));
+}
+// the shochet's round "?" button: the number he is at, at once (no time to wait)
+async function gtSlQuestionNow(){
+  if(_slExternalOnly && _slExternalOnly()) return;
+  const idx=_slNextIdx(); if(idx<0) return;
+  try{ playPressSound('shot'); }catch(e){}
+  if(await gtHoldPut(idx, 'slaughter', 'question', 'whole'))
+    KS.notice(L('#'+(idx+1)+' — "?" שאלה. ממשיכים ל-'+(idx+2)+'. לפסיקה: לוחצים על '+(idx+1)+'.','#'+(idx+1)+' — "?" question. Go on to '+(idx+2)+'. To rule it: tap '+(idx+1)+'.','#'+(idx+1)+' — "?" pregunta. Siga con '+(idx+2)+'. Para dictaminar: toque '+(idx+1)+'.'));
+}
+// USDA HOLD — which number and what (the whole animal, a half, a part)
+function gtUsdaStart(st){
+  const cur=_gtCurrentIdx(st);
+  const parts=st==='parts' ? ['whole','cheek1','cheek2','tongue'] : ['whole','right','left'];
+  gtSheet('USDA HOLD', L('מה מעוכב? (בלי סיבה) — רק התחנה הזו תשחרר או תפסול.','What is held? (no reason) — only this station releases or condemns it.','¿Qué se retiene? (sin motivo) — solo esta estación lo libera o lo condena.'),
+    _gtNumInput(cur)+'<div class="gt-row">'+parts.map(p=>_gtHBtn(_gtL(GT_PART_NAME[p]),'#B39DFF',`gtUsdaDo('${st}','${p}')`)).join('')+'</div><div class="gt-row">'+_gtHBtn(L('ביטול','Cancel','Cancelar'),'#9aa4b5','gtSheetClose()')+'</div>');
+}
+async function gtUsdaDo(st,part){
+  const idx=_gtReadNum(); if(idx<0){ KS.notice(L('מספר לא תקין','Invalid number','Número inválido')); return; }
+  gtSheetClose();
+  if(await gtHoldPut(idx, st, 'usda', part)) KS.notice('USDA HOLD — #'+(idx+1)+' · '+_gtL(GT_PART_NAME[part])+L(' — ממשיכים.',' — go on.',' — siga.'));
+}
+// the open holds of this station: release / condemn / answer / cancel
+function gtHeldList(st){
+  const mine=_gtFlags.holds.filter(h=>h.station===st && _gtOnBoard(h) && !h.local && (h.open || h.resolution==='condemned'));
+  const row=(h)=>{
+    const what=h.kind==='usda' ? 'USDA · '+_gtL(GT_PART_NAME[h.part]||[h.part,h.part,h.part]) : L('? שאלה','? Question','? Pregunta');
+    const t=h.at ? new Date(h.at).toLocaleTimeString('he-IL',{hour:'2-digit',minute:'2-digit'}) : '';
+    let acts='';
+    if(!h.open) acts=`<span class="gt-muted">${L('נפסל USDA','USDA condemned','Condenado USDA')}</span>`;
+    else if(h.kind==='usda') acts=_gtHBtn(L('שחרור','Release','Liberar'),'#28C76F',`gtHoldResolve(${h.id},'released',gtAfterRelease)`)+_gtHBtn(L('נפסל USDA','USDA condemned','Condenado USDA'),'#E53935',`gtCondemnAsk(${h.id})`);
+    else if(['legs','parts','stamps'].includes(st)) acts=_gtHBtn(L('נענתה — להמשיך','Answered — go on','Respondida — seguir'),'#28C76F',`gtHoldResolve(${h.id},'answered')`)+_gtHBtn(L('ביטול ה-?','Cancel the ?','Anular el ?'),'#9aa4b5',`gtHoldResolve(${h.id},'cancelled')`);
+    else acts=_gtHBtn(L('לפסוק','Rule','Dictaminar'),'#FFC400',`gtSheetClose();gtOwnQTap(${h.n},'${st}',null)`)+_gtHBtn(L('ביטול ה-?','Cancel the ?','Anular el ?'),'#9aa4b5',`gtHoldResolve(${h.id},'cancelled')`);
+    return `<div class="gt-hrow"><span><b>#${h.n+1}</b> · ${what}${t?' · '+t:''}${h.by?' · '+escapeHtml(h.by):''}</span><span>${acts}</span></div>`;
+  };
+  gtSheet(L('מעוכבים / שאלות — ','Held / questions — ','Retenidos / preguntas — ')+_gtL(GT_ST_NAME[st]),
+    L('רק התחנה שסימנה משחררת, פוסלת או עונה.','Only the station that marked it releases, condemns or answers.','Solo la estación que lo marcó libera, condena o responde.'),
+    (mine.length ? mine.map(row).join('') : `<div class="gt-muted">${L('אין כרגע.','None right now.','Ninguno por ahora.')}</div>`)+'<div class="gt-row">'+_gtHBtn(L('סגור','Close','Cerrar'),'#9aa4b5','gtSheetClose()')+'</div>');
+}
+function gtCondemnAsk(id){
+  gtSheet(L('נפסל USDA?','USDA condemned?','¿Condenado USDA?'),
+    L('הבשר הזה לא ממשיך. הפסיקה הכשרותית לא משתנה. בדוחות — בנפרד מטרף.','This meat does not go on. The kashrut ruling does not change. In the reports — apart from treif.','Esta carne no sigue. El dictamen kosher no cambia. En los informes — aparte de treif.'),
+    '<div class="gt-row">'+_gtHBtn(L('כן, נפסל','Yes, condemned','Sí, condenado'),'#E53935',`gtHoldResolve(${id},'condemned')`,true)+_gtHBtn(L('ביטול','Cancel','Cancelar'),'#9aa4b5','gtSheetClose()')+'</div>');
+}
+// released: a part sticker that was held prints now; a held half is weighed next
+function gtAfterRelease(h){
+  if(!h) return;
+  KS.notice(L('#'+(h.animal_id+1)+' שוחרר — חוזר לתור, ראשון.','#'+(h.animal_id+1)+' released — back in line, first.','#'+(h.animal_id+1)+' liberado — vuelve a la fila, primero.'));
+  if(h.station==='parts' && ['cheek1','cheek2','tongue'].includes(h.part)){
+    const a=KS.getAnimal(h.animal_id);
+    if(a && ((a.partsPrintCount||0)>=3 || a.partsScanned)){
+      try{ showPartsPrint(h.animal_id, a.outerStatus, false, {cheek1:1,cheek2:2,tongue:3}[h.part]);
+           const sn=document.getElementById('ppPartsInfo'); if(sn){ sn.textContent=L('הודפס עכשיו: ','Printed now: ','Impreso ahora: ')+_gtL(GT_PART_NAME[h.part])+L(' (שוחרר מ-USDA)',' (released from USDA)',' (liberado de USDA)'); sn.style.color='#9BE7B0'; sn.style.fontWeight='800'; } }catch(e){}
+      try{ KS.addAuditLog({type:'parts_print_after_release', animal:h.animal_id+1, part:h.part}); }catch(e){}
+    }
+  }
+  if(h.station==='stamps' && ['right','left'].includes(h.part)){
+    try{ _syncPendingWeight(); weightToastShow(L('שקול '+_gtL(GT_PART_NAME[h.part]),'Weigh the '+_gtL(GT_PART_NAME[h.part]),'Pese la '+_gtL(GT_PART_NAME[h.part])),'#'+(h.animal_id+1),'⚖️'); }catch(e){}
+  }
+}
+// a held number tapped
+function gtHeldTap(i,st,h){
+  if(h.station===st && !h.local) return gtHeldList(st);
+  const what=h.resolution==='condemned' ? L('נפסל USDA','USDA condemned','Condenado USDA')
+           : h.kind==='usda' ? 'USDA HOLD · '+_gtL(GT_PART_NAME[h.part]||[h.part,h.part,h.part]) : L('? שאלה','? Question','? Pregunta');
+  KS.notice('#'+(i+1)+' — '+what+L(' (תחנת ',' (station: ',' (estación: ')+_gtL(GT_ST_NAME[h.station]||[h.station,h.station,h.station])+L(') — אי אפשר לגעת עד שהתחנה הזו משחררת.',') — it cannot be touched until that station releases it.',') — no se puede tocar hasta que esa estación lo libere.'));
+}
+// the station's own "?" tapped: rule it now (out of order is fine for a "?")
+function gtOwnQTap(i,st,q){
+  if(['legs','parts','stamps'].includes(st)) return gtHeldList(st);
+  if(st==='slaughter') return gtSlRuleSheet(i);
+  if(st==='eso') return esoOpenDec(i);
+  if(st==='inner') return inCellTap(i, true);
+  if(st==='outer') return outOpenDec(i);
+}
+function gtSlRuleSheet(i){
+  const q=gtOwnQ(i,'slaughter');
+  const nc=KS.getSettings().notChalakEnabled;
+  gtSheet('#'+(i+1), L('שאלה פתוחה — מה הפסק?','Open question — what is the ruling?','Pregunta abierta — ¿cuál es el dictamen?'),
+    '<div class="gt-row">'+_gtHBtn(L('נשחט (כשר)','Slaughtered (kosher)','Faenado (kosher)'),'#2E86FF',`gtSlRule(${i},'slaughtered')`)
+      +(nc?_gtHBtn(L('לא חלק','Not chalak','No jalak'),'#C9A000',`gtSlRule(${i},'notChalak')`):'')
+      +_gtHBtn(L('נבלה','Nevela','Nevelá'),'#E53935',`gtSlRule(${i},'nevela')`)+_gtHBtn(L('ירוי','Shot','Baleado'),'#E08A00',`gtSlRule(${i},'shot')`)+'</div>'
+    +'<div class="gt-row">'+_gtHBtn(L('עדיין שאלה — לסגור','Still a question — close','Aún pregunta — cerrar'),'#9aa4b5','gtSheetClose()')
+      +(q&&!q.local?_gtHBtn(L('ביטול ה-? (סומן בטעות)','Cancel the ? (by mistake)','Anular el ? (por error)'),'#9aa4b5',`gtHoldResolve(${q.id},'cancelled')`):'')+'</div>');
+}
+function gtSlRule(i,status){
+  gtSheetClose();
+  const a=KS.getAnimal(i); if(!a || a.slaughter!=null) return;
+  KS.setSlaughter(i,status,activeUserName("slaughter","שוחט")); resetBeep(); playPressSound(status);
+  try{ KS.addAuditLog({type:'question_ruled', stage:'slaughter', animal:i+1, to:status}); }catch(e){}
+  setTimeout(gtFlagsPull, 800);
+  slRenderGrid(); slUpdateSummary();
+}
+
+// ── the buttons on every station's top bar ──
+const GT_SCREEN_STATION={scSlaughter:'slaughter',scEsophagus:'eso',scLegs:'legs',scInner:'inner',scOuter:'outer',scParts:'parts',scStamps:'stamps'};
+function gtTopBarsInit(){
+  Object.keys(GT_SCREEN_STATION).forEach(id=>{
+    const sc=document.getElementById(id); if(!sc) return;
+    const bar=sc.querySelector('.topbar'); if(!bar || bar.querySelector('.gt-tb')) return;
+    const st=GT_SCREEN_STATION[id], mid=bar.querySelector('.tb-mid');
+    const box=document.createElement('div'); box.className='gt-tb'; box.setAttribute('data-no-i18n','');
+    box.innerHTML=(st!=='slaughter' ? `<button class="gt-tbb gt-tbq" data-gt-q onclick="gtQuestionStart('${st}')"></button>` : '')
+      +`<button class="gt-tbb gt-tbu" onclick="gtUsdaStart('${st}')">USDA HOLD</button>`
+      +`<button class="gt-tbb gt-tbl" onclick="gtHeldList('${st}')" data-gt-count="${st}" style="display:none"></button>`;
+    if(mid) bar.insertBefore(box, mid); else bar.appendChild(box);
+  });
+  // the shochet's big round "?" next to slaughtered / nevela / shot
+  const sh=document.getElementById('tSlBtnSh');
+  if(sh && !document.getElementById('tSlBtnQ')){
+    const q=sh.cloneNode(false); q.id='tSlBtnQ'; q.removeAttribute('onclick'); q.className=sh.className+' gt-slq';
+    q.setAttribute('data-no-i18n',''); q.innerHTML='<span class="gt-slq-m">?</span><span class="gt-slq-t">'+L('שאלה','Question','Pregunta')+'</span>';
+    q.onclick=()=>gtSlQuestionNow();
+    sh.parentNode.appendChild(q);
+  }
+  gtTopBarsUpdate();
+}
+function gtTopBarsUpdate(){
+  // (the texts follow the screen's language, set after the buttons were made)
+  document.querySelectorAll('[data-gt-q]').forEach(b=>{ b.textContent=L('? שאלה','? Question','? Pregunta'); });
+  document.querySelectorAll('.gt-slq-t').forEach(b=>{ b.textContent=L('שאלה','Question','Pregunta'); });
+  document.querySelectorAll('[data-gt-count]').forEach(b=>{
+    const st=b.getAttribute('data-gt-count');
+    const n=_gtFlags.holds.filter(h=>h.station===st && h.open && !h.local && _gtOnBoard(h)).length;
+    b.style.display=n?'':'none';
+    b.textContent=L('מעוכבים · ','Held · ','Retenidos · ')+n;
+  });
+}
+setInterval(()=>{ try{ gtTopBarsUpdate(); }catch(e){} }, 2000);
+if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',()=>{ try{ gtTopBarsInit(); }catch(e){} });
+else setTimeout(()=>{ try{ gtTopBarsInit(); }catch(e){} }, 0);
+
+// ── team leader: "open now" — every "?", every USDA hold, every change not handled ──
+function gtOpenCardRender(){
+  const pane=document.getElementById('mgr-monitor'); if(!pane) return;
+  let card=document.getElementById('gtOpenCard');
+  if(!card){ card=document.createElement('div'); card.id='gtOpenCard'; card.className='card'; card.setAttribute('data-no-i18n',''); pane.insertBefore(card, pane.firstChild); }
+  const holds=_gtFlags.holds.filter(h=>h.open && !h.local);
+  const chg=_gtFlags.changes.filter(c=>!c.ackAt);
+  if(!holds.length && !chg.length){ card.style.display='none'; return; }
+  card.style.display='';
+  const ago=(t)=>{ const m=Math.max(0,Math.round((Date.now()-new Date(t).getTime())/60000)); return L('לפני '+m+' דק׳',m+' min ago','hace '+m+' min'); };
+  const dayTag=(h)=> h.day ? ' · '+L('שחיטת ','slaughter of ','faena del ')+h.day : '';
+  const qSl=holds.some(h=>h.kind==='question' && Number(h.epoch)===Number(_gtFlags.epoch) && ['slaughter','eso','inner','outer'].includes(h.station));
+  const doneTxt=(d)=>{ const o=[];
+    if(d.eso) o.push(L('וושט: ','esophagus: ','esófago: ')+val('eso',d.eso)); if(d.inner) o.push(L('פנים: ','inner: ','interno: ')+val('inner',d.inner));
+    if(d.outer) o.push(L('חוץ: ','outer: ','externo: ')+statusDisplayName(d.outer));
+    if(d.legsStickers) o.push(L('מדבקות רגליים/ראש','legs/head stickers','etiquetas patas/cabeza')); if(d.partsPrinted) o.push(d.partsPrinted+L(' מדבקות חלקים',' parts stickers',' etiquetas de partes'));
+    if(d.stamped) o.push(L('הוחתם','stamped','sellado')); if(d.weighed) o.push(L('נשקל','weighed','pesado'));
+    return o.join(' · '); };
+  const val=(st,v)=>{ if(v==null) return '—'; if(st==='outer') return statusDisplayName(v)||v;
+    return ({slaughtered:L('נשחט','slaughtered','faenado'),nevela:L('נבלה','nevela','nevelá'),shot:L('ירוי','shot','baleado'),notChalak:'לא חלק',ok:L('תקין','OK','OK'),
+             confirmed:L('כשר','kosher','kosher'),treif:'טרף',in_progress:L('נפתח מחדש','reopened','reabierto')})[String(v).split('/')[0]]||v; };
+  card.innerHTML=`<div class="gt-oc-t">⏳ ${L('פתוחים עכשיו','Open now','Abiertos ahora')} (${holds.length+chg.length})</div>`
+    +chg.map(c=>`<div class="gt-hrow gt-oc-chg"><span><b class="gt-tag gt-tag-r">⚠</b> <b>#${c.n+1}</b> · ${_gtL(GT_ST_NAME[c.stage]||[c.stage,c.stage,c.stage])}: ${escapeHtml(val(c.stage,c.from))} ← ${escapeHtml(val(c.stage,c.to))}`
+      +`<br><small>${L('כבר נעשה: ','Already done: ','Ya hecho: ')}${escapeHtml(doneTxt(c.done||{}))}${(c.done&&(c.done.partsPrinted||c.done.stamped||c.done.legsStickers))?L(' — לאסוף מדבקות / חותמות',' — collect stickers / stamps',' — recoger etiquetas / sellos'):''}</small></span>`
+      +`<span class="gt-muted">${ago(c.at)}</span>${(KS.getManagerRole&&KS.getManagerRole()==='manager')?_gtHBtn(L('טופל','Handled','Atendido'),'#28C76F',`gtChangeAck(${c.id})`):''}</div>`).join('')
+    +holds.map(h=>`<div class="gt-hrow"><span><b class="gt-tag ${h.kind==='usda'?'gt-tag-u':'gt-tag-q'}">${h.kind==='usda'?'USDA':'?'}</b> <b>#${h.n+1}</b> · ${_gtL(GT_ST_NAME[h.station]||[h.station,h.station,h.station])}`
+      +`${h.kind==='usda'?' · '+_gtL(GT_PART_NAME[h.part]||[h.part,h.part,h.part]):''}${h.by?' · '+escapeHtml(h.by):''}${dayTag(h)}</span><span class="gt-muted">${ago(h.at)}</span></div>`).join('')
+    +(qSl?`<div class="gt-oc-lock">🔒 ${L('סגירת יום חסומה — יש "?" פתוח','Closing the day is blocked — a "?" is open','El cierre del día está bloqueado — hay un "?" abierto')}</div>`:'');
+}
+async function gtChangeAck(id){
+  let r=null; try{ r=await window.sb.rpc('change_ack',{p_token:KS.getManagerToken(),p_id:id}); }catch(e){}
+  const d=r && r.data;
+  if(!d || !d.ok){ KS.notice(gtErrText((d&&d.error)||(r&&r.error)||'network')); return; }
+  _gtFlags.sig=''; gtFlagsPull();
+}
+
+// ── a change of a ruling: always possible — this says what was already done ──
+function _gtDoneAfterHtml(stage, a){
+  if(!a) return '';
+  const o=[];
+  if(stage==='slaughter' && a.esoChecked) o.push(L('וושט: ','Esophagus: ','Esófago: ')+(a.esoResult==='nevela'?L('נבלה','nevela','nevelá'):L('תקין','OK','OK')));
+  if((stage==='slaughter'||stage==='eso') && (a.innerStatus==='confirmed'||a.innerStatus==='treif')) o.push(L('פנים: ','Inner: ','Interno: ')+(a.innerStatus==='treif'?'טרף':L('כשר','kosher','kosher')));
+  if((stage==='slaughter'||stage==='eso'||stage==='inner') && a.outerStatus) o.push(L('חוץ: ','Outer: ','Externo: ')+statusDisplayName(a.outerStatus,a));
+  if((stage==='slaughter'||stage==='eso') && (a.legsStickers||a.headStickers)) o.push(L('הודפסו מדבקות רגליים / ראש','Legs / head stickers printed','Etiquetas de patas / cabeza impresas'));
+  if(a.legsSorted) o.push(L('הרגליים מוינו','Legs sorted','Patas clasificadas'));
+  if((a.partsPrintCount||0)>0) o.push(L('הודפסו ','Printed ','Impresas ')+(a.partsPrintCount||0)+L(' מדבקות חלקים',' parts stickers',' etiquetas de partes'));
+  if(a.stamped) o.push(L('הוחתם','Stamped','Sellado'));
+  if(a.weightRight!=null||a.weightLeft!=null) o.push(L('נשקל','Weighed','Pesado'));
+  if(!o.length) return '';
+  return "<div data-done-after style='margin-top:10px;padding:8px 10px;border-radius:8px;background:rgba(255,193,7,.12);border:1px solid #E8B84A;color:#FFE08A;text-align:start;'>"
+    +'<b>'+L('⚠ כבר נעשה בבהמה הזו:','⚠ Already done on this animal:','⚠ Ya hecho en este animal:')+'</b><br>'+o.map(escapeHtml).join(' · ')
+    +'<br>'+L('אפשר לשנות. השינוי נרשם, וכל המסכים יראו "⚠ השתנה" עד שראש הצוות מסמן "טופל".','You may change it. The change is recorded, and every screen shows "⚠ Changed" until the team leader marks it handled.','Puede cambiarlo. El cambio queda registrado y todas las pantallas muestran "⚠ Cambió" hasta que el jefe de equipo lo marque como atendido.')
+    +'</div>';
+}
+
+var GT_APP_VERSION='v10.26';
 document.addEventListener('DOMContentLoaded',()=>{ try{ document.querySelectorAll('.gt-ver').forEach(e=>e.textContent=GT_APP_VERSION); }catch(e){} });
 function escapeHtml(str){
   return String(str==null?'':str).replace(/[&<>"']/g, c=>({
@@ -4669,6 +5063,7 @@ var _GT_ERR = {
   out_of_order:['המספר עדיין לא הגיע לשלב הזה — קודם השלבים שלפניו (שחיטה, ושט, פנים, חוץ). השינוי לא נרשם.','This number has not reached this stage yet — the stages before it come first (slaughter, esophagus, inner, outer). The change was not recorded.','Este número aún no llegó a esta etapa — primero las etapas anteriores (faena, esófago, interior, exterior). El cambio no se registró.'],
   earlier_day_open:['קודם מסיימים את יום השחיטה הקודם — אין דילוג. השינוי לא נרשם.','The earlier slaughter day is finished first — no skipping. The change was not recorded.','Primero se termina el día de faena anterior — sin saltos. El cambio no se registró.'],
   board_closed:['יום השחיטה הזה כבר נסגר בתחנה זו — השינוי לא נרשם.','This slaughter day is already closed at this station — the change was not recorded.','Este día de faena ya está cerrado en esta estación — el cambio no se registró.'],
+  held:['המספר מעוכב (USDA / "?") — התחנה שסימנה צריכה לשחרר. השינוי לא נרשם.','The number is held (USDA / "?") — the station that marked it must release it. The change was not recorded.','El número está retenido (USDA / "?") — la estación que lo marcó debe liberarlo. El cambio no se registró.'],
   status_in_use:['סטטוס שכבר נפסק על בהמה בלוח פתוח: אי אפשר לשנות לו כשר/לא כשר או למחוק אותו.','A status already ruled on an animal of an open board cannot change kosher / not kosher or be deleted.','Un estado ya dictaminado en un animal de un tablero abierto no puede cambiar kosher / no kosher ni borrarse.'],
   station_device:['זה טאבלט של תחנה — הוא משמש רק את התחנה שלו. בעלים ויצרן נכנסים מכל מכשיר אחר (טלפון, מחשב).','This is a station tablet — it serves only its station. The owner and the manufacturer log in from any other device (phone, computer).','Esta es una tableta de estación — solo sirve a su estación. El propietario y el fabricante entran desde cualquier otro dispositivo.'],
   server_only:['ראש צוות מוסיפים או מסירים רק בשרת (המתקין) — לא מהאפליקציה.','A team leader is added or removed only on the server (the installer) — not from the app.','Un jefe de equipo se agrega o quita solo en el servidor (el instalador).'],
@@ -4717,7 +5112,7 @@ function gtErrCode(e){
   if(c==='PGRST202' || c==='42883') return 'missing_fn';
   const k = s.trim().toLowerCase();
   if(Object.prototype.hasOwnProperty.call(_GT_ERR, k)) return k;
-  const w = s.match(/\b(wrong_station|stale_board|device_not_paired|unauthorized|code_invalid|rate_limited|moved_on|correction_not_allowed|bad_id|bad_picture|no_device|setup_code_required|eso_locked|nc_kosher_or_treif_only|already_ruled|bad_settings|invalid_value|not_checked|reason_required|worker_login_required)\b/);
+  const w = s.match(/\b(wrong_station|stale_board|device_not_paired|unauthorized|code_invalid|rate_limited|moved_on|correction_not_allowed|bad_id|bad_picture|no_device|setup_code_required|eso_locked|nc_kosher_or_treif_only|already_ruled|held|bad_settings|invalid_value|not_checked|reason_required|worker_login_required)\b/);
   if(w) return w[1];
   if(c==='42501') return 'permission_denied';
   if(typeof e==='object' && !c && /fetch|network|timeout|load failed|offline/i.test(s)) return 'network';
@@ -5380,6 +5775,7 @@ setInterval(()=>{ try{ gtRefreshPendingBadges(); }catch(e){} }, 3000);
 const PER=50;
 function buildGrid(gridId,prevId,nextId,piId,page,animals,getCls,getLabel,getTap){
   const g=document.getElementById(gridId);if(!g)return;
+  {let _w=null; try{ _w=gtGridWrap(gridId,getCls,getLabel,getTap); }catch(e){} if(_w){ getCls=_w[0]; getLabel=_w[1]; getTap=_w[2]; }}   // v10.26 "?" / USDA / ⚠
   g.innerHTML="";
   const start=page*PER,end=Math.min(start+PER,animals.length);
   for(let i=start;i<end;i++){
@@ -5396,7 +5792,7 @@ function buildGrid(gridId,prevId,nextId,piId,page,animals,getCls,getLabel,getTap
     g.appendChild(div);
     // Android WebView: animations on freshly-created elements sometimes don't start
     // until a reflow. Force one on the blinking "next" cell so it animates immediately.
-    if(cls==="next"||cls==="next-nc"||cls==="pending-outer"){
+    if(cls==="next"||cls==="next-nc"||cls==="pending-outer"||/^next /.test(cls)){
       // reading offsetWidth forces a synchronous reflow
       void div.offsetWidth;
     }
@@ -6189,9 +6585,18 @@ function mgrEnter(){
   goTo("scManager");
   updateMgr();mgrSyncUI();
 }
+// v10.26: the shochet goes on past a number with his own "?" / a USDA hold
+function _slOpen(arr,i){ return arr[i].slaughter===null && !gtSkip(i,'slaughter'); }
+function _slNextIdx(){
+  const a=KS.getAnimals(), ps=slPage*PER, pe=Math.min(ps+PER,a.length);
+  for(let i=ps;i<pe;i++){ if(_slOpen(a,i)) return i; }
+  for(let i=0;i<a.length;i++){ if(_slOpen(a,i)) return i; }
+  return -1;
+}
 function slRenderGrid(){
   const t=T[lang],a=KS.getAnimals();
-  let next=-1;for(let i=0;i<a.length;i++){if(a[i].slaughter===null){next=i;break;}}
+  let next=-1;for(let i=0;i<a.length;i++){if(_slOpen(a,i)){next=i;break;}}
+  _gtNext.slaughter=next;
   buildGrid("slGrid","slPrev","slNext","slPI",slPage,a,
     i=>{const s=a[i].slaughter;if(s===null)return i===next?"next":"empty";if(s==="slaughtered")return"slaughtered";if(s==="notChalak")return"notchalak";if(s==="nevela")return"nevela";return"shot";},
     i=>{const s=a[i].slaughter;if(s===null)return"";if(s==="slaughtered")return t.slS;if(s==="notChalak")return lang==='he'?'לא חלק':lang==='es'?'No Jalak':'Non-Chalak';if(s==="nevela")return t.slN;return t.slSh;},
@@ -6230,10 +6635,10 @@ function slMark(status, fromExternal){
   // Mark the first pending animal ON THE CURRENT PAGE (work in order, per page)
   const pageStart=slPage*PER, pageEnd=Math.min(pageStart+PER,a.length);
   let next=-1;
-  for(let i=pageStart;i<pageEnd;i++){if(a[i].slaughter===null){next=i;break;}}
+  for(let i=pageStart;i<pageEnd;i++){if(_slOpen(a,i)){next=i;break;}}
   // If current page is fully done, find next pending anywhere (to advance)
   if(next<0){
-    for(let i=0;i<a.length;i++){if(a[i].slaughter===null){next=i;break;}}
+    for(let i=0;i<a.length;i++){if(_slOpen(a,i)){next=i;break;}}
     if(next<0)return; // everything done
     // advance to that page
     slPage=Math.floor(next/PER);
@@ -6243,11 +6648,11 @@ function slMark(status, fromExternal){
   const after=KS.getAnimals();
   const ps=slPage*PER, pe=Math.min(ps+PER,after.length);
   let pageHasPending=false;
-  for(let i=ps;i<pe;i++){if(after[i].slaughter===null){pageHasPending=true;break;}}
+  for(let i=ps;i<pe;i++){if(_slOpen(after,i)){pageHasPending=true;break;}}
   if(!pageHasPending){
     // Find next pending AFTER current page only
     let np=-1;
-    for(let i=pe;i<after.length;i++){if(after[i].slaughter===null){np=i;break;}}
+    for(let i=pe;i<after.length;i++){if(_slOpen(after,i)){np=i;break;}}
     if(np>=0)slPage=Math.floor(np/PER);
     // if none after, stay (don't jump back to earlier gaps)
   }
@@ -6288,6 +6693,9 @@ function _gtIsEsoStation(){
   return !!(s && s.classList.contains('active'));
 }
 function _gtCorrectionBlock(stage, idx){
+  // v10.26: a ruling can always be changed by the station (any of its tablets), after a warning
+  // that says what the next stations already did; the server records it (⚠ for the team leader)
+  if(KS.getAnimal(idx)) return null;
   const a=KS.getAnimal(idx);
   const P=L('בהמה #'+(idx+1)+' — ','Animal #'+(idx+1)+' — ','Animal #'+(idx+1)+' — ');
   const FINAL=(why)=>P+L('אי אפשר לשנות — הפסיקה סופית ('+why[0]+').','Cannot change — the ruling is final ('+why[1]+').','No se puede cambiar — el dictamen es definitivo ('+why[2]+').');
@@ -6449,13 +6857,15 @@ function _stampsWeightPendingIdx(){
   const a=KS.getAnimals();
   for(let i=_stampsWeighFromIdx();i<a.length;i++){
     const x=a[i];
-    if(x && x.stamped && isKosherReady(x) && (!KS.weightSideDone(x,'right') || !KS.weightSideDone(x,'left'))) return i;
+    if(x && x.stamped && isKosherReady(x) && (_gtSideOpen(x,'right') || _gtSideOpen(x,'left'))) return i;
   }
   return -1;
 }
+// v10.26: a half on USDA hold is not weighed now (weighed when released; never when condemned)
+function _gtSideOpen(x,side){ return !KS.weightSideDone(x,side) && !gtHeldAt(x.id,'stamps',side); }
 function _syncPendingWeight(){ pendingWeightIdx=_stampsWeightPendingIdx(); return pendingWeightIdx; }
 // Legs queue test (print mode) — shared by the grid, the tap check and the summary.
-function _lgNeeds(x){ return x.slaughter!==null && passedEso(x) && !x.headStickers; }
+function _lgNeeds(x){ return (x.slaughter!==null || _gtSlQx(x)) && passedEso(x) && !x.headStickers && !gtSkip(x.id,'legs'); }
 
 function slOpenWarn(idx){
   if(!_gtCorrectionGate('slaughter', idx)) return;
@@ -6466,9 +6876,9 @@ function slOpenWarn(idx){
   document.getElementById("wDesc").innerHTML=t.wTitle+" #"+(idx+1)+" — "+st;
   // Show לא חלק button if enabled
   const ncBtn=document.getElementById("twNC");
-  const ncBlocked=_innerOuterRuled(a) && a.slaughter!=='notChalak';
+  const ncBlocked=false;   // v10.26: a change is always possible (the warning says what was done)
   if(ncBtn)ncBtn.style.display=(KS.getSettings().notChalakEnabled&&!ncBlocked)?"block":"none";
-  const sBlocked=_innerOuterRuled(a) && a.slaughter==='notChalak';
+  const sBlocked=false;
   {const sBtn=document.getElementById("twS"); if(sBtn)sBtn.style.display=sBlocked?"none":"";}
   if(sBlocked){
     document.getElementById("wDesc").innerHTML+="<div data-nc-blocked style='margin-top:8px;color:var(--amber);font-weight:700;'>"+
@@ -6482,21 +6892,21 @@ function slOpenWarn(idx){
                    'Cannot change to "Non-Chalak" — the inner/outer inspector already ruled on this animal.',
                    'No se puede cambiar a "No Jalak" — el inspector interno/externo ya dictaminó sobre este animal.'))+"</div>";
   }
-  document.getElementById("wDesc").innerHTML+=_labelsRecallHtml(a);
+  document.getElementById("wDesc").innerHTML+=_labelsRecallHtml(a)+_gtDoneAfterHtml('slaughter',a);
   document.getElementById("warnModal").classList.add("open");
 }
 function slApplyChange(status){
   if(slChangingIdx<0)return;
   if(!_gtCorrectionGate('slaughter', slChangingIdx)){ closeOv("warnModal");slChangingIdx=-1;slRenderGrid();slUpdateSummary();return; }
   const _a=KS.getAnimal(slChangingIdx);
-  if(status==='slaughtered' && _a && _a.slaughter==='notChalak' && _innerOuterRuled(_a)){
+  if(false && status==='slaughtered' && _a && _a.slaughter==='notChalak' && _innerOuterRuled(_a)){   // v10.26: allowed (warned)
     try{ KS.addAuditLog({type:'slaughter_change_blocked', animal: slChangingIdx+1, from:_a.slaughter, to:status, user: activeUserName("slaughter","שוחט")}); }catch(e){}
     alert(L('אי אפשר לשנות מ"לא חלק" ל"נשחט" אחרי שבודק הפנים/החוץ כבר פסק על הבהמה. בטל קודם את הפסיקה במסך הבודק.',
             'Cannot change from "Non-Chalak" to "Slaughtered" after the inner/outer inspector has ruled on this animal. Undo the ruling at the inspector screen first.',
             'No se puede cambiar de "No Jalak" a "Faenado" después de que el inspector interno/externo dictaminó. Primero anule el dictamen en la pantalla del inspector.'));
     closeOv("warnModal");slChangingIdx=-1;return;
   }
-  if(status==='notChalak' && _a && _a.slaughter!=='notChalak' && _innerOuterRuled(_a)){
+  if(false && status==='notChalak' && _a && _a.slaughter!=='notChalak' && _innerOuterRuled(_a)){
     try{ KS.addAuditLog({type:'slaughter_change_blocked', animal: slChangingIdx+1, from:_a.slaughter, to:status, user: activeUserName("slaughter","שוחט")}); }catch(e){}
     alert(L('אי אפשר לשנות ל"לא חלק" אחרי שבודק הפנים/החוץ כבר פסק על הבהמה. בטל קודם את הפסיקה במסך הבודק.',
             'Cannot change to "Non-Chalak" after the inner/outer inspector has ruled on this animal. Undo the ruling at the inspector screen first.',
@@ -6581,7 +6991,7 @@ function esoLogin(){
 function esoRenderGrid(){
   const t=T[lang],a=KS.getAnimals();
   // Animals that need esophagus check: slaughtered or notChalak, not yet checked
-  const isEsoPend=(x)=>(x.slaughter==='slaughtered'||x.slaughter==='notChalak')&&!x.esoChecked&&_esoApplies(x);
+  const isEsoPend=(x)=>isEsoPendIdx(x.id);   // v10.26: also the shochet's "?" numbers; past held / own "?"
   let firstPending=-1;
   for(let i=0;i<a.length;i++){if(isEsoPend(a[i])){firstPending=i;break;}}
   // Auto-jump to the page of the next pending animal, unless paging manually.
@@ -6595,6 +7005,7 @@ function esoRenderGrid(){
    if(firstPending<pStart||firstPending>=pEnd){
      for(let i=pStart;i<Math.min(pEnd,a.length);i++){if(isEsoPend(a[i])){firstPending=i;break;}}
    }}
+  _gtNext.eso=firstPending;
   buildGrid("esoGrid","esoPrev","esoNext","esoPI",esoPage,a,
     i=>{
       const x=a[i];
@@ -6631,6 +7042,10 @@ function esoRenderGrid(){
   );
 }
 
+function isEsoPendIdx(i){
+  const x=KS.getAnimal(i); if(!x) return false;
+  return (x.slaughter==='slaughtered'||x.slaughter==='notChalak'||_gtSlQx(x)) && !x.esoChecked && _esoApplies(x) && !gtSkip(i,'eso');
+}
 function esoOpenDec(idx){
   esoIsChange=false;
   esoPendingDec=idx;
@@ -6645,7 +7060,7 @@ function esoOpenChangeWarn(idx){
   const cur=a.esoResult==='nevela'?L('נבלה','Nevela','Nevelá'):L('תקין','OK','OK');
   document.getElementById("esoWarnDesc").innerHTML=
     L('בהמה #','Animal #','Animal #')+(idx+1)+L(' — תוצאה נוכחית: ',' — current result: ',' — resultado actual: ')+"<strong style='color:var(--gold)'>"+cur+"</strong><br>"+(L('האם לשנות?','Change?','¿Cambiar?'))+
-    (a.esoResult!=='nevela' ? _labelsRecallHtml(a) : '');
+    (a.esoResult!=='nevela' ? _labelsRecallHtml(a) : '')+_gtDoneAfterHtml('eso',a);
   document.getElementById("esoWarnModal").classList.add("open");
 }
 let esoIsChange=false;
@@ -6790,6 +7205,10 @@ function lgProcessSort(code){
     lgShowWarn(L('מספר לא מזוהה','Not recognized','No reconocido'),'#'+code);
     return;
   }
+  // v10.26: USDA hold / an open "?"
+  {const _h=gtHeldAt(idx,'legs');
+   if(_h){ lgShowWarn(_h.kind==='usda'?(_h.resolution==='condemned'?L('נפסל USDA','USDA condemned','Condenado USDA'):'USDA HOLD'):L('? שאלה','? Question','? Pregunta'), L('רגל #','Leg #','Pata #')+(idx+1)+L(' — מעוכבת, לא למיין',' — held, do not sort',' — retenida, no clasificar')); return; }
+   if(_gtSlQx(a)){ lgShowWarn(L('? שאלה בשחיטה','? Slaughter question','? Pregunta de faena'), L('רגל #','Leg #','Pata #')+(idx+1)+L(' — עוד לא נפסק בשחיטה',' — not ruled at slaughter yet',' — aún sin dictamen de faena')); return; }}
   // Not kosher: nevela, shot, treif
   if(a.slaughter==='nevela'||a.slaughter==='shot'){
     lgShowWarn(
@@ -6846,7 +7265,7 @@ function lgShowWarn(title,desc){
 function lgRenderGrid(){
   const t=T[lang],a=KS.getAnimals();
   // ALL slaughtered animals must be printed in order — no skipping nevela/shot.
-  const needsLg=(x)=>x.slaughter!==null&&passedEso(x)&&!x.headStickers;
+  const needsLg=(x)=>_lgNeeds(x);   // v10.26: also a shochet's "?" number; past a held one
   let first=-1;for(let i=0;i<a.length;i++){if(needsLg(a[i])){first=i;break;}}
   // Auto-jump to the page of the next pending animal, unless paging manually.
   if(!lgManualPage){
@@ -6873,6 +7292,7 @@ function lgRenderGrid(){
     if(x.slaughter==="notChalak")return ncL;
     return t.stSlaughtered;
   };
+  _gtNext.legs=first;
   buildGrid("lgGrid","lgPrev","lgNext","lgPI",lgPage,a,
     i=>{const x=a[i];
         if(x.slaughter===null)return"empty";
@@ -7314,7 +7734,7 @@ function showPrintPopup(idx,step,isReprint=false){
 
 function lgTap(idx){
   const a=KS.getAnimals();
-  let first=-1;for(let i=0;i<a.length;i++){if(a[i].slaughter!==null&&passedEso(a[i])&&!a[i].headStickers){first=i;break;}}
+  let first=-1;for(let i=0;i<a.length;i++){if(_lgNeeds(a[i])){first=i;break;}}
   if(idx!==first){showNoSkip();return;}
   const x=a[idx];
   if(!x.legsStickers){
@@ -7450,7 +7870,7 @@ function passedEso(x){
   const esoOn=KS.getSettings().esophagusEnabled;
   if(!esoOn)return true;                 // eso disabled → no gating
   // Eso only checks slaughtered/notChalak animals. Nevela/shot bypass eso entirely.
-  if(x.slaughter!=='slaughtered'&&x.slaughter!=='notChalak')return true;
+  if(x.slaughter!=='slaughtered'&&x.slaughter!=='notChalak'&&!_gtSlQx(x))return true;   // (v10.26: a shochet's "?" waits for it too)
   if(!_esoApplies(x))return true;        // slaughtered before the check was turned on
   return x.esoChecked && x.esoResult!=='nevela';
 }
@@ -7460,7 +7880,7 @@ function inRenderGrid(){
   // All inspectors see same queue, whoever taps first takes the animal
   let first=-1;
   const isInPend=(x,i)=>(x.slaughter==="slaughtered"||x.slaughter==="notChalak")
-    &&passedEso(x)&&!x.innerStatus&&!inFloats.find(f=>f.idx===i);
+    &&passedEso(x)&&!x.innerStatus&&!inFloats.find(f=>f.idx===i)&&!gtSkip(i,'inner');
   for(let i=0;i<a.length;i++){if(isInPend(a[i],i)){first=i;break;}}
   // Auto-jump to the page of the next animal to inspect — but NOT while paging manually.
   if(!inManualPage){
@@ -7505,8 +7925,8 @@ function inRenderGrid(){
       const x=a[i];
       if(x.slaughter!=="slaughtered"&&x.slaughter!=="notChalak")return null;
       if(!x.innerStatus&&!passedEso(x))return null; // hidden until esophagus check passes
-      if(x.innerStatus==="treif")return null;
-      if(x.outerStatus)return null; // already decided by outer - locked, cannot change from inner
+      if(x.innerStatus==="treif")return()=>inOpenChangeWarn(i);   // v10.26: a change is always possible (with a warning)
+      if(x.outerStatus)return()=>inOpenChangeWarn(i);
       if(_inOtherDeviceCheck(x,i))return null; // another inner screen has it in check
       // 1both: approved but the outer popup was cancelled → open the outer decision again
       if(x.innerStatus==="confirmed"&&(KS.getSettings().screenConfig||'1in1out')==='1both')return()=>outOpenDec(i);
@@ -7516,7 +7936,7 @@ function inRenderGrid(){
     }
   );
 }
-function inCellTap(idx){
+function inCellTap(idx, force){
   const a=KS.getAnimals();
   // If already open in a float, just focus it (re-open its window)
   if(inFloats.find(f=>f.idx===idx)){openMaw(idx);return;}
@@ -7528,13 +7948,13 @@ function inCellTap(idx){
   let firstToOpen=-1;
   for(let i=0;i<a.length;i++){
     const sl=a[i].slaughter;
-    if((sl==="slaughtered"||sl==="notChalak")&&!a[i].innerStatus&&passedEso(a[i])){
+    if((sl==="slaughtered"||sl==="notChalak")&&!a[i].innerStatus&&passedEso(a[i])&&!gtSkip(i,'inner')){
       // skip ones already open in a float — the NEXT openable is after them
       if(inFloats.find(f=>f.idx===i))continue;
       firstToOpen=i;break;
     }
   }
-  if(firstToOpen>=0&&idx!==firstToOpen){showNoSkip();return;}
+  if(!force&&firstToOpen>=0&&idx!==firstToOpen){showNoSkip();return;}   // (force: the inner station's own "?")
   if(!inFloats.find(f=>f.idx===idx))inFloats.push({idx,drawing:null});
   if(floatsOn)renderFloats();
   openMaw(idx);
@@ -7781,8 +8201,9 @@ const inReopened={};
 function inOpenChangeWarn(idx){
   if(!_gtCorrectionGate('inner', idx)) return;
   inChangeIdx=idx;
+  const _ia=KS.getAnimal(idx);
   document.getElementById("inWarnDesc").innerHTML=
-    L("בהמה #","Animal #","Animal #")+(idx+1)+L(" — כבר אושרה לבודק חוץ"," — already approved for the outer inspector"," — ya aprobado para el inspector externo")+"<br>"+L("האם לפתוח שוב לעריכה?","Open it again for editing?","¿Abrir de nuevo para editar?");
+    L("בהמה #","Animal #","Animal #")+(idx+1)+(_ia&&_ia.innerStatus==='treif'?L(" — נפסקה טרף בפנים"," — ruled treif at the inner check"," — dictaminado treif en el control interno"):L(" — כבר אושרה לבודק חוץ"," — already approved for the outer inspector"," — ya aprobado para el inspector externo"))+"<br>"+L("האם לפתוח שוב לעריכה?","Open it again for editing?","¿Abrir de nuevo para editar?")+_gtDoneAfterHtml('inner',_ia);
   document.getElementById("inWarnModal").classList.add("open");
 }
 function inConfirmChange(){
@@ -7981,7 +8402,7 @@ function outRenderGrid(){
     return true;
   };
   const isPend=(x)=>x.innerStatus==="confirmed"&&!x.outerStatus
-    &&x.slaughter!=="nevela"&&x.slaughter!=="shot"&&roleMatch(x);
+    &&x.slaughter!=="nevela"&&x.slaughter!=="shot"&&roleMatch(x)&&!gtSkip(x.id,'outer');
   // an animal open on another outer screen is that screen's — the blink moves to the next one
   const busy=(i)=>{ try{ return KS.outerOpenElsewhere(i); }catch(e){ return false; } };
   const isMine=(i)=>isPend(a[i])&&!busy(i);
@@ -8081,7 +8502,7 @@ function outCellTap(idx){
   };
   // Enforce order using the SAME role-filtered definition as the blinking "next" cell
   const isPend=(x)=>x.innerStatus==="confirmed"&&!x.outerStatus
-    &&x.slaughter!=="nevela"&&x.slaughter!=="shot"&&roleMatch(x);
+    &&x.slaughter!=="nevela"&&x.slaughter!=="shot"&&roleMatch(x)&&!gtSkip(x.id,'outer');
   const busy=(i)=>{ try{ return KS.outerOpenElsewhere(i); }catch(e){ return false; } };
   if(busy(idx)){ _outBusyNotice(idx); return; }
   if(isPend(a[idx])){
@@ -8254,7 +8675,7 @@ function outOpenChangeWarn(idx){
   const statusLabels={glatt:"גלאט",beit:"בית יוסף",kosher:"כשר",mk:"MK",treif:"טרף"};
   const cur=statusDisplayName(a.outerStatus,a)||statusLabels[a.outerStatus]||a.outerStatus;
   document.getElementById("outWarnDesc").innerHTML=
-    L("בהמה #","Animal #","Animal #")+(idx+1)+L(" — סטטוס נוכחי: "," — current status: "," — estado actual: ")+"<strong style='color:var(--gold)'>"+escapeHtml(cur)+"</strong><br>"+L("האם לשנות?","Change it?","¿Cambiarlo?")+
+    L("בהמה #","Animal #","Animal #")+(idx+1)+L(" — סטטוס נוכחי: "," — current status: "," — estado actual: ")+"<strong style='color:var(--gold)'>"+escapeHtml(cur)+"</strong><br>"+L("האם לשנות?","Change it?","¿Cambiarlo?")+_gtDoneAfterHtml('outer',a)+
     (((a.partsPrintCount||0)>0||a.stamped)
       ? "<div style='margin-top:10px;padding:8px;border-radius:8px;background:rgba(224,48,48,.15);border:1px solid var(--red);color:var(--red-light);font-weight:700;'>⚠️ "+
         escapeHtml(L('כבר הודפסו לבהמה הזו '+(a.partsPrintCount||0)+' מדבקות חלקים'+(a.stamped?' והיא הוחתמה':'')+'. אם תשנה — יש לאסוף ולהשמיד את המדבקות והחותמות הישנות. השינוי יירשם.',
@@ -11972,10 +12393,10 @@ function _stampsNeedsReprint(x){
   return !!(x && x.stamped && x.stampedAs && isKosherReady(x) && x.stampedAs!==_printedAsKey(x));
 }
 function _partsPending(x){
-  return isKosherReady(x) && ((!x.partsScanned && (x.partsPrintCount||0)<3) || _partsNeedsReprint(x));
+  return isKosherReady(x) && ((!x.partsScanned && (x.partsPrintCount||0)<3) || _partsNeedsReprint(x)) && !gtSkip(x.id,'parts');
 }
 function _stampsPending(x){
-  return isKosherReady(x) && (!x.stamped || _stampsNeedsReprint(x));
+  return isKosherReady(x) && (!x.stamped || _stampsNeedsReprint(x)) && !gtSkip(x.id,'stamps');
 }
 function _reprintNeededLabel(){ return L('להדפסה מחדש','Reprint needed','Reimprimir'); }
 // Keep getKosherStatuses() as computed property for compatibility
@@ -12029,6 +12450,9 @@ function processBarcode(code){
 function partsTapAnimal(idx){
   const a=KS.getAnimal(idx);
   if(!a){return;}
+  {const _h=gtHeldAt(idx,'parts');   // v10.26: USDA hold / the station's open "?"
+   if(_h){ showPartsError(_h.kind==='usda'?(_h.resolution==='condemned'?L('נפסל USDA','USDA condemned','Condenado USDA'):'USDA HOLD'):L('? שאלה','? Question','? Pregunta'),
+             L('בהמה #'+(idx+1)+' — מעוכבת. אין להדפיס עד שהתחנה המסמנת משחררת.','Animal #'+(idx+1)+' — held. Do not print until the marking station releases it.','Animal #'+(idx+1)+' — retenido. No imprimir hasta que la estación que lo marcó lo libere.')); return; }}
 
   // Not kosher at all - blocked
   if(!a.slaughter||a.slaughter==="nevela"||a.slaughter==="shot"){
@@ -12152,6 +12576,12 @@ function partsAddPrint(idx){
   KS.setPartsScanned(idx);
   KS.setPartsPrintedAs(idx,_printedAsKey(a));
   showPartsPrint(idx,a.outerStatus,false,0);
+  // v10.26: a part on USDA hold is not printed now — it prints when released
+  try{ const _ph=gtPartHolds(idx,'parts').filter(h=>h.open||h.resolution==='condemned');
+    if(_ph.length){ const sn=document.getElementById('ppPartsInfo');
+      const all=['cheek1','cheek2','tongue'], held=_ph.map(h=>h.part), out=all.filter(p=>!held.includes(p));
+      if(sn){ sn.textContent=L('הודפס: ','Printed: ','Impreso: ')+out.map(p=>_gtL(GT_PART_NAME[p])).join(' + ')+L(' · מעוכב USDA: ',' · USDA hold: ',' · retenido USDA: ')+held.map(p=>_gtL(GT_PART_NAME[p])).join(', '); sn.style.color='#C5B3FF'; sn.style.fontWeight='800'; }
+      KS.addAuditLog({type:'parts_printed_without', animal:idx+1, held}); } }catch(e){}
 }
 
 let partsReprintIdx=-1;
@@ -12363,11 +12793,11 @@ function weightCaptured(w, meta){
   }
   const a=KS.getAnimal(pendingWeightIdx);
   const m = meta || {source:'barcode'};
-  if(!KS.weightSideDone(a,'right')){
+  if(_gtSideOpen(a,'right')){
     const ok=KS.setWeight(pendingWeightIdx,'right',w,m);
     if(!ok){ weightToastShow(L('שיטת קליטה זו מושבתת','This capture method is turned off','Este método de captura está desactivado'),L('פנה לראש הצוות להפעלה בהגדרות','Ask the team leader to turn it on in settings','Pida al jefe de equipo que lo active en ajustes'),'⛔'); return false; }
     weightToastShow(L('התקבל משקל צד ימין','Right side weight received','Peso del lado derecho recibido'),'\u200e'+w+L(' ק\u05f4ג · סרוק צד שמאל',' kg · scan the left side',' kg · escanee el lado izquierdo'),'⚖️');
-  }else if(!KS.weightSideDone(a,'left')){
+  }else if(_gtSideOpen(a,'left')){
     const ok=KS.setWeight(pendingWeightIdx,'left',w,m);
     if(!ok){ weightToastShow(L('שיטת קליטה זו מושבתת','This capture method is turned off','Este método de captura está desactivado'),L('פנה לראש הצוות להפעלה בהגדרות','Ask the team leader to turn it on in settings','Pida al jefe de equipo que lo active en ajustes'),'⛔'); return false; }
     const total=(a.weightRight||0)+w;
@@ -12381,7 +12811,7 @@ function weightPending(){
   _syncPendingWeight();
   if(pendingWeightIdx<0)return false;
   const a=KS.getAnimal(pendingWeightIdx);
-  return a && (!KS.weightSideDone(a,'right') || !KS.weightSideDone(a,'left'));
+  return a && (_gtSideOpen(a,'right') || _gtSideOpen(a,'left'));
 }
 // Which capture methods are enabled (default: barcode + ocr).
 function weightMethods(){
@@ -13099,6 +13529,9 @@ function stampsProcessScan(code){
 function stampsTapAnimal(idx){
   const a=KS.getAnimal(idx);
   if(!a){return;}
+  {const _h=gtHeldAt(idx,'stamps');   // v10.26: USDA hold / the station's open "?"
+   if(_h){ stampsShowError(_h.kind==='usda'?(_h.resolution==='condemned'?L('נפסל USDA','USDA condemned','Condenado USDA'):'USDA HOLD'):L('? שאלה','? Question','? Pregunta'),
+             L('בהמה #'+(idx+1)+' — מעוכבת. אין להחתים עד שהתחנה המסמנת משחררת.','Animal #'+(idx+1)+' — held. Do not stamp until the marking station releases it.','Animal #'+(idx+1)+' — retenido. No sellar hasta que la estación que lo marcó lo libere.')); return; }}
   // the previous animal still waits for its weight → finish that first
   if(weightPending() && idx!==pendingWeightIdx){ wmShowRequire(); return; }
 
