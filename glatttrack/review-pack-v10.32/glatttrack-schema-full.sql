@@ -12214,6 +12214,24 @@ notify pgrst, 'reload schema';
 -- ============================================================================
 
 -- ── helpers: settings, kosher statuses, the esophagus rule ──────────────────
+-- v10.32: running this file while tablets work. In the Supabase SQL Editor the whole file is ONE
+-- transaction: it changes triggers and functions of tables the tablets read and write every few
+-- seconds, so a tablet's request and this file could each wait for the other ("deadlock detected",
+-- nothing is changed). The busy tables are locked here first, all together, so this file waits
+-- for the tablets' running requests and then goes on alone (the tablets wait a few seconds and
+-- carry on). Run on psql statement by statement, the lock ends at once — harmless.
+do $$
+declare t text; v_list text := '';
+begin
+  perform set_config('lock_timeout', '30s', true);
+  foreach t in array array['settings_pilot', 'plant_state', 'devices_pilot', 'device_credentials', 'worker_sessions',
+                           'processed_commands', 'animals_pilot', 'animals_carry', 'animal_holds', 'animal_changes',
+                           'events_pilot', 'kashrut_seals'] loop
+    if to_regclass('public.' || t) is not null then v_list := v_list || case when v_list = '' then '' else ', ' end || 'public.' || t; end if;
+  end loop;
+  if v_list <> '' then execute 'lock table ' || v_list || ' in access exclusive mode'; end if;
+end $$;
+
 create or replace function _gt_settings() returns jsonb
 language sql stable security definer set search_path = public, extensions, pg_temp as $$
   select coalesce((select settings from settings_pilot where id = 1), '{}'::jsonb);
