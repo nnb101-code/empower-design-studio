@@ -2598,7 +2598,14 @@ begin
   r3 := pg_temp.api(pg_temp.dev('ESO1'), 'select hold_set(945, ''eso'', ''question'')');
   ok := ok and pg_temp.ok(r) and pg_temp.ok(r2) and r2 #>> '{hold,resolution}' = 'answered' and (pg_temp.ar(944)).inner_status is null
         and pg_temp.api(pg_temp.dev('ESO1'), format('select hold_resolve(%s, ''answered'')', (r3 #>> '{hold,id}')::bigint)) ->> 'error' = 'bad_value';
-  perform pg_temp.rec('v10.32 a part on USDA hold is not printed on the server: the full set (3) and that part''s flag refused; the other parts recorded; after the release the part and the full set are recorded; an inner "?" answered when its window is decided', ok,
+  -- an open esophagus "?": the number has not passed the esophagus — no legs / head stickers, no lungs
+  perform pg_temp.prep(947, 'slaughter');
+  r  := pg_temp.api(pg_temp.dev('ESO1'), 'select hold_set(947, ''eso'', ''question'')');
+  r2 := pg_temp.api(pg_temp.dev('LEGS'), pg_temp.q_push(947, '{"legs_stickers":true,"head_stickers":true}'));
+  r3 := pg_temp.api(pg_temp.dev('IN1'), pg_temp.q_claim(947, 'inner_start', 'in_progress', '', ''));
+  ok := ok and pg_temp.ok(r) and r2 ->> 'error' = 'out_of_order' and r3 ->> 'error' = 'out_of_order'
+        and not coalesce((pg_temp.ar(947)).legs_stickers, false) and (pg_temp.ar(947)).inner_status is null;
+  perform pg_temp.rec('v10.32 a part on USDA hold is not printed on the server: the full set (3) and that part''s flag refused; the other parts recorded; after the release the part and the full set are recorded; an inner "?" answered when its window is decided; an open esophagus "?" stops the legs stickers and the lungs', ok,
     concat_ws(' | ', r4::text, r5::text, r2::text, r3::text, (pg_temp.ar(942)).parts_print_count, r::text));
 end $$;
 $gt72$;

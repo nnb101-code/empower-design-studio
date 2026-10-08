@@ -4741,6 +4741,8 @@ function _gtOnBoard(h){
 }
 function gtHoldsOf(i){ return _gtFlags.holds.filter(h=>h.n===i && _gtOnBoard(h)); }
 function gtSlQ(i){ return gtHoldsOf(i).some(h=>h.open && h.station==='slaughter' && h.kind==='question'); }
+// v10.32 (owner): an open esophagus "?" — the number has NOT passed the esophagus: legs / inner wait for it
+function gtEsoQ(i){ try{ return gtHoldsOf(i).some(h=>h.open && h.station==='eso' && h.kind==='question'); }catch(e){ return false; } }
 function _gtSlQx(x){ return !!x && x.slaughter==null && x.id!=null && gtSlQ(x.id); }
 function gtOwnQ(i,st){ return gtHoldsOf(i).find(h=>h.open && h.station===st && h.kind==='question')||null; }
 // what stops station st on number i (part: a half / a part of the animal)
@@ -4793,13 +4795,15 @@ function gtGridWrap(gridId,getCls,getLabel,getTap){
   if(!st || !_gtFlags.ok || (!_gtFlags.holds.length && !_gtFlags.changes.length)) return null;
   const info=(i)=>{
     const held=gtHeldAt(i,st), own=gtOwnQ(i,st), slq=gtSlQ(i), parts=gtPartHolds(i,st), chg=gtChange(i);
-    return {held,own,slq,parts,chg};
+    const esq=(st==='legs'||st==='inner') && !own && gtEsoQ(i);       // v10.32: shown (and blinking) here, not taken
+    return {held,own,slq,parts,chg,esq};
   };
   return [
     (i)=>{ let c=getCls(i); const f=info(i);
       const isNext=/^next/.test(c);
       if(f.held) c=f.held.resolution==='condemned'?'gt-cond':(f.held.kind==='usda'?'gt-usda':'gt-q');
       else if(f.own) c='gt-q';
+      else if(f.esq) c='gt-q';
       else if(f.slq) c=(i===_gtNext[st] && (st==='eso'||st==='legs')) ? 'next gt-qb' : 'gt-q';
       else if(f.parts.length) c+=' gt-usda-part';
       if(f.chg) c+=' gt-chg';
@@ -4811,6 +4815,7 @@ function gtGridWrap(gridId,getCls,getLabel,getTap){
         else l=L('שאלה','Question','Pregunta');
       } else if(f.own){ l=L('שאלה','Question','Pregunta');
         if(st==='inner'){ try{ const qs=gtInnerQSteps(i); if(qs.length) l+=': '+qs.map(x=>_gtL(GT_QSTEP_NAME[x])).join(', '); }catch(e){} } }
+      else if(f.esq) l=L('שאלה בוושט','Esophagus question','Pregunta de esófago');
       else if(f.slq) l=L('שאלה בשחיטה','Slaughter question','Pregunta de faena');
       else if(f.parts.length) l=(l?l+'<br>':'')+'USDA '+_gtPartsLabel(f.parts);
       if(f.chg) l=(l?l+'<br>':'')+L('⚠ השתנה','⚠ Changed','⚠ Cambió');
@@ -4818,6 +4823,7 @@ function gtGridWrap(gridId,getCls,getLabel,getTap){
     (i)=>{ const f=info(i);
       if(f.held) return ()=>gtHeldTap(i,st,f.held);
       if(f.own) return ()=>gtOwnQTap(i,st,f.own);
+      if(f.esq) return ()=>KS.notice(L('#'+(i+1)+' — שאלה בוושט. מחכים לתשובה של משגיח הוושט; עד אז המספר לא מגיע לכאן.','#'+(i+1)+' — esophagus question. Waiting for the esophagus mashgiach; until then the number does not come here.','#'+(i+1)+' — pregunta de esófago. Se espera al mashguíaj; hasta entonces el número no llega aquí.'));
       const t=getTap(i); if(t) return t;
       if(f.slq && st==='eso') return ()=>{ if(i===_gtEsoFirst()) esoOpenDec(i); else showNoSkip(); };
       if(f.slq && st==='legs') return ()=>lgTap(i);
@@ -8071,6 +8077,7 @@ function statusLabel(x, ctx){
 function passedEso(x){
   const esoOn=KS.getSettings().esophagusEnabled;
   if(!esoOn)return true;                 // eso disabled → no gating
+  if(x && x.id!=null && typeof gtEsoQ==='function' && gtEsoQ(x.id)) return false;   // v10.32: an esophagus "?" is open — not passed, whatever this tablet holds
   // Eso only checks slaughtered/notChalak animals. Nevela/shot bypass eso entirely.
   if(x.slaughter!=='slaughtered'&&x.slaughter!=='notChalak'&&!_gtSlQx(x))return true;   // (v10.26: a shochet's "?" waits for it too)
   if(!_esoApplies(x))return true;        // slaughtered before the check was turned on
