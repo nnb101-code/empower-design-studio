@@ -3451,6 +3451,7 @@ create unique index if not exists animal_holds_open_uq on animal_holds (board_ep
 create index if not exists animal_holds_board_idx on animal_holds (board_epoch, animal_id);
 alter table animal_holds enable row level security;
 revoke all on animal_holds from public, anon, authenticated;
+revoke all on sequence animal_holds_id_seq from public, anon, authenticated;   -- Supabase grants new sequences to the app roles
 
 -- the station a paired tablet works at (null: none / team leader / display)
 create or replace function _hold_station_of_role(p_role text) returns text
@@ -3804,6 +3805,7 @@ create table if not exists animal_changes (
 create index if not exists animal_changes_board_idx on animal_changes (board_epoch, animal_id);
 alter table animal_changes enable row level security;
 revoke all on animal_changes from public, anon, authenticated;
+revoke all on sequence animal_changes_id_seq from public, anon, authenticated;
 
 -- what the stations after p_stage already did on this animal (empty = nothing)
 create or replace function _gt_done_after(p_stage text, a animals_pilot) returns jsonb
