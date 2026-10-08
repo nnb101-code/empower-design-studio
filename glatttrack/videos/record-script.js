@@ -181,16 +181,14 @@ const scenes = {
     await cap(p, 'in5', 1000); await tap(p, '#tLConfirm', 1500);
     await open(2); await tap(p, '#tMawK', 900); await tap(p, cell(2), 1200); await tap(p, '#tLConfirm', 1300);
     await cap(p, 'in6', 1000); await open(3); await tap(p, '#tMawT', 1600); await tap(p, '#tMawT', 1600);
-    // v10.29: a question in one window — only that item, and on to the next window
-    await cap(p, 'in8', 1000); await tap(p, cell(4), 1200);
-    await tap(p, '#gtQRumen', 1500);
-    await tap(p, '#tMawK', 1600);
-    await tap(p, '#tLConfirm', 2400);
-    await cap(p, 'in9', 1500);
+    // v10.31: a question in one window closes the number at once (no next window)
+    await cap(p, 'in8', 1000); await open(4);
+    await tap(p, '#gtQMaw', 2200);
+    await cap(p, 'in9', 2500);
     await cap(p, 'in7', 800);
     for (const n of [5, 7]) { await open(n); await tap(p, '#tMawK', 900); await tap(p, cell(n), 1200); await tap(p, '#tLConfirm', 1200); }
-    await cap(p, 'in10', 900); await tap(p, cell(4), 1300);
-    await tap(p, `[onclick="rumenDecide('k')"]`, 1600);
+    await cap(p, 'in10', 900); await tap(p, cell(4), 1500);
+    await tap(p, '#tMawK', 1300); await tap(p, cell(4), 1300);
     await tap(p, '#tLConfirm', 2000);
   }); },
   async outer(b) { await station(b, 'outer', '06-outer', async p => {
@@ -203,6 +201,17 @@ const scenes = {
     await tap(p, cell(7), 1300); await tap(p, '#decModal .dec-btns button:has-text("גלאט")', 1300);
     await cap(p, 'o4', 2500);
   }); },
+  async rabbinate(b) {
+    const Q = j => execSync(`psql -h /tmp -p 5433 -U postgres -d gtapp -qc "update settings_pilot set settings = settings || '${j}'::jsonb"`);
+    Q('{\\"screenConfig\\":\\"1in2out\\",\\"notChalakEnabled\\":true}');
+    try { await station(b, 'outer', '06b-rabbinate', async p => {
+      await p.evaluate(() => outLogin(1)); await p.waitForTimeout(1800);
+      await cap(p, 'r1', 1500);
+      await tap(p, '#scOuter .gt-tbq', 1500);
+      await cap(p, 'r2', 1500);
+      await tap(p, '#gtSheet button:last-child', 1200);
+    }); } finally { Q('{\\"screenConfig\\":\\"1in1out\\",\\"notChalakEnabled\\":false}'); }
+  },
   async legsSort(b) { await station(b, 'legs', '07-legs-sort', async p => {
     await login(p, 'legs');
     await tap(p, '#lgModeSort', 1500);
