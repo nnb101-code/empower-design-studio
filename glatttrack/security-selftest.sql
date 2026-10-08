@@ -1369,7 +1369,9 @@ begin
            and pg_temp.api(pg_temp.dev('IN1'), 'select hold_set(983, ''inner'', ''usda'', ''left'')') ->> 'error' = 'bad_value'
            and pg_temp.api(pg_temp.dev('LEGS'), 'select hold_set(983, ''legs'', ''usda'', ''right'')') ->> 'error' = 'bad_value';
   -- USDA belongs to the area the animal is in: slaughtered, esophagus not yet → esophagus only (not legs / inner / stamps)
-  -- (the esophagus screen may be off in this plant's settings — then the first area is legs)
+  -- (the esophagus screen may be off in this plant's settings — then the first area is legs; the plant's
+  --  own screen choice is set aside here, all undone at the end)
+  update settings_pilot set settings = settings - 'screensPlan' where id = 1;
   perform pg_temp.prep(890, 'slaughter');
   ok := ok and _usda_zone(pg_temp.ar(890)) in ('eso', 'legs')
            and pg_temp.api(pg_temp.dev('IN1'), 'select hold_set(890, ''inner'', ''usda'', ''whole'')') ->> 'error' = 'wrong_zone'
@@ -2459,6 +2461,8 @@ begin
   update device_credentials set revoked = false
    where device_id in (select pg_temp.devid(n) from unnest(array['SL1','ESO1','IN1','OUT2','LEGS','PARTS','STAMPS']) n);
   perform set_config('app.device_admin', '', true);
+  -- (v10.32: these checks use every screen — the plant's own screen choice is set aside here; all undone at the end)
+  update settings_pilot set settings = settings - 'screensPlan' where id = 1;
   -- the shochet's "?": the next numbers go on; the esophagus and the legs stickers may act on it,
   -- the lungs wait; another station can't put a slaughter "?"; the shochet's ruling closes it
   r  := pg_temp.api(pg_temp.dev('SL1'), format('select hold_set(%s, ''slaughter'', ''question'')', 980));
