@@ -1,0 +1,8 @@
+Two connections call leader_device_replace(same team-leader code, same recovery code) at the same time
+(A holds its transaction open, B starts, then A commits):
+--- WITHOUT the lock (v10.15):
+request A: ok (replaced=true)
+request B (same codes, at the same time): ok (replaced=true)          ← the one-time code used twice
+--- WITH the lock (v10.16):
+request A: ok (replaced=true)
+request B (same codes, at the same time): refused: no_recovery_code

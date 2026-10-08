@@ -469,6 +469,8 @@ body{padding-top:var(--gt-bar-h,0px);box-sizing:border-box;}
 .gt-tb{display:flex;gap:6px;align-items:center;flex-wrap:nowrap}
 .gt-tbb{border-radius:11px;padding:7px 11px;font:800 14px Arial;cursor:pointer;border:2px solid;white-space:nowrap;width:auto;flex:0 0 auto}
 .gt-tbq{background:#FFC400;color:#000;border-color:#FFE57F}
+.gt-winq{display:block;margin:12px auto 0;min-width:160px;padding:12px 18px;border-radius:12px;border:2px solid #FFE57F;background:#FFC400;color:#000;font:800 18px Arial;cursor:pointer}
+.lung-actions .gt-winq{display:inline-block;min-width:auto}
 .gt-tbu{background:#6A3FB5;color:#fff;border-color:#C5B3FF}
 .gt-tbl{background:#1c2433;color:#E8EDF5;border-color:#55607a}
 .gt-slq{background:#FFC400!important;color:#000!important;box-shadow:0 0 24px rgba(255,196,0,.55)!important;display:flex;flex-direction:column;align-items:center;justify-content:center}
@@ -4920,7 +4922,7 @@ function gtOwnQTap(i,st,q){
   if(['legs','parts','stamps'].includes(st)) return gtHeldList(st);
   if(st==='slaughter') return gtSlRuleSheet(i);
   if(st==='eso') return esoOpenDec(i);
-  if(st==='inner') return inCellTap(i, true);
+  if(st==='inner') return gtInnerResume(i);
   if(st==='outer') return outOpenDec(i);
 }
 function gtSlRuleSheet(i){
@@ -4950,7 +4952,7 @@ function gtTopBarsInit(){
     const bar=sc.querySelector('.topbar'); if(!bar || bar.querySelector('.gt-tb')) return;
     const st=GT_SCREEN_STATION[id], mid=bar.querySelector('.tb-mid');
     const box=document.createElement('div'); box.className='gt-tb'; box.setAttribute('data-no-i18n','');
-    box.innerHTML=(st!=='slaughter' ? `<button class="gt-tbb gt-tbq" data-gt-q onclick="gtQuestionStart('${st}')"></button>` : '')
+    box.innerHTML=(st!=='slaughter' && st!=='inner' ? `<button class="gt-tbb gt-tbq" data-gt-q onclick="gtQuestionStart('${st}')"></button>` : '')
       +`<button class="gt-tbb gt-tbu" onclick="gtUsdaStart('${st}')">USDA HOLD</button>`
       +`<button class="gt-tbb gt-tbl" onclick="gtHeldList('${st}')" data-gt-count="${st}" style="display:none"></button>`;
     if(mid) bar.insertBefore(box, mid); else bar.appendChild(box);
@@ -4963,7 +4965,67 @@ function gtTopBarsInit(){
     q.onclick=()=>gtSlQuestionNow();
     sh.parentNode.appendChild(q);
   }
+  gtWindowQInit();
   gtTopBarsUpdate();
+}
+// v10.28: "? שאלה" inside the windows of a check — inner: rumen, maw and lungs (each window);
+// esophagus and outer: their decision window. The number waits with what was already done;
+// tapping it later goes on from the same place.
+function gtWindowQInit(){
+  const add=(parent, id, fn, style)=>{
+    if(!parent || document.getElementById(id)) return;
+    const b=document.createElement('button'); b.id=id; b.className='gt-winq'; b.setAttribute('data-no-i18n','');
+    b.setAttribute('data-gt-q',''); b.onclick=fn; if(style) b.style.cssText=style;
+    parent.appendChild(b);
+  };
+  add(document.querySelector('#rumenModal .maw-box'), 'gtQRumen', ()=>gtInnerQuestion('rumen'));
+  add(document.querySelector('#mawModal .maw-box'), 'gtQMaw', ()=>gtInnerQuestion('maw'));
+  add(document.querySelector('#lungModal .lung-actions'), 'gtQLung', ()=>gtInnerQuestion('lung'), 'margin:0;flex:0 0 auto;');
+  { const ok=document.querySelector(`#esoModal [onclick="esoDecide('ok')"]`); add(ok && ok.parentNode && ok.parentNode.parentNode, 'gtQEso', ()=>gtWindowQuestion('eso')); }
+  add(document.querySelector('#decModal .dec-box'), 'gtQOuter', ()=>gtWindowQuestion('outer'));
+}
+async function gtInnerQuestion(where){
+  let idx=-1;
+  if(where==='lung'){
+    idx=inPendingLung;
+    try{ minimizeLung(); }catch(e){}                      // the drawing is kept
+  } else {
+    idx=inPendingMaw;
+    document.getElementById('rumenModal').classList.remove('open');
+    document.getElementById('mawModal').classList.remove('open');
+    try{ _inDisarmAll(); }catch(e){}
+    inPendingMaw=-1;
+  }
+  if(idx<0) return;
+  inFloats=inFloats.filter(f=>f.idx!==idx);
+  try{ if(KS.getSettings().floatsEnabled!==false) renderFloats(); }catch(e){}
+  inManualPage=false;
+  try{ KS.addAuditLog({type:'question_at', stage:'inner', step:where, animal:idx+1}); }catch(e){}
+  if(await gtHoldPut(idx,'inner','question','whole'))
+    KS.notice(L('#'+(idx+1)+' — "?" שאלה. ממשיכים לבהמה הבאה. כשיש תשובה — לוחצים על '+(idx+1)+' וממשיכים מאותו מקום.',
+                '#'+(idx+1)+' — "?" question. Go on to the next animal. When there is an answer, tap '+(idx+1)+' and go on from the same place.',
+                '#'+(idx+1)+' — "?" pregunta. Siga con el siguiente. Cuando haya respuesta, toque '+(idx+1)+' y siga desde el mismo punto.'));
+  try{ inRenderGrid(); inUpdateSummary(); }catch(e){}
+}
+// the inner check of a "?" number, from where it stopped: rumen → maw → lungs
+function gtInnerResume(i){
+  const a=KS.getAnimal(i); if(!a) return;
+  const s=KS.getSettings();
+  if(!a.innerStatus) return inCellTap(i, true);          // nothing was done yet
+  if(s.rumenCheck && !a.rumen) return openMaw(i);
+  if(s.rumenCheck && a.rumen==='treif') return;           // (already treif — ruled)
+  if(s.mawCheck!==false && !a.maw){ rumenSel=(a.rumen==='treif'?'t':'k'); return openMawWindow(i); }
+  if(!inFloats.find(f=>f.idx===i)) inFloats.push({idx:i, drawing:KS.getLungDrawing(i)});
+  try{ if(s.floatsEnabled!==false) renderFloats(); }catch(e){}
+  inOpenLung(i);
+}
+async function gtWindowQuestion(st){
+  let idx=-1;
+  if(st==='eso'){ idx=esoPendingDec; document.getElementById('esoModal').style.display='none'; esoPendingDec=-1; esoIsChange=false; }
+  if(st==='outer'){ idx=outPendingDec; try{ outCancelDec(); }catch(e){} }
+  if(idx<0) return;
+  if(await gtHoldPut(idx,st,'question','whole'))
+    KS.notice(L('#'+(idx+1)+' — "?" שאלה. ממשיכים לבהמה הבאה.','#'+(idx+1)+' — "?" question. Go on to the next animal.','#'+(idx+1)+' — "?" pregunta. Siga con el siguiente.'));
 }
 function gtTopBarsUpdate(){
   // (the texts follow the screen's language, set after the buttons were made)
@@ -5035,7 +5097,7 @@ function _gtDoneAfterHtml(stage, a){
     +'</div>';
 }
 
-var GT_APP_VERSION='v10.27';
+var GT_APP_VERSION='v10.28';
 document.addEventListener('DOMContentLoaded',()=>{ try{ document.querySelectorAll('.gt-ver').forEach(e=>e.textContent=GT_APP_VERSION); }catch(e){} });
 function escapeHtml(str){
   return String(str==null?'':str).replace(/[&<>"']/g, c=>({

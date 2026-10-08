@@ -1,0 +1,4 @@
+wrong: קוד ההתקנה שגוי
+ok: ✅ השרת אישר את ההתקנה
+NATIVE DIALOG alert ✅ המכשיר הזה נרשם כמכשיר ראש הצוות. מעכשיו ראש צוות נכנס רק 
+screen scManager wizard block
