@@ -6,10 +6,10 @@ const fs = require('fs');
 const { execSync } = require('child_process');
 const LANG = process.env.LANG_V || 'he';
 const APP = process.env.APP;
-const OUT = __dirname + '/raw5-' + LANG; fs.mkdirSync(OUT, { recursive: true });
+const OUT = __dirname + '/raw6-' + LANG; fs.mkdirSync(OUT, { recursive: true });
 const MAIN = 'http://localhost:8083/', INST = 'http://localhost:8084/';
-const C = require('./caps4.js');
-const DUR = JSON.parse(fs.readFileSync(__dirname + '/voice-en5/durations.json'));
+const C = require('./caps5.js');
+const DUR = JSON.parse(fs.readFileSync(__dirname + '/voice-' + (LANG === 'es' ? 'es' : 'en') + '5/durations.json'));
 const ONLY = process.env.ONLY ? process.env.ONLY.split(',') : null;
 const VP = { width: 800, height: 560 };   // small CSS screen, recorded at 2x: big and sharp on a phone
 const VS = { width: 1600, height: 1120 };
@@ -38,9 +38,9 @@ async function useApp(ctx) {
     r => r.fulfill({ status: 200, contentType: 'text/html; charset=utf-8', body: fs.readFileSync(APP) }));
 }
 async function cap(p, key, minMs = 2200) {
-  const txt = C[key][LANG === 'en' ? 1 : 0];
+  const txt = C[key][LANG === 'en' ? 1 : LANG === 'es' ? 2 : 0];
   (LOG[p.__clip] = LOG[p.__clip] || []).push({ t: Date.now() - p.__t0, key });
-  await p.evaluate(([t, dir]) => { const c = document.getElementById('gtCap'); if (c) { c.textContent = t; c.style.direction = dir; c.parentNode.appendChild(c); } }, [txt, LANG === 'en' ? 'ltr' : 'rtl']);
+  await p.evaluate(([t, dir]) => { const c = document.getElementById('gtCap'); if (c) { c.textContent = t; c.style.direction = dir; c.parentNode.appendChild(c); } }, [txt, LANG === 'he' ? 'rtl' : 'ltr']);
   await p.waitForTimeout(Math.max(minMs, Math.round((DUR[key] || 2) * 1000) + 500));
 }
 async function finger(p, x, y, press = true) {
@@ -68,12 +68,13 @@ async function showSticker(p, idx, kind, key) {
     b.style.display = 'flex';
     renderSticker('gtStkIn', idx, kind, false);
     const pay = buildStickerPayload(idx) || '';
-    const lab = en ? { N: 'Number', D: 'Date', HD: 'Hebrew date', W: 'Day', TM: 'Time', SH: 'Shochet', S: 'Status at printing' }
+    const lab = en === 'es' ? { N: 'Número', D: 'Fecha', HD: 'Fecha hebrea', W: 'Día', TM: 'Hora', SH: 'Shojet', S: 'Estado al imprimir' }
+              : en ? { N: 'Number', D: 'Date', HD: 'Hebrew date', W: 'Day', TM: 'Time', SH: 'Shochet', S: 'Status at printing' }
                    : { N: 'מספר', D: 'תאריך', HD: 'תאריך עברי', W: 'יום', TM: 'שעה', SH: 'שוחט', S: 'מצב בזמן ההדפסה' };
-    const sw = { slaughtered: en ? 'slaughtered' : 'נשחט', notChalak: 'לא חלק', nevela: 'נבלה', shot: 'ירוי' };
+    const sw = { slaughtered: en === 'es' ? 'faenado' : en ? 'slaughtered' : 'נשחט', notChalak: 'לא חלק', nevela: 'נבלה', shot: 'ירוי' };
     const rows = pay.split('|').slice(1).map(x => { const i = x.indexOf(':'); const k = x.slice(0, i), v = x.slice(i + 1); if (k === 'T' || !v) return ''; return `<div><b>${lab[k] || k}:</b> <span dir="auto">${(k === 'S' ? (sw[v] || statusDisplayName(v, KS.getAnimal(idx)) || v) : v).replace(/</g, '&lt;')}</span></div>`; }).join('');
-    document.getElementById('gtStkQr').innerHTML = `<div style="font-weight:800;font-size:17px;margin-bottom:6px;direction:${en ? 'ltr' : 'rtl'}">${en ? 'Inside the QR code' : 'מה יש בתוך ה-QR'}</div><div style="direction:${en ? 'ltr' : 'rtl'}">${rows}</div>`;
-  }, [idx, kind, LANG === 'en']);
+    document.getElementById('gtStkQr').innerHTML = `<div style="font-weight:800;font-size:17px;margin-bottom:6px;direction:${en ? 'ltr' : 'rtl'}">${en === 'es' ? 'Dentro del código QR' : en ? 'Inside the QR code' : 'מה יש בתוך ה-QR'}</div><div style="direction:${en ? 'ltr' : 'rtl'}">${rows}</div>`;
+  }, [idx, kind, LANG === 'es' ? 'es' : LANG === 'en']);
   await cap(p, key, 4800);
   await p.evaluate(() => { const b = document.getElementById('gtStk'); if (b) b.style.display = 'none'; });
 }
@@ -116,7 +117,7 @@ const scenes = {
     await cap(p, 'i2', 4500);
     await tap(p, '[onclick="gtStartFirstSetup()"]', 900);
     await cap(p, 'i4', 1500);
-    await finger(p, 512, 290, false); await p.type('#gtFfName', LANG === 'en' ? 'Moshe Cohen' : 'משה כהן', { delay: 90 });
+    await finger(p, 512, 290, false); await p.type('#gtFfName', LANG === 'he' ? 'משה כהן' : 'Moshe Cohen', { delay: 90 });
     await p.type('#gtFfCode', 'moshe-2026', { delay: 90 });
     await finger(p, 512, 430, false); await p.type('#gtFfSetup', 'ABCD-1234-XY', { delay: 110 });
     await p.waitForTimeout(500);

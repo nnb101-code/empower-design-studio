@@ -1,235 +1,235 @@
 1
-00:00:00,515 --> 00:00:05,555
+00:00:00,523 --> 00:00:05,563
 An empty screen. We open the GlattTrack app on the team leader's tablet.
 
 2
-00:00:07,190 --> 00:00:13,688
+00:00:07,161 --> 00:00:13,659
 The app connects to the plant server. The server has no team leader yet, so this is the first installation.
 
 3
-00:00:14,942 --> 00:00:20,724
+00:00:14,890 --> 00:00:20,672
 Fill in the team leader's name, a personal code, and the server setup code from the installer.
 
 4
-00:00:26,293 --> 00:00:30,718
+00:00:26,272 --> 00:00:30,697
 The server checks the setup code and approves the installation.
 
 5
-00:00:36,222 --> 00:00:43,108
+00:00:36,201 --> 00:00:43,087
 This tablet is now registered as the team leader's device. The setup page opens, only this once.
 
 6
-00:00:44,631 --> 00:00:49,033
+00:00:44,569 --> 00:00:48,971
 A recovery code. It can be skipped and made later.
 
 7
-00:00:50,795 --> 00:00:59,071
+00:00:50,763 --> 00:00:59,039
 Choose the screens the plant uses: slaughter, esophagus, legs and head, inner, outer, small parts, and stamps. Then save.
 
 8
-00:01:11,671 --> 00:01:16,917
+00:01:11,704 --> 00:01:16,950
 Workers, pairing the tablets, the owner and the printers can be done now or later.
 
 9
-00:01:19,702 --> 00:01:25,369
+00:01:19,744 --> 00:01:25,411
 The team leader screen is open. Now, a working day, station by station.
 
 10
-00:01:29,520 --> 00:01:36,111
+00:01:29,573 --> 00:01:36,164
 The slaughter tablet. The shochet presses one button per animal, and the next number fills in by itself.
 
 11
-00:01:44,351 --> 00:01:49,008
+00:01:44,196 --> 00:01:48,853
 A question about the knife on animal five. Tap the question button.
 
 12
-00:01:51,929 --> 00:01:56,726
+00:01:51,758 --> 00:01:56,567
 Number five is marked with a question mark, and the shochet goes on to the next animal.
 
 13
-00:01:56,726 --> 00:01:59,726
+00:01:56,567 --> 00:01:59,567
 Animal six: nevela.
 
 14
-00:02:02,960 --> 00:02:06,633
+00:02:02,772 --> 00:02:06,445
 The answer came. Tap five and rule it: slaughtered.
 
 15
-00:02:11,597 --> 00:02:16,672
-Tapping a marked number opens a correction, only before the next station has touched it.
+00:02:11,355 --> 00:02:16,834
+Tapping a marked number opens a change. It is always possible, after a warning.
 
 16
-00:02:28,294 --> 00:02:31,294
+00:02:28,939 --> 00:02:31,939
 The esophagus check tablet.
 
 17
-00:02:32,874 --> 00:02:37,057
+00:02:33,451 --> 00:02:37,634
 Trying to skip to animal three. The system does not allow it.
 
 18
-00:02:39,776 --> 00:02:43,144
+00:02:40,362 --> 00:02:43,730
 Tap the blinking animal and choose OK.
 
 19
-00:03:12,645 --> 00:03:17,781
+00:03:13,421 --> 00:03:18,557
 The legs and head tablet. Stickers are printed right after slaughter, before the ruling.
 
 20
-00:03:17,781 --> 00:03:20,964
+00:03:18,557 --> 00:03:21,740
 The first tap prints the leg stickers.
 
 21
-00:03:23,145 --> 00:03:29,498
+00:03:23,904 --> 00:03:30,253
 The legs sticker. Printed: the number, the Hebrew and Gregorian dates, and the time. In the QR code: everything.
 
 22
-00:03:29,498 --> 00:03:32,565
+00:03:30,253 --> 00:03:33,320
 The second tap prints the head sticker.
 
 23
-00:03:34,744 --> 00:03:37,822
+00:03:35,459 --> 00:03:38,537
 The head sticker has the same details.
 
 24
-00:03:39,572 --> 00:03:44,183
+00:03:40,266 --> 00:03:44,877
 Every animal in order. A nevela also gets a number sticker.
 
 25
-00:04:16,818 --> 00:04:19,818
+00:04:17,382 --> 00:04:20,382
 The nevela sticker.
 
 26
-00:04:35,421 --> 00:04:39,613
+00:04:36,269 --> 00:04:40,461
 The inner inspector's tablet. Tap the next animal in line.
 
 27
-00:04:40,985 --> 00:04:43,985
+00:04:41,800 --> 00:04:44,800
 Rumen check: kosher.
 
 28
-00:04:44,871 --> 00:04:47,871
+00:04:45,626 --> 00:04:48,626
 Maw: kosher.
 
 29
-00:04:48,595 --> 00:04:51,595
+00:04:49,399 --> 00:04:52,399
 The lung drawing: mark it with a finger.
 
 30
-00:04:55,695 --> 00:05:00,341
+00:04:56,370 --> 00:05:01,016
 Approve for the outer inspector. The animal moves on with its drawing.
 
 31
-00:05:12,229 --> 00:05:17,269
+00:05:12,743 --> 00:05:17,783
 Animal three is treif. The first tap asks, the second tap rules.
 
 32
-00:05:25,567 --> 00:05:34,266
+00:05:25,972 --> 00:05:34,671
 Animal four: a question on the rumen. Tap the question button in that window. Only the rumen is marked, and the check goes on to the next window.
 
 33
-00:05:44,156 --> 00:05:49,573
+00:05:44,428 --> 00:05:49,842
 Animal four waits, marked: question, rumen. The inspector goes on to the next animals.
 
 34
-00:05:49,573 --> 00:05:53,199
+00:05:49,842 --> 00:05:53,468
 Animals five and seven: kosher, and approve.
 
 35
-00:06:12,247 --> 00:06:17,486
+00:06:12,644 --> 00:06:17,883
 The answer came. Tap four: the rumen window opens, and the check goes on from there.
 
 36
-00:06:36,990 --> 00:06:42,420
+00:06:42,066 --> 00:06:47,496
 The outer inspector's tablet. The lung drawing is shown, and the inspector rules.
 
 37
-00:06:45,301 --> 00:06:48,301
+00:06:50,379 --> 00:06:53,379
 Animal one: MK.
 
 38
-00:06:49,679 --> 00:06:54,865
+00:06:54,746 --> 00:06:59,932
 Animal two: Beit Yosef. Four: Glatt. Five: kosher. Seven: Glatt.
 
 39
-00:07:11,739 --> 00:07:15,788
+00:07:16,616 --> 00:07:20,665
 The ruling is made. Back to the legs tablet, for sorting.
 
 40
-00:07:25,456 --> 00:07:29,855
+00:07:31,533 --> 00:07:35,932
 Leg sorting: scan the sticker that was printed before the ruling.
 
 41
-00:07:31,066 --> 00:07:35,778
+00:07:37,212 --> 00:07:41,924
 The number is updated: the screen shows the current ruling from the server.
 
 42
-00:07:41,018 --> 00:07:44,018
+00:07:46,988 --> 00:07:49,988
 Leg three: treif, in red.
 
 43
-00:07:51,093 --> 00:07:53,839
+00:07:56,901 --> 00:07:59,648
 The small parts tablet: cheeks and tongue.
 
 44
-00:07:53,839 --> 00:07:57,869
+00:07:59,648 --> 00:08:03,678
 Animal three is treif. The screen refuses to print.
 
 45
-00:08:00,611 --> 00:08:06,544
+00:08:06,402 --> 00:08:12,335
 USDA hold: the tongue of animal one fell. Mark the tongue. No reason is needed.
 
 46
-00:08:11,858 --> 00:08:16,623
+00:08:17,615 --> 00:08:22,380
 Animal one: both cheeks print. The tongue is held, so it does not print.
 
 47
-00:08:19,631 --> 00:08:24,440
+00:08:25,408 --> 00:08:30,227
 The parts sticker: the ruling in Hebrew and English, and the MK kashrut mark.
 
 48
-00:08:24,440 --> 00:08:29,296
+00:08:30,227 --> 00:08:35,083
 USDA released it. Tap release, and the tongue sticker prints now.
 
 49
-00:08:35,188 --> 00:08:38,188
+00:08:40,934 --> 00:08:43,934
 Animal two: Beit Yosef.
 
 50
-00:08:40,467 --> 00:08:44,021
+00:08:46,170 --> 00:08:49,724
 Beit Yosef, with its four kashrut marks.
 
 51
-00:08:57,396 --> 00:09:00,491
+00:09:03,516 --> 00:09:06,617
 The stamps and weighing tablet, for the main carcass.
 
 52
-00:09:00,491 --> 00:09:05,195
+00:09:06,617 --> 00:09:11,321
 Scan the animal's sticker. Five stamps print, by the ruling.
 
 53
-00:09:09,450 --> 00:09:13,600
+00:09:15,487 --> 00:09:19,637
 The stamp of animal one: MK, with its kashrut mark.
 
 54
-00:09:14,258 --> 00:09:18,732
+00:09:20,299 --> 00:09:24,773
 Weighing: scan the weight label, right side and then left side.
 
 55
-00:09:24,196 --> 00:09:28,017
+00:09:30,104 --> 00:09:33,925
 Animal one is stamped and weighed. On to the next.
 
 56
-00:09:36,760 --> 00:09:41,512
+00:09:42,760 --> 00:09:47,512
 Back with the team leader: the card of animal one, with its whole history.
 
 57
-00:09:42,520 --> 00:09:46,629
+00:09:48,519 --> 00:09:52,628
 Every action: who, when, and from which tablet.
 
 58
-00:09:46,744 --> 00:09:48,930
+00:09:52,744 --> 00:09:54,930
 Sample stickers, every kind.
 
 59
-00:09:48,930 --> 00:09:55,520
+00:09:54,930 --> 00:10:01,480
 Top row: legs and head, before the ruling. Bottom row: parts and stamps, with the plant's kashrut marks.
