@@ -9,7 +9,7 @@ This pack is the CURRENT state. Review these files only.
 | `active-schema-snapshot.sql` | **Audit this first.** `pg_dump --schema-only` (public + gt_rls) of a clean database built from `glatttrack-schema-full.sql`. Exactly one ACTIVE definition of each function, trigger, RLS policy and grant. |
 | `setup-supabase-step46-order-and-processing-days.sql` | The new migration (run after step 45). |
 | `STEP46-CHANGES.md` | What step 46 / app v10.6 changed (Hebrew). |
-| `security-selftest.sql` + `security-selftest-result.txt` | Release gate: **141 / 141**. One statement (one DO block) whose changes are all undone inside it (see v10.15 below). |
+| `security-selftest.sql` + `security-selftest-result.txt` | Release gate: **142 / 142**. One statement (one DO block) whose changes are all undone inside it (see v10.15 below). |
 | `SECURITY-MANIFEST.md` | Permission map (step 45 observed table) + a step-46 section. |
 | `active-security-manifest.sql` + `-result.txt` | Prints the active security surface. |
 | `kosher-app-v10.32.html` | The app (UI, offline store, sync client). `GT_MIN_SCHEMA = 46`. |
@@ -19,6 +19,10 @@ This pack is the CURRENT state. Review these files only.
 | `plant-server/` | Plant resilience kit (bash, runs as root on the plant servers, NOT in the database): standby server, floating address, UPS, nightly checked backup. Guide: `PLANT-RESILIENCE-HE.md`. |
 
 ## Fixed in v10.32 (server 02 + app) — after the v10.31 review
+
+- **LAN without WAN** (review §26): a tablet with the plant server reachable and NO internet. "No route" → fine. A hanging internet (no answer at all — common with a dead line behind a router) → the tablet NEVER opened: the CSS `@import` of Google Fonts blocked the first paint. Fixed: the fonts are added only after `load` (and `vendor/fonts/fonts.css` first on a plant server); system fonts until then. Checked in Chromium with every non-local host aborted / left hanging: the app is up in < 1 s and rulings reach the plant server.
+- **Plant build without any cloud fallback** (review §17): `window.GT_BUILD` ('test' | 'plant'); `tools/make-plant-build.py` makes `kosher-app-vX-plant.html` — the cloud test-server URL and key, the public CDN of supabase-js and of the OCR library are removed (the script refuses to write if any is left). A plant build without gt-config.js is stopped ("plant server settings file did not load — call the installer"), never cloud. Checked: plant build with gt-config → works; without → stop screen, no request to any cloud host.
+- **Test-mode expiry** (review §7): the self-test already had "switched on 9 hours ago → off, the team leader cannot rule". Added: after the expiry the same team-leader session puts no "?" / USDA, and a station tablet carrying the team leader's session gets nothing beyond its own station (142 / 142).
 
 - **A1 — "?" / USDA through the worker login.** `hold_set` and `hold_resolve` now call `_hold_caller_error(p_station)`: a paired tablet of that station, and on a screen whose workers log in with a code (`loginModeByRole` = code / both) only with a live worker session (`_worker_gate`; the refusal is returned as `{"ok":false,"error":"worker_login_required"}`, nothing is written). The app shows "log in with your code, then tap again" and opens the screen's login.
 - **F1 — one shared inner + outer screen.** `_hold_caller_error` lets its inner tablet put / close an `outer` hold when `_gt_one_inspection()` (the same rule as `_stage_allowed('outer')`), after its worker's login; any other configuration → `wrong_station`.

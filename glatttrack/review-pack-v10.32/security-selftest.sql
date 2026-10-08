@@ -1339,6 +1339,16 @@ begin
         and exists (select 1 from admin_audit where action = 'test_mode_off' and detail ->> 'reason' = 'auto_expired');
   perform pg_temp.rec('chaos (f): test mode switched on 9 hours ago → off: the team leader cannot rule, server_test_mode false, flag set off + audited', ok,
     concat_ws(' | ', r::text, left(r2::text, 60), r3::text, r4::text, (select value from plant_state where key = 'testMode')));
+  -- v10.32 (review): after it expired, the same team-leader session puts no "?" / USDA either, and a
+  -- station tablet that carries the team leader's session gets no rights beyond its own station
+  r  := pg_temp.api(pg_temp.mgr(), 'select hold_set(983, ''slaughter'', ''question'')');
+  r2 := pg_temp.api(pg_temp.mgr(), 'select hold_set(983, ''parts'', ''usda'', ''whole'')');
+  r3 := pg_temp.api(pg_temp.dev('PARTS') || pg_temp.mgr(), pg_temp.q_claim(983, 'slaughter', 'slaughtered', 'leader', 'x'));
+  r4 := pg_temp.api(pg_temp.dev('PARTS') || pg_temp.mgr(), 'select hold_set(983, ''outer'', ''question'')');
+  ok := r ->> 'ok' = 'false' and r2 ->> 'ok' = 'false' and pg_temp.err(r3) = 'wrong_station' and r4 ->> 'error' = 'wrong_station'
+        and (pg_temp.ar(983)).slaughter is null and not exists (select 1 from animal_holds where animal_id = 983 and resolved_at is null);
+  perform pg_temp.rec('v10.32 test mode expired: the same team-leader session puts no "?" / USDA; a station tablet carrying it gets nothing beyond its own station', ok,
+    concat_ws(' | ', r::text, r2::text, r3::text, r4::text));
   perform pg_temp.testmode(false);
 end $$;
 $gt50$;

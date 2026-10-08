@@ -20,8 +20,27 @@
      it). Opened any other way this file simply doesn't exist and the app uses
      the cloud project as before. -->
 <script src="gt-config.js"></script>
+<script>
+// v10.32: which build this file is. 'test' — opened without a plant server (no gt-config.js) it
+// works with the cloud test server. 'plant' (made by tools/make-plant-build.py) — it has no cloud
+// address at all: without the plant server's gt-config.js it stops and asks for the installer.
+window.GT_BUILD = 'test';   /* GT_BUILD_MARK */
+</script>
+<script>
+// v10.32: the fonts come from the internet only AFTER the app is up. A plant whose internet line
+// hangs (no answer, not "no route") made the old @import block the whole screen — the tablet never
+// opened, although the plant server answered. The local fonts below (vendor/fonts/fonts.css on a
+// plant server, if installed) and then the system fonts are used until / unless these arrive.
+window.addEventListener('load', function(){ setTimeout(function(){
+  try{
+    if(window.GT_SERVER){ var v=document.createElement('link'); v.rel='stylesheet'; v.href='vendor/fonts/fonts.css'; document.head.appendChild(v); }
+    var l=document.createElement('link'); l.rel='stylesheet';
+    l.href='https://fonts.googleapis.com/css2?family=Frank+Ruhl+Libre:wght@400;700;900&family=Rubik:wght@400;500;700&display=swap';
+    document.head.appendChild(l);
+  }catch(e){}
+}, 0); });
+</script>
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Frank+Ruhl+Libre:wght@400;700;900&family=Rubik:wght@400;500;700&display=swap');
 :root{--bg:#07090F;--panel:#0F1521;--panel2:#161E2E;--border:#1F2D45;--text:#E8EDF5;--muted:#6B7D99;--gold:#D4A843;--gold2:#F0C060;--blue:#2A7FFF;--red:#E03030;--red-light:#FF5555;--amber:#F0A030;--green:#28C76F;--purple:#9B6FFF;--glatt:#28C76F;--beit:#4DA6FF;--kosher:#D4A843;--mk:#A080F0;}
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
 html,body{direction:ltr!important;font-family:'Rubik',sans-serif;background:var(--bg);color:var(--text);height:100%;width:100%;overflow:hidden;}
@@ -15061,8 +15080,8 @@ setTimeout(_maybeShowLicenseRequest, 2000); // let the app render first, then ch
   (function(){
     var s=document.createElement('script');
     // v10.16 (A7): known before anything loads, so the stop screen can say why
-    try{ window._gtPlantConfigMissing = !(window.GT_SERVER && window.GT_SERVER.url) && localStorage.getItem('gt_plant_bound') === '1'; }catch(e){}
-    s.src=(window.GT_SERVER ? 'vendor/supabase.js' : 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js');
+    try{ window._gtPlantConfigMissing = !(window.GT_SERVER && window.GT_SERVER.url) && (window.GT_BUILD === 'plant' || localStorage.getItem('gt_plant_bound') === '1'); }catch(e){}
+    s.src=((window.GT_SERVER || window.GT_BUILD === 'plant') ? 'vendor/supabase.js' : 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js');
     s.async=false;
     document.head.appendChild(s);
   })();
@@ -15093,7 +15112,7 @@ setTimeout(_maybeShowLicenseRequest, 2000); // let the app render first, then ch
       // (that would bypass "no plant server = no work"): it stays stopped until the plant server answers.
       let _gtBound = false; try{ _gtBound = localStorage.getItem('gt_plant_bound') === '1'; }catch(e){}
       if(GT && GT.url){ try{ localStorage.setItem('gt_plant_bound', '1'); }catch(e){} }
-      window._gtPlantConfigMissing = !(GT && GT.url) && _gtBound;
+      window._gtPlantConfigMissing = !(GT && GT.url) && (_gtBound || window.GT_BUILD === 'plant');   // v10.32: the plant build never uses the cloud
       const SUPABASE_URL = (GT && GT.url) ? GT.url : (window._gtPlantConfigMissing ? 'http://127.0.0.1:9' : 'https://grnpowvittmghmegdacw.supabase.co');
       const SUPABASE_ANON_KEY = (GT && GT.anonKey) ? GT.anonKey : 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdybnBvd3ZpdHRtZ2htZWdkYWN3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgyNjEzNTksImV4cCI6MjEwMzgzNzM1OX0.KvzSRB7P9SA3wig5jO3kAJU-Uk6a_GntHwn9-bqUDrM';
       // Every database request (/rest/v1/…) carries this device's pairing key
