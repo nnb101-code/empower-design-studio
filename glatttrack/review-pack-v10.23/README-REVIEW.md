@@ -18,7 +18,11 @@ This pack is the CURRENT state. Review these files only.
 | `test-mode-on.sql` / `test-mode-off.sql` | The owner's SQL-only test switch. |
 | `plant-server/` | Plant resilience kit (bash, runs as root on the plant servers, NOT in the database): standby server, floating address, UPS, nightly checked backup. Guide: `PLANT-RESILIENCE-HE.md`. |
 
-## Fixed in v10.23 (app only)
+## Fixed in v10.23 (server 02)
+
+- `_gt_standbys()` counted logical walsenders (Supabase Realtime) as streaming standbys, so on the cloud server `standby_down` was never raised and the self-test check "standby server and UPS" failed. Now walsenders holding a logical slot are excluded. Reproduced locally with `pg_recvlogical` (134/135) → fixed (135/135).
+
+## Fixed in v10.23 (app)
 
 - v10.22 could ERASE the team leader's kashrut marks: a paired team-leader device opened before login (device key, no session) pulled `seals_get` from a server that never had marks (version 0) and replaced its local marks with the empty set. Now an empty server set with version 0 never replaces local marks; a team-leader session uploads them. Test `browser-tests/kashrut-marks-not-erased.test.js` (+ result: v10.22 erased, v10.23 keeps). The marks card (`#sealUploadGrid`) now exists in Settings → Kashrut (it was rendered into a missing element before).
 
