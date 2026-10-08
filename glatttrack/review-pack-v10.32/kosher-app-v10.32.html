@@ -4891,6 +4891,25 @@ function gtQuestionStart(st){
     L('המספר מחכה לתשובה, והתחנה ממשיכה למספר הבא. כשיש תשובה — לוחצים על המספר.','The number waits for the answer and the station goes on to the next one. When there is an answer, tap the number.','El número espera la respuesta y la estación sigue con el siguiente. Cuando haya respuesta, toque el número.'),
     _gtNumInput(cur)+'<div class="gt-row">'+_gtHBtn(L('סמן ?','Mark ?','Marcar ?'),'#FFC400',`gtQuestionDo('${st}')`,true)+_gtHBtn(L('ביטול','Cancel','Cancelar'),'#9aa4b5','gtSheetClose()')+'</div>');
 }
+// v10.32 (owner's decision): the top "? Question" button marks the blinking number at once, one tap,
+// like the shochet's round button. A long press (or no blinking number) opens the small window to
+// type another number.
+function _gtQButtonWire(b, st){
+  let t=null, longDone=false;
+  const clear=()=>{ if(t){ clearTimeout(t); t=null; } };
+  b.addEventListener('pointerdown', ()=>{ longDone=false; clear(); t=setTimeout(()=>{ t=null; longDone=true; gtQuestionStart(st); }, 650); });
+  ['pointerup','pointerleave','pointercancel'].forEach(ev=>b.addEventListener(ev, clear));
+  b.addEventListener('contextmenu', e=>e.preventDefault());
+  b.addEventListener('click', e=>{ e.preventDefault(); if(longDone){ longDone=false; return; } gtQuestionNow(st); });
+}
+async function gtQuestionNow(st){
+  const idx=_gtCurrentIdx(st);
+  if(idx<0) return gtQuestionStart(st);                 // nothing blinking: type the number
+  if(gtOwnQ(idx, st)){ KS.notice(L('#'+(idx+1)+' כבר מסומן "?".','#'+(idx+1)+' is already marked "?".','#'+(idx+1)+' ya está marcado "?".')); return; }
+  try{ playPressSound && playPressSound('shot'); }catch(e){}
+  if(await gtHoldPut(idx, st, 'question', 'whole'))
+    KS.notice(L('#'+(idx+1)+' סומן "?" — ממשיכים למספר הבא. (מספר אחר: לחיצה ארוכה על "? שאלה")','#'+(idx+1)+' marked "?" — go on to the next number. (Another number: long-press "? Question")','#'+(idx+1)+' marcado "?" — siga con el siguiente. (Otro número: mantenga pulsado "? Pregunta")'));
+}
 async function gtQuestionDo(st){
   const idx=_gtReadNum(); if(idx<0){ KS.notice(L('מספר לא תקין','Invalid number','Número inválido')); return; }
   gtSheetClose();
@@ -4998,10 +5017,11 @@ function gtTopBarsInit(){
     const bar=sc.querySelector('.topbar'); if(!bar || bar.querySelector('.gt-tb')) return;
     const st=GT_SCREEN_STATION[id], mid=bar.querySelector('.tb-mid');
     const box=document.createElement('div'); box.className='gt-tb'; box.setAttribute('data-no-i18n','');
-    box.innerHTML=(st!=='slaughter' && st!=='inner' ? `<button class="gt-tbb gt-tbq" data-gt-q onclick="gtQuestionStart('${st}')"></button>` : '')
+    box.innerHTML=(st!=='slaughter' && st!=='inner' ? `<button class="gt-tbb gt-tbq" data-gt-q data-gt-st="${st}"></button>` : '')
       +(st!=='slaughter' ? `<button class="gt-tbb gt-tbu" onclick="gtUsdaStart('${st}')">USDA HOLD</button>` : '')
       +`<button class="gt-tbb gt-tbl" onclick="gtHeldList('${st}')" data-gt-count="${st}" style="display:none"></button>`;
     if(mid) bar.insertBefore(box, mid); else bar.appendChild(box);
+    const qb=box.querySelector('[data-gt-q]'); if(qb) _gtQButtonWire(qb, st);
   });
   // the shochet's big round "?" next to slaughtered / nevela / shot
   const sh=document.getElementById('tSlBtnSh');
