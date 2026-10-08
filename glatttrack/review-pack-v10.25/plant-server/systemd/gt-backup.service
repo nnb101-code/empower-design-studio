@@ -1,0 +1,5 @@
+[Unit]
+Description=GlattTrack nightly backup (checked by restoring it)
+[Service]
+Type=oneshot
+ExecStart=/opt/glatttrack/plant-server/backup.sh

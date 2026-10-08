@@ -4641,7 +4641,7 @@ const KS = (function(){
 // every device via settings_pilot — unescaped, a name containing markup
 // would run on every device that renders the list, not just the one it was
 // typed on.
-var GT_APP_VERSION='v10.24';
+var GT_APP_VERSION='v10.25';
 document.addEventListener('DOMContentLoaded',()=>{ try{ document.querySelectorAll('.gt-ver').forEach(e=>e.textContent=GT_APP_VERSION); }catch(e){} });
 function escapeHtml(str){
   return String(str==null?'':str).replace(/[&<>"']/g, c=>({
@@ -8284,7 +8284,7 @@ function outUpdateSummary(){
   else if(set.notChalakEnabled && role!=='glatt') keys.push('kosherRab');
   if(role==='glatt') keys=keys.filter(k=>k!=='rabChalak');
   Object.keys(cnt).forEach(k=>{ if(!keys.includes(k)) keys.push(k); });   // a ruling under a status turned off since
-  const col=k=>k==='kosherRab'?'#C99A00':_safeColor(((set.statusColorOverrides||{})[k])||((getAllStatuses().find(st=>st.key===k)||{}).color),'#888');
+  const col=k=>k==='kosherRab'?_safeColor(((set.statusColorOverrides||{}).kosherRab)||'#C99A00','#C99A00'):_safeColor(((set.statusColorOverrides||{})[k])||((getAllStatuses().find(st=>st.key===k)||{}).color),'#888');
   const item=(c,label,n,id)=>`<div class="sum-item"><div class="sum-dot" style="background:${c}"></div><span data-no-i18n>${escapeHtml(label)}</span>:&nbsp;<strong${id?` id="${id}"`:''}>${n}</strong></div>`;
   const bar=document.getElementById('outSumBar'); if(!bar) return;
   bar.innerHTML=item('var(--amber)',(T[lang]&&T[lang].outPend)||'ממתינים',a.filter(x=>x.innerStatus==="confirmed"&&!x.outerStatus&&mine(x)).length,'outCP')
@@ -10073,7 +10073,7 @@ function mgrUpdateSealUploads(){
     {key:'rabChalak',he:'רבנות חלק',en:'Rabbinate Chalak',color:'#16A085'},
   ];
   const s=KS.getSettings();
-  if(s.notChalakEnabled) sealTypes.push({key:'kosherRab',he:'רבנות כשר',en:'Rabbinate Kosher',color:'#C99A00'});
+  sealTypes.push({key:'kosherRab',he:'רבנות כשר',en:'Rabbinate Kosher',color:_safeColor((s.statusColorOverrides||{}).kosherRab||'#C99A00','#C99A00')});
   (s.customStatuses||[]).filter(c=>c&&c.kosher===true&&!c.removed).forEach(c=>sealTypes.push({key:c.key,he:c.he||c.key,en:c.en||'',color:c.color||'#888'}));
   const seals=s.customSeals||{};
   // Each seal uses a unique input id - label wraps it directly (Android safe)
@@ -10223,9 +10223,26 @@ function mgrUpdateStatusToggles(){
   const disabled=_disabledStatusList(s);
   const overrides=s.statusColorOverrides||{};
   const seals=s.customSeals||{};
-  let html='';
+  let html='', rabDone=false;
+  // v10.25: רבנות כשר always has its own row next to רבנות חלק (colour + kashrut mark). It is the
+  // rabbinate screen's kosher ruling (stored as kosher on a "לא חלק" animal), so it has no on/off or remove.
+  const rabRow=()=>{ rabDone=true;
+    const c=_safeColor(overrides.kosherRab||'#C99A00','#C99A00'), sl=_safeImg(seals.kosherRab), K=_jsArg('kosherRab');
+    return `<div data-rab-kosher="1" style="display:flex;align-items:center;gap:8px;padding:10px 2px;border-bottom:1px solid var(--border);flex-wrap:wrap;">
+      <button onclick="mgrPickColor(${K},${_jsArg(c)})" style="width:30px;height:30px;min-width:30px;border-radius:7px;border:2px solid rgba(255,255,255,.3);background:${c};cursor:pointer;"></button>
+      <span data-no-i18n style="flex:1;min-width:50px;font-size:13px;color:#E8EDF5;font-weight:600;">רבנות כשר<span style="font-size:11px;color:var(--muted);font-weight:400;margin-inline-start:6px;">· Rabbinate Kosher</span>
+        <span style="display:block;font-size:11px;color:var(--muted);font-weight:400;">${L('הפסיקה הכשרה של מסך הרבנות','The rabbinate screen\'s kosher ruling','El dictamen kosher de la pantalla del rabinato')}</span></span>
+      <label style="display:flex;align-items:center;gap:5px;cursor:pointer;background:rgba(212,168,67,.08);border-radius:7px;padding:3px 6px;">
+        ${sl?`<img src="${sl}" style="width:38px;height:38px;object-fit:contain;border:1px solid var(--border);border-radius:6px;background:#fff;">`
+            :`<span style="font-size:11px;color:var(--gold);">${L('+ חותמת','+ Seal','+ Sello')}</span>`}
+        ${sl?`<span style="font-size:10px;color:var(--muted);">${L('החלף','Change','Cambiar')}</span>`:''}
+        <input type="file" accept="image/*" onchange="mgrUploadSeal(${K},this)" style="display:none">
+      </label>
+      ${sl?`<button onclick="mgrRemoveSeal(${K})" style="font-size:11px;color:#FF6B6B;background:rgba(224,48,48,.1);border:1px solid rgba(224,48,48,.3);border-radius:5px;padding:4px 7px;cursor:pointer;">⌫</button>`:''}
+    </div>`; };
   st_all.forEach((st)=>{
     if(st.removed)return;   // removed mid-day: kept only for display of animals already ruled with it
+    if(st.key==='treif' && !rabDone) html+=rabRow();
     const on=!disabled.includes(st.key);
     const label=st.he||st.key;
     const enName=(st.en && st.en!==st.he)?st.en:'';
@@ -10251,7 +10268,9 @@ function mgrUpdateStatusToggles(){
         <div style="position:absolute;top:3px;${on?'right:3px':'left:3px'};width:22px;height:22px;border-radius:50%;background:white;transition:all .2s;pointer-events:none;"></div>
       </button>
     </div>`;
+    if(st.key==='rabChalak' && !rabDone) html+=rabRow();
   });
+  if(!rabDone) html+=rabRow();
   {const removedDef=(s.removedDefaults||[]).map(k=>DEFAULT_STATUSES.find(d=>d.key===k)).filter(d=>d&&d.key!=='treif');
    const removedCus=(s.customStatuses||[]).filter(c=>c&&c.removed);
    const back=[...removedDef,...removedCus];
