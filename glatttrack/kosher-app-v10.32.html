@@ -5075,17 +5075,20 @@ function gtWindowQInit(){
   add(document.querySelector('#decModal .dec-box'), 'gtQOuter', ()=>gtWindowQuestion('outer'));
   gtUsdaInChangeWindows();
 }
-// v10.32 (owner): a USDA hold belongs to the area the animal is in now (same rule as the server's _usda_zone):
-// slaughter→esophagus: esophagus · esophagus→legs: legs · legs→inner: inner · after inner: stamps. Parts: its own.
+// v10.32 (owner): a USDA hold belongs to the station that last marked / printed for the number (same rule as
+// the server's _usda_zone): esophagus (from slaughter, and after its check) → legs (stickers printed) →
+// inner (check started) → stamps (inner ruled). The small-parts station holds its own parts.
 function _gtScreenUsed(sc){ try{ const p=KS.getSettings().screensPlan; return (p && Array.isArray(p.screens)) ? p.screens.includes(sc) : true; }catch(e){ return true; } }
 function _gtUsdaZone(i){
   const x=KS.getAnimal(i); if(!x || !x.slaughter) return null;
   const alive=(x.slaughter==='slaughtered'||x.slaughter==='notChalak');
-  if(alive && KS.getSettings().esophagusEnabled && _esoApplies(x) && !x.esoChecked) return 'eso';
-  if(_gtScreenUsed('legs') && !x.headStickers) return 'legs';
-  if(!alive) return null;
-  if(!(x.innerStatus==='confirmed'||x.innerStatus==='treif')) return 'inner';
-  return _gtScreenUsed('stamps') ? 'stamps' : 'outer';
+  const eso=!!KS.getSettings().esophagusEnabled && _esoApplies(x), legs=_gtScreenUsed('legs');
+  if(x.innerStatus==='confirmed'||x.innerStatus==='treif') return _gtScreenUsed('stamps') ? 'stamps' : 'outer';
+  if(x.innerStatus || x.rumen || x.maw) return 'inner';
+  if(legs && (x.headStickers||x.legsStickers)) return 'legs';
+  if(alive && eso) return 'eso';
+  if(legs) return 'legs';
+  return alive ? 'inner' : null;
 }
 function _gtUsdaMine(st, i){ return st==='parts' || _gtUsdaZone(i)===st; }
 function _gtUsdaNotMine(i){
@@ -5313,6 +5316,7 @@ var _GT_ERR = {
   no_recovery_code:['אין קוד שחזור שמור. צריך את המתקין.','There is no saved recovery code. The installer is needed.','No hay código de recuperación. Se necesita al instalador.'],
   rate_limited:['יותר מדי ניסיונות — המתן כמה דקות ונסה שוב.','Too many attempts — wait a few minutes and try again.','Demasiados intentos — espere unos minutos e intente de nuevo.'],
   moved_on:['לא ניתן לשנות פסיקה זו: כבר עברת לעבוד על בהמה אחרת מאז שנקבעה. שינוי אפשרי רק כל עוד לא התקדמת הלאה.','Cannot change this ruling: you already worked on a different animal since it was set. Changes are only possible before moving on.','No se puede cambiar este dictamen: ya trabajaste en otro animal desde que se definió. Solo se puede cambiar antes de avanzar.'],
+  next_station_done:['המספר כבר עבר לתחנה הבאה — אי אפשר לשנות כאן. השינוי לא נרשם.','The number already passed to the next station — it cannot be changed here. The change was not recorded.','El número ya pasó a la siguiente estación — no se puede cambiar aquí.'],
   outer_ruled:['כבר נפסק בבדיקת חוץ — אי אפשר לשנות. השינוי לא נרשם.','Already ruled by the outer inspector — it cannot be changed. The change was not recorded.','Ya dictaminado en el control externo — no se puede cambiar.'],
   wrong_zone:['ה-USDA של המספר הזה שייך לתחנה של האזור שבו הבהמה נמצאת עכשיו.','The USDA hold of this number belongs to the station of the area the animal is in now.','La retención USDA de este número corresponde a la estación de la zona donde está el animal.'],
   correction_not_allowed:['לא ניתן לשנות פסיקה זו בשלב הזה — השינוי לא נרשם.','This ruling can no longer be changed at this stage — the change was not recorded.','Este dictamen ya no se puede cambiar en esta etapa — el cambio no se registró.'],
@@ -5349,7 +5353,7 @@ function gtErrCode(e){
   if(c==='PGRST202' || c==='42883') return 'missing_fn';
   const k = s.trim().toLowerCase();
   if(Object.prototype.hasOwnProperty.call(_GT_ERR, k)) return k;
-  const w = s.match(/\b(wrong_station|stale_board|device_not_paired|unauthorized|code_invalid|rate_limited|moved_on|correction_not_allowed|bad_id|bad_picture|no_device|setup_code_required|eso_locked|nc_kosher_or_treif_only|already_ruled|held|bad_settings|invalid_value|not_checked|reason_required|worker_login_required|outer_ruled|wrong_zone)\b/);
+  const w = s.match(/\b(wrong_station|stale_board|device_not_paired|unauthorized|code_invalid|rate_limited|moved_on|correction_not_allowed|bad_id|bad_picture|no_device|setup_code_required|eso_locked|nc_kosher_or_treif_only|already_ruled|held|bad_settings|invalid_value|not_checked|reason_required|worker_login_required|outer_ruled|wrong_zone|next_station_done)\b/);
   if(w) return w[1];
   if(c==='42501') return 'permission_denied';
   if(typeof e==='object' && !c && /fetch|network|timeout|load failed|offline/i.test(s)) return 'network';
@@ -6958,9 +6962,13 @@ function _gtIsEsoStation(){
 function _gtCorrectionBlock(stage, idx){
   // v10.26: a ruling can always be changed by the station (any of its tablets), after a warning
   // that says what the next stations already did; the server records it (⚠ for the team leader)
-  { const _a=KS.getAnimal(idx);                 // v10.32 (owner): after the outer ruling the earlier stations change nothing
-    if(_a && _a.outerStatus && ['slaughter','eso','inner'].includes(stage))
-      return L('בהמה #'+(idx+1)+' — כבר נפסקה בבדיקת חוץ. אי אפשר לשנות.','Animal #'+(idx+1)+' — already ruled by the outer inspector. It cannot be changed.','Animal #'+(idx+1)+' — ya dictaminado en el control externo. No se puede cambiar.'); }
+  { const _a=KS.getAnimal(idx);                 // v10.32 (owner): once the number reached the next station, this one changes nothing
+    if(_a){
+      const nextName = stage==='slaughter' ? (_a.esoChecked ? GT_ST_NAME.eso : (_a.legsStickers||_a.headStickers) ? GT_ST_NAME.legs : _a.innerStatus ? GT_ST_NAME.inner : _a.outerStatus ? GT_ST_NAME.outer : null)
+                     : stage==='eso' ? ((_a.legsStickers||_a.headStickers) ? GT_ST_NAME.legs : _a.innerStatus ? GT_ST_NAME.inner : _a.outerStatus ? GT_ST_NAME.outer : null)
+                     : stage==='inner' ? (_a.outerStatus ? GT_ST_NAME.outer : null) : null;
+      if(nextName) return L('בהמה #'+(idx+1)+' — כבר עברה ל'+nextName[0]+'. אי אפשר לשנות כאן.','Animal #'+(idx+1)+' — already passed to '+nextName[1]+'. It cannot be changed here.','Animal #'+(idx+1)+' — ya pasó a '+nextName[2]+'. No se puede cambiar aquí.');
+    } }
   if(KS.getAnimal(idx)) return null;
   const a=KS.getAnimal(idx);
   const P=L('בהמה #'+(idx+1)+' — ','Animal #'+(idx+1)+' — ','Animal #'+(idx+1)+' — ');

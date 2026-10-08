@@ -725,14 +725,14 @@ begin
   r2 := pg_temp.api(pg_temp.dev('OUT1'), pg_temp.q_push(928, jsonb_build_object('outer_status', 'treif', 'outer_time', (pg_temp.ar(928)).outer_time + 5)));
   r3 := pg_temp.api(pg_temp.dev('SL1'), 'select board_flags()');
   r4 := pg_temp.api('{}', format('select change_ack(%L, %s)', pg_temp.v('mgr'),
-                      (select id from animal_changes where animal_id = 927 and stage = 'slaughter' order by id desc limit 1)));
+                      (select id from animal_changes where animal_id = 928 and stage = 'outer' order by id desc limit 1)));
   r5 := pg_temp.api(pg_temp.dev('SL1'), format('select change_ack(%L, 1)', 'nope'));
-  ok := pg_temp.ok(r) and (pg_temp.ar(927)).slaughter = 'nevela' and pg_temp.ok(r2) and (pg_temp.ar(928)).outer_status = 'treif'
-        and exists (select 1 from animal_changes where animal_id = 927 and stage = 'slaughter' and old_value = 'slaughtered'
-                       and new_value = 'nevela' and done ->> 'inner' = 'confirmed')
+  -- (v10.32 (owner): a slaughter change once the number reached the next station is refused — nothing recorded)
+  ok := r ->> 'error' = 'next_station_done' and (pg_temp.ar(927)).slaughter = 'slaughtered' and pg_temp.ok(r2) and (pg_temp.ar(928)).outer_status = 'treif'
+        and not exists (select 1 from animal_changes where animal_id = 927)
         and exists (select 1 from animal_changes where animal_id = 928 and stage = 'outer' and done ->> 'stamped' = 'true')
         and exists (select 1 from jsonb_array_elements(r3 -> 'changes') x where (x ->> 'n')::int = 928 and x ->> 'ackAt' is null)
-        and pg_temp.ok(r4) and (select ack_at from animal_changes where animal_id = 927 and stage = 'slaughter' order by id desc limit 1) is not null
+        and pg_temp.ok(r4) and (select ack_at from animal_changes where animal_id = 928 and stage = 'outer' order by id desc limit 1) is not null
         and r5 ->> 'error' = 'unauthorized'
         and not exists (select 1 from animal_changes where animal_id in (916, 919));   -- nothing later had happened there
   -- v10.32 (owner): once the outer inspector ruled, slaughter / esophagus / inner change nothing (outer_ruled)
@@ -743,9 +743,17 @@ begin
   r6 := pg_temp.api(pg_temp.dev('SL1'), pg_temp.q_push(889, jsonb_build_object('slaughter', 'nevela', 'slaughter_time', (pg_temp.ar(889)).slaughter_time + 5)));
   r7 := pg_temp.api(pg_temp.dev('ESO1'), format('select eso_change(889, ''nevela'', %L, %s)', pg_temp.devid('ESO1'), pg_temp.ep()));
   r8 := pg_temp.api(pg_temp.dev('IN1'), pg_temp.q_push(889, jsonb_build_object('inner_status', 'treif', 'inner_time', (pg_temp.ar(889)).inner_time + 5)));
-  ok := ok and r6 ->> 'error' = 'outer_ruled' and r7 ->> 'error' = 'outer_ruled' and r8 ->> 'error' = 'outer_ruled'
+  ok := ok and r6 ->> 'error' = 'next_station_done' and r7 ->> 'error' = 'next_station_done' and r8 ->> 'error' = 'outer_ruled'
         and (pg_temp.ar(889)).slaughter = 'slaughtered' and (pg_temp.ar(889)).eso_result = 'ok' and (pg_temp.ar(889)).inner_status = 'confirmed';
-  perform pg_temp.rec('v10.26 a change after the next stations worked: allowed, recorded (what was done), shown, handled by the team leader; v10.32: after the outer ruling slaughter / esophagus / inner change nothing', ok,
+  -- the esophagus changes its ruling until the legs / head stickers are printed — not after
+  perform pg_temp.prep(891, 'slaughter');
+  perform pg_temp.api(pg_temp.dev('ESO1'), pg_temp.q_claim(891, 'eso', 'ok', '', ''));
+  r6 := pg_temp.api(pg_temp.dev('ESO1'), format('select eso_change(891, ''nevela'', %L, %s)', pg_temp.devid('ESO1'), pg_temp.ep()));
+  r7 := pg_temp.api(pg_temp.dev('ESO1'), format('select eso_change(891, ''ok'', %L, %s)', pg_temp.devid('ESO1'), pg_temp.ep()));
+  perform pg_temp.api(pg_temp.dev('LEGS'), pg_temp.q_push(891, '{"legs_stickers":true,"head_stickers":true}'));
+  r8 := pg_temp.api(pg_temp.dev('ESO1'), format('select eso_change(891, ''nevela'', %L, %s)', pg_temp.devid('ESO1'), pg_temp.ep()));
+  ok := ok and pg_temp.ok(r6) and pg_temp.ok(r7) and r8 ->> 'error' = 'next_station_done' and (pg_temp.ar(891)).eso_result = 'ok';
+  perform pg_temp.rec('v10.32 a station changes its ruling only until the number reached the next station (slaughter → esophagus → legs → inner → outer); the outer inspector''s change after printing is recorded and handled by the team leader', ok,
     concat_ws(' | ', left(r::text, 50), left(r2::text, 50), left(r3::text, 80), r4::text, r5::text, r6 ->> 'error', r7 ->> 'error', r8 ->> 'error'));
 
   -- lung check: abandoned only by the tablet that opened it; 10-minute takeover still works

@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict oC0hFyb9COICJT5bpq1JDuog7yFRI9umoqnuXcKTQW2BCzwkLuyCTp10p8kCugp
+\restrict P1iyLeLQ5mH5mLNwp7j8FcfYglce1ruPDlEi91tBucHuhGeo7xfftH1XHc1oEaZ
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -1049,8 +1049,16 @@ CREATE FUNCTION public._correction_check(p_stage text, a public.animals_pilot, p
     AS $$
 declare v_by text; v_role text;
 begin
-  -- v10.32 (owner): once the outer inspector ruled, the earlier stations change nothing any more
-  if p_stage in ('slaughter', 'eso', 'inner') and a.outer_status is not null then return 'outer_ruled'; end if;
+  -- v10.32 (owner): a station changes its ruling only until the number reached the next station —
+  -- then it belongs to that station's department:
+  --   slaughter: until the esophagus checked it (or legs / inner / outer acted on it)
+  --   esophagus: until the legs / head stickers were printed (or inner / outer acted on it)
+  --   inner    : until the outer inspector ruled
+  if p_stage = 'slaughter' and (coalesce(a.eso_checked, false) or coalesce(a.legs_stickers, false) or coalesce(a.head_stickers, false)
+                                or a.inner_status is not null or a.outer_status is not null) then return 'next_station_done'; end if;
+  if p_stage = 'eso' and (coalesce(a.legs_stickers, false) or coalesce(a.head_stickers, false)
+                          or a.inner_status is not null or a.outer_status is not null) then return 'next_station_done'; end if;
+  if p_stage = 'inner' and a.outer_status is not null then return 'outer_ruled'; end if;
   if p_dev is null then return 'correction_not_allowed'; end if;
   v_by := case p_stage when 'slaughter' then a.slaughter_by_device when 'eso' then a.eso_by_device
                        when 'inner' then a.inner_by_device when 'outer' then a.outer_by_device end;
@@ -2633,6 +2641,10 @@ begin
   if p_err = 'moved_on' then
     raise exception 'GT:MOVED_ON correction-blocked: already moved on — % status is locked', p_stage using errcode = 'P0001';
   end if;
+  if p_err = 'next_station_done' then  -- v10.32
+    raise exception 'GT:NEXT_STATION_DONE next_station_done: the number already reached the next station — the % ruling can no longer be changed', p_stage
+      using errcode = 'P0001';
+  end if;
   if p_err = 'outer_ruled' then        -- v10.32
     raise exception 'GT:OUTER_RULED outer_ruled: the outer inspector already ruled — the % ruling can no longer be changed', p_stage
       using errcode = 'P0001';
@@ -3414,13 +3426,17 @@ CREATE FUNCTION public._usda_zone(a public.animals_pilot) RETURNS text
     SET search_path TO 'public', 'extensions', 'pg_temp'
     AS $$
 declare v_alive boolean := a.slaughter in ('slaughtered', 'notChalak');
+        v_eso boolean := _eso_required(a.id); v_legs boolean := _gt_screen_used('legs');
 begin
   if a.slaughter is null then return null; end if;
-  if v_alive and _eso_required(a.id) and not coalesce(a.eso_checked, false) then return 'eso'; end if;
-  if _gt_screen_used('legs') and not coalesce(a.head_stickers, false) then return 'legs'; end if;
-  if not v_alive then return null; end if;                       -- nevela / shot: nothing further
-  if a.inner_status is null or a.inner_status not in ('confirmed', 'treif') then return 'inner'; end if;
-  return case when _gt_screen_used('stamps') then 'stamps' else 'outer' end;
+  if a.inner_status in ('confirmed', 'treif') then
+    return case when _gt_screen_used('stamps') then 'stamps' else 'outer' end;
+  end if;
+  if a.inner_status is not null or a.rumen is not null or a.maw is not null then return 'inner'; end if;
+  if v_legs and (coalesce(a.head_stickers, false) or coalesce(a.legs_stickers, false)) then return 'legs'; end if;
+  if v_alive and v_eso then return 'eso'; end if;                -- checked there, or the first station after slaughter
+  if v_legs then return 'legs'; end if;
+  return case when v_alive then 'inner' end;
 end $$;
 
 
@@ -3679,7 +3695,7 @@ begin
   end;
 
   if v_err is not null then
-    if v_err in ('moved_on', 'correction_not_allowed', 'eso_locked', 'outer_ruled') then
+    if v_err in ('moved_on', 'correction_not_allowed', 'eso_locked', 'outer_ruled', 'next_station_done') then
       perform _log_correction_rejected(v_dev, v_cur, null, v_err, jsonb_build_object('via', 'animal_push'));
     end if;
     if v_err in ('out_of_order', 'earlier_day_open') then
@@ -10769,5 +10785,5 @@ GRANT ALL ON TABLE public.system_flags TO service_role;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict oC0hFyb9COICJT5bpq1JDuog7yFRI9umoqnuXcKTQW2BCzwkLuyCTp10p8kCugp
+\unrestrict P1iyLeLQ5mH5mLNwp7j8FcfYglce1ruPDlEi91tBucHuhGeo7xfftH1XHc1oEaZ
 

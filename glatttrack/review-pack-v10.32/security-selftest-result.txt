@@ -31,7 +31,7 @@ NOTICE:  PASS  correction by the same tablet right away: allowed
 NOTICE:  PASS  v10.26 a change after the tablet moved on: allowed (slaughter, esophagus, inner, outer)
 NOTICE:  PASS  v10.26 a change by another tablet of the same station: allowed; no ruling rights: refused (correction_not_allowed)
 NOTICE:  PASS  refused corrections are logged (event log + brake counter)
-NOTICE:  PASS  v10.26 a change after the next stations worked: allowed, recorded (what was done), shown, handled by the team leader; v10.32: after the outer ruling slaughter / esophagus / inner change nothing
+NOTICE:  PASS  v10.32 a station changes its ruling only until the number reached the next station (slaughter → esophagus → legs → inner → outer); the outer inspector's change after printing is recorded and handled by the team leader
 NOTICE:  PASS  lung check: abandon by its tablet only; 10-minute takeover works
 NOTICE:  PASS  inner takeover: the tablet that lost the check is refused (claim + push), B's state kept, refusal recorded
 NOTICE:  PASS  rabbinate send by inner / slaughter / team leader / a plain push: refused

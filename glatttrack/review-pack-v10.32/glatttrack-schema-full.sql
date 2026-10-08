@@ -12883,7 +12883,7 @@ begin
   end;
 
   if v_err is not null then
-    if v_err in ('moved_on', 'correction_not_allowed', 'eso_locked', 'outer_ruled') then
+    if v_err in ('moved_on', 'correction_not_allowed', 'eso_locked', 'outer_ruled', 'next_station_done') then
       perform _log_correction_rejected(v_dev, v_cur, null, v_err, jsonb_build_object('via', 'animal_push'));
     end if;
     if v_err in ('out_of_order', 'earlier_day_open') then
@@ -15641,11 +15641,13 @@ begin
 end $$;
 revoke execute on function _parts_print_block(bigint, integer, boolean, boolean, boolean, boolean, integer, integer) from public, anon, authenticated;
 
--- v10.32 (owner): a USDA hold belongs to the area the animal is in now — the station it is going to:
---   slaughter → (esophagus done)  : esophagus
---   esophagus → (legs/head done)  : legs
---   legs → (inner check done)     : inner
---   after the inner check (also at the outer inspector) : stamps
+-- v10.32 (owner): a USDA hold belongs to the station that last marked / printed for the number — once
+-- another station marked it, the earlier one has no hold on it any more:
+--   slaughtered (not yet marked further) : the first station after slaughter (esophagus; without it legs)
+--   esophagus checked                    : esophagus
+--   legs / head stickers printed         : legs
+--   inner check started                  : inner
+--   inner check ruled (also at the outer inspector) : stamps
 -- (a screen the plant does not use is skipped; the small-parts station holds its own parts — not here)
 create or replace function _gt_screen_used(p_screen text) returns boolean
 language sql stable security definer set search_path = public, extensions, pg_temp as $$
@@ -15656,13 +15658,17 @@ revoke execute on function _gt_screen_used(text) from public, anon, authenticate
 create or replace function _usda_zone(a animals_pilot) returns text
 language plpgsql stable security definer set search_path = public, extensions, pg_temp as $$
 declare v_alive boolean := a.slaughter in ('slaughtered', 'notChalak');
+        v_eso boolean := _eso_required(a.id); v_legs boolean := _gt_screen_used('legs');
 begin
   if a.slaughter is null then return null; end if;
-  if v_alive and _eso_required(a.id) and not coalesce(a.eso_checked, false) then return 'eso'; end if;
-  if _gt_screen_used('legs') and not coalesce(a.head_stickers, false) then return 'legs'; end if;
-  if not v_alive then return null; end if;                       -- nevela / shot: nothing further
-  if a.inner_status is null or a.inner_status not in ('confirmed', 'treif') then return 'inner'; end if;
-  return case when _gt_screen_used('stamps') then 'stamps' else 'outer' end;
+  if a.inner_status in ('confirmed', 'treif') then
+    return case when _gt_screen_used('stamps') then 'stamps' else 'outer' end;
+  end if;
+  if a.inner_status is not null or a.rumen is not null or a.maw is not null then return 'inner'; end if;
+  if v_legs and (coalesce(a.head_stickers, false) or coalesce(a.legs_stickers, false)) then return 'legs'; end if;
+  if v_alive and v_eso then return 'eso'; end if;                -- checked there, or the first station after slaughter
+  if v_legs then return 'legs'; end if;
+  return case when v_alive then 'inner' end;
 end $$;
 revoke execute on function _usda_zone(animals_pilot) from public, anon, authenticated;
 
@@ -16066,8 +16072,16 @@ create or replace function _correction_check(p_stage text, a animals_pilot, p_de
 language plpgsql security definer set search_path = public, extensions, pg_temp as $$
 declare v_by text; v_role text;
 begin
-  -- v10.32 (owner): once the outer inspector ruled, the earlier stations change nothing any more
-  if p_stage in ('slaughter', 'eso', 'inner') and a.outer_status is not null then return 'outer_ruled'; end if;
+  -- v10.32 (owner): a station changes its ruling only until the number reached the next station —
+  -- then it belongs to that station's department:
+  --   slaughter: until the esophagus checked it (or legs / inner / outer acted on it)
+  --   esophagus: until the legs / head stickers were printed (or inner / outer acted on it)
+  --   inner    : until the outer inspector ruled
+  if p_stage = 'slaughter' and (coalesce(a.eso_checked, false) or coalesce(a.legs_stickers, false) or coalesce(a.head_stickers, false)
+                                or a.inner_status is not null or a.outer_status is not null) then return 'next_station_done'; end if;
+  if p_stage = 'eso' and (coalesce(a.legs_stickers, false) or coalesce(a.head_stickers, false)
+                          or a.inner_status is not null or a.outer_status is not null) then return 'next_station_done'; end if;
+  if p_stage = 'inner' and a.outer_status is not null then return 'outer_ruled'; end if;
   if p_dev is null then return 'correction_not_allowed'; end if;
   v_by := case p_stage when 'slaughter' then a.slaughter_by_device when 'eso' then a.eso_by_device
                        when 'inner' then a.inner_by_device when 'outer' then a.outer_by_device end;
@@ -16091,6 +16105,10 @@ begin
   if p_err is null then return; end if;
   if p_err = 'moved_on' then
     raise exception 'GT:MOVED_ON correction-blocked: already moved on — % status is locked', p_stage using errcode = 'P0001';
+  end if;
+  if p_err = 'next_station_done' then  -- v10.32
+    raise exception 'GT:NEXT_STATION_DONE next_station_done: the number already reached the next station — the % ruling can no longer be changed', p_stage
+      using errcode = 'P0001';
   end if;
   if p_err = 'outer_ruled' then        -- v10.32
     raise exception 'GT:OUTER_RULED outer_ruled: the outer inspector already ruled — the % ruling can no longer be changed', p_stage
