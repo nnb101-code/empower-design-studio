@@ -9,7 +9,7 @@ const APP = process.env.APP;
 const OUT = __dirname + '/raw6-' + LANG; fs.mkdirSync(OUT, { recursive: true });
 const MAIN = 'http://localhost:8083/', INST = 'http://localhost:8084/';
 const C = require('./caps5.js');
-const DUR = JSON.parse(fs.readFileSync(__dirname + '/voice-' + (LANG === 'es' ? 'es' : 'en') + '5/durations.json'));
+const DUR = JSON.parse(fs.readFileSync(__dirname + '/voice-' + (LANG === 'es' ? 'es' : LANG === 'he' ? 'he' : 'en') + '5/durations.json'));
 const ONLY = process.env.ONLY ? process.env.ONLY.split(',') : null;
 const VP = { width: 800, height: 560 };   // small CSS screen, recorded at 2x: big and sharp on a phone
 const VS = { width: 1600, height: 1120 };
