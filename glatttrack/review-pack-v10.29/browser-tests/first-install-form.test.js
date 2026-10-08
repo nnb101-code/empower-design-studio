@@ -1,0 +1,13 @@
+const { chromium } = require('/opt/node22/lib/node_modules/playwright'); const fs=require('fs');
+(async()=>{ const b=await chromium.launch({executablePath:'/opt/pw-browsers/chromium'}); const ctx=await b.newContext({viewport:{width:1024,height:700}});
+ await ctx.route(u=>{const x=new URL(u); return x.pathname==='/';}, r=>r.fulfill({status:200,contentType:'text/html; charset=utf-8',body:fs.readFileSync(''+(process.env.APP||'kosher-app-v10.21.html')+'')}));
+ await ctx.addInitScript(()=>{ if(!localStorage.getItem('i')){ localStorage.setItem('ks_lang_by_screen',JSON.stringify({scPair:'he',scNav:'he',scManager:'he'})); localStorage.setItem('i','1'); } });
+ const p=await ctx.newPage(); p.on('dialog',d=>{console.log('NATIVE DIALOG',d.type(),d.message().slice(0,60)); d.accept();}); p.on('pageerror',e=>console.log('pageerror',e.message));
+ await p.goto('http://localhost:8084/'); await p.waitForTimeout(6000);
+ await p.click('text=יצירת ראש הצוות הראשון'); await p.waitForTimeout(800);
+ await p.fill('#gtFfName','משה כהן'); await p.fill('#gtFfCode','moshe-2026'); await p.fill('#gtFfSetup','WRONG-0000'); await p.click('#gtFfOk'); await p.waitForTimeout(1500);
+ console.log('wrong:', await p.textContent('#gtFfErr')); await p.screenshot({path:__dirname+'/ff-wrong.png'});
+ await p.fill('#gtFfSetup','ABCD-1234-XY'); await p.click('#gtFfOk'); await p.waitForTimeout(600); console.log('ok:', await p.textContent('#gtFfErr')); await p.screenshot({path:__dirname+'/ff-ok.png'});
+ await p.waitForTimeout(8000);
+ console.log('screen', await p.evaluate(()=>document.querySelector('.screen.active').id), 'wizard', await p.evaluate(()=>{const w=document.getElementById('gtWizard');return w&&w.style.display;}));
+ await b.close(); })();

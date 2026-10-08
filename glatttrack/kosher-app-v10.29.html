@@ -4775,7 +4775,8 @@ function gtGridWrap(gridId,getCls,getLabel,getTap){
         if(f.held.resolution==='condemned') l=L('נפסל USDA','USDA condemned','Condenado USDA');
         else if(f.held.kind==='usda') l='USDA';
         else l=L('שאלה','Question','Pregunta');
-      } else if(f.own) l=L('שאלה','Question','Pregunta');
+      } else if(f.own){ l=L('שאלה','Question','Pregunta');
+        if(st==='inner'){ try{ const qs=gtInnerQSteps(i); if(qs.length) l+=': '+qs.map(x=>_gtL(GT_QSTEP_NAME[x])).join(', '); }catch(e){} } }
       else if(f.slq) l=L('שאלה בשחיטה','Slaughter question','Pregunta de faena');
       else if(f.parts.length) l=(l?l+'<br>':'')+'USDA '+_gtPartsLabel(f.parts);
       if(f.chg) l=(l?l+'<br>':'')+L('⚠ השתנה','⚠ Changed','⚠ Cambió');
@@ -4984,37 +4985,68 @@ function gtWindowQInit(){
   { const ok=document.querySelector(`#esoModal [onclick="esoDecide('ok')"]`); add(ok && ok.parentNode && ok.parentNode.parentNode, 'gtQEso', ()=>gtWindowQuestion('eso')); }
   add(document.querySelector('#decModal .dec-box'), 'gtQOuter', ()=>gtWindowQuestion('outer'));
 }
+// v10.29: "?" in a window marks only THAT item (rumen / maw / lungs) — at once, no confirm —
+// and the check goes straight on to the next window of the same animal. The animal waits
+// (yellow "?") only when the last window is done while an item is still "?". Tapping it later
+// opens the window that is "?"; the items already decided are kept (also the lung drawing).
+// (the open items: on this tablet, which holds the animal's lung check)
+function _gtQStepsAll(){ try{ return JSON.parse(localStorage.getItem('gt_inner_qsteps')||'{}')||{}; }catch(e){ return {}; } }
+function _gtQKey(i){ return String(_gtFlags.epoch||'')+':'+i; }
+function gtInnerQSteps(i){ const m=_gtQStepsAll(); return Array.isArray(m[_gtQKey(i)]) ? m[_gtQKey(i)] : []; }
+function _gtQStepsSet(i, arr){ try{ const m=_gtQStepsAll(); if(arr && arr.length) m[_gtQKey(i)]=arr; else delete m[_gtQKey(i)];
+  Object.keys(m).forEach(k=>{ if(!k.startsWith(String(_gtFlags.epoch||'')+':')) delete m[k]; });   // other days: gone
+  localStorage.setItem('gt_inner_qsteps', JSON.stringify(m)); }catch(e){} }
+function _gtQStepAdd(i, step){ const a=gtInnerQSteps(i); if(!a.includes(step)) a.push(step); _gtQStepsSet(i, a); }
+function _gtQStepDone(i, step){ _gtQStepsSet(i, gtInnerQSteps(i).filter(x=>x!==step)); }
+const GT_QSTEP_NAME={rumen:['כרסים','Rumen','Panza'],maw:['בית הכוסות','Maw','Cuajar'],lung:['ריאה','Lungs','Pulmones']};
 async function gtInnerQuestion(where){
-  let idx=-1;
-  if(where==='lung'){
-    idx=inPendingLung;
-    try{ minimizeLung(); }catch(e){}                      // the drawing is kept
-  } else {
-    idx=inPendingMaw;
+  const idx = where==='lung' ? inPendingLung : inPendingMaw;
+  if(idx<0) return;
+  _gtQStepAdd(idx, where);
+  try{ KS.addAuditLog({type:'question_at', stage:'inner', step:where, animal:idx+1}); }catch(e){}
+  if(!gtOwnQ(idx,'inner')) gtHoldPut(idx,'inner','question','whole');        // the number waits (server)
+  if(where==='rumen'){
+    // → the maw window of the same animal (the rumen stays open)
     document.getElementById('rumenModal').classList.remove('open');
+    try{ _inDisarmAll(); }catch(e){}
+    rumenSel=null;
+    openMawWindow(idx);
+    return;
+  }
+  if(where==='maw'){
+    // → the lungs of the same animal (the maw stays open)
     document.getElementById('mawModal').classList.remove('open');
     try{ _inDisarmAll(); }catch(e){}
     inPendingMaw=-1;
+    if(KS.getSettings().lungEnabled!==false){
+      KS.setInnerInProgress(idx, false);
+      if(!inFloats.find(f=>f.idx===idx)) inFloats.push({idx, drawing:KS.getLungDrawing(idx)});
+      try{ if(KS.getSettings().floatsEnabled!==false) renderFloats(); }catch(e){}
+      inOpenLung(idx);
+    } else _gtInnerWait(idx);
+    return;
   }
-  if(idx<0) return;
+  // lungs: the last window — the animal waits with its drawing
+  try{ minimizeLung(); }catch(e){}
+  _gtInnerWait(idx);
+}
+// the last window is done while an item is "?": the animal waits (not approved for outer)
+function _gtInnerWait(idx){
   inFloats=inFloats.filter(f=>f.idx!==idx);
   try{ if(KS.getSettings().floatsEnabled!==false) renderFloats(); }catch(e){}
+  document.getElementById('lungModal').classList.remove('open'); inPendingLung=-1;
   inManualPage=false;
-  try{ KS.addAuditLog({type:'question_at', stage:'inner', step:where, animal:idx+1}); }catch(e){}
-  if(await gtHoldPut(idx,'inner','question','whole'))
-    KS.notice(L('#'+(idx+1)+' — "?" שאלה. ממשיכים לבהמה הבאה. כשיש תשובה — לוחצים על '+(idx+1)+' וממשיכים מאותו מקום.',
-                '#'+(idx+1)+' — "?" question. Go on to the next animal. When there is an answer, tap '+(idx+1)+' and go on from the same place.',
-                '#'+(idx+1)+' — "?" pregunta. Siga con el siguiente. Cuando haya respuesta, toque '+(idx+1)+' y siga desde el mismo punto.'));
+  const open=gtInnerQSteps(idx).map(st=>_gtL(GT_QSTEP_NAME[st])).join(', ');
+  KS.notice(L('#'+(idx+1)+' מחכה — "?" על: '+open+'. ממשיכים לבהמה הבאה.','#'+(idx+1)+' waits — "?" on: '+open+'. Go on to the next animal.','#'+(idx+1)+' espera — "?" en: '+open+'. Siga con el siguiente.'));
   try{ inRenderGrid(); inUpdateSummary(); }catch(e){}
 }
-// the inner check of a "?" number, from where it stopped: rumen → maw → lungs
+// a "?" number tapped: the window that is "?" first; then on, skipping what was decided
 function gtInnerResume(i){
   const a=KS.getAnimal(i); if(!a) return;
-  const s=KS.getSettings();
-  if(!a.innerStatus) return inCellTap(i, true);          // nothing was done yet
-  if(s.rumenCheck && !a.rumen) return openMaw(i);
-  if(s.rumenCheck && a.rumen==='treif') return;           // (already treif — ruled)
-  if(s.mawCheck!==false && !a.maw){ rumenSel=(a.rumen==='treif'?'t':'k'); return openMawWindow(i); }
+  const s=KS.getSettings(), q=gtInnerQSteps(i);
+  if(!a.innerStatus) return inCellTap(i, true);
+  if(s.rumenCheck && (q.includes('rumen') || !a.rumen)) return openMaw(i);
+  if(s.mawCheck!==false && (q.includes('maw') || !a.maw)){ inPendingMaw=i; rumenSel=(a.rumen==='treif'?'t':'k'); return openMawWindow(i); }
   if(!inFloats.find(f=>f.idx===i)) inFloats.push({idx:i, drawing:KS.getLungDrawing(i)});
   try{ if(s.floatsEnabled!==false) renderFloats(); }catch(e){}
   inOpenLung(i);
@@ -5097,7 +5129,7 @@ function _gtDoneAfterHtml(stage, a){
     +'</div>';
 }
 
-var GT_APP_VERSION='v10.28';
+var GT_APP_VERSION='v10.29';
 document.addEventListener('DOMContentLoaded',()=>{ try{ document.querySelectorAll('.gt-ver').forEach(e=>e.textContent=GT_APP_VERSION); }catch(e){} });
 function escapeHtml(str){
   return String(str==null?'':str).replace(/[&<>"']/g, c=>({
@@ -8062,6 +8094,7 @@ function rumenDecide(result){
   _inDisarmAll();
   if(inPendingMaw<0)return;
   rumenSel=result;
+  try{ _gtQStepDone(inPendingMaw,'rumen'); }catch(e){}
   KS.setRumen(inPendingMaw,result==='k'?'kosher':'treif');
   document.getElementById("rumenModal").classList.remove("open");
   if(result==='t'){
@@ -8077,6 +8110,14 @@ function rumenDecide(result){
 }
 function openMawWindow(idx){
   inPendingMaw=idx;
+  // v10.29: going on after a "?" — the maw already decided (and not "?") is not asked again
+  {const _a=KS.getAnimal(idx), _q=(typeof gtInnerQSteps==='function')?gtInnerQSteps(idx):[];
+   if(_a && _a.maw==='kosher' && !_q.includes('maw') && _a.innerStatus==='in_progress' && KS.getSettings().mawCheck!==false){
+     inPendingMaw=-1;
+     if(!inFloats.find(f=>f.idx===idx)) inFloats.push({idx, drawing:KS.getLungDrawing(idx)});
+     try{ if(KS.getSettings().floatsEnabled!==false) renderFloats(); }catch(e){}
+     return inOpenLung(idx);
+   }}
   const mawOn=KS.getSettings().mawCheck!==false;
   if(!mawOn){
     // No maw check → confirm inner directly
@@ -8102,6 +8143,7 @@ function uiSelectRumen(r){   // rumen choice highlight on the screen (the ruling
 }
 function mawDone(result){
   _inDisarmAll();
+  try{ if(inPendingMaw>=0) _gtQStepDone(inPendingMaw,'maw'); }catch(e){}
   document.getElementById("mawModal").classList.remove("open");
   if(result==="t"||(KS.getSettings().rumenCheck&&rumenSel==="t")){
     KS.setMaw(inPendingMaw,"treif");KS.setInnerTreif(inPendingMaw,activeUserName("inner","בודק פנים"));
@@ -8120,7 +8162,10 @@ function mawDone(result){
     // open lung drawing
     KS.setInnerInProgress(pendIdx, notChalak);
     inRenderGrid();inUpdateSummary();inPendingMaw=-1;
-    if(!floatsOn) inOpenLung(pendIdx);
+    // v10.29: after a "?" in this animal's check, the next window (lungs) opens right away
+    const _qchain=(typeof gtInnerQSteps==='function') && gtInnerQSteps(pendIdx).length>0;
+    if(_qchain && !inFloats.find(f=>f.idx===pendIdx)) inFloats.push({idx:pendIdx, drawing:KS.getLungDrawing(pendIdx)});
+    if(!floatsOn || _qchain) inOpenLung(pendIdx);
   }else{
     // No lung check → confirm immediately so outer inspector can proceed.
     // notChalakInner is set directly here (not via its own commit) because
@@ -8392,6 +8437,11 @@ function lungDone(result){
     if(bg&&draw){const tmp=document.createElement("canvas");tmp.width=bg.width;tmp.height=bg.height;const ctx=tmp.getContext("2d");ctx.drawImage(bg,0,0);ctx.drawImage(draw,0,0);const dataUrl=tmp.toDataURL();KS.setLungDrawing(confirmedIdx,dataUrl);const fw=inFloats.find(f=>f.idx===confirmedIdx);if(fw)fw.drawing=dataUrl;}
   }catch(e){/* drawing save failed (Android WebView quirk) — proceed with the ruling anyway */}
   try{ delete inReopened[confirmedIdx]; }catch(e){}
+  if(result==="treif"){ try{ _gtQStepsSet(confirmedIdx, []); }catch(e){} }
+  else {
+    try{ _gtQStepDone(confirmedIdx,'lung'); }catch(e){}
+    if(gtInnerQSteps(confirmedIdx).length){ _gtInnerWait(confirmedIdx); return; }   // v10.29: a "?" is still open
+  }
   if(result==="treif")KS.setInnerTreif(confirmedIdx,activeUserName("inner","בודק פנים"));
   else KS.setInnerConfirmed(confirmedIdx,activeUserName("inner","בודק פנים"));
   inFloats=inFloats.filter(f=>f.idx!==confirmedIdx);renderFloats();
