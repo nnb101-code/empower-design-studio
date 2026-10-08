@@ -3702,7 +3702,8 @@ begin
   v_dev := _call_device(null);
   if v_dev is null then return jsonb_build_object('ok', false, 'error', _no_device_error()); end if;
   v_role := _caller_device_role();
-  if _hold_station_of_role(v_role) is distinct from p_station then
+  if _hold_station_of_role(v_role) is distinct from p_station
+     and not (_test_mode_on() and _request_has_manager()) then      -- test mode: the team leader acts as every station
     return jsonb_build_object('ok', false, 'error', 'wrong_station');
   end if;
   v_res := _cmd_get(p_command_id, v_dev, 'hold_set');
@@ -3760,7 +3761,8 @@ begin
   if v_res is not null then return v_res; end if;
   select * into h from animal_holds where id = p_hold for update;
   if h.id is null then return jsonb_build_object('ok', false, 'error', 'bad_id'); end if;
-  if _hold_station_of_role(_caller_device_role()) is distinct from h.station then
+  if _hold_station_of_role(_caller_device_role()) is distinct from h.station
+     and not (_test_mode_on() and _request_has_manager()) then
     return jsonb_build_object('ok', false, 'error', 'wrong_station');
   end if;
   if h.resolved_at is not null then
