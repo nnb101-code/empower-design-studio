@@ -5090,7 +5090,7 @@ function _gtScreenUsed(sc){ try{ const p=KS.getSettings().screensPlan; return (p
 function _gtUsdaZone(i){
   const x=KS.getAnimal(i); if(!x || !x.slaughter) return null;
   const alive=(x.slaughter==='slaughtered'||x.slaughter==='notChalak');
-  const eso=!!KS.getSettings().esophagusEnabled && _esoApplies(x), legs=_gtScreenUsed('legs');
+  const eso=x.esoChecked===true || (!!KS.getSettings().esophagusEnabled && _esoApplies(x)), legs=_gtScreenUsed('legs');   // v10.34: checked at the esophagus → its own until legs print
   if(x.innerStatus==='confirmed'||x.innerStatus==='treif') return _gtScreenUsed('stamps') ? 'stamps' : 'outer';
   if(x.innerStatus || x.rumen || x.maw) return 'inner';
   if(legs && (x.headStickers||x.legsStickers)) return 'legs';
@@ -5306,7 +5306,7 @@ var _GT_ERR = {
   // step 46
   setup_code_not_configured:['בשרת לא הוגדר קוד התקנה — מי שמתקין את השרת צריך להגדיר אותו (select _set_setup_code(...)).','No setup code was set on the server — whoever installs it must set one (select _set_setup_code(...)).','No hay código de instalación en el servidor — quien lo instala debe definirlo (select _set_setup_code(...)).'],
   unfinished_animals:['יש בהמות שנשחטו ועדיין אין להן פסיקה אחרונה — האיפוס נעצר.','Slaughtered animals have no last ruling yet — the reset stopped.','Hay animales faenados sin dictamen final — el reinicio se detuvo.'],
-  out_of_order:['המספר עדיין לא הגיע לשלב הזה — קודם השלבים שלפניו (שחיטה, ושט, פנים, חוץ). השינוי לא נרשם.','This number has not reached this stage yet — the stages before it come first (slaughter, esophagus, inner, outer). The change was not recorded.','Este número aún no llegó a esta etapa — primero las etapas anteriores (faena, esófago, interior, exterior). El cambio no se registró.'],
+  out_of_order:['המספר עדיין לא הגיע לשלב הזה — קודם השלבים שלפניו (שחיטה, ושט, רגליים, פנים, חוץ). השינוי לא נרשם.','This number has not reached this stage yet — the stages before it come first (slaughter, esophagus, legs, inner, outer). The change was not recorded.','Este número aún no llegó a esta etapa — primero las etapas anteriores (faena, esófago, patas, interior, exterior). El cambio no se registró.'],
   earlier_day_open:['קודם מסיימים את יום השחיטה הקודם — אין דילוג. השינוי לא נרשם.','The earlier slaughter day is finished first — no skipping. The change was not recorded.','Primero se termina el día de faena anterior — sin saltos. El cambio no se registró.'],
   board_closed:['יום השחיטה הזה כבר נסגר בתחנה זו — השינוי לא נרשם.','This slaughter day is already closed at this station — the change was not recorded.','Este día de faena ya está cerrado en esta estación — el cambio no se registró.'],
   held:['המספר מעוכב (USDA / "?") — התחנה שסימנה צריכה לשחרר. השינוי לא נרשם.','The number is held (USDA / "?") — the station that marked it must release it. The change was not recorded.','El número está retenido (USDA / "?") — la estación que lo marcó debe liberarlo. El cambio no se registró.'],
@@ -5970,7 +5970,7 @@ function _scanProblem(screenName){
   const intakeTotal=(s.dailyIntake||[]).reduce((t,r)=>t+(Number(r.qty)||0),0);
   const doneSl=animals.filter(a=>a.slaughter!==null).length;
   const pendingSlaughter=intakeTotal>0?Math.max(0,intakeTotal-doneSl):0;
-  const pendingInner=animals.filter(a=>(a.slaughter==='slaughtered'||a.slaughter==='notChalak')&&passedEso(a)&&(!a.innerStatus||a.innerStatus==='in_progress')).length;
+  const pendingInner=animals.filter(a=>(a.slaughter==='slaughtered'||a.slaughter==='notChalak')&&passedToInner(a)&&(!a.innerStatus||a.innerStatus==='in_progress')).length;
   const pendingOuter=animals.filter(a=>a.innerStatus==='confirmed'&&!a.outerStatus).length;
   
   if(pendingSlaughter>0)issues.push(L(`${pendingSlaughter} ממתינים לשחיטה`,`${pendingSlaughter} pending slaughter`,`${pendingSlaughter} pendientes`));
@@ -8159,6 +8159,11 @@ function statusLabel(x, ctx){
 // When the esophagus screen is enabled, downstream screens (legs, inner inspection)
 // must NOT receive an animal directly from slaughter — only after it PASSED the eso check.
 // Nevela result on eso means the animal is dead and doesn't continue.
+// v10.34 (owner): the inner inspector works AFTER legs / head — when the plant chose the legs screen,
+// a number reaches the inner check only once its legs / head stickers are printed (the server refuses too)
+function _gtLegsFirst(){ try{ const p=KS.getSettings().screensPlan; return !!(p && Array.isArray(p.screens) && p.screens.includes('legs')); }catch(e){ return false; } }
+function passedLegs(x){ return !_gtLegsFirst() || !x || !!(x.legsStickers||x.headStickers) || !!x.innerStatus; }
+function passedToInner(x){ return passedEso(x) && passedLegs(x); }
 function passedEso(x){
   const esoOn=KS.getSettings().esophagusEnabled;
   if(!esoOn)return true;                 // eso disabled → no gating
@@ -8174,7 +8179,7 @@ function inRenderGrid(){
   // All inspectors see same queue, whoever taps first takes the animal
   let first=-1;
   const isInPend=(x,i)=>(x.slaughter==="slaughtered"||x.slaughter==="notChalak")
-    &&passedEso(x)&&!x.innerStatus&&!inFloats.find(f=>f.idx===i)&&!gtSkip(i,'inner');
+    &&passedToInner(x)&&!x.innerStatus&&!inFloats.find(f=>f.idx===i)&&!gtSkip(i,'inner');
   for(let i=0;i<a.length;i++){if(isInPend(a[i],i)){first=i;break;}}
   // Auto-jump to the page of the next animal to inspect — but NOT while paging manually.
   if(!inManualPage){
@@ -8193,7 +8198,7 @@ function inRenderGrid(){
       const x=a[i];
       if(x.slaughter===null)return"empty";
       if(x.slaughter==="nevela"||x.slaughter==="shot")return"nevela";
-      if(!x.innerStatus&&!passedEso(x))return"empty"; // hidden until esophagus check passes
+      if(!x.innerStatus&&!passedToInner(x))return"empty"; // hidden until esophagus check passes
       // Status CHANGED by inner → treif (red). Color follows the new status.
       if(x.innerStatus==="treif")return"treif-inner";
       if(x.outerStatus==="treif")return"treif-final"; // outer ruled treif - red
@@ -8209,7 +8214,7 @@ function inRenderGrid(){
       return"empty";
     },
     i=>{const x=a[i];
-      if(!x.innerStatus&&x.slaughter!=="nevela"&&x.slaughter!=="shot"&&!passedEso(x))return""; // hidden until esophagus check passes
+      if(!x.innerStatus&&x.slaughter!=="nevela"&&x.slaughter!=="shot"&&!passedToInner(x))return""; // hidden until esophagus check passes
       if(_inOtherDeviceCheck(x,i))return L('בבדיקה במסך אחר','In check at other screen','En revisión en otra pantalla');
       if(x.innerStatus==="in_progress"||inFloats.find(f=>f.idx===i))return"...";
       if(x.innerStatus==="confirmed"&&!x.outerStatus&&x.slaughter!=="nevela"&&x.slaughter!=="shot"&&(KS.getSettings().screenConfig||'1in1out')==='1both')
@@ -8218,7 +8223,7 @@ function inRenderGrid(){
     i=>{
       const x=a[i];
       if(x.slaughter!=="slaughtered"&&x.slaughter!=="notChalak")return null;
-      if(!x.innerStatus&&!passedEso(x))return null; // hidden until esophagus check passes
+      if(!x.innerStatus&&!passedToInner(x))return null; // hidden until esophagus check passes
       if(x.innerStatus==="treif")return()=>inOpenChangeWarn(i);   // v10.26: a change is always possible (with a warning)
       if(x.outerStatus)return()=>inOpenChangeWarn(i);
       if(_inOtherDeviceCheck(x,i))return null; // another inner screen has it in check
@@ -8242,7 +8247,7 @@ function inCellTap(idx, force){
   let firstToOpen=-1;
   for(let i=0;i<a.length;i++){
     const sl=a[i].slaughter;
-    if((sl==="slaughtered"||sl==="notChalak")&&!a[i].innerStatus&&passedEso(a[i])&&!gtSkip(i,'inner')){
+    if((sl==="slaughtered"||sl==="notChalak")&&!a[i].innerStatus&&passedToInner(a[i])&&!gtSkip(i,'inner')){
       // skip ones already open in a float — the NEXT openable is after them
       if(inFloats.find(f=>f.idx===i))continue;
       firstToOpen=i;break;
@@ -8259,7 +8264,7 @@ function inCellTap(idx, force){
 function inPrevPage(){if(inPage>0){inManualPage=true;inPage--;inRenderGrid();}}
 function inNextPage(){if(inPage<Math.ceil(KS.getAnimals().length/PER)-1){inManualPage=true;inPage++;inRenderGrid();}}
 function inUpdateSummary(){
-  const a=KS.getAnimals();const base=a.filter(x=>(x.slaughter==="slaughtered"||x.slaughter==="notChalak")&&(typeof passedEso!=='function'||passedEso(x)));
+  const a=KS.getAnimals();const base=a.filter(x=>(x.slaughter==="slaughtered"||x.slaughter==="notChalak")&&(typeof passedToInner!=='function'||passedToInner(x)));
   document.getElementById("inCW").textContent=base.filter(x=>!x.innerStatus||x.innerStatus==='in_progress').length;
   document.getElementById("inCD").textContent=base.filter(x=>x.innerStatus==="confirmed").length;
   document.getElementById("inCT").textContent=base.filter(x=>x.innerStatus==="treif").length;
@@ -10490,7 +10495,7 @@ function mgrHealthCheck(){
   const intakeTotal=(KS.getSettings().dailyIntake||[]).reduce((t,r)=>t+(Number(r.qty)||0),0);
   const done=a.filter(x=>x.slaughter!==null).length;
   const pendingSlaughter = intakeTotal>0 ? Math.max(0, intakeTotal-done) : 0;
-  const pendingInner = a.filter(x=>(x.slaughter==='slaughtered'||x.slaughter==='notChalak')&&passedEso(x)&&(!x.innerStatus||x.innerStatus==='in_progress')).length;
+  const pendingInner = a.filter(x=>(x.slaughter==='slaughtered'||x.slaughter==='notChalak')&&passedToInner(x)&&(!x.innerStatus||x.innerStatus==='in_progress')).length;
   const pendingOuter = a.filter(x=>x.innerStatus==='confirmed'&&!x.outerStatus&&x.slaughter!=='nevela'&&x.slaughter!=='shot').length;
   const pendingParts = a.filter(x=>isKosherReady(x)&&!x.partsScanned).length;
   if(pendingSlaughter>0) issues.push(L(pendingSlaughter+' בהמות מהקליטה של היום עדיין לא נשחטו', pendingSlaughter+' animals from today\'s intake not slaughtered yet', pendingSlaughter+' animales de la recepción de hoy sin faenar'));

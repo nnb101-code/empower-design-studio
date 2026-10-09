@@ -278,6 +278,11 @@ declare
     array['NEW','','','active']];
   i int;
 begin
+  -- v10.34: the checks run without the plant's own screen choice (the inner check waits for legs only
+  -- when the plant chose the legs screen — the test that needs it sets it); all of it is undone at the end
+  perform set_config('gt.reset_in_progress', 'true', true);
+  update settings_pilot set settings = settings - 'screensPlan' where id = 1 and settings ? 'screensPlan';
+  perform set_config('gt.reset_in_progress', 'false', true);
   perform set_config('app.device_admin', 'on', true);
   for i in 1 .. array_length(devs, 1) loop
     v_id := 'gtselftest_' || lower(devs[i][1]) || '_' || substr(md5(random()::text), 1, 6);
@@ -857,6 +862,25 @@ begin
   ok := ok and not (pg_temp.ar(940)).nc_plain;
   perform pg_temp.rec('v10.33 "not chalak" at the outer ruling: רבנות כשר or plain כשר (flag only with the outer ruling, only for "not chalak")', ok,
     concat_ws(' | ', left(r::text, 60), left(r2::text, 60), left(r3::text, 60), left(r4::text, 60), left(r5::text, 60)));
+  -- v10.34 (owner): the inner inspector works after legs / head — with the legs screen in the plant's
+  -- screen choice, no inner check before the stickers; without a screen choice nothing changes
+  perform set_config('gt.reset_in_progress', 'true', true);
+  update animals_pilot set slaughter = 'slaughtered', slaughter_time = 1, eso_checked = true, eso_result = 'ok' where id in (875, 876);
+  update animals_pilot set legs_stickers = true, head_stickers = true where id = 876;
+  update settings_pilot set settings = settings || '{"screensPlan":{"decided":true,"screens":["slaughter","esophagus","legs","inner","outer"]}}'::jsonb where id = 1;
+  perform set_config('gt.reset_in_progress', 'false', true);
+  r  := pg_temp.api(pg_temp.dev('IN1'), pg_temp.q_claim(875, 'inner_start', 'in_progress', '', pg_temp.devid('IN1')));
+  r2 := pg_temp.api(pg_temp.dev('IN1'), pg_temp.q_claim(876, 'inner_start', 'in_progress', '', pg_temp.devid('IN1')));
+  r3 := pg_temp.api(pg_temp.dev('IN1'), pg_temp.q_push(875, jsonb_build_object('inner_status', 'confirmed', 'inner_time', 5)));
+  ok := r ->> 'error' = 'out_of_order' and r ->> 'reason' = 'legs_not_done' and pg_temp.claimed(r2)
+        and r3 ->> 'error' = 'out_of_order' and (pg_temp.ar(875)).inner_status is null;
+  perform set_config('gt.reset_in_progress', 'true', true);
+  update settings_pilot set settings = settings - 'screensPlan' where id = 1;
+  perform set_config('gt.reset_in_progress', 'false', true);
+  r4 := pg_temp.api(pg_temp.dev('IN1'), pg_temp.q_claim(875, 'inner_start', 'in_progress', '', pg_temp.devid('IN1')));
+  ok := ok and pg_temp.claimed(r4);
+  perform pg_temp.rec('v10.34 the inner check comes after legs / head stickers (when the plant uses the legs screen)', ok,
+    concat_ws(' | ', r ->> 'error', r ->> 'reason', r ->> 'claimed', r2 ->> 'claimed', r2 ->> 'error', r3 ->> 'error', r4 ->> 'claimed', r4 ->> 'error'));
 end $$;
 $gt39$;
     v_step := 'identity chaos: old key after a replacement, fake actor / role';

@@ -3574,7 +3574,8 @@ revoke execute on function _gt_screen_used(text) from public, anon, authenticate
 create or replace function _usda_zone(a animals_pilot) returns text
 language plpgsql stable security definer set search_path = public, extensions, pg_temp as $$
 declare v_alive boolean := a.slaughter in ('slaughtered', 'notChalak');
-        v_eso boolean := _eso_required(a.id); v_legs boolean := _gt_screen_used('legs');
+        v_eso boolean := coalesce(a.eso_checked, false) or _eso_required(a.id);   -- v10.34: checked there → its own
+        v_legs boolean := _gt_screen_used('legs');
 begin
   if a.slaughter is null then return null; end if;
   if a.inner_status in ('confirmed', 'treif') then
@@ -3626,6 +3627,14 @@ language sql stable security definer set search_path = public, extensions, pg_te
 $$;
 revoke execute on function _holds_open(bigint) from public, anon, authenticated;
 
+-- v10.34: the plant chose its screens and the legs screen is one of them (no choice yet → not required)
+create or replace function _gt_legs_first() returns boolean
+language sql stable security definer set search_path = public, extensions, pg_temp as $$
+  select jsonb_typeof(_gt_settings() #> '{screensPlan,screens}') = 'array'
+         and (_gt_settings() #> '{screensPlan,screens}') ? 'legs';
+$$;
+revoke execute on function _gt_legs_first() from public, anon, authenticated;
+
 -- stage order: a number with an open slaughter "?" may be checked at the esophagus and
 -- get its legs / head stickers (inner and outer wait for the shochet)
 create or replace function _stage_order_error(p_stage text, a animals_pilot, p_today boolean default true) returns text
@@ -3647,6 +3656,12 @@ begin
       if not v_alive then return 'not_slaughtered'; end if;
       if not v_eso_ok then return 'eso_not_passed'; end if;
       if a.outer_status is not null then return 'later_stage_started'; end if;
+      -- v10.34 (owner): the inner inspector works AFTER legs / head — on a plant whose screen choice
+      -- has the legs screen, the stickers come first (today's board; an earlier day is not held back)
+      if p_today and _gt_legs_first()
+         and not (coalesce(a.legs_stickers, false) or coalesce(a.head_stickers, false)) then
+        return 'legs_not_done';
+      end if;
     when 'outer' then
       if a.inner_status is distinct from 'confirmed' then return 'inner_not_confirmed'; end if;
     when 'legs_stickers' then
