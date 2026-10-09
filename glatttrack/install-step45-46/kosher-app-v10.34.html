@@ -7973,7 +7973,10 @@ function mgrRenderDevices(){
   // Per-screen assignment
   const sa=document.getElementById('mgrScreenAssign');
   if(sa){
-    sa.innerHTML=SCREEN_LIST.map(([key,label])=>{
+    // v10.34: legs and head split → the head screen has its own printer and scanner
+    const _split=(typeof _lgSplit==='function') && _lgSplit();
+    const _list=_split ? [['legs','רגליים'],['head','ראש']].concat(SCREEN_LIST.slice(1)) : SCREEN_LIST;
+    sa.innerHTML=_list.map(([key,label])=>{
       const cur=sd[key]||{printer:'',scanner:''};
       const pOpts='<option value="">— '+L('מדפסת','Printer','Impresora')+' —</option>'+printers.map(d=>`<option value="${escapeHtml(d.id)}" ${cur.printer===d.id?'selected':''}>${escapeHtml(d.name)}</option>`).join('');
       const scOpts='<option value="">— '+L('סורק','Scanner','Escáner')+' —</option>'+scanners.map(d=>`<option value="${escapeHtml(d.id)}" ${cur.scanner===d.id?'selected':''}>${escapeHtml(d.name)}</option>`).join('');
@@ -8297,6 +8300,7 @@ function _lgTitle(){
   let el=document.getElementById('lgRoleLbl');
   if(!el){ el=document.createElement('span'); el.id='lgRoleLbl'; el.setAttribute('data-no-i18n','');
     el.style.cssText='color:var(--gold);font-weight:800;font-size:16px;margin-inline-start:8px;'; at.parentNode.insertBefore(el, at); }
+  try{ if(el._r!==r+lgInstance){ el._r=r+lgInstance; renderScreenDeviceStatus(); } }catch(e){}
   el.textContent = r==='head' ? L('מסך ראש','Head screen','Pantalla cabeza') + (KS.getSettings().legsPaused===true ? ' · '+L('רגליים כבוי','legs off','patas apagado') : '')
                  : r==='legs' ? L('מסך רגליים','Legs screen','Pantalla patas') : r==='paused' ? L('מסך רגליים — כבוי','Legs screen — off','Pantalla patas — apagada') : '';
 }
@@ -16138,7 +16142,10 @@ window.addEventListener("touchcancel",function(){isDrawing=false;},true);
    ═══════════════════════════════════════════════════════════════════ */
 
 // ── 1. Printer / scanner status — from the devices the team leader set up ──
+// v10.34: the legs screen's tablet slot 1 (legs and head split) is the head screen — its own printer / scanner
+function _gtLegsDevKey(){ try{ return (_lgSplit() && lgInstance===1) ? 'head' : 'legs'; }catch(e){ return 'legs'; } }
 function _gtDevFor(key){
+  if(key==='legs') key=_gtLegsDevKey();
   const s=KS.getSettings(); const cfg=(s.screenDevices||{})[key]||{};
   return { p:(s.printers||[]).find(d=>d.id===cfg.printer)||null, sc:(s.scanners||[]).find(d=>d.id===cfg.scanner)||null };
 }
@@ -16155,7 +16162,7 @@ function renderScreenDeviceStatus(){
                   : _gtChip('#F0A030', '🖨 '+L('אין מדפסת מצומדת','No printer paired','Sin impresora emparejada'));
     const sChip=sc ? _gtChip(scOn?'#7AAEFF':'#FF8866', '📷 '+L('סורק: ','Scanner: ','Escáner: ')+escapeHtml(sc.name)+(scOn?'':L(' — לא מחובר',' — not connected',' — no conectado')), scOn)
                    : _gtChip('#6B7D99', '📷 '+L('אין סורק','No scanner','Sin escáner'));
-    const btn=((p&&!pOn)||(sc&&!scOn)) ? '<button class="gt-connect-btn" onclick="connectScreenDevices(\''+key+'\')">'+L('חבר','Connect','Conectar')+'</button>' : '';
+    const btn=((p&&!pOn)||(sc&&!scOn)) ? '<button class="gt-connect-btn" onclick="connectScreenDevices(\''+(key==='legs'?_gtLegsDevKey():key)+'\')">'+L('חבר','Connect','Conectar')+'</button>' : '';
     if(chips){ chips.innerHTML=pChip+sChip+btn; if(bar) bar.innerHTML=''; }
     else if(bar){ bar.innerHTML='<div class="gt-dev-bar">'+pChip+sChip+btn+'</div>'; }
   });
