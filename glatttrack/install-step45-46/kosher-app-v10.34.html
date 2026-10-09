@@ -1687,6 +1687,7 @@ const LUNG_B64="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICA
           <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:6px;">🔒 איפוס יום — אוטומטי בלבד</div>
           <div style="font-size:12px;color:var(--muted);line-height:1.6;">היום מתאפס אוטומטית בשעה שהוגדרה למעלה, ורק אחרי שגיבוי הצליח. אין כפתור איפוס ידני באפליקציה — זה נמנע בכוונה כדי שיום עבודה לא יימחק בטעות.</div>
           <button onclick="mgrShowBackups()" style="width:100%;margin-top:10px;padding:9px;border-radius:8px;background:rgba(212,168,67,.12);border:1px solid var(--gold);color:var(--gold);font-size:12px;font-weight:700;cursor:pointer;">📦 גיבויים אוטומטיים — צפייה ושחזור</button>
+          <button id="gtTestResetBtn" onclick="gtTestResetNow()" style="display:none;width:100%;margin-top:8px;padding:10px;border-radius:8px;background:rgba(224,48,48,.12);border:1px solid #E03030;color:#FF6B6B;font-size:13px;font-weight:700;cursor:pointer;">🧪 איפוס יום עכשיו — רק במצב בדיקה</button>
         </div>
 
       </div><!-- end ss-system -->
@@ -5475,6 +5476,7 @@ Object.assign(I18N_DOM,{"המפעל": ["Plant", "Planta"], "רשימות המש�
 // Hebrew restores the original text.
 const _HEB=/[֐-׿]/;
 Object.assign(I18N_DOM,{"כפתור \"לא חלק\" בשחיטה ובבית הכוסות — עם כל מספר של מסכי חוץ (גם מסך אחד, גם מסך משותף פנים+חוץ). \"לא חלק\" נשאר עד הפסיקה בבודק החוץ, ושם הבהמה מקבלת סטטוס אחד: הסטטוס של \"לא חלק\" (רבנות כשר, כשר או כל שם שהמפעל נותן לו — בסטטוסי הכשרות, ✏️ שם) או טרף.": ["A \"Non-Chalak\" button at slaughter and at the maw — with any number of outer screens (one screen, or one shared inner + outer screen too). \"Non-Chalak\" holds until the outer ruling, where the animal gets one status: the non-chalak status (רבנות כשר, כשר or any name the plant gives it — in the kashrut statuses, ✏️ Name) or treif.", "Un botón \"No Jalak\" en la faena y en el cuajar — con cualquier número de pantallas externas (una sola, o una compartida interna + externa). \"No Jalak\" vale hasta el dictamen externo, donde el animal recibe un estado: el estado no jalak (רבנות כשר, כשר o el nombre que la planta le dé — en los estados de kashrut, ✏️ Nombre) o treif."], "\"לא חלק\"": ["\"Non-Chalak\"", "\"No Jalak\""], "ניתוב \"לא חלק\" למסך B": ["Route \"Non-Chalak\" to screen B", "Enviar \"No Jalak\" a la pantalla B"], "רק כשיש שני מסכי חוץ. דולק: מסך B הוא רק ל\"לא חלק\" — בהמה \"לא חלק\" עוברת אליו ומקבלת שם את הסטטוס של \"לא חלק\" או טרף, ובמסך A יש \"שליחה למסך B\". כבוי (משולב): שני מסכי החוץ פוסקים הכול, כל אחד את הבהמה שמגיעה אליו.": ["Only with two outer screens. On: screen B is only for non-chalak — a non-chalak animal goes there and gets the non-chalak status or treif, and screen A has \"Send to screen B\". Off (combined): both outer screens rule everything, each the animal that comes to it.", "Solo con dos pantallas externas. Encendido: la pantalla B es solo para no jalak — el animal no jalak va allí y recibe el estado no jalak o treif, y la pantalla A tiene \"Enviar a la pantalla B\". Apagado (combinado): ambas pantallas dictaminan todo, cada una el animal que le llega."]});   // v10.34: the not-chalak switches
+Object.assign(I18N_DOM,{"🧪 איפוס יום עכשיו — רק במצב בדיקה": ["🧪 Reset the day now — test mode only", "🧪 Reiniciar el día ahora — solo modo de prueba"]});
 Object.assign(I18N_DOM,{"שינוי — בבחירת מסכים ←": ["Change — in Choosing screens →", "Cambiar — en Elegir pantallas →"]});
 Object.assign(I18N_DOM,{"\"לא חלק\" ומסכי חוץ": ["\"Non-Chalak\" and outer screens", "\"No Jalak\" y pantallas externas"]});
 Object.assign(I18N_DOM,{"סטטוס רגיל לבהמה חלקה — למשל במפעל שכולו תחת הרבנות (רבנות חלק / רבנות כשר). לא לבהמה \"לא חלק\".": ["A regular status for a chalak animal — e.g. in a plant fully under the rabbinate (רבנות חלק / רבנות כשר). Not for a \"Non-Chalak\" animal.", "Un estado normal para un animal jalak — p. ej. en una planta totalmente bajo el rabinato (רבנות חלק / רבנות כשר). No para un animal \"No Jalak\"."]});
@@ -9646,7 +9648,16 @@ function gtSettingsBuild(){
   // the old sub-tabs and their panels give way
   const bar = document.getElementById('sub-s-screens'); if(bar && bar.parentElement) bar.parentElement.style.display = 'none';
   ['ss-screens', 'ss-devices', 'ss-users', 'ss-system', 'ss-inspection'].forEach(id => { const e = document.getElementById(id); if(e) e.style.display = 'none'; });
+  // v10.34 (owner): search the settings — type a word, tap a result, the section opens there
+  const sb = document.createElement('div'); sb.id = 'gtSetSearchBox'; sb.style.cssText = 'margin:0 0 10px;';
+  sb.innerHTML = '<input id="gtSetSearch" type="search" autocomplete="off" oninput="gtSetSearch(this.value)" style="width:100%;box-sizing:border-box;padding:11px 12px;border-radius:10px;border:1px solid var(--gold);background:var(--panel2);color:var(--text);font-size:15px;">'
+               + '<div id="gtSetSearchRes" style="margin-top:6px;"></div>';
+  root.appendChild(sb);
   root.appendChild(host);
+  // v10.34: the daily-reset card sat under "small parts — average weight"; it belongs to "daily reset & archive"
+  try{ const card = document.getElementById('gtTestResetBtn').closest('.mgr-card');
+       const sec = [...host.querySelectorAll('details.gt-acc-in')].find(d => (d.querySelector('summary').textContent||'').includes(L('איפוס יומי וארכיון', 'Daily reset & archive', 'Reinicio diario y archivo')));
+       if(card && sec) sec.querySelector('.gt-acc-b').appendChild(card); }catch(e){}
   gtSettingsLabels();
   // old calls that opened a sub-tab now open the matching group
   const map = { screens: 'devices', devices: 'devices', users: 'users', inspection: 'stations', system: 'system' };
@@ -9657,7 +9668,54 @@ function gtSettingsBuild(){
     if(d){ d.open = true; setTimeout(() => { try{ d.scrollIntoView({ block: 'start', behavior: 'smooth' }); }catch(e){} }, 50); }
   };
 }
+// v10.34 (owner): in test mode only — start a new day now (backup first, as the automatic reset does)
+async function gtTestResetNow(){
+  if(!(typeof _gtTestModeOn==='function' && _gtTestModeOn())){ KS.notice(L('רק במצב בדיקה.','Test mode only.','Solo en modo de prueba.')); return; }
+  if(!confirm(L('לאפס את היום עכשיו? כל המספרים מתחילים מחדש (קודם נשמר גיבוי).','Reset the day now? All numbers start again (a backup is saved first).','¿Reiniciar el día ahora? Todos los números empiezan de nuevo (antes se guarda una copia).'))) return;
+  try{ localStorage.removeItem('glatttrack_daily_reset_lock_v2'); }catch(e){}
+  const ok = await ksRunProtectedDailyReset('test-reset');
+  KS.notice(ok ? L('היום אופס.','The day was reset.','El día fue reiniciado.') : L('האיפוס לא בוצע: ','Not reset: ','No se reinició: ') + (_lastResetFailureReason || ''));
+}
+setInterval(() => { try{ const b = document.getElementById('gtTestResetBtn'); if(b) b.style.display = (typeof _gtTestModeOn==='function' && _gtTestModeOn()) ? 'block' : 'none'; }catch(e){} }, 2000);
+function gtSetSearch(q){
+  const res = document.getElementById('gtSetSearchRes'); if(!res) return;
+  q = String(q || '').trim().toLowerCase();
+  if(q.length < 2){ res.innerHTML = ''; return; }
+  const out = [], seen = new Set();
+  document.querySelectorAll('#gtSetGroups details.gt-grp').forEach(gd => {
+    const g = _GT_SET_GROUPS.find(x => x.k === gd.getAttribute('data-g')); if(!g) return;
+    gd.querySelectorAll('details.gt-acc-in').forEach((sd, si) => {
+      const title = (sd.querySelector('summary').textContent || '').replace(/\s+/g, ' ').trim();
+      // the smallest pieces of text inside the section that contain the word
+      const hits = [...sd.querySelectorAll('summary, div, span, button, label, option')].filter(e =>
+        ![...e.children].some(c => /^(DIV|SPAN|BUTTON|LABEL)$/.test(c.tagName) && (c.textContent || '').toLowerCase().includes(q))
+        && (e.textContent || '').toLowerCase().includes(q));
+      hits.slice(0, 3).forEach(e => {
+        const t = (e.textContent || '').replace(/\s+/g, ' ').trim(); const k = g.k + '|' + si + '|' + t; if(seen.has(k) || !t) return; seen.add(k);
+        out.push({ g, gd, sd, el: e, title, t });
+      });
+    });
+  });
+  if(!out.length && q.length >= 4 && !gtSetSearch._again){ gtSetSearch._again = true; try{ gtSetSearch(q.slice(0, -1)); } finally { gtSetSearch._again = false; } return; }   // מדפסת → מדפס(ות)
+  window._gtSetHits = out.slice(0, 25);
+  res.innerHTML = out.length ? window._gtSetHits.map((h, i) =>
+      '<button onclick="gtSetSearchGo(' + i + ')" style="display:block;width:100%;text-align:start;margin:3px 0;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--panel);color:var(--text);cursor:pointer;">'
+      + '<div style="font-size:11px;color:var(--gold);">' + escapeHtml(L(h.g.t[0], h.g.t[1], h.g.t[2])) + ' › ' + escapeHtml(h.title) + '</div>'
+      + '<div style="font-size:13px;">' + escapeHtml(h.t.length > 90 ? h.t.slice(0, 90) + '…' : h.t) + '</div></button>').join('')
+    : '<div style="font-size:12px;color:var(--muted);padding:6px;">' + L('לא נמצא', 'Nothing found', 'No se encontró') + '</div>';
+}
+function gtSetSearchGo(i){
+  const h = (window._gtSetHits || [])[i]; if(!h) return;
+  h.gd.open = true; h.sd.open = true;
+  const box = document.getElementById('gtSetSearchRes'); if(box) box.innerHTML = '';
+  setTimeout(() => {
+    try{ h.el.scrollIntoView({ block: 'center', behavior: 'smooth' }); }catch(e){}
+    const o = h.el.style.outline; h.el.style.outline = '3px solid var(--gold)'; h.el.style.outlineOffset = '2px';
+    setTimeout(() => { h.el.style.outline = o; }, 2500);
+  }, 120);
+}
 function gtSettingsLabels(){
+  { const i = document.getElementById('gtSetSearch'); if(i) i.placeholder = '🔍 ' + L('חיפוש בהגדרות — למשל: איפוס, מדפסת, לא חלק', 'Search the settings — e.g. reset, printer, chalak', 'Buscar en ajustes — p. ej. reinicio, impresora'); }
   document.querySelectorAll('#gtSetGroups details.gt-grp').forEach(d => {
     const g = _GT_SET_GROUPS.find(x => x.k === d.getAttribute('data-g')); if(!g) return;
     d.querySelector('.gt-grp-t').textContent = L(g.t[0], g.t[1], g.t[2]);
