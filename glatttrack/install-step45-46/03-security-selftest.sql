@@ -842,6 +842,21 @@ begin
         and not _nc_outer_value_ok(pg_temp.ar(942), 'rabChalak') and not _nc_outer_value_ok(pg_temp.ar(941), 'rabChalak');
   perform pg_temp.rec('rabbinate screen: a sent animal may be ruled רבנות חלק (and is kosher-ready); a shochet / maw "not chalak" may not', ok,
     concat_ws(' | ', left(r::text, 40), left(r2::text, 60), left(r3::text, 60), r4 ->> 'error'));
+  -- v10.33: "not chalak" holds until the outer ruling — there רבנות כשר ('kosher') or plain כשר
+  -- ('kosherPlain' → 'kosher' + nc_plain); the flag moves only with the outer ruling
+  c := gen_random_uuid();
+  r  := pg_temp.api(pg_temp.dev('OUT2'), pg_temp.q_claimc(941, 'outer', 'kosherPlain', c));
+  r2 := pg_temp.api(pg_temp.dev('OUT2'), pg_temp.q_claimc(941, 'outer', 'kosherPlain', c));
+  ok := pg_temp.claimed(r) and (pg_temp.ar(941)).outer_status = 'kosher' and (pg_temp.ar(941)).nc_plain
+        and _printed_as_key(pg_temp.ar(941)) = 'kosher' and _kosher_ready(pg_temp.ar(941)) and pg_temp.claimed(r2);
+  r3 := pg_temp.api(pg_temp.dev('IN1'), pg_temp.q_push(941, '{"nc_plain":false}'));
+  ok := ok and (pg_temp.ar(941)).nc_plain;
+  r4 := pg_temp.api(pg_temp.dev('OUT2'), pg_temp.q_push(941, jsonb_build_object('nc_plain', false, 'outer_time', (pg_temp.ar(941)).outer_time + 5)));
+  ok := ok and pg_temp.ok(r4) and not (pg_temp.ar(941)).nc_plain and _printed_as_key(pg_temp.ar(941)) = 'kosherRab';
+  r5 := pg_temp.api(pg_temp.dev('OUT1'), pg_temp.q_push(940, jsonb_build_object('nc_plain', true, 'outer_time', (pg_temp.ar(940)).outer_time + 5)));
+  ok := ok and not (pg_temp.ar(940)).nc_plain;
+  perform pg_temp.rec('v10.33 "not chalak" at the outer ruling: רבנות כשר or plain כשר (flag only with the outer ruling, only for "not chalak")', ok,
+    concat_ws(' | ', left(r::text, 60), left(r2::text, 60), left(r3::text, 60), left(r4::text, 60), left(r5::text, 60)));
 end $$;
 $gt39$;
     v_step := 'identity chaos: old key after a replacement, fake actor / role';

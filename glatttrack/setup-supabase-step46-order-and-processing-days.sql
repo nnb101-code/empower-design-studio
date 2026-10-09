@@ -127,6 +127,17 @@ begin
   if v_list <> '' then execute 'lock table ' || v_list || ' in access exclusive mode'; end if;
 end $$;
 
+-- v10.33: a "not chalak" animal that the outer inspector ruled plain כשר (not רבנות כשר).
+-- "Not chalak" holds until the outer ruling; there it becomes רבנות כשר (outer_status 'kosher')
+-- or כשר (outer_status 'kosher' + nc_plain). Only with a kosher ruling of a "not chalak" animal.
+alter table animals_pilot add column if not exists nc_plain boolean not null default false;
+
+do $$ begin
+  if to_regclass('public.animals_carry') is not null then
+    alter table animals_carry add column if not exists nc_plain boolean not null default false;
+  end if;
+end $$;
+
 create or replace function _gt_settings() returns jsonb
 language sql stable security definer set search_path = public, extensions, pg_temp as $$
   select coalesce((select settings from settings_pilot where id = 1), '{}'::jsonb);
@@ -202,7 +213,7 @@ revoke execute on function _kosher_ready(animals_pilot) from public, anon, authe
 create or replace function _printed_as_key(a animals_pilot) returns text
 language sql immutable set search_path = public, extensions, pg_temp as $$
   select case when a.outer_status is null then null
-              when a.outer_status = 'kosher' and _is_nc(a) then 'kosherRab'
+              when a.outer_status = 'kosher' and _is_nc(a) and not coalesce(a.nc_plain, false) then 'kosherRab'
               else a.outer_status end;
 $$;
 revoke execute on function _printed_as_key(animals_pilot) from public, anon, authenticated;
@@ -247,6 +258,7 @@ revoke execute on function _stage_order_error(text, animals_pilot, boolean) from
 
 -- ── 4a. processing boards kept after the daily reset ────────────────────────
 create table if not exists animals_carry (like animals_pilot including defaults including constraints);
+alter table animals_carry add column if not exists nc_plain boolean not null default false;
 alter table animals_carry add column if not exists board_id bigint;
 alter table animals_carry add column if not exists slaughter_day date;
 do $$ begin
@@ -518,6 +530,7 @@ declare
   v_res jsonb;
   v_dup boolean := false;
   v_order text; v_open bigint;
+  v_plain boolean := false;
   a animals_pilot%rowtype;
 begin
   if p_id is null or p_id < 0 or p_id > 999 then
@@ -530,10 +543,13 @@ begin
   v_epoch := _board_epoch();
   if (p_stage = 'slaughter' and (p_value is null or not _gt_value_ok('slaughter', p_value)))
      or (p_stage = 'inner' and coalesce(p_value, '') not in ('confirmed', 'treif'))
-     or (p_stage = 'outer' and (p_value is null or not _gt_value_ok('outer', p_value)))
+     or (p_stage = 'outer' and (p_value is null or (p_value <> 'kosherPlain' and not _gt_value_ok('outer', p_value))))
      or (p_stage = 'eso' and coalesce(p_value, '') not in ('ok', 'nevela')) then
     return jsonb_build_object('claimed', false, 'error', 'bad_value');
   end if;
+  -- v10.33: 'kosherPlain' = plain כשר for a "not chalak" animal (outer_status 'kosher' + nc_plain)
+  v_plain := (p_stage = 'outer' and p_value = 'kosherPlain');
+  if v_plain then p_value := 'kosher'; end if;
   if v_epoch is not null and (p_epoch is null or p_epoch < v_epoch) then
     return jsonb_build_object('claimed', false, 'error', 'stale_board', 'boardEpoch', v_epoch);
   end if;
@@ -634,6 +650,7 @@ begin
   elsif p_stage = 'outer' then
     update animals_pilot
        set outer_status = p_value, outer_by = v_actor, outer_by_device = v_dev, device_id = v_dev,
+           nc_plain = v_plain,
            outer_time = greatest(v_now, coalesce(outer_time, 0) + 1), updated_at = now()
      where id = p_id and outer_status is null
        and coalesce(board_epoch, 0) <= coalesce(v_epoch, 0);
@@ -674,6 +691,7 @@ begin
       when 'slaughter' then a.slaughter = p_value and a.slaughter_by_device = v_dev
       when 'inner'     then a.inner_status = p_value and a.inner_by_device = v_dev
       when 'outer'     then a.outer_status = p_value and a.outer_by_device = v_dev
+                            and coalesce(a.nc_plain, false) = (v_plain and _is_nc(a))
       when 'eso'       then coalesce(a.eso_checked, false) and a.eso_result = p_value and a.eso_by_device = v_dev
       else false end, false);
     if not v_dup and p_stage in ('inner_start', 'inner') and a.inner_status = 'in_progress'
@@ -703,7 +721,7 @@ declare
     'weight_right','weight_left','weight_stage2','weight_stage3',
     'weight_right_skipped','weight_left_skipped','weight_stage2_skipped','weight_stage3_skipped',
     'eso_checked','eso_result','legs_sorted','stamped','stamped_as',
-    'not_chalak_inner','parts_print_count','parts_printed_as'];
+    'not_chalak_inner','parts_print_count','parts_printed_as','nc_plain'];
   v_api boolean := _is_api_request() and not _request_is_service_role();
   v_rows jsonb; r jsonb; r2 jsonb; k text;
   v_cols text[]; v_ins text; v_sel text; v_set text;
@@ -1040,8 +1058,10 @@ begin
     if exists (select 1 from animals_pilot a where _proc_pending(st, a, true)) then v_carry := true; exit; end if;
   end loop;
   if v_carry then
-    insert into animals_carry
-    select a.*, v_board, v_day from animals_pilot a where a.slaughter is not null;
+    insert into animals_carry          -- by column name (v10.33: columns added later sit after board_id)
+    select (jsonb_populate_record(null::animals_carry,
+              to_jsonb(a) || jsonb_build_object('board_id', v_board, 'slaughter_day', v_day))).*
+      from animals_pilot a where a.slaughter is not null;
   end if;
   perform _proc_finalize(null);                               -- older boards nobody needs any more
 
@@ -1057,7 +1077,7 @@ begin
     maw = null, rumen = null,
     inner_status = null, inner_by = null, inner_time = null, inner_by_device = null,
     not_chalak_inner = false, not_chalak_outer = false,
-    outer_status = null, outer_by = null, outer_time = null, outer_by_device = null,
+    outer_status = null, outer_by = null, outer_time = null, outer_by_device = null, nc_plain = false,
     parts_scanned = false, tongue_sticker = false, cheek_sticker = false,
     weight_right = null, weight_left = null,
     weight_stage2 = null, weight_stage3 = null,
@@ -1694,6 +1714,7 @@ begin
                         'nci', coalesce((x ->> 'not_chalak_inner')::boolean, false),
                         'nco', coalesce((x ->> 'not_chalak_outer')::boolean, false),
                         'nc',  (coalesce((x ->> 'not_chalak_inner')::boolean, false) or coalesce((x ->> 'not_chalak_outer')::boolean, false)),
+                        'ncp', coalesce((x ->> 'nc_plain')::boolean, false),
                         'wr',  coalesce(x -> 'weight_right', 'null'::jsonb),
                         'wl',  coalesce(x -> 'weight_left', 'null'::jsonb)
                       ) order by (x ->> 'id')::int)
@@ -4045,8 +4066,8 @@ begin
     new.inner_time := old.inner_time;
   end if;
   if old.outer_status is not null and new.outer_time is distinct from old.outer_time
-     and (new.outer_status, new.outer_by, new.outer_by_device)
-         is not distinct from (old.outer_status, old.outer_by, old.outer_by_device) then
+     and (new.outer_status, new.outer_by, new.outer_by_device, coalesce(new.nc_plain, false))
+         is not distinct from (old.outer_status, old.outer_by, old.outer_by_device, coalesce(old.nc_plain, false)) then
     new.outer_time := old.outer_time;
   end if;
 
@@ -4077,9 +4098,10 @@ begin
       new.inner_status || case when coalesce(new.not_chalak_inner, false) then '/notChalak' else '' end, v_dev);
   end if;
   if old.outer_status is not null
-     and (new.outer_status, new.outer_by, new.outer_by_device) is distinct from (old.outer_status, old.outer_by, old.outer_by_device) then
+     and ((new.outer_status, new.outer_by, new.outer_by_device) is distinct from (old.outer_status, old.outer_by, old.outer_by_device)
+          or coalesce(new.nc_plain, false) is distinct from coalesce(old.nc_plain, false)) then
     perform _raise_correction(_correction_check('outer', old, v_dev), 'outer');
-    perform _gt_note_change('outer', old, old.outer_status, new.outer_status, v_dev);
+    perform _gt_note_change('outer', old, _printed_as_key(old), _printed_as_key(new), v_dev);
   end if;
   return new;
 end $$;
@@ -4270,8 +4292,10 @@ begin
     v_carry := true;
   end if;
   if v_carry then
-    insert into animals_carry
-    select a.*, v_board, v_day from animals_pilot a where a.slaughter is not null;
+    insert into animals_carry          -- by column name (v10.33: columns added later sit after board_id)
+    select (jsonb_populate_record(null::animals_carry,
+              to_jsonb(a) || jsonb_build_object('board_id', v_board, 'slaughter_day', v_day))).*
+      from animals_pilot a where a.slaughter is not null;
   end if;
   if v_old_epoch is not null then
     update animal_holds set resolved_at = now(), resolution = 'board_closed'
@@ -4292,7 +4316,7 @@ begin
     maw = null, rumen = null,
     inner_status = null, inner_by = null, inner_time = null, inner_by_device = null,
     not_chalak_inner = false, not_chalak_outer = false,
-    outer_status = null, outer_by = null, outer_time = null, outer_by_device = null,
+    outer_status = null, outer_by = null, outer_time = null, outer_by_device = null, nc_plain = false,
     parts_scanned = false, tongue_sticker = false, cheek_sticker = false,
     weight_right = null, weight_left = null,
     weight_stage2 = null, weight_stage3 = null,
@@ -4325,6 +4349,33 @@ begin
         updated_at = now();
 end $$;
 revoke execute on function _do_board_reset(text, date) from public, anon, authenticated;
+
+-- ── §30 "not chalak" at the outer ruling: רבנות כשר or כשר (v10.33) ──────────
+-- "Not chalak" holds until the outer ruling. There the animal is ruled רבנות כשר
+-- (outer_status 'kosher') or plain כשר (outer_status 'kosher' + nc_plain) or treif
+-- (רבנות חלק too when it was only sent to the rabbinate screen). nc_plain moves only with
+-- the outer ruling itself: a write whose outer ruling the merge did not take keeps the
+-- server's flag, and the flag is cleared on anything but a kosher ruling of a
+-- "not chalak" animal.
+create or replace function _animals_nc_plain() returns trigger
+language plpgsql security definer set search_path = public, extensions, pg_temp as $$
+begin
+  if tg_op = 'UPDATE' and current_setting('gt.reset_in_progress', true) is distinct from 'true'
+     and coalesce(current_setting('gt.claim', true), '') <> 'true'
+     and (new.outer_status, new.outer_time, new.outer_by, new.outer_by_device)
+         is not distinct from (old.outer_status, old.outer_time, old.outer_by, old.outer_by_device) then
+    new.nc_plain := old.nc_plain;
+  end if;
+  if new.outer_status is distinct from 'kosher' or not coalesce(_is_nc(new), false) then
+    new.nc_plain := false;
+  end if;
+  new.nc_plain := coalesce(new.nc_plain, false);
+  return new;
+end $$;
+revoke execute on function _animals_nc_plain() from public, anon, authenticated;
+drop trigger if exists a_animals_nc_plain on animals_pilot;
+create trigger a_animals_nc_plain before insert or update on animals_pilot
+  for each row execute function _animals_nc_plain();
 
 -- ── self-check ──────────────────────────────────────────────────────────────
 do $$
@@ -4377,6 +4428,10 @@ begin
   if not exists (select 1 from pg_trigger where tgrelid = 'animals_pilot'::regclass and tgname = 'b_animals_hold_guard' and tgenabled <> 'D')
      or not exists (select 1 from pg_trigger where tgrelid = 'animals_pilot'::regclass and tgname = 'zzzzz_close_questions' and tgenabled <> 'D') then
     problems := problems || 'hold triggers missing (v10.26)'::text; end if;
+  if not exists (select 1 from pg_trigger where tgrelid = 'animals_pilot'::regclass and tgname = 'a_animals_nc_plain' and tgenabled <> 'D')
+     or _printed_as_key(jsonb_populate_record(null::animals_pilot, '{"id":5,"slaughter":"notChalak","outer_status":"kosher","nc_plain":true}')) <> 'kosher'
+     or _printed_as_key(jsonb_populate_record(null::animals_pilot, '{"id":5,"slaughter":"notChalak","outer_status":"kosher"}')) <> 'kosherRab' then
+    problems := problems || '"not chalak" plain kosher at the outer ruling (v10.33)'::text; end if;
   if (select value from plant_state where key = 'schemaStep')::int < 46 then
     problems := problems || 'schemaStep not 46'::text; end if;
   if array_length(problems, 1) > 0 then
