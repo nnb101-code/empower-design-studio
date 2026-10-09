@@ -1301,29 +1301,10 @@ const LUNG_B64="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICA
       <div id="func-inspection" style="display:none;">
         <div class="mgr-sec">בדיקות פנים וחוץ</div>
         <div class="mgr-card">
-          <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">תצורת מסכים — פנים/חוץ:</div>
-          <div style="display:flex;flex-direction:column;gap:6px;">
-            <button onclick="mgrSetScreenConfig('1both')" id="sc0" class="mgr-choice-btn" style="text-align:right;padding:9px 12px;">
-              <div style="font-weight:700;font-size:12px;">מסך 1 — פנים + חוץ יחד</div>
-              <div style="font-size:10px;color:var(--muted)">בודק אחד עושה שתי העבודות</div>
-            </button>
-            <button onclick="mgrSetScreenConfig('1in1out')" id="sc1" class="mgr-choice-btn active-choice" style="text-align:right;padding:9px 12px;">
-              <div style="font-weight:700;font-size:12px;">2 מסכים — 1 פנים + 1 חוץ</div>
-              <div style="font-size:10px;color:var(--muted)">בודק פנים ובודק חוץ נפרדים</div>
-            </button>
-            <button onclick="mgrSetScreenConfig('2in1out')" id="sc2" class="mgr-choice-btn" style="text-align:right;padding:9px 12px;">
-              <div style="font-weight:700;font-size:12px;">3 מסכים — 2 פנים + 1 חוץ</div>
-              <div style="font-size:10px;color:var(--muted)">שני בודקי פנים, בודק חוץ אחד</div>
-            </button>
-            <button onclick="mgrSetScreenConfig('1in2out')" id="sc4" class="mgr-choice-btn" style="text-align:right;padding:9px 12px;">
-              <div style="font-weight:700;font-size:12px;">3 מסכים — 1 פנים + 2 חוץ</div>
-              <div style="font-size:10px;color:var(--muted)">בודק פנים אחד, שני בודקי חוץ (גלאט / כשר אם לא‑חלק פעיל)</div>
-            </button>
-            <button onclick="mgrSetScreenConfig('2in2out')" id="sc3" class="mgr-choice-btn" style="text-align:right;padding:9px 12px;">
-              <div style="font-weight:700;font-size:12px;">4 מסכים — 2 פנים + 2 חוץ</div>
-              <div style="font-size:10px;color:var(--muted)">שני בודקים לכל תפקיד (חוץ: גלאט / כשר אם לא‑חלק פעיל)</div>
-            </button>
-          </div>
+          <!-- v10.34 (owner): the number of inner / outer screens is chosen in ONE place — Screens → Choosing screens -->
+          <div style="font-size:12px;color:var(--muted);margin-bottom:6px;">תצורת מסכים — פנים/חוץ:</div>
+          <div id="mgrCfgNow" data-no-i18n style="font-size:14px;font-weight:700;color:var(--gold);margin-bottom:8px;"></div>
+          <button onclick="gtOpenSetting('devices','mgrPlanTitle')" class="mgr-choice-btn" style="text-align:right;padding:9px 12px;font-size:12px;">שינוי — בבחירת מסכים ←</button>
         </div>
         <div class="mgr-card">
           <div class="mgr-toggle-row">
@@ -5441,6 +5422,7 @@ Object.assign(I18N_DOM,{"המפעל": ["Plant", "Planta"], "רשימות המש�
 // Hebrew restores the original text.
 const _HEB=/[֐-׿]/;
 Object.assign(I18N_DOM,{"כפתור \"לא חלק\" בשחיטה ובבית הכוסות — עם כל מספר של מסכי חוץ (גם מסך אחד, גם מסך משותף פנים+חוץ). \"לא חלק\" נשאר עד הפסיקה בבודק החוץ, ושם הבהמה מקבלת סטטוס אחד: הסטטוס של \"לא חלק\" (רבנות כשר, כשר או כל שם שהמפעל נותן לו — בסטטוסי הכשרות, ✏️ שם) או טרף.": ["A \"Non-Chalak\" button at slaughter and at the maw — with any number of outer screens (one screen, or one shared inner + outer screen too). \"Non-Chalak\" holds until the outer ruling, where the animal gets one status: the non-chalak status (רבנות כשר, כשר or any name the plant gives it — in the kashrut statuses, ✏️ Name) or treif.", "Un botón \"No Jalak\" en la faena y en el cuajar — con cualquier número de pantallas externas (una sola, o una compartida interna + externa). \"No Jalak\" vale hasta el dictamen externo, donde el animal recibe un estado: el estado no jalak (רבנות כשר, כשר o el nombre que la planta le dé — en los estados de kashrut, ✏️ Nombre) o treif."], "\"לא חלק\"": ["\"Non-Chalak\"", "\"No Jalak\""], "ניתוב \"לא חלק\" למסך B": ["Route \"Non-Chalak\" to screen B", "Enviar \"No Jalak\" a la pantalla B"], "רק כשיש שני מסכי חוץ. דולק: מסך B הוא רק ל\"לא חלק\" — בהמה \"לא חלק\" עוברת אליו ומקבלת שם את הסטטוס של \"לא חלק\" או טרף, ובמסך A יש \"שליחה למסך B\". כבוי (משולב): שני מסכי החוץ פוסקים הכול, כל אחד את הבהמה שמגיעה אליו.": ["Only with two outer screens. On: screen B is only for non-chalak — a non-chalak animal goes there and gets the non-chalak status or treif, and screen A has \"Send to screen B\". Off (combined): both outer screens rule everything, each the animal that comes to it.", "Solo con dos pantallas externas. Encendido: la pantalla B es solo para no jalak — el animal no jalak va allí y recibe el estado no jalak o treif, y la pantalla A tiene \"Enviar a la pantalla B\". Apagado (combinado): ambas pantallas dictaminan todo, cada una el animal que le llega."]});   // v10.34: the not-chalak switches
+Object.assign(I18N_DOM,{"שינוי — בבחירת מסכים ←": ["Change — in Choosing screens →", "Cambiar — en Elegir pantallas →"]});
 Object.assign(I18N_DOM,{"\"לא חלק\" ומסכי חוץ": ["\"Non-Chalak\" and outer screens", "\"No Jalak\" y pantallas externas"]});
 Object.assign(I18N_DOM,{"סטטוס רגיל לבהמה חלקה — למשל במפעל שכולו תחת הרבנות (רבנות חלק / רבנות כשר). לא לבהמה \"לא חלק\".": ["A regular status for a chalak animal — e.g. in a plant fully under the rabbinate (רבנות חלק / רבנות כשר). Not for a \"Non-Chalak\" animal.", "Un estado normal para un animal jalak — p. ej. en una planta totalmente bajo el rabinato (רבנות חלק / רבנות כשר). No para un animal \"No Jalak\"."]});
 // v10.30: known pieces of a longer text that holds a name (e.g. "🟢 ראש צוות — <name> (המכשיר הזה)")
@@ -10857,6 +10839,7 @@ function mgrSyncUI(){
   const cfgMap={'1both':0,'1in1out':1,'2in1out':2,'2in2out':3,'1in2out':4};
   const cfg=s.screenConfig||'1in1out';
   Object.entries(cfgMap).forEach(([c,i])=>{const b=document.getElementById('sc'+i);if(b)b.classList.toggle('active-choice',c===cfg);});
+  try{ _gtSyncCfgViews(); }catch(e){}
   // Daily target + animal type
   const dc=document.getElementById('mgrDailyCount');if(dc)dc.textContent=s.dailyTarget||0;
   const di=document.getElementById('mgrDailyInput');if(di)di.value=s.dailyTarget||0;
@@ -11680,6 +11663,20 @@ function funcTab(tab){
 }
 function mgrHlNum(prefix,val){
   document.querySelectorAll(`[id^="${prefix}"]`).forEach(b=>b.classList.toggle('active-choice',b.id===prefix+val));
+}
+function _gtCfgLabel(cfg){
+  return ({'1both':L('מסך אחד משותף — פנים + חוץ יחד','One shared screen — inner + outer together','Una pantalla compartida — interna + externa'),
+           '1in1out':L('2 מסכים — 1 פנים + 1 חוץ','2 screens — 1 inner + 1 outer','2 pantallas — 1 interna + 1 externa'),
+           '2in1out':L('3 מסכים — 2 פנים + 1 חוץ','3 screens — 2 inner + 1 outer','3 pantallas — 2 internas + 1 externa'),
+           '1in2out':L('3 מסכים — 1 פנים + 2 חוץ','3 screens — 1 inner + 2 outer','3 pantallas — 1 interna + 2 externas'),
+           '2in2out':L('4 מסכים — 2 פנים + 2 חוץ','4 screens — 2 inner + 2 outer','4 pantallas — 2 internas + 2 externas')})[cfg]||cfg;
+}
+// v10.34: the ncRouteB switch only where it means something — two outer screens
+function _gtSyncCfgViews(){
+  const s=KS.getSettings(), cfg=s.screenConfig||'1in1out';
+  const now=document.getElementById('mgrCfgNow'); if(now) now.textContent=_gtCfgLabel(cfg);
+  const t=document.getElementById('mgrNcRouteBT'), row=t&&t.closest('.mgr-toggle-row');
+  if(row) row.style.display=(cfg==='1in2out'||cfg==='2in2out')?'':'none';
 }
 function mgrSetScreenConfig(cfg){
   KS.updateSettings({screenConfig:cfg});
@@ -16352,12 +16349,13 @@ async function mgrRenderPlan(){
       // inner + outer both used: one clear choice of how many screens, and which worker lists follow from it
       const cur = D.shared ? '1both' : _gtCfgFor(D.ni, D.no);
       const lists2 = L('רשימות עובדים: "בודקי פנים" ו"בודקי חוץ"','Worker lists: "Inner inspectors" and "Outer inspectors"','Listas: "Inspectores internos" y "externos"');
+      const two = L('. שני מסכי חוץ: משולבים, או מסך B רק ל"לא חלק" (כשרות ← "לא חלק" ומסכי חוץ)','. Two outer screens: combined, or screen B only for "Non-Chalak" (Kashrut → "Non-Chalak" and outer screens)','. Dos pantallas externas: combinadas, o la pantalla B solo para "No Jalak" (Kashrut → "No Jalak" y pantallas externas)');
       const choices = [
         ['1both', L('מסך אחד משותף — פנים + חוץ יחד','One shared screen — inner + outer together','Una pantalla compartida'), L('בודק אחד עושה את שתי הבדיקות. רשימת עובדים אחת: "בודקים"','One inspector does both checks. One worker list: "Inspectors"','Un inspector hace ambos chequeos. Una lista: "Inspectores"')],
         ['1in1out', L('2 מסכים — 1 פנים + 1 חוץ','2 screens — 1 inner + 1 outer','2 pantallas — 1 interna + 1 externa'), lists2],
         ['2in1out', L('3 מסכים — 2 פנים + 1 חוץ','3 screens — 2 inner + 1 outer','3 pantallas — 2 internas + 1 externa'), lists2],
-        ['2in2out', L('4 מסכים — 2 פנים + 2 חוץ','4 screens — 2 inner + 2 outer','4 pantallas — 2 internas + 2 externas'), lists2],
-        ['1in2out', L('3 מסכים — 1 פנים + 2 חוץ','3 screens — 1 inner + 2 outer','3 pantallas — 1 interna + 2 externas'), lists2]
+        ['2in2out', L('4 מסכים — 2 פנים + 2 חוץ','4 screens — 2 inner + 2 outer','4 pantallas — 2 internas + 2 externas'), lists2 + two],
+        ['1in2out', L('3 מסכים — 1 פנים + 2 חוץ','3 screens — 1 inner + 2 outer','3 pantallas — 1 interna + 2 externas'), lists2 + two]
       ];
       x += `<div style="margin:10px 32px 0 0;"><div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:6px;">${L('בדיקת פנים וחוץ — כמה מסכים?','Inner and outer check — how many screens?','Chequeo interno y externo — ¿cuántas pantallas?')}</div>`
         + choices.map(([k,t,d]) => { const on2 = cur===k;
