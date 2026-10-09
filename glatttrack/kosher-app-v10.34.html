@@ -581,6 +581,12 @@ function _gtIsNC(x){ return !!(x && (x.slaughter==='notChalak' || x.notChalakInn
 function _gtNCPlain(x){ return !!(x && x.ncPlain===true && x.outerStatus==='kosher' && _gtIsNC(x)); }
 // the outer ruling as a button key: 'kosherPlain' for a plain כשר of a "not chalak" animal
 function _gtOuterKey(x){ return !x ? null : (_gtNCPlain(x) ? 'kosherPlain' : (x.outerStatus||null)); }
+// v10.34 (owner): a "not chalak" animal gets ONE kashrut status at the outer ruling — the plant names it
+// (רבנות כשר where the rabbinate gives it, or כשר, or any name). Stored as 'kosher' on a "not chalak" animal.
+function gtNCName(){ const s=(typeof KS!=='undefined'&&KS.getSettings)?KS.getSettings():{};
+  const he=String(s.ncStatusName||'').trim()||'רבנות כשר';
+  const en=String(s.ncStatusNameEn||'').trim()||(s.ncStatusName?'':'Rabbinate Kosher');
+  return {he, en}; }
 function _gtNCFixed(x){ return !!(x && (x.slaughter==='notChalak' || x.notChalakInner===true)); }
 </script>
 <script>
@@ -1259,22 +1265,22 @@ const LUNG_B64="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICA
         <div class="mgr-card">
           <div class="mgr-toggle-row">
             <div>
-              <div style="font-size:13px;color:var(--text);font-weight:600;">"לא חלק" ושליחה למסך רבנות</div>
-              <div style="font-size:11px;color:var(--muted);">כפתור "לא חלק" בשחיטה ובבית הכוסות — עם כל מספר של מסכי חוץ (גם מסך אחד, גם מסך משותף פנים+חוץ): ההגדרה "לא חלק" נשארת עד הפסיקה בבודק החוץ, ושם הבהמה נפסקת רבנות כשר, כשר או טרף. כשיש שני מסכי חוץ אפשר לנתב את הבהמות "לא חלק" למסך B (המתג הבא).</div>
+              <div style="font-size:13px;color:var(--text);font-weight:600;">"לא חלק"</div>
+              <div style="font-size:11px;color:var(--muted);">כפתור "לא חלק" בשחיטה ובבית הכוסות — עם כל מספר של מסכי חוץ (גם מסך אחד, גם מסך משותף פנים+חוץ). "לא חלק" נשאר עד הפסיקה בבודק החוץ, ושם הבהמה מקבלת סטטוס אחד: הסטטוס של "לא חלק" (רבנות כשר, כשר או כל שם שהמפעל נותן לו — בסטטוסי הכשרות, ✏️ שם) או טרף.</div>
             </div>
             <div class="mgr-toggle" id="mgrNotChalakT" onclick="mgrToggleRab('notChalakEnabled',this)"><div class="mgr-toggle-dot" style="right:26px"></div></div>
           </div>
           <div class="mgr-toggle-row" style="margin-top:12px;">
             <div>
               <div style="font-size:13px;color:var(--text);font-weight:600;" id="mgrNcRouteBTitle">ניתוב "לא חלק" למסך B</div>
-              <div style="font-size:11px;color:var(--muted);" id="mgrNcRouteBDesc">רק כשיש שני מסכי חוץ. דולק: בהמה "לא חלק" עוברת למסך B (מסך הרבנות), ובמסך הגלאט יש "שליחה למסך רבנות". כבוי: שני מסכי החוץ פוסקים הכול, כל אחד את הבהמה שמגיעה אליו.</div>
+              <div style="font-size:11px;color:var(--muted);" id="mgrNcRouteBDesc">רק כשיש שני מסכי חוץ. דולק: מסך B הוא רק ל"לא חלק" — בהמה "לא חלק" עוברת אליו ומקבלת שם את הסטטוס של "לא חלק" או טרף, ובמסך A יש "שליחה למסך B". כבוי (משולב): שני מסכי החוץ פוסקים הכול, כל אחד את הבהמה שמגיעה אליו.</div>
             </div>
             <div class="mgr-toggle" id="mgrNcRouteBT" onclick="mgrToggleRab('ncRouteB',this)"><div class="mgr-toggle-dot" style="right:26px"></div></div>
           </div>
           <div class="mgr-toggle-row" style="margin-top:12px;">
             <div>
               <div style="font-size:13px;color:var(--text);font-weight:600;">סטטוס כשרות "רבנות חלק"</div>
-              <div style="font-size:11px;color:var(--muted);">כפתור פסיקה בבודק החוץ ובמסך הרבנות (לא לבהמה שסומנה "לא חלק" בשחיטה או בבית הכוסות)</div>
+              <div style="font-size:11px;color:var(--muted);">סטטוס רגיל לבהמה חלקה — למשל במפעל שכולו תחת הרבנות (רבנות חלק / רבנות כשר). לא לבהמה "לא חלק".</div>
             </div>
             <div class="mgr-toggle" id="mgrRabChalakT" onclick="mgrToggleRabChalak(this)"><div class="mgr-toggle-dot" style="right:26px"></div></div>
           </div>
@@ -5300,7 +5306,7 @@ function _gtDoneAfterHtml(stage, a){
     +'</div>';
 }
 
-var GT_APP_VERSION='v10.33';
+var GT_APP_VERSION='v10.34';
 document.addEventListener('DOMContentLoaded',()=>{ try{ document.querySelectorAll('.gt-ver').forEach(e=>e.textContent=GT_APP_VERSION); }catch(e){} });
 function escapeHtml(str){
   return String(str==null?'':str).replace(/[&<>"']/g, c=>({
@@ -5359,8 +5365,8 @@ var _GT_ERR = {
   permission_denied:['השרת סירב לפעולה (אין הרשאה).','The server refused the action (not permitted).','El servidor rechazó la acción (sin permiso).'],
   network:['אין חיבור לשרת','No connection to the server','Sin conexión con el servidor'],
   eso_locked:['הבהמה נפסלה בבדיקת הוושט — רק מסך הוושט יכול לשנות זאת. השינוי לא נרשם.','This animal failed the esophagus check — only the esophagus screen can change that. The change was not recorded.','Este animal no pasó el control de esófago — solo la pantalla de esófago puede cambiarlo. El cambio no se registró.'],
-  nc_kosher_or_treif_only:['בהמה "לא חלק" אפשר לפסוק רק רבנות כשר, כשר או טרף (בהמה שרק נשלחה למסך הרבנות — גם רבנות חלק). הפסיקה לא נרשמה.','A "לא חלק" animal can only be ruled "רבנות כשר", "כשר" or "טרף" (an animal only sent to the rabbinate screen — also "רבנות חלק"). The ruling was not recorded.','Un animal "לא חלק" solo puede dictaminarse "רבנות כשר", "כשר" o "טרף" (un animal solo enviado a la pantalla del rabinato — también "רבנות חלק"). El dictamen no se registró.'],
-  already_ruled:['לבהמה כבר יש פסיקת חוץ — היא לא נשלחה למסך הרבנות.','This animal already has an outer ruling — it was not sent to the rabbinate screen.','Este animal ya tiene dictamen externo — no se envió a la pantalla del rabinato.'],
+  nc_kosher_or_treif_only:['בהמה "לא חלק" מקבלת רק את סטטוס ה"לא חלק" של המפעל או טרף. הפסיקה לא נרשמה.','A "לא חלק" animal gets only the plant\'s "not chalak" status or "טרף". The ruling was not recorded.','Un animal "לא חלק" recibe solo el estado "no jalak" de la planta o "טרף". El dictamen no se registró.'],
+  already_ruled:['לבהמה כבר יש פסיקת חוץ — היא לא נשלחה למסך B.','This animal already has an outer ruling — it was not sent to screen B.','Este animal ya tiene dictamen externo — no se envió a la pantalla del rabinato.'],
   bad_settings:['השרת דחה ערך הגדרה לא תקין — ההגדרה לא נשמרה.','The server refused an invalid setting value — the setting was not saved.','El servidor rechazó un valor de ajuste no válido — no se guardó.'],
   not_checked:['הבהמה עוד לא עברה בדיקת וושט.','This animal has not had the esophagus check yet.','Este animal aún no pasó el control de esófago.'],
   reason_required:['השרת דורש סיבה לפעולה הזו — הפעולה לא בוצעה.','The server requires a reason for this action — it was not done.','El servidor exige un motivo para esta acción — no se realizó.'],
@@ -5408,7 +5414,7 @@ function _gtStatusWord(v, a){
   const nc = _isNCAnimal(a);
   const W={
     glatt:['גלאט','גלאט','גלאט'], beit:['בית יוסף','בית יוסף','בית יוסף'], mk:['MK','MK','MK'],
-    kosher: nc?['רבנות כשר','רבנות כשר','רבנות כשר']:['כשר','כשר','כשר'],
+    kosher: nc?[gtNCName().he,gtNCName().he,gtNCName().he]:['כשר','כשר','כשר'],
     treif:['טרף','טרף','טרף'], nevela:['נבלה','Nevela','Nevela'], shot:['ירוי','Shot','Disparado'],
     notChalak:['לא חלק','Non-Chalak','No Jalak'],
     chalak:['חלק','Glatt (smooth)','Liso'], slaughtered:['נשחט','Slaughtered','Faenado'], ok:['תקין','OK','OK'],
@@ -5440,7 +5446,8 @@ Object.assign(I18N_DOM,{"המפעל": ["Plant", "Planta"], "רשימות המש�
 // (lists, grids, windows) is translated as it appears. Switching back to
 // Hebrew restores the original text.
 const _HEB=/[֐-׿]/;
-Object.assign(I18N_DOM,{"כפתור \"לא חלק\" בשחיטה ובבית הכוסות — עם כל מספר של מסכי חוץ (גם מסך אחד, גם מסך משותף פנים+חוץ): ההגדרה \"לא חלק\" נשארת עד הפסיקה בבודק החוץ, ושם הבהמה נפסקת רבנות כשר, כשר או טרף. כשיש שני מסכי חוץ אפשר לנתב את הבהמות \"לא חלק\" למסך B (המתג הבא).": ["A \"Non-Chalak\" button at slaughter and at the maw — with any number of outer screens (one screen, or one shared inner + outer screen too): \"Non-Chalak\" holds until the outer ruling, where the animal is ruled Rabbinate kosher, kosher or treif. With two outer screens the non-chalak animals can be routed to screen B (the next switch).", "Un botón \"No Jalak\" en la faena y en el cuajar — con cualquier número de pantallas externas (una sola, o una compartida interna + externa): \"No Jalak\" vale hasta el dictamen externo, donde el animal se dictamina Kosher rabinato, kosher o treif. Con dos pantallas externas, los animales no jalak se pueden enviar a la pantalla B (el siguiente interruptor)."], "ניתוב \"לא חלק\" למסך B": ["Route \"Non-Chalak\" to screen B", "Enviar \"No Jalak\" a la pantalla B"], "רק כשיש שני מסכי חוץ. דולק: בהמה \"לא חלק\" עוברת למסך B (מסך הרבנות), ובמסך הגלאט יש \"שליחה למסך רבנות\". כבוי: שני מסכי החוץ פוסקים הכול, כל אחד את הבהמה שמגיעה אליו.": ["Only with two outer screens. On: a non-chalak animal goes to screen B (the rabbinate screen), and the glatt screen has \"Send to the rabbinate screen\". Off: both outer screens rule everything, each the animal that comes to it.", "Solo con dos pantallas externas. Encendido: un animal no jalak pasa a la pantalla B (rabinato), y la pantalla glatt tiene \"Enviar a la pantalla del rabinato\". Apagado: ambas pantallas externas dictaminan todo, cada una el animal que le llega."]});   // v10.33: the not-chalak switches
+Object.assign(I18N_DOM,{"כפתור \"לא חלק\" בשחיטה ובבית הכוסות — עם כל מספר של מסכי חוץ (גם מסך אחד, גם מסך משותף פנים+חוץ). \"לא חלק\" נשאר עד הפסיקה בבודק החוץ, ושם הבהמה מקבלת סטטוס אחד: הסטטוס של \"לא חלק\" (רבנות כשר, כשר או כל שם שהמפעל נותן לו — בסטטוסי הכשרות, ✏️ שם) או טרף.": ["A \"Non-Chalak\" button at slaughter and at the maw — with any number of outer screens (one screen, or one shared inner + outer screen too). \"Non-Chalak\" holds until the outer ruling, where the animal gets one status: the non-chalak status (רבנות כשר, כשר or any name the plant gives it — in the kashrut statuses, ✏️ Name) or treif.", "Un botón \"No Jalak\" en la faena y en el cuajar — con cualquier número de pantallas externas (una sola, o una compartida interna + externa). \"No Jalak\" vale hasta el dictamen externo, donde el animal recibe un estado: el estado no jalak (רבנות כשר, כשר o el nombre que la planta le dé — en los estados de kashrut, ✏️ Nombre) o treif."], "\"לא חלק\"": ["\"Non-Chalak\"", "\"No Jalak\""], "ניתוב \"לא חלק\" למסך B": ["Route \"Non-Chalak\" to screen B", "Enviar \"No Jalak\" a la pantalla B"], "רק כשיש שני מסכי חוץ. דולק: מסך B הוא רק ל\"לא חלק\" — בהמה \"לא חלק\" עוברת אליו ומקבלת שם את הסטטוס של \"לא חלק\" או טרף, ובמסך A יש \"שליחה למסך B\". כבוי (משולב): שני מסכי החוץ פוסקים הכול, כל אחד את הבהמה שמגיעה אליו.": ["Only with two outer screens. On: screen B is only for non-chalak — a non-chalak animal goes there and gets the non-chalak status or treif, and screen A has \"Send to screen B\". Off (combined): both outer screens rule everything, each the animal that comes to it.", "Solo con dos pantallas externas. Encendido: la pantalla B es solo para no jalak — el animal no jalak va allí y recibe el estado no jalak o treif, y la pantalla A tiene \"Enviar a la pantalla B\". Apagado (combinado): ambas pantallas dictaminan todo, cada una el animal que le llega."]});   // v10.34: the not-chalak switches
+Object.assign(I18N_DOM,{"סטטוס רגיל לבהמה חלקה — למשל במפעל שכולו תחת הרבנות (רבנות חלק / רבנות כשר). לא לבהמה \"לא חלק\".": ["A regular status for a chalak animal — e.g. in a plant fully under the rabbinate (רבנות חלק / רבנות כשר). Not for a \"Non-Chalak\" animal.", "Un estado normal para un animal jalak — p. ej. en una planta totalmente bajo el rabinato (רבנות חלק / רבנות כשר). No para un animal \"No Jalak\"."]});
 // v10.30: known pieces of a longer text that holds a name (e.g. "🟢 ראש צוות — <name> (המכשיר הזה)")
 const I18N_PARTS=[['ראש צוות — ',['Team leader — ','Jefe de equipo — ']],['(המכשיר הזה)',['(this device)','(este dispositivo)']],
                   ['"סגור" — רק כשמה שנשאר לא יעובד בתחנה הזו.',['"Close" — only when what is left will not be processed at this station.','"Cerrar" — solo cuando lo que queda no se procesará en esta estación.']],
@@ -7666,7 +7673,7 @@ function renderSticker(containerId,idx,kind,sample){
     // every sticker carries the status in Hebrew AND English: [Hebrew, color, English]
     const stMap={glatt:['גלאט','#28C76F','Glatt'],beit:['בית יוסף','#4DA6FF','Beit Yosef'],kosher:['כשר','#D4A843','Kosher'],mk:['MK','#A080F0','MK'],rabChalak:['רבנות חלק','#16A085','Rabbinate Chalak'],treif:['טרף','#E03030','Treif'],slaughtered:['נשחט','#2A7FFF','Slaughtered'],notChalak:['לא חלק','#C99A00','Non-Chalak'],nevela:['נבלה','#E03030','Nevela'],shot:['נבלה','#E03030','Nevela']};
     st=stMap[stRaw]||(stRaw?[statusDisplayName(stRaw)||stRaw,(getAllStatuses().find(x=>x.key===stRaw)||{}).color||'#888',statusEnglishName(stRaw)]:['—','#888','']);
-    if((!sample && stRaw==='kosher' && _isNCAnimal(KS.getAnimal(idx))) || (_smp && _smp.status==='kosherRab')) st=['רבנות כשר', st[1], 'Rabbinate Kosher'];
+    if((!sample && stRaw==='kosher' && _isNCAnimal(KS.getAnimal(idx))) || (_smp && _smp.status==='kosherRab')) st=[gtNCName().he, st[1], gtNCName().en];
     const _d=slTime||new Date();
     if(opt.showHeb){try{heb=(typeof getHebrewDate==='function')?getHebrewDate(_d):'';
       }catch(e){heb='';}}
@@ -7875,7 +7882,7 @@ function _stkvStatuses(kind){
   getAllStatuses().forEach(st=>{
     if(st.key==='treif' || st.removed || dis.includes(st.key)) return;
     out.push({key:st.key, label:statusDisplayName(st.key)||st.key});
-    if(st.key==='kosher' && s.notChalakEnabled) out.push({key:'kosherRab', label:'רבנות כשר'});
+    if(st.key==='kosher' && s.notChalakEnabled) out.push({key:'kosherRab', label:gtNCName().he+' ('+L('לא חלק','non-chalak','no jalak')+')'});
   });
   return out;
 }
@@ -8111,7 +8118,7 @@ function _isNCAnimal(x){ return _gtIsNC(x) && !_gtNCPlain(x); }   // v10.33: rul
 // Stickers print it with its English name too (statusEnglishName).
 function statusDisplayName(key, x){
   if(!key)return '';
-  if((key==='kosher' && _isNCAnimal(x)) || key==='kosherRab' || key==='rabKosher') return 'רבנות כשר';
+  if((key==='kosher' && _isNCAnimal(x)) || key==='kosherRab' || key==='rabKosher') return gtNCName().he;
   const d=DEFAULT_STATUSES.find(st=>st.key===key); if(d) return d.he;
   const c=(KS.getSettings().customStatuses||[]).find(st=>st.key===key);
   if(c) return c.he||c.en||key;
@@ -8119,7 +8126,7 @@ function statusDisplayName(key, x){
 }
 function statusEnglishName(key, x){
   if(!key)return '';
-  if((key==='kosher' && _isNCAnimal(x)) || key==='kosherRab' || key==='rabKosher') return 'Rabbinate Kosher';
+  if((key==='kosher' && _isNCAnimal(x)) || key==='kosherRab' || key==='rabKosher') return gtNCName().en;
   const d=DEFAULT_STATUSES.find(st=>st.key===key); if(d) return d.en;
   const c=(KS.getSettings().customStatuses||[]).find(st=>st.key===key);
   if(c) return c.en||'';
@@ -8930,15 +8937,16 @@ async function outSendToRabbinate(){
   const x=KS.getAnimal(idx);
   if(!x || x.outerStatus || _gtIsNC(x) || x.innerStatus!=='confirmed') return;
   const rc=_gtRabChalakOn();
-  const ok=await ATconfirm(L('לשלוח את בהמה #'+(idx+1)+' למסך הרבנות?\nשם יפסקו '+(rc?'רבנות חלק, רבנות כשר, כשר או טרף':'רבנות כשר, כשר או טרף')+'. היא לא חוזרת למסך הזה.',
-                            'Send animal #'+(idx+1)+' to the rabbinate screen?\nIt is ruled there: '+(rc?'"רבנות חלק", "רבנות כשר", "כשר" or "טרף"':'"רבנות כשר", "כשר" or "טרף"')+'. It does not come back to this screen.',
-                            '¿Enviar el animal #'+(idx+1)+' a la pantalla del rabinato?\nAllí se dictamina: '+(rc?'"רבנות חלק", "רבנות כשר", "כשר" o "טרף"':'"רבנות כשר", "כשר" o "טרף"')+'. No vuelve a esta pantalla.'));
+  const _n=gtNCName().he;
+  const ok=await ATconfirm(L('לשלוח את בהמה #'+(idx+1)+' למסך B?\nשם יפסקו '+_n+' או טרף. היא לא חוזרת למסך הזה.',
+                            'Send animal #'+(idx+1)+' to screen B?\nIt is ruled there: "'+_n+'" or "טרף". It does not come back to this screen.',
+                            '¿Enviar el animal #'+(idx+1)+' a la pantalla B?\nAllí se dictamina: "'+_n+'" o "טרף". No vuelve a esta pantalla.'));
   if(!ok || outPendingDec!==idx) return;
   if(!KS.setOuterNotChalak(idx, activeUserName("outer","בודק חוץ"))) return;
   document.getElementById("decModal").classList.remove("open");
   _outRelease(idx);
   outPendingDec=-1;
-  try{ KS.notice(L('בהמה #'+(idx+1)+' נשלחה למסך הרבנות','Animal #'+(idx+1)+' was sent to the rabbinate screen','El animal #'+(idx+1)+' fue enviado a la pantalla del rabinato')); }catch(e){}
+  try{ KS.notice(L('בהמה #'+(idx+1)+' נשלחה למסך B','Animal #'+(idx+1)+' was sent to screen B','El animal #'+(idx+1)+' fue enviado a la pantalla B')); }catch(e){}
   outManualPage=false;
   try{ outRenderGrid(); outUpdateSummary(); }catch(e){}
 }
@@ -8967,9 +8975,9 @@ function outDecide(status){
      try{ if((KS.getSettings().screenConfig||'1in1out')==='1both'){ inRenderGrid(); inUpdateSummary(); } }catch(e){}
      return;
    }}
-  if(status!=='kosher' && status!=='kosherPlain' && status!=='treif' && _gtIsNC(KS.getAnimal(outPendingDec))
-     && !(status==='rabChalak' && !_gtNCFixed(KS.getAnimal(outPendingDec)))){
-    try{ KS.notice(L('בהמה #'+(outPendingDec+1)+' — "לא חלק": אפשר לפסוק רק רבנות כשר, כשר או טרף.','Animal #'+(outPendingDec+1)+' — "לא חלק": only "רבנות כשר", "כשר" or "טרף".','Animal #'+(outPendingDec+1)+' — "לא חלק": solo "רבנות כשר", "כשר" o "טרף".')); }catch(e){}
+  if(status!=='kosher' && status!=='treif' && _gtIsNC(KS.getAnimal(outPendingDec))){
+    const _n=gtNCName().he;
+    try{ KS.notice(L('בהמה #'+(outPendingDec+1)+' — "לא חלק": אפשר לפסוק רק '+_n+' או טרף.','Animal #'+(outPendingDec+1)+' — "לא חלק": only "'+_n+'" or "טרף".','Animal #'+(outPendingDec+1)+' — "לא חלק": solo "'+_n+'" o "טרף".')); }catch(e){}
     try{ rebuildOuterButtons(); }catch(e){}
     return;
   }
@@ -9021,7 +9029,7 @@ function outUpdateSummary(){
   const keyOf=x=>(x.outerStatus==='kosher'&&_isNCAnimal(x))?'kosherRab':x.outerStatus;
   const cnt={}; a.forEach(x=>{ if(x.outerStatus&&x.outerStatus!=='treif'&&mine(x)){ const k=keyOf(x); cnt[k]=(cnt[k]||0)+1; } });
   let keys=getAllStatuses().filter(st=>st.key!=='treif'&&!st.removed&&!dis.includes(st.key)).map(st=>st.key);
-  if(role==='kosher') keys=['kosherRab'].concat(_gtRabChalakOn(set)?['rabChalak']:[]);
+  if(role==='kosher') keys=['kosherRab'];   // v10.34: screen B rules only the "not chalak" status
   else if(set.notChalakEnabled && role!=='glatt') keys.push('kosherRab');
   if(role==='glatt') keys=keys.filter(k=>k!=='rabChalak');
   Object.keys(cnt).forEach(k=>{ if(!keys.includes(k)) keys.push(k); });   // a ruling under a status turned off since
@@ -9198,7 +9206,7 @@ function gtAnHtml(acc, K, C){
     .concat([['nevela', acc.nevela, c => c.acc.nevela], ['shot', acc.shot, c => c.acc.shot]]);
   const _resNm = { nevela: L('נבלה', 'Nevela', 'Nevelá'), shot: L('ירוי', 'Shot', 'Baleado') }, _resCol = { nevela: '#8B1E1E', shot: '#8A8F98' };
   const ruled = K.graded + K.treif + acc.nevela + acc.shot;          // every animal with a result
-  const _rn = k => _resNm[k] || (k === 'rabKosher' ? L('רבנות כשר', 'Rabbinate kosher', 'Kosher rabinato') : nm(k)), _rc = k => _resCol[k] || (k === 'rabKosher' ? '#C99A00' : col(k));
+  const _rn = k => _resNm[k] || (k === 'rabKosher' ? gtNCName().he : nm(k)), _rc = k => _resCol[k] || (k === 'rabKosher' ? '#C99A00' : col(k));
   const bar = rowsDef.filter(r => r[1] > 0).map(([k, v]) => `<div title="${escapeHtml(_rn(k))}" style="width:${ruled ? v / ruled * 100 : 0}%;background:${_rc(k)};height:100%;"></div>`).join('');
   const tbl = `<div style="height:14px;border-radius:7px;overflow:hidden;display:flex;background:var(--border);margin-bottom:10px;">${bar}</div>
     <table class="gt-tbl"><tr><th></th><th>${L('כמות', 'Count', 'Cant.')}</th><th>%</th>${C.map(c => `<th>${escapeHtml(c.l)}</th>`).join('')}</tr>
@@ -10208,7 +10216,7 @@ function _renderBucketBreakdown(bucket){
     ['glatt','גלאט','var(--glatt)'],
     ['beit','בית יוסף','var(--beit)'],
     ['kosher','כשר','var(--kosher)'],
-    ['rabKosher','רבנות כשר','#C99A00'],
+    ['rabKosher',gtNCName().he,'#C99A00'],
     ['mk','MK','var(--mk)'],
     ['other',L('אחר','Other','Otro'),'var(--gold)'],
   ];
@@ -10244,7 +10252,7 @@ function mgrUpdateSummaries(){
     ['גלאט','var(--glatt)',d.glatt],
     ['בית יוסף','var(--beit)',d.beit],
     ['כשר','var(--kosher)',d.kosher],
-    ['רבנות כשר','#C99A00',d.rabKosher||0],
+    [gtNCName().he,'#C99A00',d.rabKosher||0],
     ['MK','var(--mk)',d.mk],
   ];
   Object.entries(d.custom).forEach(([k,v])=>{const c=getAllStatuses().find(x=>x.key===k);rows.push([c?statusDisplayName(k):k,c?c.color:'var(--gold)',v]);});
@@ -10363,7 +10371,7 @@ function mgrDrawCharts(){
     ['גלאט','#28C76F',d.glatt],
     ['בית יוסף','#4DA6FF',d.beit],
     ['כשר','#D4A843',d.kosher],
-    ['רבנות כשר','#C99A00',d.rabKosher||0],
+    [gtNCName().he,'#C99A00',d.rabKosher||0],
     ['MK','#A080F0',d.mk],
     ['טרף','#E03030',d.treif+d.innerTreif],
   ];
@@ -10913,7 +10921,7 @@ function mgrUpdateSealUploads(){
     {key:'rabChalak',he:'רבנות חלק',en:'Rabbinate Chalak',color:'#16A085'},
   ];
   const s=KS.getSettings();
-  sealTypes.push({key:'kosherRab',he:'רבנות כשר',en:'Rabbinate Kosher',color:_safeColor((s.statusColorOverrides||{}).kosherRab||'#C99A00','#C99A00')});
+  sealTypes.push({key:'kosherRab',he:gtNCName().he,en:gtNCName().en,color:_safeColor((s.statusColorOverrides||{}).kosherRab||'#C99A00','#C99A00')});
   (s.customStatuses||[]).filter(c=>c&&c.kosher===true&&!c.removed).forEach(c=>sealTypes.push({key:c.key,he:c.he||c.key,en:c.en||'',color:c.color||'#888'}));
   const seals=s.customSeals||{};
   // Each seal uses a unique input id - label wraps it directly (Android safe)
@@ -10956,6 +10964,19 @@ function mgrSealChosen(type,input){
 }
 
 
+// v10.34: the plant names the "not chalak" status (Hebrew + the English printed on stickers)
+async function mgrNCNameEdit(){
+  const cur=gtNCName();
+  const he=prompt(L('שם הסטטוס של בהמה "לא חלק" (למשל: רבנות כשר / כשר):','Name of the "not chalak" status (e.g. רבנות כשר / כשר):','Nombre del estado "no jalak" (p. ej. רבנות כשר / כשר):'), cur.he);
+  if(he==null) return;
+  const h=String(he).trim().slice(0,30); if(!h) return;
+  const en=prompt(L('השם באנגלית למדבקות (אפשר להשאיר ריק):','English name for the stickers (may be empty):','Nombre en inglés para las etiquetas (puede quedar vacío):'),
+                  cur.he===h ? cur.en : (h==='כשר'?'Kosher':''));
+  if(en==null) return;
+  KS.updateSettings({ncStatusName:h, ncStatusNameEn:String(en).trim().slice(0,40)});
+  try{ mgrUpdateStatusToggles(); }catch(e){}
+  try{ mgrUpdateSealPreviews(); }catch(e){}
+}
 function mgrUploadSeal(type,input){
   const file=input.files[0];if(!file)return;
   const reader=new FileReader();
@@ -11070,8 +11091,9 @@ function mgrUpdateStatusToggles(){
     const c=_safeColor(overrides.kosherRab||'#C99A00','#C99A00'), sl=_safeImg(seals.kosherRab), K=_jsArg('kosherRab');
     return `<div data-rab-kosher="1" style="display:flex;align-items:center;gap:8px;padding:10px 2px;border-bottom:1px solid var(--border);flex-wrap:wrap;">
       <button onclick="mgrPickColor(${K},${_jsArg(c)})" style="width:30px;height:30px;min-width:30px;border-radius:7px;border:2px solid rgba(255,255,255,.3);background:${c};cursor:pointer;"></button>
-      <span data-no-i18n style="flex:1;min-width:50px;font-size:13px;color:#E8EDF5;font-weight:600;">רבנות כשר<span style="font-size:11px;color:var(--muted);font-weight:400;margin-inline-start:6px;">· Rabbinate Kosher</span>
-        <span style="display:block;font-size:11px;color:var(--muted);font-weight:400;">${L('הפסיקה הכשרה של מסך הרבנות','The rabbinate screen\'s kosher ruling','El dictamen kosher de la pantalla del rabinato')}</span></span>
+      <span data-no-i18n style="flex:1;min-width:50px;font-size:13px;color:#E8EDF5;font-weight:600;">${escapeHtml(gtNCName().he)}${gtNCName().en?`<span style="font-size:11px;color:var(--muted);font-weight:400;margin-inline-start:6px;">· ${escapeHtml(gtNCName().en)}</span>`:''}
+        <span style="display:block;font-size:11px;color:var(--muted);font-weight:400;">${L('הסטטוס של בהמה "לא חלק" בפסיקת החוץ','The status of a "not chalak" animal at the outer ruling','El estado de un animal "no jalak" en el dictamen externo')}</span></span>
+      <button onclick="mgrNCNameEdit()" style="font-size:11px;color:var(--gold);background:rgba(212,168,67,.08);border:1px solid var(--border);border-radius:5px;padding:4px 7px;cursor:pointer;">${L('✏️ שם','✏️ Name','✏️ Nombre')}</button>
       <label style="display:flex;align-items:center;gap:5px;cursor:pointer;background:rgba(212,168,67,.08);border-radius:7px;padding:3px 6px;">
         ${sl?`<img src="${sl}" style="width:38px;height:38px;object-fit:contain;border:1px solid var(--border);border-radius:6px;background:#fff;">`
             :`<span style="font-size:11px;color:var(--gold);">${L('+ חותמת','+ Seal','+ Sello')}</span>`}
@@ -11371,8 +11393,8 @@ function rebuildOuterButtons(){
   const ncAnimal=_gtIsNC(pendAnimal);
   // a לא חלק animal can only be כשר or טרף — on EVERY outer screen
   if(role==='kosher' || ncAnimal){
-    const fixed=_gtNCFixed(pendAnimal);
-    statuses=statuses.filter(st=>st.key==='kosher'||st.key==='treif'||(st.key==='rabChalak'&&!fixed));
+    // v10.34 (owner): a "not chalak" animal gets ONE status — the plant's name for it — or טרף
+    statuses=statuses.filter(st=>st.key==='kosher'||st.key==='treif');
   }
   // Treif is always the LAST button, after every other status (including custom ones).
   statuses=statuses.slice().sort((a,b)=>{
@@ -11397,24 +11419,22 @@ function rebuildOuterButtons(){
     // disabled list — so any animal that arrives by mistake can still be ruled.
     const isCur=!!(pendAnimal&&_gtOuterKey(pendAnimal)===st.key);   // keep the animal's current ruling visible
     if(disabled.includes(st.key)&&st.key!=='treif' && !(ncAnimal&&st.key==='kosher') && !isCur)return'';
-    if(role==='glatt' && st.key==='rabChalak' && !isCur)return'';   // on the rabbinate screen (screen B)
+    // v10.34 (owner): רבנות חלק is a regular status of screen A (screen B rules only the "not chalak" status)
     if(st.removed && !isCur)return'';
     const override=s.statusColorOverrides||{};
     const color=_safeColor(override[st.key]||st.color,'#888');
     const bgStyle=cssMap[st.key]||`background:${color}`;
-    const label=(ncAnimal&&st.key==='kosher') ? 'רבנות כשר' : (st.he||st.key);
+    const label=(ncAnimal&&st.key==='kosher') ? gtNCName().he : (st.he||st.key);
     const extraStyle=st.key==='treif'?';grid-column:1/-1':'';
     const one=(k,lb)=>`<button class="dec-btn" data-decide="${escapeHtml(k)}"
       style="${bgStyle}${extraStyle};color:#fff;padding:13px 8px;border-radius:12px;border:none;font-size:15px;font-weight:700;cursor:pointer;font-family:'Frank Ruhl Libre',serif;">
       ${escapeHtml(lb)}</button>`;
-    // v10.33 (owner): "not chalak" holds until here — רבנות כשר or plain כשר
-    if(ncAnimal&&st.key==='kosher') return one('kosher','רבנות כשר')+one('kosherPlain','כשר');
     return one(st.key,label);
   }).join('');
   // SAFETY: never leave the decision modal with no buttons (would freeze the screen)
   if(!html.trim()){
-    html=(ncAnimal?['kosher','kosherPlain','treif']:['kosher','treif']).map(k=>{
-      const bgStyle=cssMap[k==='kosherPlain'?'kosher':k];const label=k==='kosherPlain'?'כשר':k==='kosher'?(ncAnimal?'רבנות כשר':(t.dKosher||'כשר')):(t.dTreif||'טרף');
+    html=['kosher','treif'].map(k=>{
+      const bgStyle=cssMap[k];const label=k==='kosher'?(ncAnimal?gtNCName().he:(t.dKosher||'כשר')):(t.dTreif||'טרף');
       return`<button class="dec-btn" data-decide="${k}" style="${bgStyle};color:#fff;padding:13px 8px;border-radius:12px;border:none;font-size:15px;font-weight:700;cursor:pointer;font-family:'Frank Ruhl Libre',serif;">${label}</button>`;
     }).join('');
   }
@@ -11422,7 +11442,7 @@ function rebuildOuterButtons(){
   // Only when this plant has a separate rabbinate screen.
   if(role==='glatt' && s.notChalakEnabled && pendAnimal && !ncAnimal && !pendAnimal.outerStatus){
     html+=`<div style="grid-column:1/-1;border-top:1px dashed var(--border);margin-top:6px;"></div>
-    <button class="dec-btn" data-tonc="1" style="grid-column:1/-1;background:transparent;color:var(--gold);padding:11px 8px;border-radius:12px;border:2px dashed var(--gold);font-size:14px;font-weight:700;cursor:pointer;">↪ ${escapeHtml(L('שליחה למסך רבנות','Send to the rabbinate screen','Enviar a la pantalla del rabinato'))}</button>`;
+    <button class="dec-btn" data-tonc="1" style="grid-column:1/-1;background:transparent;color:var(--gold);padding:11px 8px;border-radius:12px;border:2px dashed var(--gold);font-size:14px;font-weight:700;cursor:pointer;">↪ ${escapeHtml(L('שליחה למסך B ('+gtNCName().he+')','Send to screen B ('+gtNCName().he+')','Enviar a la pantalla B ('+gtNCName().he+')'))}</button>`;
   }
   btns.innerHTML=html;
   // Click handler - walk up DOM for Android compatibility
