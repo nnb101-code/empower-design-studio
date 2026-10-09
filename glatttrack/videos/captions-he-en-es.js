@@ -15,7 +15,7 @@ module.exports = {
   s4q: ["שאלה על הסכין בבהמה 5 — לוחצים \"? שאלה\"", "A question about the knife on animal five. Tap the question button.", "Una pregunta sobre el cuchillo en el animal cinco. Toque el botón de pregunta."],
   s5q: ["5 מסומן \"?\" ומהבהב כל הזמן, כדי שלא ישכחו — והשוחט ממשיך לבהמה הבאה", "Number five is marked with a question mark and keeps blinking, so it is not forgotten. The shochet goes on to the next animal.", "El número cinco queda marcado con un signo de pregunta y parpadea todo el tiempo, para no olvidarlo. El shojet sigue con el siguiente animal."],
   s6q: ["יש תשובה: לוחצים על 5 ופוסקים — נשחט", "The answer came. Tap five and rule it: slaughtered.", "Llegó la respuesta. Toque el cinco y dictamine: faenado."],
-  s3: ["לחיצה על מספר שכבר סומן פותחת שינוי — תמיד אפשר, אחרי אזהרה", "Tapping a marked number opens a change. It is always possible, after a warning.", "Tocar un número ya marcado abre un cambio. Siempre es posible, después de una advertencia."],
+  s3: ["לחיצה על מספר שכבר סומן פותחת שינוי, אחרי אזהרה — רק עד שהמספר מגיע לוושט", "Tapping a marked number opens a change, after a warning. Only until the number reaches the esophagus check.", "Tocar un número ya marcado abre un cambio, tras una advertencia. Solo hasta que el número llega al control de esófago."],
   e1: ["טאבלט בדיקת הוושט", "The esophagus check tablet.", "La tableta del control de esófago."],
   e2: ["ניסיון לדלג לבהמה 3 — המערכת לא מאפשרת", "Trying to skip to animal three. The system does not allow it.", "Intento de saltar al animal tres. El sistema no lo permite."],
   e3: ["לוחצים על הבהמה המהבהבת ובוחרים \"תקין\"", "Tap the blinking animal and choose OK.", "Toque el animal que parpadea y elija correcto."],

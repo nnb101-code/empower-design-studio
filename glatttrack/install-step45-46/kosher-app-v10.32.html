@@ -4749,8 +4749,16 @@ function gtEsoQ(i){ try{ return gtHoldsOf(i).some(h=>h.open && h.station==='eso'
 function _gtSlQx(x){ return !!x && x.slaughter==null && x.id!=null && gtSlQ(x.id); }
 function gtOwnQ(i,st){ return gtHoldsOf(i).find(h=>h.open && h.station===st && h.kind==='question')||null; }
 // what stops station st on number i (part: a half / a part of the animal)
+// v10.32 (owner): a screen sees a hold only if it concerns it — its own, or one put by an EARLIER station on a
+// number that has not reached it yet. A hold put further down the line (the number already passed this
+// screen) is not shown here: the slaughter screen shows only slaughter rulings.
+const GT_ST_RANK={slaughter:0,eso:1,legs:2,inner:3,outer:4,parts:5,stamps:5};
+function gtHoldSeenAt(h,st){ if(!h || h.station===st) return true;
+  const a=GT_ST_RANK[h.station], b=GT_ST_RANK[st]; if(a==null || b==null) return true;
+  return a<b || (a===b && h.part==='whole');             // (parts / stamps work side by side: a whole-animal hold stops both)
+}
 function gtHeldAt(i,st,part){
-  const hs=gtHoldsOf(i); let h;
+  const hs=gtHoldsOf(i).filter(x=>gtHoldSeenAt(x,st)); let h;
   h=hs.find(x=>x.kind==='usda' && x.part==='whole' && x.open); if(h) return h;
   h=hs.find(x=>x.kind==='usda' && x.part==='whole' && x.resolution==='condemned'); if(h) return h;
   if(['legs','parts','stamps'].includes(st)){ h=hs.find(x=>x.kind==='question' && x.station===st && x.open); if(h) return h; }
@@ -4797,7 +4805,8 @@ function gtGridWrap(gridId,getCls,getLabel,getTap){
   const st=GT_GRID_STATION[gridId];
   if(!st || !_gtFlags.ok || (!_gtFlags.holds.length && !_gtFlags.changes.length)) return null;
   const info=(i)=>{
-    const held=gtHeldAt(i,st), own=gtOwnQ(i,st), slq=gtSlQ(i), parts=gtPartHolds(i,st), chg=gtChange(i);
+    const held=gtHeldAt(i,st), own=gtOwnQ(i,st), slq=gtSlQ(i), parts=gtPartHolds(i,st);
+    const _c=gtChange(i), chg=(_c && gtHoldSeenAt({station:_c.stage==='esophagus'?'eso':_c.stage, part:'x'}, st)) ? _c : null;   // v10.32: only here and further down the line
     const esq=(st==='legs'||st==='inner') && !own && gtEsoQ(i);       // v10.32: shown (and blinking) here, not taken
     return {held,own,slq,parts,chg,esq};
   };
@@ -9085,9 +9094,12 @@ function gtKey(acc){
   const treif = acc.treif + acc.innerTreif;
   const kg = (acc.weights.sumR || 0) + (acc.weights.sumL || 0);
   const b = KS.getSettings().billing || {}; const price = (b.enabled && Number(b.price) > 0) ? Number(b.price) : 0;
-  const ruled = graded + treif;
+  // v10.32 (owner): every percentage is out of ALL the animals that have a result — kosher grades, treif,
+  // nevela and shot — each on its own
+  const ruled = graded + treif + acc.nevela + acc.shot;
   return { total: acc.total, alive: acc.slaughtered, graded, treif, nev: acc.nevela + acc.shot, nevela: acc.nevela, shot: acc.shot,
            glattPct: ruled ? acc.glatt / ruled * 100 : null, kosherPct: ruled ? graded / ruled * 100 : null, treifPct: ruled ? treif / ruled * 100 : null,
+           nevelaPct: ruled ? acc.nevela / ruled * 100 : null, shotPct: ruled ? acc.shot / ruled * 100 : null,
            kg, weighed: acc.weights.n || 0, charge: kg * price, price, cur: b.currency || '₪', days: acc.days, perDay: acc.days ? acc.total / acc.days : 0 };
 }
 // "▲ 12% מול …" (for percentages: points)
@@ -9147,8 +9159,8 @@ function gtAnHtml(acc, K, C){
     kpi(pct(K.glattPct), 'גלאט', 'var(--green)', dl(K.glattPct, k => k.glattPct, { points: true, goodUp: true })) +
     kpi(pct(K.kosherPct), L('כשר (כל הדרגות)', 'Kosher (all grades)', 'Kosher (todos)'), 'var(--gold)', dl(K.kosherPct, k => k.kosherPct, { points: true, goodUp: true })) +
     kpi(pct(K.treifPct), 'טרף', 'var(--red-light)', dl(K.treifPct, k => k.treifPct, { points: true, goodUp: false })) +
-    kpi(_gtNum(K.nevela), L('נבלה', 'Nevela', 'Nevelá'), 'var(--red-light)', dl(K.nevela, k => k.nevela, { goodUp: false })) +
-    kpi(_gtNum(K.shot), L('ירוי', 'Shot', 'Baleado'), '#A8AEB8', dl(K.shot, k => k.shot, { goodUp: false })) +
+    kpi(pct(K.nevelaPct), L('נבלה', 'Nevela', 'Nevelá') + ' · ' + _gtNum(K.nevela), 'var(--red-light)', dl(K.nevelaPct, k => k.nevelaPct, { points: true, goodUp: false })) +
+    kpi(pct(K.shotPct), L('ירוי', 'Shot', 'Baleado') + ' · ' + _gtNum(K.shot), '#A8AEB8', dl(K.shotPct, k => k.shotPct, { points: true, goodUp: false })) +
     kpi(_gtNum(K.kg) + ' ' + L('ק״ג', 'kg', 'kg'), L('משקל', 'Weight', 'Peso') + ' · ' + _gtNum(K.weighed) + ' ' + L('נשקלו', 'weighed', 'pesados'), 'var(--blue)', dl(K.kg, k => k.kg, {})) +
     (K.price ? kpi(escapeHtml(gtMoney(K.cur, K.charge, 0)), L('חיוב', 'Charge', 'Cargo'), 'var(--gold)', dl(K.charge, k => k.charge, {})) : '') +
     '</div>';
@@ -9207,9 +9219,10 @@ function gtAnHtml(acc, K, C){
 // ── v10.16: rankings, focused comparison, workers ──
 const _GT_MIN_N = 5;                       // fewer animals than this: shown, but not ranked best / worst
 function _gtRow(o){
-  const graded = o.glatt + o.beit + o.kosher + (o.rabKosher || 0) + o.mk + (o.other || 0), ruled = graded + o.treif;
+  // v10.32 (owner): out of all the animals with a result; nevela and shot each on its own
+  const graded = o.glatt + o.beit + o.kosher + (o.rabKosher || 0) + o.mk + (o.other || 0), ruled = graded + o.treif + (o.nevela || 0) + (o.shot || 0);
   return { n: o.total, glatt: ruled ? o.glatt / ruled * 100 : null, kosher: ruled ? graded / ruled * 100 : null, treif: ruled ? o.treif / ruled * 100 : null,
-           nev: o.total ? (o.nevela + o.shot) / o.total * 100 : null, avg: o.kgN ? o.kgSum / o.kgN : null, kg: o.kgAll || 0, kgN: o.kgN || 0 };
+           nev: ruled ? ((o.nevela || 0) + (o.shot || 0)) / ruled * 100 : null, nevela: ruled ? (o.nevela || 0) / ruled * 100 : null, shot: ruled ? (o.shot || 0) / ruled * 100 : null, avg: o.kgN ? o.kgSum / o.kgN : null, kg: o.kgAll || 0, kgN: o.kgN || 0 };
 }
 function gtRankTable(bucket, id){
   const rows = Object.entries(bucket || {}).map(([name, o]) => ({ name, ..._gtRow(o) }));
@@ -9222,13 +9235,13 @@ function gtRankTable(bucket, id){
     if(r[k] === best(k, !up)) return ' style="color:var(--red-light);font-weight:800;"'; return ''; };
   const p = v => v == null ? '—' : _gtNum(v, 1) + '%';
   const cols = [['name', L('שם', 'Name', 'Nombre')], ['n', L('בהמות', 'Animals', 'Animales')], ['glatt', 'גלאט'], ['kosher', 'כשר'],
-                ['treif', 'טרף'], ['nev', L('נבלה/ירוי', 'Nevela/shot', 'Nevelá')], ['avg', L('ממוצע ק״ג', 'Avg kg', 'Prom. kg')], ['kg', L('סה״כ ק״ג', 'Total kg', 'Total kg')]];
+                ['treif', 'טרף'], ['nevela', L('נבלה', 'Nevela', 'Nevelá')], ['shot', L('ירוי', 'Shot', 'Baleado')], ['avg', L('ממוצע ק״ג', 'Avg kg', 'Prom. kg')], ['kg', L('סה״כ ק״ג', 'Total kg', 'Total kg')]];
   const sortHint = '<span style="font-size:9px;opacity:.6;">⇅</span>';
   rows.sort((a, b) => b.n - a.n);
   return `<div style="overflow-x:auto;"><table class="gt-tbl gt-rank gt-tight" id="gtRank_${id}"><tr>${cols.map(([k, l], i) => `<th style="cursor:pointer;white-space:nowrap;" onclick="gtSortTbl('gtRank_${id}', ${i})">${l} ${sortHint}</th>`).join('')}</tr>` +
     rows.map(r => `<tr${r.n < _GT_MIN_N ? ' style="opacity:.6;"' : ''}><td style="text-align:start;font-weight:700;" data-v="${escapeHtml(r.name)}">${escapeHtml(r.name)}</td><td data-v="${r.n}">${_gtNum(r.n)}</td>` +
       `<td data-v="${r.glatt ?? -1}"${mark(r, 'glatt', true)}>${p(r.glatt)}</td><td data-v="${r.kosher ?? -1}"${mark(r, 'kosher', true)}>${p(r.kosher)}</td>` +
-      `<td data-v="${r.treif ?? -1}"${mark(r, 'treif', false)}>${p(r.treif)}</td><td data-v="${r.nev ?? -1}"${mark(r, 'nev', false)}>${p(r.nev)}</td>` +
+      `<td data-v="${r.treif ?? -1}"${mark(r, 'treif', false)}>${p(r.treif)}</td><td data-v="${r.nevela ?? -1}"${mark(r, 'nevela', false)}>${p(r.nevela)}</td><td data-v="${r.shot ?? -1}"${mark(r, 'shot', false)}>${p(r.shot)}</td>` +
       `<td data-v="${r.avg ?? -1}"${mark(r, 'avg', true)}>${r.avg == null ? '—' : _gtNum(r.avg, 1)}</td><td data-v="${r.kg}">${r.kg ? _gtNum(r.kg) : '—'}</td></tr>`).join('') +
     `</table></div><div class="gt-hint" style="margin-top:6px;">${L('ירוק = הכי טוב, אדום = הכי חלש (רק כשיש לפחות ' + _GT_MIN_N + ' בהמות). ממוצע ק״ג = בהמות ששתי החצאים שלהן נשקלו. לחיצה על כותרת ממיינת.',
       'Green = best, red = weakest (only with at least ' + _GT_MIN_N + ' animals). Avg kg = animals with both halves weighed. Tap a header to sort.', 'Verde = mejor, rojo = más débil. Toque un encabezado para ordenar.')}</div>`;
