@@ -9656,7 +9656,7 @@ function gtSettingsBuild(){
   root.appendChild(host);
   // v10.34: the daily-reset card sat under "small parts — average weight"; it belongs to "daily reset & archive"
   try{ const card = document.getElementById('gtTestResetBtn').closest('.mgr-card');
-       const sec = [...host.querySelectorAll('details.gt-acc-in')].find(d => (d.querySelector('summary').textContent||'').includes(L('איפוס יומי וארכיון', 'Daily reset & archive', 'Reinicio diario y archivo')));
+       const sec = [...host.querySelectorAll('details.gt-acc-in')].find(d => /איפוס יומי וארכיון|Daily reset|Reinicio diario/.test(d.querySelector('summary').textContent||''));
        if(card && sec) sec.querySelector('.gt-acc-b').appendChild(card); }catch(e){}
   gtSettingsLabels();
   // old calls that opened a sub-tab now open the matching group
@@ -9669,14 +9669,16 @@ function gtSettingsBuild(){
   };
 }
 // v10.34 (owner): in test mode only — start a new day now (backup first, as the automatic reset does)
+// (the server's test mode + a team leader logged in — not the "all stations on this device" switch)
+function _gtTestResetAllowed(){ return (window._gtServerTestMode===true || !!(window._gtTestInfo && window._gtTestInfo.on)) && !!(KS.getManagerToken && KS.getManagerToken()) && KS.getManagerRole()==='manager'; }
 async function gtTestResetNow(){
-  if(!(typeof _gtTestModeOn==='function' && _gtTestModeOn())){ KS.notice(L('רק במצב בדיקה.','Test mode only.','Solo en modo de prueba.')); return; }
+  if(!_gtTestResetAllowed()){ KS.notice(L('רק במצב בדיקה.','Test mode only.','Solo en modo de prueba.')); return; }
   if(!confirm(L('לאפס את היום עכשיו? כל המספרים מתחילים מחדש (קודם נשמר גיבוי).','Reset the day now? All numbers start again (a backup is saved first).','¿Reiniciar el día ahora? Todos los números empiezan de nuevo (antes se guarda una copia).'))) return;
   try{ localStorage.removeItem('glatttrack_daily_reset_lock_v2'); }catch(e){}
   const ok = await ksRunProtectedDailyReset('test-reset');
   KS.notice(ok ? L('היום אופס.','The day was reset.','El día fue reiniciado.') : L('האיפוס לא בוצע: ','Not reset: ','No se reinició: ') + (_lastResetFailureReason || ''));
 }
-setInterval(() => { try{ const b = document.getElementById('gtTestResetBtn'); if(b) b.style.display = (typeof _gtTestModeOn==='function' && _gtTestModeOn()) ? 'block' : 'none'; }catch(e){} }, 2000);
+setInterval(() => { try{ const b = document.getElementById('gtTestResetBtn'); if(b) b.style.display = _gtTestResetAllowed() ? 'block' : 'none'; }catch(e){} }, 2000);
 function gtSetSearch(q){
   const res = document.getElementById('gtSetSearchRes'); if(!res) return;
   q = String(q || '').trim().toLowerCase();
