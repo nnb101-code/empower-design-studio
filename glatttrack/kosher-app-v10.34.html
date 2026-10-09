@@ -1302,6 +1302,15 @@ const LUNG_B64="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICA
       <div id="func-inspection" style="display:none;">
         <div class="mgr-sec">בדיקות פנים וחוץ</div>
         <div class="mgr-card">
+          <div class="mgr-toggle-row" style="margin-bottom:12px;">
+            <div>
+              <div style="font-size:13px;color:var(--text);font-weight:600;">📷 סריקת ברקוד בבדיקת פנים וחוץ</div>
+              <div style="font-size:11px;color:var(--muted);">סורקים את המדבקה מהרגליים (על הריאה / בית הכוסות) — נפתח בדיוק המספר שעליה. אפשר גם ללחוץ על מספר כרגיל. מצלמת הטאבלט, או סורק ידני (USB / Bluetooth) שנקלט לבד.</div>
+            </div>
+            <div class="mgr-toggle" id="mgrScanInOutT" onclick="mgrToggleRab('scanInOut',this)"><div class="mgr-toggle-dot" style="right:26px"></div></div>
+          </div>
+        </div>
+        <div class="mgr-card">
           <!-- v10.34 (owner): the number of inner / outer screens is chosen in ONE place — Screens → Choosing screens -->
           <div style="font-size:12px;color:var(--muted);margin-bottom:6px;">תצורת מסכים — פנים/חוץ:</div>
           <div id="mgrCfgNow" data-no-i18n style="font-size:14px;font-weight:700;color:var(--gold);margin-bottom:8px;"></div>
@@ -5088,7 +5097,8 @@ function gtTopBarsInit(){
     const bar=sc.querySelector('.topbar'); if(!bar || bar.querySelector('.gt-tb')) return;
     const st=GT_SCREEN_STATION[id], mid=bar.querySelector('.tb-mid');
     const box=document.createElement('div'); box.className='gt-tb'; box.setAttribute('data-no-i18n','');
-    box.innerHTML=(st!=='slaughter' && st!=='inner' ? `<button class="gt-tbb gt-tbq" data-gt-q data-gt-st="${st}"></button>` : '')
+    box.innerHTML=((st==='inner'||st==='outer') ? `<button class="gt-tbb" data-gt-scan="${st}" onclick="gtScanOpen('${st}')" style="display:none;background:#0E5C7A;border-color:#4FC3F7;color:#fff;"></button>` : '')   /* v10.34: scan the sticker */
+      +(st!=='slaughter' && st!=='inner' ? `<button class="gt-tbb gt-tbq" data-gt-q data-gt-st="${st}"></button>` : '')
       +(st!=='slaughter' ? `<button class="gt-tbb gt-tbu" onclick="gtUsdaStart('${st}')">USDA HOLD</button>` : '')   /* v10.34: every station but slaughter (the number's position decides) */
       +`<button class="gt-tbb gt-tbl" onclick="gtHeldList('${st}')" data-gt-count="${st}" style="display:none"></button>`;
     if(mid) bar.insertBefore(box, mid); else bar.appendChild(box);
@@ -5270,10 +5280,92 @@ async function gtWindowQuestion(st){
   if(gtOwnQ(idx,st))
     KS.notice(L('#'+(idx+1)+' — "?" שאלה. ממשיכים לבהמה הבאה.','#'+(idx+1)+' — "?" question. Go on to the next animal.','#'+(idx+1)+' — "?" pregunta. Siga con el siguiente.'));
 }
+// ── v10.34 (owner): scan the sticker from legs (lung / maw) at the inner and outer checks ──
+// The stickers already carry the animal's code (QR "BH|N:12|…"). The scan opens exactly that number —
+// also out of the usual order (two outer inspectors on different numbers). Camera (BarcodeDetector),
+// a hand scanner (types the code + Enter), or typing the number.
+let _gtScanStream=null, _gtScanTimer=null;
+function _gtScanStop(){ try{ if(_gtScanTimer) clearInterval(_gtScanTimer); _gtScanTimer=null; }catch(e){} try{ if(_gtScanStream) _gtScanStream.getTracks().forEach(t=>t.stop()); }catch(e){} _gtScanStream=null; }
+function gtScanClose(){ _gtScanStop(); gtSheetClose(); }
+async function gtScanOpen(st){
+  gtSheet('📷 '+L('סריקת המדבקה','Scan the sticker','Escanear la etiqueta'),
+    L('מכוונים את המצלמה למדבקה (ריאה / בית הכוסות) — או סורקים עם סורק ידני, או מקלידים מספר.','Point the camera at the sticker (lung / maw) — or use a hand scanner, or type the number.','Apunte la cámara a la etiqueta (pulmón / cuajar) — o use un escáner de mano, o escriba el número.'),
+    '<video id="gtScanVid" playsinline muted style="width:100%;max-height:240px;background:#111;border-radius:10px;object-fit:cover;"></video>'
+    +'<div id="gtScanMsg" style="font-size:12px;color:var(--muted);margin:6px 0;"></div>'
+    +_gtNumInput(-1)
+    +'<div class="gt-row">'+_gtHBtn(L('פתח','Open','Abrir'),'#D4A843',`(function(){ const i=_gtReadNum(); if(i<0){ KS.notice(L('מספר לא תקין','Invalid number','Número inválido')); return; } gtScanClose(); gtScanGo('${st}', i); })()`)
+    +_gtHBtn(L('ביטול','Cancel','Cancelar'),'#9aa4b5','gtScanClose()')+'</div>');
+  const msg=document.getElementById('gtScanMsg'), vid=document.getElementById('gtScanVid');
+  if(!('BarcodeDetector' in window) || !(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)){
+    if(vid) vid.style.display='none';
+    if(msg) msg.textContent=L('המצלמה לא קוראת ברקוד בטאבלט הזה — סורק ידני או הקלדה.','This tablet\'s camera cannot read codes — use a hand scanner or type.','La cámara no lee códigos aquí — use un escáner o escriba.');
+    return;
+  }
+  let det; try{ det=new window.BarcodeDetector({formats:['qr_code','code_128','code_39','ean_13']}); }catch(e){ try{ det=new window.BarcodeDetector(); }catch(e2){ det=null; } }
+  try{
+    _gtScanStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
+    if(!document.getElementById('gtScanVid')){ _gtScanStop(); return; }
+    vid.srcObject=_gtScanStream; await vid.play();
+  }catch(e){ if(vid) vid.style.display='none'; if(msg) msg.textContent=L('אין גישה למצלמה — סורק ידני או הקלדה.','No camera access — hand scanner or typing.','Sin cámara — escáner o escriba.'); return; }
+  if(!det) return;
+  _gtScanTimer=setInterval(async()=>{
+    if(!document.getElementById('gtScanVid')){ _gtScanStop(); return; }
+    try{ const r=await det.detect(vid); if(r && r.length){ const code=r[0].rawValue; const n=_gtCodeNum(code);
+      if(!isNaN(n) && n>=1 && n<=KS.getAnimals().length){ gtScanClose(); try{ playPressSound && playPressSound('ok'); }catch(e){} gtScanGo(st, n-1); } } }catch(e){}
+  }, 300);
+}
+function gtScanGo(st, idx){
+  const x=KS.getAnimal(idx); const N='#'+(idx+1)+' — ';
+  const say=(he,en,es)=>KS.notice(N+L(he,en,es));
+  if(!x || !x.slaughter) return say('עוד לא נשחט.','not slaughtered yet.','aún no faenado.');
+  if(x.slaughter==='nevela'||x.slaughter==='shot') return say('נבלה / ירוי — אין בדיקה.','nevela / shot — no check.','nevelá / baleado — sin revisión.');
+  try{ KS.notice('📷 #'+(idx+1)); }catch(e){}
+  if(st==='inner'){
+    if(x.innerStatus==='confirmed'||x.innerStatus==='treif') return inOpenChangeWarn(idx);
+    if(!passedToInner(x)) return say('עוד לא עבר את הוושט / הרגליים.','has not passed the esophagus / legs yet.','aún no pasó esófago / patas.');
+    if(_inOtherDeviceCheck(x, idx)) return say('בבדיקה בטאבלט פנים אחר.','in check on another inner tablet.','en revisión en otra tableta interna.');
+    if(x.innerStatus==='in_progress'||inFloats.find(f=>f.idx===idx)) return inOpenLung(idx);
+    const pg=Math.floor(idx/PER); if(pg!==inPage){ inPage=pg; inManualPage=true; try{ inRenderGrid(); }catch(e){} }
+    return inCellTap(idx, true);
+  }
+  if(st==='outer'){
+    if(x.outerStatus) return outOpenChangeWarn(idx);
+    if(x.innerStatus!=='confirmed') return say('עוד לא עבר בדיקת פנים.','has not passed the inner check yet.','aún no pasó la revisión interna.');
+    try{ if(KS.outerOpenElsewhere(idx)) return _outBusyNotice(idx); }catch(e){}
+    const role=outRole(outInstance);
+    if(role==='glatt' && isNotChalakAnimal(x)) return say('"לא חלק" — נפסק במסך B.','"Non-Chalak" — ruled on screen B.','"No Jalak" — se dictamina en la pantalla B.');
+    if(role==='kosher' && !isNotChalakAnimal(x)) return say('לא "לא חלק" — נפסק במסך A.','not "Non-Chalak" — ruled on screen A.','no es "No Jalak" — se dictamina en la pantalla A.');
+    const pg=Math.floor(idx/PER); if(pg!==outPage){ outPage=pg; outManualPage=true; try{ outRenderGrid(); }catch(e){} }
+    return outOpenDec(idx);
+  }
+}
+// a hand scanner types the code and Enter: caught on the inner / outer screen (not while typing in a field)
+(function(){
+  let buf='', last=0;
+  document.addEventListener('keydown', e=>{
+    try{
+      if(KS.getSettings().scanInOut!==true) return;
+      const scr=(document.querySelector('.screen.active')||{}).id;
+      const st= scr==='scInner' ? 'inner' : scr==='scOuter' ? 'outer' : null; if(!st) return;
+      const t=e.target; if(t && (t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.isContentEditable)) return;
+      const now=Date.now(); if(now-last>120) buf=''; last=now;
+      if(e.key==='Enter'){
+        const code=buf.trim(); buf='';
+        if(code.length>=2 && (looksLikeAnimalCode(code) || /^\d{1,3}$/.test(code))){
+          const n=_gtCodeNum(code); if(!isNaN(n) && n>=1 && n<=KS.getAnimals().length){ e.preventDefault(); gtScanClose(); gtScanGo(st, n-1); }
+        }
+        return;
+      }
+      if(e.key && e.key.length===1) buf+=e.key;
+    }catch(err){}
+  }, true);
+})();
 function gtTopBarsUpdate(){
   // (the texts follow the screen's language, set after the buttons were made)
   document.querySelectorAll('[data-gt-q]').forEach(b=>{ b.textContent=L('? שאלה','? Question','? Pregunta'); });
   document.querySelectorAll('.gt-slq-t').forEach(b=>{ b.textContent=L('שאלה','Question','Pregunta'); });
+  { const on=KS.getSettings().scanInOut===true;
+    document.querySelectorAll('[data-gt-scan]').forEach(b=>{ b.textContent='📷 '+L('סריקה','Scan','Escanear'); b.style.display=on?'':'none'; }); }
   document.querySelectorAll('[data-gt-count]').forEach(b=>{
     const st=b.getAttribute('data-gt-count');
     const n=_gtFlags.holds.filter(h=>h.station===st && h.open && !h.local && _gtOnBoard(h)).length;
@@ -5481,6 +5573,7 @@ Object.assign(I18N_DOM,{"המפעל": ["Plant", "Planta"], "רשימות המש�
 // Hebrew restores the original text.
 const _HEB=/[֐-׿]/;
 Object.assign(I18N_DOM,{"כפתור \"לא חלק\" בשחיטה ובבית הכוסות — עם כל מספר של מסכי חוץ (גם מסך אחד, גם מסך משותף פנים+חוץ). \"לא חלק\" נשאר עד הפסיקה בבודק החוץ, ושם הבהמה מקבלת סטטוס אחד: הסטטוס של \"לא חלק\" (רבנות כשר, כשר או כל שם שהמפעל נותן לו — בסטטוסי הכשרות, ✏️ שם) או טרף.": ["A \"Non-Chalak\" button at slaughter and at the maw — with any number of outer screens (one screen, or one shared inner + outer screen too). \"Non-Chalak\" holds until the outer ruling, where the animal gets one status: the non-chalak status (רבנות כשר, כשר or any name the plant gives it — in the kashrut statuses, ✏️ Name) or treif.", "Un botón \"No Jalak\" en la faena y en el cuajar — con cualquier número de pantallas externas (una sola, o una compartida interna + externa). \"No Jalak\" vale hasta el dictamen externo, donde el animal recibe un estado: el estado no jalak (רבנות כשר, כשר o el nombre que la planta le dé — en los estados de kashrut, ✏️ Nombre) o treif."], "\"לא חלק\"": ["\"Non-Chalak\"", "\"No Jalak\""], "ניתוב \"לא חלק\" למסך B": ["Route \"Non-Chalak\" to screen B", "Enviar \"No Jalak\" a la pantalla B"], "רק כשיש שני מסכי חוץ. דולק: מסך B הוא רק ל\"לא חלק\" — בהמה \"לא חלק\" עוברת אליו ומקבלת שם את הסטטוס של \"לא חלק\" או טרף, ובמסך A יש \"שליחה למסך B\". כבוי (משולב): שני מסכי החוץ פוסקים הכול, כל אחד את הבהמה שמגיעה אליו.": ["Only with two outer screens. On: screen B is only for non-chalak — a non-chalak animal goes there and gets the non-chalak status or treif, and screen A has \"Send to screen B\". Off (combined): both outer screens rule everything, each the animal that comes to it.", "Solo con dos pantallas externas. Encendido: la pantalla B es solo para no jalak — el animal no jalak va allí y recibe el estado no jalak o treif, y la pantalla A tiene \"Enviar a la pantalla B\". Apagado (combinado): ambas pantallas dictaminan todo, cada una el animal que le llega."]});   // v10.34: the not-chalak switches
+Object.assign(I18N_DOM,{"📷 סריקת ברקוד בבדיקת פנים וחוץ": ["📷 Barcode scan at the inner and outer checks", "📷 Escaneo de código en revisión interna y externa"], "סורקים את המדבקה מהרגליים (על הריאה / בית הכוסות) — נפתח בדיוק המספר שעליה. אפשר גם ללחוץ על מספר כרגיל. מצלמת הטאבלט, או סורק ידני (USB / Bluetooth) שנקלט לבד.": ["Scan the sticker from legs (on the lung / maw) — exactly that number opens. Tapping a number still works. The tablet camera, or a hand scanner (USB / Bluetooth) that is picked up by itself.", "Escanee la etiqueta de patas (en el pulmón / cuajar) — se abre exactamente ese número. Tocar un número sigue funcionando. La cámara de la tableta, o un escáner de mano (USB / Bluetooth) que se detecta solo."]});
 Object.assign(I18N_DOM,{"🧪 איפוס יום עכשיו — רק במצב בדיקה": ["🧪 Reset the day now — test mode only", "🧪 Reiniciar el día ahora — solo modo de prueba"]});
 Object.assign(I18N_DOM,{"שינוי — בבחירת מסכים ←": ["Change — in Choosing screens →", "Cambiar — en Elegir pantallas →"]});
 Object.assign(I18N_DOM,{"\"לא חלק\" ומסכי חוץ": ["\"Non-Chalak\" and outer screens", "\"No Jalak\" y pantallas externas"]});
@@ -10937,7 +11030,7 @@ function mgrSyncUI(){
     if(d)d.style.right=on?'3px':'26px';
   });
   // Sync rabbinate toggles (different markup: dot positioned via style.right, no inner id)
-  [['notChalakEnabled','mgrNotChalakT'],['esophagusEnabled','mgrEsophagusT'],['legsSortEnabled','legsSortToggle'],['ncRouteB','mgrNcRouteBT']].forEach(([key,tid])=>{
+  [['notChalakEnabled','mgrNotChalakT'],['esophagusEnabled','mgrEsophagusT'],['legsSortEnabled','legsSortToggle'],['ncRouteB','mgrNcRouteBT'],['scanInOut','mgrScanInOutT']].forEach(([key,tid])=>{
     const on=key==='ncRouteB' ? s[key]!==false : s[key]===true;   // v10.33: the routing to screen B is on unless turned off
     const t=document.getElementById(tid);
     if(t){
