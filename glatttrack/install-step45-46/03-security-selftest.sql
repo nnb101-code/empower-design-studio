@@ -874,6 +874,14 @@ begin
   r3 := pg_temp.api(pg_temp.dev('IN1'), pg_temp.q_push(875, jsonb_build_object('inner_status', 'confirmed', 'inner_time', 5)));
   ok := r ->> 'error' = 'out_of_order' and r ->> 'reason' = 'legs_not_done' and pg_temp.claimed(r2)
         and r3 ->> 'error' = 'out_of_order' and (pg_temp.ar(875)).inner_status is null;
+  -- v10.34 (owner): USDA belongs to the station the animal is at on the line
+  perform set_config('gt.reset_in_progress', 'true', true);
+  update settings_pilot set settings = settings || '{"esophagusEnabled":true,"screensPlan":{"decided":true,"screens":["slaughter","esophagus","legs","inner","outer","parts","stamps"]}}'::jsonb where id = 1;
+  perform set_config('gt.reset_in_progress', 'false', true);
+  ok := ok and _usda_zone(jsonb_populate_record(null::animals_pilot, '{"id":870,"slaughter":"slaughtered","eso_checked":true,"eso_result":"ok"}')) = 'legs'
+           and _usda_zone(jsonb_populate_record(null::animals_pilot, '{"id":870,"slaughter":"slaughtered","eso_checked":true,"eso_result":"ok","head_stickers":true}')) = 'inner'
+           and _usda_zone(jsonb_populate_record(null::animals_pilot, '{"id":870,"slaughter":"slaughtered","eso_checked":true,"head_stickers":true,"inner_status":"confirmed"}')) = 'outer'
+           and _usda_zone(jsonb_populate_record(null::animals_pilot, '{"id":870,"slaughter":"slaughtered","eso_checked":true,"head_stickers":true,"inner_status":"confirmed","outer_status":"glatt"}')) = 'stamps';
   perform set_config('gt.reset_in_progress', 'true', true);
   update settings_pilot set settings = settings - 'screensPlan' where id = 1;
   perform set_config('gt.reset_in_progress', 'false', true);
@@ -891,7 +899,7 @@ begin
         and (pg_temp.ar(874)).eso_checked;
   r5 := pg_temp.api(pg_temp.dev('ESO1'), pg_temp.q_claim(873, 'eso', 'ok', '', pg_temp.devid('ESO1')));
   ok := ok and pg_temp.claimed(r5) and not exists (select 1 from animal_holds where animal_id = 873 and station = 'eso' and resolved_at is null);
-  perform pg_temp.rec('v10.34 the inner check comes after legs / head stickers (when the plant uses the legs screen); the esophagus turns its ok into a "?" until legs print', ok,
+  perform pg_temp.rec('v10.34 the inner check comes after legs / head stickers (when the plant uses the legs screen); the esophagus turns its ok into a "?" until legs print; USDA belongs to the station the animal is at on the line', ok,
     concat_ws(' | ', r ->> 'error', r ->> 'reason', r ->> 'claimed', r2 ->> 'claimed', r2 ->> 'error', r3 ->> 'error', r4 ->> 'claimed', r4 ->> 'error'));
 end $$;
 $gt39$;

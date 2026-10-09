@@ -5083,7 +5083,7 @@ function gtTopBarsInit(){
     const st=GT_SCREEN_STATION[id], mid=bar.querySelector('.tb-mid');
     const box=document.createElement('div'); box.className='gt-tb'; box.setAttribute('data-no-i18n','');
     box.innerHTML=(st!=='slaughter' && st!=='inner' ? `<button class="gt-tbb gt-tbq" data-gt-q data-gt-st="${st}"></button>` : '')
-      +(st!=='slaughter' && (st!=='outer' || !_gtScreenUsed('stamps')) ? `<button class="gt-tbb gt-tbu" onclick="gtUsdaStart('${st}')">USDA HOLD</button>` : '')   /* v10.32: after the inner check USDA belongs to stamps */
+      +(st!=='slaughter' ? `<button class="gt-tbb gt-tbu" onclick="gtUsdaStart('${st}')">USDA HOLD</button>` : '')   /* v10.34: every station but slaughter (the number's position decides) */
       +`<button class="gt-tbb gt-tbl" onclick="gtHeldList('${st}')" data-gt-count="${st}" style="display:none"></button>`;
     if(mid) bar.insertBefore(box, mid); else bar.appendChild(box);
     const qb=box.querySelector('[data-gt-q]'); if(qb) _gtQButtonWire(qb, st);
@@ -5131,15 +5131,20 @@ function gtWindowQInit(){
 // inner (check started) → stamps (inner ruled). The small-parts station holds its own parts.
 function _gtScreenUsed(sc){ try{ const p=KS.getSettings().screensPlan; return (p && Array.isArray(p.screens)) ? p.screens.includes(sc) : true; }catch(e){ return true; } }
 function _gtUsdaZone(i){
+  // v10.34 (owner): the station the animal is AT on the line (the server's _usda_zone says the same):
+  // slaughtered → esophagus · checked at the esophagus → legs · stickers printed → inner · inner done → outer
+  // · outer ruling → stamps (no stamps screen: outer). The small-parts station holds the head's parts.
   const x=KS.getAnimal(i); if(!x || !x.slaughter) return null;
   const alive=(x.slaughter==='slaughtered'||x.slaughter==='notChalak');
-  const eso=x.esoChecked===true || (!!KS.getSettings().esophagusEnabled && _esoApplies(x)), legs=_gtScreenUsed('legs');   // v10.34: checked at the esophagus → its own until legs print
-  if(x.innerStatus==='confirmed'||x.innerStatus==='treif') return _gtScreenUsed('stamps') ? 'stamps' : 'outer';
+  const eso=x.esoChecked===true || (!!KS.getSettings().esophagusEnabled && _esoApplies(x)), legs=_gtScreenUsed('legs');
+  if(x.outerStatus) return _gtScreenUsed('stamps') ? 'stamps' : 'outer';
+  if(x.innerStatus==='confirmed'||x.innerStatus==='treif') return 'outer';
   if(x.innerStatus || x.rumen || x.maw) return 'inner';
-  if(legs && (x.headStickers||x.legsStickers)) return 'legs';
-  if(alive && eso) return 'eso';
-  if(legs) return 'legs';
-  return alive ? 'inner' : null;
+  if(!alive) return null;
+  if(legs && (x.headStickers||x.legsStickers)) return 'inner';
+  if(x.esoChecked===true) return legs ? 'legs' : 'inner';
+  if(eso) return 'eso';
+  return legs ? 'legs' : 'inner';
 }
 function _gtUsdaMine(st, i){ return st==='parts' || _gtUsdaZone(i)===st; }
 function _gtUsdaNotMine(i){

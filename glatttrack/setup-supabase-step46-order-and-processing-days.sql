@@ -3557,14 +3557,8 @@ begin
 end $$;
 revoke execute on function _parts_print_block(bigint, integer, boolean, boolean, boolean, boolean, integer, integer) from public, anon, authenticated;
 
--- v10.32 (owner): a USDA hold belongs to the station that last marked / printed for the number — once
--- another station marked it, the earlier one has no hold on it any more:
---   slaughtered (not yet marked further) : the first station after slaughter (esophagus; without it legs)
---   esophagus checked                    : esophagus
---   legs / head stickers printed         : legs
---   inner check started                  : inner
---   inner check ruled (also at the outer inspector) : stamps
--- (a screen the plant does not use is skipped; the small-parts station holds its own parts — not here)
+-- a USDA hold belongs to ONE station at a time — v10.34 (owner): the station the animal is at
+-- on the line (see _usda_zone below)
 create or replace function _gt_screen_used(p_screen text) returns boolean
 language sql stable security definer set search_path = public, extensions, pg_temp as $$
   select case when jsonb_typeof(_gt_settings() #> '{screensPlan,screens}') = 'array'
@@ -3573,19 +3567,29 @@ $$;
 revoke execute on function _gt_screen_used(text) from public, anon, authenticated;
 create or replace function _usda_zone(a animals_pilot) returns text
 language plpgsql stable security definer set search_path = public, extensions, pg_temp as $$
+-- v10.34 (owner): the USDA hold belongs to the station the animal is AT on the line:
+--   slaughtered, esophagus not yet   → esophagus
+--   checked at the esophagus         → legs
+--   legs / head stickers printed     → inner (also while the inner check is open)
+--   inner check done                 → outer (whole or halves)
+--   outer ruling                     → stamps (whole or halves); without a stamps screen: outer
+--   (the head: cheeks + tongue — the small-parts station, its own parts)
+-- a screen the plant does not use is skipped
 declare v_alive boolean := a.slaughter in ('slaughtered', 'notChalak');
-        v_eso boolean := coalesce(a.eso_checked, false) or _eso_required(a.id);   -- v10.34: checked there → its own
+        v_eso boolean := coalesce(a.eso_checked, false) or _eso_required(a.id);
         v_legs boolean := _gt_screen_used('legs');
 begin
   if a.slaughter is null then return null; end if;
-  if a.inner_status in ('confirmed', 'treif') then
+  if a.outer_status is not null then
     return case when _gt_screen_used('stamps') then 'stamps' else 'outer' end;
   end if;
+  if a.inner_status in ('confirmed', 'treif') then return 'outer'; end if;
   if a.inner_status is not null or a.rumen is not null or a.maw is not null then return 'inner'; end if;
-  if v_legs and (coalesce(a.head_stickers, false) or coalesce(a.legs_stickers, false)) then return 'legs'; end if;
-  if v_alive and v_eso then return 'eso'; end if;                -- checked there, or the first station after slaughter
-  if v_legs then return 'legs'; end if;
-  return case when v_alive then 'inner' end;
+  if not v_alive then return null; end if;
+  if v_legs and (coalesce(a.head_stickers, false) or coalesce(a.legs_stickers, false)) then return 'inner'; end if;
+  if coalesce(a.eso_checked, false) then return case when v_legs then 'legs' else 'inner' end; end if;
+  if v_eso then return 'eso'; end if;
+  return case when v_legs then 'legs' else 'inner' end;
 end $$;
 revoke execute on function _usda_zone(animals_pilot) from public, anon, authenticated;
 
