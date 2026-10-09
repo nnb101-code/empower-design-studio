@@ -1,0 +1,39 @@
+מצורפת חבילת הבדיקה העדכנית של GlattTrack (אפליקציה v10.34, שרת שלב 46).
+זה סבב שלושה-עשר: החלטות חדשות של בעל המערכת אחרי בדיקות בשטח, ותיקון באג בתור השליחה לשרת.
+קודם תקרא את README-REVIEW.md, החלק "Changed in v10.33 – v10.34", ואחריו "Fixed in v10.32" ומטה.
+
+הכללים של בעל המערכת (המצב הנוכחי):
+- סדר הקו: שחיטה ← וושט ← רגליים/ראש ← פנים ← חוץ ← חותמות / חלקים. בודק הפנים עובד אחרי הרגליים: במפעל שבחר מסך רגליים, אין בדיקת פנים לפני מדבקות רגליים/ראש.
+- מספר שהגיע לתחנה הבאה שייך לה: התחנה הקודמת לא משנה את הפסיקה שלה (שחיטה — עד שהוושט בדק; וושט — עד שהודפסו רגליים/ראש; פנים — עד פסיקת חוץ). בודק החוץ משנה את פסיקתו עם אזהרה.
+- הוושט יכול להפוך "תקין" שלו ל-"?" כל עוד המספר לא הגיע לתחנה הבאה (הבדיקה נפתחת מחדש).
+- USDA HOLD: כל מסך חוץ משחיטה יכול לסמן על כל מספר; על המספר כתוב מאיזה מסך; רק אותו מסך משחרר או פוסל. USDA אחד לבהמה שלמה בכל פעם. חצאים רק בחוץ/חותמות. חלק מעוכב לא מודפס.
+- "?" מהבהב בכל מסך עד שמחליטים; בפנים "?" נשמר עם החלון שלו.
+- עיכוב מוצג רק קדימה בקו.
+- "לא חלק" נשאר עד פסיקת החוץ, ושם הבהמה מקבלת סטטוס אחד (שם שהמפעל קובע — רבנות כשר / כשר / אחר) או טרף. שני מסכי חוץ: משולב, או מסך B רק ל"לא חלק". רבנות חלק = סטטוס רגיל.
+- שני מסכי חוץ: מספר פתוח אצל בודק אחד נעול אצל השני (2 דקות לטאבלט שמת).
+- סריקת ברקוד (אופציה) בפנים ובחוץ פותחת בדיוק את המספר הסרוק.
+- סטטוס כשרות מופיע תמיד בשם שבו נכתב, בכל שפה.
+- "לא חלק" אינו סטטוס כשרות בסיכומים; כל אחוז מכלל הבהמות שיש להן תוצאה.
+
+בדוק במיוחד:
+(00) hold_set אחרי v10.34: בלי בדיקת האזור. מי יכול לשים / לשחרר USDA של מסך אחר? האם usda_held_elsewhere נאכף בכל מסלול (גם carry / יום עיבוד קודם)? האם פתיחה מחדש של הוושט (reopened_question) יכולה לשמש לעקיפת נעילת התחנה הבאה?
+(0) _stage_order_error('inner') + _gt_legs_first: האם יש מסלול כתיבה של פסיקת פנים לפני מדבקות (claim, animal_push, carry_push, המסך המשותף פנים+חוץ)?
+(1) nc_plain + a_animals_nc_plain + _printed_as_key: האם אפשר להדפיס "כשר" במקום "רבנות כשר" לבהמה "לא חלק" בלי פסיקת חוץ?
+(2) באפליקציה: _pushAnswer — האם דחייה של מספר אחד עדיין יכולה לתקוע את התור, או לגרום לאובדן שינוי תקין של מספר אחר?
+(3) הנקודות הקודמות: _hold_caller_error, _parts_print_block, _correction_check, מצב בדיקה, הרשאות רצפים.
+בדיקת האבטחה: 144/144 (מסד נקי מ-glatttrack-schema-full.sql + הרצה שנייה של 02, וגם על Supabase).
+
+Please review this pack according to README-REVIEW.md.
+
+Rules for the review:
+1. Audit the ACTIVE state in active-schema-snapshot.sql (one definition per function). Do not audit older step files or the history inside glatttrack-schema-full.sql as if it were active.
+2. Use SECURITY-MANIFEST.md and security-selftest-result.txt (144/144) to see what is already enforced and tested. Before reporting a vulnerability, check whether a self-test already covers it; if it does, say so and explain why you still think it is exploitable (with the exact function name and line from the snapshot).
+3. Separate your findings into:
+   A. Real, exploitable problems (with a concrete attack: which role, which call, which parameters, what wrong result).
+   B. Defense-in-depth improvements (not exploitable today).
+   C. Things that are already fine.
+4. For every A-finding give: the function name as it appears in the snapshot, the exact problem, and a minimal fix (SQL or JS) that keeps the existing function signatures.
+5. Check the business rules listed in README-REVIEW.md one by one against the code, and say for each: enforced on the server (where) / only in the app / not enforced.
+6. Do not propose rewriting the architecture. Do not invent tables, columns, roles or RPCs that are not in the snapshot.
+
+Answer in Hebrew, with code blocks in English.
