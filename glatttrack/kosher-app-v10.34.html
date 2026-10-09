@@ -6980,7 +6980,13 @@ function _gtCorrectionBlock(stage, idx){
       const nextName = stage==='slaughter' ? (_a.esoChecked ? GT_ST_NAME.eso : (_a.legsStickers||_a.headStickers) ? GT_ST_NAME.legs : _a.innerStatus ? GT_ST_NAME.inner : _a.outerStatus ? GT_ST_NAME.outer : null)
                      : stage==='eso' ? ((_a.legsStickers||_a.headStickers) ? GT_ST_NAME.legs : _a.innerStatus ? GT_ST_NAME.inner : _a.outerStatus ? GT_ST_NAME.outer : null)
                      : stage==='inner' ? (_a.outerStatus ? GT_ST_NAME.outer : null) : null;
-      if(nextName) return L('בהמה #'+(idx+1)+' — כבר עברה ל'+nextName[0]+'. אי אפשר לשנות כאן.','Animal #'+(idx+1)+' — already passed to '+nextName[1]+'. It cannot be changed here.','Animal #'+(idx+1)+' — ya pasó a '+nextName[2]+'. No se puede cambiar aquí.');
+      if(nextName){
+        // v10.34 (owner): say where its USDA HOLD is marked now
+        let z=null; try{ z=_gtUsdaZone(idx); }catch(e){}
+        const zn=z && GT_ST_NAME[z];
+        const usda=zn ? L(' USDA HOLD — במסך '+zn[0]+'.',' USDA HOLD — on the '+zn[1]+' screen.',' USDA HOLD — en la pantalla '+zn[2]+'.') : '';
+        return L('בהמה #'+(idx+1)+' — כבר עברה ל'+nextName[0]+'. אי אפשר לשנות כאן.','Animal #'+(idx+1)+' — already passed to '+nextName[1]+'. It cannot be changed here.','Animal #'+(idx+1)+' — ya pasó a '+nextName[2]+'. No se puede cambiar aquí.')+usda;
+      }
     } }
   if(KS.getAnimal(idx)) return null;
   const a=KS.getAnimal(idx);
