@@ -847,26 +847,25 @@ begin
         and not _nc_outer_value_ok(pg_temp.ar(942), 'rabChalak') and not _nc_outer_value_ok(pg_temp.ar(941), 'rabChalak');
   perform pg_temp.rec('rabbinate screen: a sent animal may be ruled רבנות חלק (and is kosher-ready); a shochet / maw "not chalak" may not', ok,
     concat_ws(' | ', left(r::text, 40), left(r2::text, 60), left(r3::text, 60), r4 ->> 'error'));
-  -- v10.33: "not chalak" holds until the outer ruling — there רבנות כשר ('kosher') or plain כשר
-  -- ('kosherPlain' → 'kosher' + nc_plain); the flag moves only with the outer ruling
+  -- v10.34 (owner, review A2): ONE status for a "not chalak" animal — the v10.33 plain-kosher flag is
+  -- retired: neither the claim ('kosherPlain') nor a push (outer_status + nc_plain together) can set it
   c := gen_random_uuid();
   r  := pg_temp.api(pg_temp.dev('OUT2'), pg_temp.q_claimc(941, 'outer', 'kosherPlain', c));
-  r2 := pg_temp.api(pg_temp.dev('OUT2'), pg_temp.q_claimc(941, 'outer', 'kosherPlain', c));
-  ok := pg_temp.claimed(r) and (pg_temp.ar(941)).outer_status = 'kosher' and (pg_temp.ar(941)).nc_plain
-        and _printed_as_key(pg_temp.ar(941)) = 'kosher' and _kosher_ready(pg_temp.ar(941)) and pg_temp.claimed(r2);
-  r3 := pg_temp.api(pg_temp.dev('IN1'), pg_temp.q_push(941, '{"nc_plain":false}'));
-  ok := ok and (pg_temp.ar(941)).nc_plain;
-  r4 := pg_temp.api(pg_temp.dev('OUT2'), pg_temp.q_push(941, jsonb_build_object('nc_plain', false, 'outer_time', (pg_temp.ar(941)).outer_time + 5)));
-  ok := ok and pg_temp.ok(r4) and not (pg_temp.ar(941)).nc_plain and _printed_as_key(pg_temp.ar(941)) = 'kosherRab';
-  r5 := pg_temp.api(pg_temp.dev('OUT1'), pg_temp.q_push(940, jsonb_build_object('nc_plain', true, 'outer_time', (pg_temp.ar(940)).outer_time + 5)));
-  ok := ok and not (pg_temp.ar(940)).nc_plain;
-  perform pg_temp.rec('v10.33 "not chalak" at the outer ruling: רבנות כשר or plain כשר (flag only with the outer ruling, only for "not chalak")', ok,
-    concat_ws(' | ', left(r::text, 60), left(r2::text, 60), left(r3::text, 60), left(r4::text, 60), left(r5::text, 60)));
+  ok := pg_temp.claimed(r) and (pg_temp.ar(941)).outer_status = 'kosher' and not (pg_temp.ar(941)).nc_plain
+        and _printed_as_key(pg_temp.ar(941)) = 'kosherRab';
+  r4 := pg_temp.api(pg_temp.dev('OUT2'), pg_temp.q_push(941, jsonb_build_object('outer_status', 'kosher', 'nc_plain', true, 'outer_time', (pg_temp.ar(941)).outer_time + 5)));
+  ok := ok and not (pg_temp.ar(941)).nc_plain and _printed_as_key(pg_temp.ar(941)) = 'kosherRab';
+  perform pg_temp.rec('v10.34 "not chalak" gets one status at the outer ruling: no plain-kosher flag on any write path (claim or push)', ok,
+    concat_ws(' | ', left(r::text, 60), left(r4::text, 60)));
   -- v10.34 (owner): the inner inspector works after legs / head — with the legs screen in the plant's
   -- screen choice, no inner check before the stickers; without a screen choice nothing changes
   perform set_config('gt.reset_in_progress', 'true', true);
   update animals_pilot set slaughter = 'slaughtered', slaughter_time = 1, eso_checked = true, eso_result = 'ok' where id in (875, 876);
   update animals_pilot set legs_stickers = true, head_stickers = true where id = 876;
+  -- leg stickers only (no head yet) · an inner check left open before the rule (review A3)
+  update animals_pilot set slaughter = 'slaughtered', slaughter_time = 1, eso_checked = true, eso_result = 'ok', legs_stickers = true where id = 877;
+  update animals_pilot set slaughter = 'slaughtered', slaughter_time = 1, eso_checked = true, eso_result = 'ok',
+         inner_status = 'in_progress', inner_by_device = pg_temp.devid('IN1'), inner_time = 1 where id = 878;
   update settings_pilot set settings = settings || '{"screensPlan":{"decided":true,"screens":["slaughter","esophagus","legs","inner","outer"]}}'::jsonb where id = 1;
   perform set_config('gt.reset_in_progress', 'false', true);
   r  := pg_temp.api(pg_temp.dev('IN1'), pg_temp.q_claim(875, 'inner_start', 'in_progress', '', pg_temp.devid('IN1')));
@@ -874,6 +873,10 @@ begin
   r3 := pg_temp.api(pg_temp.dev('IN1'), pg_temp.q_push(875, jsonb_build_object('inner_status', 'confirmed', 'inner_time', 5)));
   ok := r ->> 'error' = 'out_of_order' and r ->> 'reason' = 'legs_not_done' and pg_temp.claimed(r2)
         and r3 ->> 'error' = 'out_of_order' and (pg_temp.ar(875)).inner_status is null;
+  r5 := pg_temp.api(pg_temp.dev('IN1'), pg_temp.q_claim(877, 'inner_start', 'in_progress', '', pg_temp.devid('IN1')));
+  ok := ok and r5 ->> 'reason' = 'legs_not_done';
+  r5 := pg_temp.api(pg_temp.dev('IN1'), pg_temp.q_push(878, jsonb_build_object('inner_status', 'confirmed', 'inner_time', 9)));
+  ok := ok and r5 ->> 'error' = 'out_of_order' and (pg_temp.ar(878)).inner_status = 'in_progress';
   -- v10.34 (owner): USDA belongs to the station the animal is at on the line
   perform set_config('gt.reset_in_progress', 'true', true);
   update settings_pilot set settings = settings || '{"esophagusEnabled":true,"screensPlan":{"decided":true,"screens":["slaughter","esophagus","legs","inner","outer","parts","stamps"]}}'::jsonb where id = 1;

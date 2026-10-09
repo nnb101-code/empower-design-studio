@@ -3392,6 +3392,23 @@ const KS = (function(){
       return 'again';
     }
     if(code==='command_id_conflict') return 'again';   // sent again under a new command id
+    // v10.34 (review A4): the same server_error for the same number a second time → only that number is
+    // dropped (server's row back, recorded, said on the screen); the first time it is tried again later
+    if(id!=null && code==='server_error'){
+      const k='server_error:'+JSON.stringify(sentOf(id));
+      const prev=_pushSame[id];
+      if(prev && prev.k===k && ++prev.n>=2){
+        delete _pushSame[id];
+        _clearAnimalDirty(id); _revertToServer(id, d.row || null, Object.keys(sentOf(id)));
+        _sbRecordEvent('sync', 'push-dropped', { reason: 'server-error-twice' }, id+1);
+        _showRuleNotice(L('#'+(id+1)+' — שגיאת שרת חוזרת: השינוי לא נשמר, המספר חזר לערך שבשרת.','#'+(id+1)+' — repeated server error: the change was not saved, the number shows the server\'s value again.','#'+(id+1)+' — error del servidor repetido: el cambio no se guardó, el número vuelve al valor del servidor.'));
+        return 'again';
+      }
+      _pushSame[id]={k, n:1};
+      _pushBackoffUntil=Date.now()+20000;
+      _sbDebugBanner(L('השליחה לשרת נכשלה — ','Sending to server failed — ','Falló el envío al servidor — ') + gtErrText(code), false);
+      return 'again';
+    }
     // v10.34: a refusal of ONE known number (any other code) never holds back the rest of the queue:
     // that number takes the server's row again and its change is dropped; the others go on
     if(id!=null && code!=='server_error'){
@@ -5062,8 +5079,8 @@ function gtOwnQTap(i,st,q){
   if(st==='inner'){
     // v10.34 (owner): the inner check comes after legs / head — a "?" put before the stickers waits for them
     const x=KS.getAnimal(i);
-    if(x && !x.innerStatus && typeof passedLegs==='function' && !passedLegs(x))
-      return KS.notice(L('#'+(i+1)+' — "?" פתוח, אבל המספר עוד לא עבר ברגליים. אחרי שיודפסו לו מדבקות רגליים / ראש — לוחצים שוב וממשיכים.',
+    if(x && (!x.innerStatus || x.innerStatus==='in_progress') && typeof _gtLegsFirst==='function' && _gtLegsFirst() && !x.headStickers)
+      return KS.notice(L('#'+(i+1)+' — "?" פתוח, אבל למספר עוד לא הודפסו מדבקות ראש. אחרי שיודפסו — לוחצים שוב וממשיכים.',
                          '#'+(i+1)+' — the "?" is open, but the number has not passed legs yet. Once its legs / head stickers are printed — tap again and go on.',
                          '#'+(i+1)+' — el "?" está abierto, pero el número aún no pasó por patas. Cuando se impriman sus etiquetas de patas / cabeza — toque de nuevo y siga.'));
     return gtInnerResume(i);
@@ -8319,7 +8336,7 @@ function statusLabel(x, ctx){
 // v10.34 (owner): the inner inspector works AFTER legs / head — when the plant chose the legs screen,
 // a number reaches the inner check only once its legs / head stickers are printed (the server refuses too)
 function _gtLegsFirst(){ try{ const p=KS.getSettings().screensPlan; return !!(p && Array.isArray(p.screens) && p.screens.includes('legs')); }catch(e){ return false; } }
-function passedLegs(x){ return !_gtLegsFirst() || !x || !!(x.legsStickers||x.headStickers) || !!x.innerStatus; }
+function passedLegs(x){ return !_gtLegsFirst() || !x || !!x.headStickers || !!x.innerStatus; }   // the head stickers (with the lung / maw stickers) — leg stickers alone are not enough
 function passedToInner(x){ return passedEso(x) && passedLegs(x); }
 function passedEso(x){
   const esoOn=KS.getSettings().esophagusEnabled;
