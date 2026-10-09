@@ -5027,7 +5027,15 @@ function gtOwnQTap(i,st,q){
   if(['legs','parts','stamps'].includes(st)) return gtHeldList(st);
   if(st==='slaughter') return gtSlRuleSheet(i);
   if(st==='eso') return esoOpenDec(i);
-  if(st==='inner') return gtInnerResume(i);
+  if(st==='inner'){
+    // v10.34 (owner): the inner check comes after legs / head — a "?" put before the stickers waits for them
+    const x=KS.getAnimal(i);
+    if(x && !x.innerStatus && typeof passedLegs==='function' && !passedLegs(x))
+      return KS.notice(L('#'+(i+1)+' — "?" פתוח, אבל המספר עוד לא עבר ברגליים. אחרי שיודפסו לו מדבקות רגליים / ראש — לוחצים שוב וממשיכים.',
+                         '#'+(i+1)+' — the "?" is open, but the number has not passed legs yet. Once its legs / head stickers are printed — tap again and go on.',
+                         '#'+(i+1)+' — el "?" está abierto, pero el número aún no pasó por patas. Cuando se impriman sus etiquetas de patas / cabeza — toque de nuevo y siga.'));
+    return gtInnerResume(i);
+  }
   if(st==='outer') return outOpenDec(i);
 }
 function gtSlRuleSheet(i){
