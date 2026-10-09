@@ -1432,12 +1432,14 @@ begin
   --  own screen choice is set aside here, all undone at the end)
   update settings_pilot set settings = settings - 'screensPlan' where id = 1;
   perform pg_temp.prep(890, 'slaughter');
-  ok := ok and _usda_zone(pg_temp.ar(890)) in ('eso', 'legs')
-           and pg_temp.api(pg_temp.dev('IN1'), 'select hold_set(890, ''inner'', ''usda'', ''whole'')') ->> 'error' = 'wrong_zone'
-           and pg_temp.api(pg_temp.dev('STAMPS'), 'select hold_set(890, ''stamps'', ''usda'', ''whole'')') ->> 'zone' = _usda_zone(pg_temp.ar(890))
-           and pg_temp.ok(pg_temp.api(pg_temp.dev(case _usda_zone(pg_temp.ar(890)) when 'eso' then 'ESO1' else 'LEGS' end),
-                          format('select hold_set(890, %L, ''usda'', ''whole'')', _usda_zone(pg_temp.ar(890)))));
-  perform pg_temp.rec('v10.32 test mode expired: the same team-leader session puts no "?" / USDA; a station tablet carrying it gets nothing beyond its own station; a USDA half only at outer / stamps (the animal is split after the inner check); USDA only by the station of the area the animal is in', ok,
+  -- v10.34 (owner): any station (not slaughter) may hold the animal; one whole-animal hold at a time — another
+  -- station is told which one holds it; only that station releases it
+  ok := ok and pg_temp.ok(pg_temp.api(pg_temp.dev('IN1'), 'select hold_set(890, ''inner'', ''usda'', ''whole'')'))
+           and pg_temp.api(pg_temp.dev('STAMPS'), 'select hold_set(890, ''stamps'', ''usda'', ''whole'')') ->> 'station' = 'inner'
+           and pg_temp.api(pg_temp.dev('SL1'), 'select hold_set(890, ''slaughter'', ''usda'', ''whole'')') ->> 'error' in ('bad_station', 'wrong_station')
+           and pg_temp.api(pg_temp.dev('STAMPS'), format('select hold_resolve(%s, ''released'')',
+                 (select id from animal_holds where animal_id = 890 and station = 'inner' and resolved_at is null))) ->> 'ok' is distinct from 'true';
+  perform pg_temp.rec('v10.32 test mode expired: the same team-leader session puts no "?" / USDA; a station tablet carrying it gets nothing beyond its own station; a USDA half only at outer / stamps (the animal is split after the inner check); v10.34: any station but slaughter holds USDA, one whole-animal hold at a time, only that station releases it', ok,
     concat_ws(' | ', r::text, r2::text, r3::text, r4::text));
   perform pg_temp.testmode(false);
 end $$;

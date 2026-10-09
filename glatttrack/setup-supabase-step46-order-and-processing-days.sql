@@ -3837,7 +3837,7 @@ create or replace function hold_set(p_id integer, p_station text, p_kind text, p
                                     p_board bigint default null, p_command_id uuid default null) returns jsonb
 language plpgsql security definer set search_path = public, extensions, pg_temp as $$
 declare v_dev text; v_role text; v_ep bigint; v_res jsonb; a animals_pilot; v_id bigint; v_part text := coalesce(nullif(p_part, ''), 'whole');
-        v_actor text;
+        v_actor text; v_order text;
 begin
   if p_id is null or p_id < 0 or p_id > 999 then return jsonb_build_object('ok', false, 'error', 'bad_id'); end if;
   if p_kind is null or p_kind not in ('question', 'usda') then return jsonb_build_object('ok', false, 'error', 'bad_value'); end if;
@@ -3870,9 +3870,19 @@ begin
     v_ep := a.board_epoch;
   end if;
   if v_ep is null then return jsonb_build_object('ok', false, 'error', 'stale_board'); end if;
-  -- v10.32: a USDA hold only by the station of the area the animal is in (the parts station: its own parts)
-  if p_kind = 'usda' and p_station <> 'parts' and _usda_zone(a) is distinct from p_station then
-    return jsonb_build_object('ok', false, 'error', 'wrong_zone', 'zone', _usda_zone(a));
+  -- v10.34 (owner): every station (not slaughter) may put a USDA hold on any number; the hold shows the
+  -- station that put it, and only that station releases or condemns it. One open whole-animal USDA hold
+  -- per number: another station is told where it is held.
+  if p_kind = 'usda' and p_station = 'slaughter' then
+    return jsonb_build_object('ok', false, 'error', 'bad_station');
+  end if;
+  if p_kind = 'usda' and v_part = 'whole' then
+    select station into v_order from animal_holds
+     where board_epoch = v_ep and animal_id = p_id and kind = 'usda' and part = 'whole' and resolved_at is null
+       and station <> p_station limit 1;
+    if v_order is not null then
+      return jsonb_build_object('ok', false, 'error', 'usda_held_elsewhere', 'station', v_order);
+    end if;
   end if;
   -- v10.34 (owner): the esophagus may turn its own "ok" into a "?" while the number has not reached the
   -- next station (no legs / head stickers, no inner / outer ruling): the check is opened again and the

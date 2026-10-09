@@ -4888,6 +4888,11 @@ async function gtHoldPut(idx, st, kind, part){
   if(!d || !d.ok){
     _gtFlags.holds=_gtFlags.holds.filter(h=>h!==loc); _gtFlags.sig=''; gtRerenderAll();
     if(d && d.error==='worker_login_required') return _gtHoldNeedsLogin();
+    if(d && d.error==='usda_held_elsewhere'){   // v10.34: one whole-animal USDA hold at a time
+      const zn=GT_ST_NAME[d.station];
+      KS.notice(L('#'+(idx+1)+' כבר מעוכב USDA במסך '+(zn?zn[0]:d.station)+' — רק משם משחררים.','#'+(idx+1)+' is already on USDA hold at the '+(zn?zn[1]:d.station)+' screen — only that screen releases it.','#'+(idx+1)+' ya está retenido USDA en la pantalla '+(zn?zn[2]:d.station)+' — solo esa pantalla lo libera.'));
+      return false;
+    }
     if(d && d.error==='wrong_zone'){   // v10.34: say WHICH station the server holds it belongs to (and take the server's row)
       try{ KS.refetch(idx); }catch(e){}
       const z=d.zone, zn=z && GT_ST_NAME[z];
@@ -5147,7 +5152,7 @@ function _gtUsdaZone(i){
   if(eso) return 'eso';
   return legs ? 'legs' : 'inner';
 }
-function _gtUsdaMine(st, i){ return st==='parts' || _gtUsdaZone(i)===st; }
+function _gtUsdaMine(st, i){ return st!=='slaughter'; }   // v10.34 (owner): every station but slaughter; the hold shows who put it, only that station releases it
 function _gtUsdaNotMine(i){
   const z=_gtUsdaZone(i);
   KS.notice('#'+(i+1)+' — '+(z ? L('ה-USDA של המספר הזה שייך עכשיו לתחנת ','this number\'s USDA hold belongs now to the station: ','la retención USDA de este número corresponde ahora a: ')+_gtL(GT_ST_NAME[z]||[z,z,z])
