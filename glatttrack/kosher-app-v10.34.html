@@ -725,7 +725,7 @@ const LUNG_B64="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICA
       <button onclick="esoDecide('ok')" style="flex:1;padding:16px;border-radius:12px;border:2px solid var(--green);background:transparent;color:var(--green);font-size:16px;font-weight:700;cursor:pointer;font-family:'Frank Ruhl Libre',serif;">תקין</button>
       <button onclick="esoDecide('nevela')" style="flex:1;padding:16px;border-radius:12px;border:2px solid var(--red);background:transparent;color:var(--red-light);font-size:16px;font-weight:700;cursor:pointer;font-family:'Frank Ruhl Libre',serif;">נבלה</button>
     </div>
-    <button onclick="esoAskQ()" style="width:100%;margin-top:10px;padding:13px;border-radius:12px;border:2px solid #FFC400;background:transparent;color:#FFC400;font-size:16px;font-weight:700;cursor:pointer;">? שאלה</button>
+    <button onclick="esoCancelDec()" style="width:100%;margin-top:10px;padding:12px;border-radius:12px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:15px;font-weight:700;cursor:pointer;">ביטול</button>
   </div>
 </div>
 
@@ -4824,7 +4824,7 @@ function gtGridWrap(gridId,getCls,getLabel,getTap){
     (i)=>{ const f=info(i); let l=getLabel(i);
       if(f.held){
         if(f.held.resolution==='condemned') l=L('נפסל USDA','USDA condemned','Condenado USDA');
-        else if(f.held.kind==='usda') l='USDA';
+        else if(f.held.kind==='usda') l=_gtL(GT_ST_NAME[f.held.station]||[f.held.station,f.held.station,f.held.station]);   // the corner says USDA; the label: from which screen   // v10.34: from which screen
         else l=L('שאלה','Question','Pregunta');
       } else if(f.own){ l=L('שאלה','Question','Pregunta');
         if(st==='inner'){ try{ const qs=gtInnerQSteps(i); if(qs.length) l+=': '+qs.map(x=>_gtL(GT_QSTEP_NAME[x])).join(', '); }catch(e){} } }
@@ -4955,7 +4955,7 @@ function gtUsdaStart(st, idx){
   // v10.32 (owner): the animal is split into halves only after the inner check — halves only at outer / stamps
   const parts=st==='parts' ? ['whole','cheek1','cheek2','tongue'] : (['outer','stamps'].includes(st) ? ['whole','right','left'] : ['whole']);
   window._gtUsdaPart = parts.length===1 ? 'whole' : null;
-  gtSheet('USDA HOLD', L('מה מעוכב? בוחרים ולוחצים "סמן". (בלי סיבה) — רק התחנה הזו תשחרר או תפסול.','What is held? Choose, then tap "Mark". (No reason) — only this station releases or condemns it.','¿Qué se retiene? Elija y toque "Marcar". (Sin motivo) — solo esta estación lo libera o lo condena.'),
+  gtSheet('USDA HOLD — '+L('מסך ','screen: ','pantalla: ')+_gtL(GT_ST_NAME[st]||[st,st,st]), L('מה מעוכב? בוחרים ולוחצים "סמן". (בלי סיבה) — רק התחנה הזו תשחרר או תפסול.','What is held? Choose, then tap "Mark". (No reason) — only this station releases or condemns it.','¿Qué se retiene? Elija y toque "Marcar". (Sin motivo) — solo esta estación lo libera o lo condena.'),
     _gtNumInput(cur)+'<div class="gt-row">'+parts.map(p=>`<button class="gt-sb gt-up${parts.length===1?' on':''}" data-part="${p}" style="border-color:#B39DFF;color:#B39DFF" onclick="_gtUsdaPick(this)">${_gtL(GT_PART_NAME[p])}</button>`).join('')+'</div>'
     +'<div class="gt-row">'+`<button class="gt-sb" id="gtUsdaOk" style="border-color:#B39DFF;background:#B39DFF;color:#000;${parts.length===1?'':'opacity:.35;'}" onclick="_gtUsdaConfirm('${st}')">${L('סמן USDA HOLD','Mark USDA HOLD','Marcar USDA HOLD')}</button>`
     +_gtHBtn(L('ביטול','Cancel','Cancelar'),'#9aa4b5','gtSheetClose()')+'</div>');
@@ -5098,6 +5098,16 @@ function gtWindowQInit(){
   { const ok=document.querySelector(`#esoModal [onclick="esoDecide('ok')"]`); add(ok && ok.parentNode && ok.parentNode.parentNode, 'gtQEso', ()=>gtWindowQuestion('eso')); }
   add(document.querySelector('#decModal .dec-box'), 'gtQOuter', ()=>gtWindowQuestion('outer'));
   gtUsdaInChangeWindows();
+  // v10.34 (owner): USDA HOLD also from the decision window
+  [['esoModal','eso',()=>esoPendingDec,()=>esoCancelDec()],['decModal','outer',()=>outPendingDec,()=>{ try{ outCancelDec(); }catch(e){} }]].forEach(([mid,st,getIdx,close])=>{
+    const m=document.getElementById(mid); if(!m || m.querySelector('.gt-usda-dec')) return;
+    const box=m.querySelector('.dec-box') || m.firstElementChild || m;
+    const b=document.createElement('button'); b.className='gt-usda-dec'; b.setAttribute('data-no-i18n','');
+    b.style.cssText='display:block;width:100%;margin-top:10px;padding:12px;border-radius:12px;border:2px solid #B39DFF;background:#6A3FB5;color:#fff;font:800 17px Arial;cursor:pointer';
+    b.textContent='USDA HOLD';
+    b.onclick=()=>{ let i=-1; try{ i=getIdx(); }catch(e){} if(i<0) return; if(!_gtUsdaMine(st, i)){ _gtUsdaNotMine(i); return; } close(); gtUsdaStart(st, i); };
+    box.appendChild(b);
+  });
 }
 // v10.32 (owner): a USDA hold belongs to the station that last marked / printed for the number (same rule as
 // the server's _usda_zone): esophagus (from slaughter, and after its check) → legs (stickers printed) →
@@ -5124,12 +5134,14 @@ function _gtUsdaNotMine(i){
 function _gtUsdaChgRefresh(){
   const map={esoWarnModal:['eso',()=>esoChangeIdx],inWarnModal:['inner',()=>inChangeIdx],outWarnModal:['outer',()=>outChangeIdx],
              lgRpModal:['legs',()=>lgReprintIdx],partsRpModal:['parts',()=>partsReprintIdx],stampsRpModal:['stamps',()=>stampsRpIdx]};
+  [['esoModal','eso',()=>esoPendingDec],['decModal','outer',()=>outPendingDec]].forEach(([mid,st,g])=>{ const b=document.querySelector('#'+mid+' .gt-usda-dec'); if(!b) return;
+    let i=-1; try{ i=g(); }catch(e){} b.style.display=(i>=0 && _gtUsdaMine(st, i)) ? 'block' : 'none'; });
   Object.keys(map).forEach(mid=>{ const b=document.querySelector('#'+mid+' .gt-usda-chg'); if(!b) return;
     let i=-1; try{ i=map[mid][1](); }catch(e){} b.style.display=(i>=0 && _gtUsdaMine(map[mid][0], i)) ? 'block' : 'none'; });
 }
 function _gtUsdaWrapOpeners(){
   if(window._gtUsdaWrapped) return; window._gtUsdaWrapped=true;
-  ['esoOpenChangeWarn','inOpenChangeWarn','outOpenChangeWarn','lgReprintWarn','partsReprintWarn','stampsTapAnimal'].forEach(fn=>{
+  ['esoOpenChangeWarn','inOpenChangeWarn','outOpenChangeWarn','lgReprintWarn','partsReprintWarn','stampsTapAnimal','esoOpenDec','outOpenDec'].forEach(fn=>{
     const o=window[fn]; if(typeof o!=='function') return;
     window[fn]=function(){ const r=o.apply(this, arguments); try{ _gtUsdaChgRefresh(); }catch(e){} return r; };
   });
@@ -5224,7 +5236,10 @@ async function gtWindowQuestion(st){
   if(st==='eso'){ idx=esoPendingDec; document.getElementById('esoModal').style.display='none'; esoPendingDec=-1; esoIsChange=false; }
   if(st==='outer'){ idx=outPendingDec; try{ outCancelDec(); }catch(e){} }
   if(idx<0) return;
-  if(await gtHoldPut(idx,st,'question','whole'))
+  if(await gtHoldPut(idx,st,'question','whole')){
+    if(st==='eso'){ try{ KS.refetch(idx); }catch(e){} }
+  }
+  if(gtOwnQ(idx,st))
     KS.notice(L('#'+(idx+1)+' — "?" שאלה. ממשיכים לבהמה הבאה.','#'+(idx+1)+' — "?" question. Go on to the next animal.','#'+(idx+1)+' — "?" pregunta. Siga con el siguiente.'));
 }
 function gtTopBarsUpdate(){
@@ -7373,16 +7388,10 @@ function esoOpenChangeWarn(idx){
   document.getElementById("esoWarnModal").classList.add("open");
 }
 let esoIsChange=false;
-// v10.34 (owner): "?" from the esophagus window — also for a number already checked "ok" (a change),
-// as long as it has not reached the next station (the server checks it and opens the check again)
-async function esoAskQ(){
-  const idx=esoPendingDec; if(idx<0) return;
+// v10.34 (owner): the esophagus window can be closed without a ruling
+function esoCancelDec(){
   document.getElementById("esoModal").style.display="none";
   esoPendingDec=-1; esoIsChange=false;
-  if(await gtHoldPut(idx, 'eso', 'question', 'whole')){
-    try{ KS.refetch(idx); }catch(e){}
-    KS.notice(L('#'+(idx+1)+' סומן "?" — ממשיכים למספר הבא.','#'+(idx+1)+' marked "?" — go on to the next number.','#'+(idx+1)+' marcado "?" — siga con el siguiente.'));
-  }
   esoManualPage=false; try{ esoRenderGrid(); esoUpdateSummary(); }catch(e){}
 }
 function esoConfirmChange(){
