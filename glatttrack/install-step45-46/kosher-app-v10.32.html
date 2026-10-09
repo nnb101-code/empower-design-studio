@@ -5231,7 +5231,7 @@ else setTimeout(()=>{ try{ gtTopBarsInit(); }catch(e){} }, 0);
 function gtOpenCardRender(){
   const pane=document.getElementById('mgr-monitor'); if(!pane) return;
   let card=document.getElementById('gtOpenCard');
-  if(!card){ card=document.createElement('div'); card.id='gtOpenCard'; card.className='card'; card.setAttribute('data-no-i18n',''); pane.insertBefore(card, pane.firstChild); }
+  if(!card){ card=document.createElement('div'); card.id='gtOpenCard'; card.className='card'; card.setAttribute('data-no-i18n',''); pane.insertBefore(card, pane.firstChild); try{ gtTodayArrange(); }catch(e){} }
   const holds=_gtFlags.holds.filter(h=>h.open && !h.local);
   const chg=_gtFlags.changes.filter(c=>!c.ackAt);
   if(!holds.length && !chg.length){ card.style.display='none'; return; }
@@ -9623,7 +9623,7 @@ function mgrTab(tab){
   const tb=document.getElementById('tab-'+tab);if(tb)tb.classList.add('active');
   document.querySelectorAll('.mgr-panel').forEach(p=>p.style.display='none');
   const pn=document.getElementById('mgr-'+tab);if(pn)pn.style.display='block';
-  if(tab==='monitor'){mgrUpdateMonitor(); try{ mgrRenderHealth(); gtHealthRefresh(); }catch(e){}}
+  if(tab==='monitor'){mgrUpdateMonitor(); try{ mgrRenderHealth(); gtHealthRefresh(); }catch(e){} try{ gtTodayArrange(); gtTodayRender(); }catch(e){}}
   if(tab==='reports'){mgrDrawCharts();}
   if(tab==='summaries'){mgrUpdateSummaries();}
   if(tab==='log'){mgrUpdateLog();}
@@ -9683,6 +9683,77 @@ function updateMgr(){
 }
 
 // ── MONITOR ──
+// v10.32 (owner): the team leader's Today tab in three — Overview (opens first) · Tracking · System.
+// Too much on one page hides everything; system health is not on the first page.
+var _gtTodaySub='ov';
+const GT_TODAY_PANES={ ov:['gtSetupGuide','gtTodaySum','@mgrSecLive','mgrMonitor','@mgrSecProgress','mgrProgress','gtTodayAtt'],
+                       tr:['gtOpenCard','mgrProc','todayIntakeAcc'], sys:['mgrHealth','gtTestHome'] };
+function _gtTodayEl(id){ return id[0]==='@' ? document.querySelector('#mgr-monitor .mgr-sec[data-t="'+id.slice(1)+'"]') : document.getElementById(id); }
+function gtTodayArrange(){
+  const pane=document.getElementById('mgr-monitor'); if(!pane) return;
+  if(!document.getElementById('gtTodayBar')){
+    const bar=document.createElement('div'); bar.id='gtTodayBar'; bar.setAttribute('data-no-i18n','');
+    bar.style.cssText='display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;';
+    pane.insertBefore(bar, pane.firstChild);
+    let after=bar;
+    ['ov','tr','sys'].forEach(k=>{ const d=document.createElement('div'); d.id='gtToday_'+k; pane.insertBefore(d, after.nextSibling); after=d; });
+    const sum=document.createElement('div'); sum.id='gtTodaySum'; sum.className='mgr-card'; sum.setAttribute('data-no-i18n',''); sum.style.marginBottom='12px';
+    const att=document.createElement('div'); att.id='gtTodayAtt'; att.setAttribute('data-no-i18n','');
+    document.getElementById('gtToday_ov').append(sum, att);
+  }
+  Object.keys(GT_TODAY_PANES).forEach(k=>{
+    const box=document.getElementById('gtToday_'+k); if(!box) return;
+    const want=GT_TODAY_PANES[k].map(_gtTodayEl).filter(Boolean);
+    const have=[...box.children];
+    if(want.length!==have.length || want.some((e,i)=>have[i]!==e)) want.forEach(e=>box.appendChild(e));   // only when out of place
+    box.style.display=(k===_gtTodaySub)?'':'none';
+  });
+}
+function gtTodaySub(k){ _gtTodaySub=k; gtTodayArrange(); gtTodayRender(); try{ window.scrollTo(0,0); }catch(e){} }
+function gtTodayRender(){
+  const bar=document.getElementById('gtTodayBar'); if(!bar) return;
+  const open=(_gtFlags.holds||[]).filter(h=>h.open && !h.local).length + (_gtFlags.changes||[]).filter(c=>!c.ackAt).length;
+  let sysN=0; try{ sysN=_gtHealthAttention().length; }catch(e){}
+  const chip=(k,t,n,col)=>`<button onclick="gtTodaySub('${k}')" style="padding:9px 18px;border-radius:20px;font:700 15px Arial;cursor:pointer;`
+    +(k===_gtTodaySub?'background:var(--gold);color:#000;border:1px solid var(--gold);':'background:transparent;color:var(--muted);border:1px solid var(--border);')+`">`
+    +(n?`<span style="display:inline-block;min-width:20px;padding:1px 6px;border-radius:10px;background:${col};color:#fff;font-size:12px;margin-inline-end:6px;">${n}</span>`:'')+escapeHtml(t)+'</button>';
+  bar.innerHTML=chip('ov',L('סקירה','Overview','Resumen'),0)+chip('tr',L('מעקב','Tracking','Seguimiento'),open,'var(--red)')+chip('sys',L('מערכת','System','Sistema'),sysN,'var(--red)');
+  // Overview: today's results — every status with its count and its share of all the animals with a result
+  const sum=document.getElementById('gtTodaySum');
+  if(sum){
+    const a=(typeof KS!=='undefined' && KS.getAnimals) ? KS.getAnimals() : [];
+    const sl=a.filter(x=>x.slaughter).length;
+    const cnt={}; let ruled=0;
+    a.forEach(x=>{ let k=null;
+      if(x.slaughter==='nevela'||x.slaughter==='shot') k=x.slaughter;
+      else if(x.innerStatus==='treif') k='treif';
+      else if(x.outerStatus) k=x.outerStatus;
+      if(k){ cnt[k]=(cnt[k]||0)+1; ruled++; } });
+    const target=Number((KS.getSettings()||{}).dailyTarget)||0;
+    const st=(typeof getAllStatuses==='function') ? getAllStatuses() : [];
+    const nm=k=>({nevela:L('נבלה','Nevela','Nevelá'), shot:L('ירוי','Shot','Baleado')})[k] || (typeof statusDisplayName==='function' ? (statusDisplayName(k)||k) : k);
+    const colOf=k=>({nevela:'#C0392B', shot:'#8A8F98', treif:'var(--red-light)'})[k] || ((st.find(x=>x.key===k)||{}).color) || 'var(--gold)';
+    const order=st.map(x=>x.key).filter(k=>k!=='treif').concat(['treif','nevela','shot']);
+    Object.keys(cnt).forEach(k=>{ if(!order.includes(k)) order.splice(order.length-3,0,k); });
+    const keys=order.filter((k,i)=>order.indexOf(k)===i && (cnt[k] || k==='treif' || k==='nevela' || k==='shot'));
+    const pct=v=>ruled ? (Math.round(v/ruled*1000)/10)+'%' : '—';
+    const big=(v,l,c)=>`<div><div style="font-size:${c?26:44}px;font-weight:900;line-height:1;color:${c||'var(--text)'}">${v}</div><div style="font-size:12px;color:var(--muted);margin-top:3px;">${l}</div></div>`;
+    sum.innerHTML=`<div style="font-size:13px;color:var(--muted);margin-bottom:8px;">${escapeHtml(L('היום','Today','Hoy'))}</div>`
+      +`<div style="display:flex;gap:24px;align-items:flex-end;flex-wrap:wrap;">`+big(sl,escapeHtml(L('נשחטו','Slaughtered','Faenados')))
+      +big(ruled,escapeHtml(L('עם תוצאה','With a result','Con resultado')),'var(--blue)')+big(Math.max(0,sl-ruled),escapeHtml(L('בדרך','On the way','En camino')),'var(--amber)')
+      +(target?big(sl+'/'+target,escapeHtml(L('יעד יומי','Daily target','Meta diaria')),'var(--text)'):'')+`</div>`
+      +`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:6px;margin-top:12px;">`
+      +keys.map(k=>`<div style="background:var(--panel2);border-radius:9px;padding:7px 9px;"><div style="font-size:21px;font-weight:800;color:${colOf(k)}">${cnt[k]||0}</div><div style="font-size:12px;color:var(--muted);">${escapeHtml(nm(k))} · ${pct(cnt[k]||0)}</div></div>`).join('')
+      +`</div>`;
+  }
+  const att=document.getElementById('gtTodayAtt');
+  if(att){
+    const n=open+sysN;
+    att.innerHTML = n ? `<div onclick="gtTodaySub('${open?'tr':'sys'}')" style="cursor:pointer;margin-top:4px;background:#2a1a08;border:1px solid var(--amber);border-radius:12px;padding:11px 14px;color:#FFD08A;font-weight:700;display:flex;justify-content:space-between;">`
+        +`<span>⚠ ${escapeHtml(L(n+' דברים דורשים טיפול', n+' things need attention', n+' cosas requieren atención'))}</span><span>${escapeHtml(open?L('מעקב ←','Tracking →','Seguimiento →'):L('מערכת ←','System →','Sistema →'))}</span></div>` : '';
+  }
+}
+setInterval(()=>{ try{ const m=document.getElementById('mgr-monitor'); if(m && m.style.display!=='none' && m.offsetParent){ gtTodayArrange(); gtTodayRender(); } }catch(e){} }, 2000);
 // v10.27: "all the screens on one device" (test mode) — a card at the top of the team leader's
 // home tab, not only deep in Settings → System
 function gtTestHomeCard(){
@@ -9692,7 +9763,7 @@ function gtTestHomeCard(){
   if(!show){ if(c) c.style.display='none'; return; }
   if(!c){ c=document.createElement('div'); c.id='gtTestHome'; c.setAttribute('data-no-i18n','');
     c.style.cssText='margin-bottom:10px;padding:10px 12px;border:1px dashed var(--amber);border-radius:12px;display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;';
-    pane.insertBefore(c, pane.firstChild); }
+    pane.insertBefore(c, pane.firstChild); try{ gtTodayArrange(); }catch(e){} }
   c.style.display='';
   const on=_gtTestModeOn();
   c.innerHTML='<div style="font-size:14px;color:var(--text);"><b style="color:var(--amber);">🧪 '+escapeHtml(L('כל המסכים במכשיר אחד (מצב בדיקה)','All the screens on one device (test mode)','Todas las pantallas en un dispositivo (modo prueba)'))+'</b><br><span style="font-size:12px;color:var(--muted);">'
@@ -15974,7 +16045,7 @@ function gtOpenHealth(){
   if(!(KS.getManagerToken && KS.getManagerToken())) return;
   const a=document.querySelector('.screen.active');
   if(!a || a.id!=='scManager') goTo('scManager');
-  try{ mgrTab('monitor'); }catch(e){}
+  try{ _gtTodaySub='sys'; mgrTab('monitor'); }catch(e){}
   setTimeout(()=>{ const c=document.getElementById('mgrHealth'); if(c) c.scrollIntoView({block:'start', behavior:'smooth'}); }, 60);
 }
 let _gtHealthBusy=false, _gtHealthAt=0;
