@@ -4878,6 +4878,14 @@ async function gtHoldPut(idx, st, kind, part){
   if(!d || !d.ok){
     _gtFlags.holds=_gtFlags.holds.filter(h=>h!==loc); _gtFlags.sig=''; gtRerenderAll();
     if(d && d.error==='worker_login_required') return _gtHoldNeedsLogin();
+    if(d && d.error==='wrong_zone'){   // v10.34: say WHICH station the server holds it belongs to (and take the server's row)
+      try{ KS.refetch(idx); }catch(e){}
+      const z=d.zone, zn=z && GT_ST_NAME[z];
+      KS.notice(L('לא סומן: לפי השרת, ה-USDA של #'+(idx+1)+' שייך עכשיו ל'+(zn?'מסך '+zn[0]:'תחנה אחרת')+'.',
+                  'Not marked: by the server, the USDA hold of #'+(idx+1)+' belongs now to '+(zn?'the '+zn[1]+' screen':'another station')+'.',
+                  'No se marcó: según el servidor, la retención USDA de #'+(idx+1)+' corresponde ahora a '+(zn?'la pantalla '+zn[2]:'otra estación')+'.'));
+      return false;
+    }
     if(d && d.error==='already_ruled'){   // v10.34: a "?" after the number went on (or after a ruling that cannot become "?")
       KS.notice(L('לא סומן: #'+(idx+1)+' כבר נפסק ועבר הלאה (או נפסק נבלה — קודם משנים לתקין). "?" אפשר רק לפני שהתחנה הבאה עבדה עליו.',
                   'Not marked: #'+(idx+1)+' was already ruled and went on (or ruled nevela — change it to OK first). A "?" only before the next station worked on it.',
