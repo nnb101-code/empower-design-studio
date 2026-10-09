@@ -428,6 +428,11 @@ begin
                         or (not coalesce(old.legs_stickers, false) and coalesce(new.legs_stickers, false))) then
     v_stage := 'legs_stickers'; v_err := _stage_order_error('legs_stickers', new, true); v_groups := v_groups || 'legs'::text;
   end if;
+  -- v10.34 (owner): with legs + head, the head stickers come after the leg stickers (legs → head → inner)
+  if v_err is null and not coalesce(old.head_stickers, false) and coalesce(new.head_stickers, false)
+     and _gt_flag(_gt_settings(), 'legsMode', true) and _gt_legs_first() and not coalesce(new.legs_stickers, false) then
+    v_stage := 'legs_stickers'; v_err := 'legs_not_done';
+  end if;
   if not coalesce(old.legs_sorted, false) and coalesce(new.legs_sorted, false) then
     v_groups := v_groups || 'legs'::text;
     if v_err is null then v_stage := 'legs'; v_err := _stage_order_error('legs', new, true); end if;
@@ -2224,7 +2229,7 @@ begin
   if p_role not in ('slaughter','esophagus','legs','inner','outer','parts','stamps','display','leader') then
     return jsonb_build_object('ok', false, 'error', 'bad_role');
   end if;
-  v_idx := case when p_role in ('inner','outer','display','leader') then coalesce(p_index, 0) else 0 end;
+  v_idx := case when p_role in ('inner','outer','display','leader','legs') then coalesce(p_index, 0) else 0 end;   -- v10.34: legs slot 1 = the head screen
   if (p_role in ('display', 'leader') and v_idx not between 0 and 3) or (p_role not in ('display', 'leader') and v_idx not in (0, 1)) then
     return jsonb_build_object('ok', false, 'error', 'bad_slot');
   end if;

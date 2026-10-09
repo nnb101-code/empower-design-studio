@@ -622,7 +622,7 @@ const LUNG_B64="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICA
     <div class="nav-grid">
       <div class="nav-card ready" id="navSlaughterCard" onclick="goTo('scSlaughterLogin')"><div class="ready-dot"></div><div class="nav-card-name" id="tNSl">שחיטה</div><div class="nav-card-desc" id="tNSlD">נשחט / נבלה / ירוי</div><span class="nav-badge r" id="tNReady">מוכן</span></div>
       <div class="nav-card ready" id="navEsoCard" onclick="goTo('scEsophagusLogin')" style="display:none;"><div class="ready-dot"></div><div class="nav-card-name" id="tNEso">בדיקת וושט</div><div class="nav-card-desc" id="tNEsoD">משגיח — פסילת נבלה</div><span class="nav-badge r">מוכן</span></div>
-      <div class="nav-card ready" id="navLegsCard" onclick="goTo('scLegsLogin')"><div class="ready-dot"></div><div class="nav-card-name" id="tNLg">רגלים / ראש</div><div class="nav-card-desc" id="tNLgD">מדבקות ראשוניות</div><span class="nav-badge r">מוכן</span></div>
+      <div class="nav-card ready" id="navLegsCard" onclick="lgInstance=0;try{_lgTitle()}catch(e){};goTo('scLegsLogin')"><div class="ready-dot"></div><div class="nav-card-name" id="tNLg">רגלים / ראש</div><div class="nav-card-desc" id="tNLgD">מדבקות ראשוניות</div><span class="nav-badge r">מוכן</span></div>
       <div id="navInnerCards" style="display:contents;"></div>
       <div id="navOuterCards" style="display:contents;"></div>
       <div class="nav-card ready" id="navPartsCard" onclick="goTo('scPartsLogin')"><div class="ready-dot"></div><div class="nav-card-name" id="tNParts">חלקים קטנים</div><div class="nav-card-desc" id="tNPartsD">לשון ולחיים</div><span class="nav-badge r">מוכן</span></div>
@@ -1494,7 +1494,7 @@ const LUNG_B64="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICA
         <div class="mgr-card">
           <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);">
             <span style="font-size:13px;color:var(--text);">מדבקות רגליים</span>
-            <input type="number" inputmode="numeric" min="0" id="printLegsCount" onchange="mgrSetPrintCount('legs',this.value)" style="width:70px;background:var(--panel2);border:1px solid var(--border);border-radius:7px;padding:7px;color:var(--gold);font-size:15px;font-weight:700;text-align:center;">
+            <select id="printLegsCount" onchange="mgrSetPrintCount('legs',this.value)" style="width:70px;background:var(--panel2);border:1px solid var(--border);border-radius:7px;padding:7px;color:var(--gold);font-size:15px;font-weight:700;"><option value="2">2</option><option value="3">3</option><option value="4">4</option></select>
           </div>
           <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);">
             <span style="font-size:13px;color:var(--text);">מדבקות ראש</span>
@@ -4791,6 +4791,7 @@ function gtOwnQ(i,st){ return gtHoldsOf(i).find(h=>h.open && h.station===st && h
 // screen) is not shown here: the slaughter screen shows only slaughter rulings.
 const GT_ST_RANK={slaughter:0,eso:1,legs:2,inner:3,outer:4,parts:5,stamps:5};
 function gtHoldSeenAt(h,st){ if(!h || h.station===st) return true;
+  if(h.part!=='x') return true;   // v10.34 (owner): a "?" or a USDA hold shows on every screen (change marks: only further down the line)
   const a=GT_ST_RANK[h.station], b=GT_ST_RANK[st]; if(a==null || b==null) return true;
   return a<b || (a===b && h.part==='whole');             // (parts / stamps work side by side: a whole-animal hold stops both)
 }
@@ -7328,7 +7329,15 @@ function _stampsWeightPendingIdx(){
 function _gtSideOpen(x,side){ return !KS.weightSideDone(x,side) && !gtHeldAt(x.id,'stamps',side); }
 function _syncPendingWeight(){ pendingWeightIdx=_stampsWeightPendingIdx(); return pendingWeightIdx; }
 // Legs queue test (print mode) — shared by the grid, the tap check and the summary.
-function _lgNeeds(x){ return (x.slaughter!==null || _gtSlQx(x)) && passedEso(x) && !x.headStickers && !gtSkip(x.id,'legs'); }
+// v10.34 (owner): legs and head may be TWO screens (setting legsHeadSplit, with legs + head):
+// tablet "legs" slot 0 = legs (leg / side stickers), slot 1 = head (head stickers incl. lung + maw).
+// A number shows on a screen only after it passed the one before it: esophagus → legs → head → inner.
+let lgInstance=0;
+function _lgSplit(){ const s=KS.getSettings(); return s.legsHeadSplit===true && s.legsMode!==false; }
+function _lgRole(){ return _lgSplit() ? (lgInstance===1 ? 'head' : 'legs') : 'both'; }
+function _lgArrived(x){ return _lgRole()==='head' ? !!x.legsStickers : passedEso(x); }
+function _lgDone(x){ return _lgRole()==='legs' ? !!x.legsStickers : !!x.headStickers; }
+function _lgNeeds(x){ return (x.slaughter!==null || _gtSlQx(x)) && _lgArrived(x) && !_lgDone(x) && !gtSkip(x.id,'legs'); }
 
 function slOpenWarn(idx){
   if(!_gtCorrectionGate('slaughter', idx)) return;
@@ -7397,6 +7406,7 @@ function slUpdateSummary(){
 let lgPage=0,lgManualPage=false;
 function lgLogin(){
   if(!_checkLogin('legs','scLegsLogin'))return;
+  try{ _lgTitle(); }catch(e){}
   goTo("scLegs");
   // Show mode bar if sort mode enabled in settings
   const sortOn=KS.getSettings().legsSortEnabled;
@@ -7765,9 +7775,9 @@ function lgRenderGrid(){
   buildGrid("lgGrid","lgPrev","lgNext","lgPI",lgPage,a,
     i=>{const x=a[i];
         if(x.slaughter===null)return"empty";
-        if(!x.headStickers&&!passedEso(x))return"empty"; // hidden until esophagus check passes
+        if(!_lgDone(x)&&!_lgArrived(x))return"empty"; // hidden until esophagus check passes
         // After printing: keep base color (status doesn't change, just adds "done").
-        if(x.headStickers)return baseColor(x);
+        if(_lgDone(x))return baseColor(x);
         // Next-in-line blinks; nevela/shot blink red, notChalak yellow, else blue.
         if(i===first){
           if(x.slaughter==="nevela"||x.slaughter==="shot")return"next-nev";
@@ -7776,14 +7786,14 @@ function lgRenderGrid(){
         return baseColor(x);},
     i=>{const x=a[i];
         if(x.slaughter===null)return"";
-        if(!x.headStickers&&!passedEso(x))return""; // hidden until esophagus check passes
+        if(!_lgDone(x)&&!_lgArrived(x))return""; // hidden until esophagus check passes
         // After printing → base status + "בוצע"; before → base status only.
-        return x.headStickers?(baseLabel(x)+"<br>"+doneL):baseLabel(x);},
+        return _lgDone(x)?(baseLabel(x)+"<br>"+doneL):baseLabel(x);},
     i=>{
       const x=a[i];
       if(x.slaughter===null)return null;
-      if(!x.headStickers&&!passedEso(x))return null; // hidden until esophagus check passes
-      if(x.headStickers)return()=>lgReprintWarn(i);  // done - reprint with warning
+      if(!_lgDone(x)&&!_lgArrived(x))return null; // hidden until esophagus check passes
+      if(_lgDone(x))return()=>lgReprintWarn(i);  // done - reprint with warning
       return()=>lgTap(i);
     }
   );
@@ -8149,7 +8159,7 @@ function mgrRenderPrintPreview(){
   // Sync count inputs
   const s=KS.getSettings();
   const lc=document.getElementById('printLegsCount');if(lc)lc.value=s.legStickerCount!=null?s.legStickerCount:2;
-  const hc=document.getElementById('printHeadCount');if(hc)hc.value=s.headStickerCount!=null?s.headStickerCount:5;
+  const hc=document.getElementById('printHeadCount');if(hc)hc.value=s.headStickerCount!=null?s.headStickerCount:7;
   const pc=document.getElementById('printPartsCount');if(pc)pc.value=s.partsStickerCount!=null?s.partsStickerCount:3;
   const qz=document.getElementById('printShowQR');if(qz)qz.checked=s.printShowQR!==false;
   const hz=document.getElementById('printShowHeb');if(hz)hz.checked=s.printShowHeb!==false;
@@ -8186,7 +8196,7 @@ function showPrintPopup(idx,step,isReprint=false){
   const stepLabel=step==="legs"?L("מדבקות רגלים","Leg Stickers","Etiquetas de patas"):L("מדבקות ראש","Head Stickers","Etiquetas de cabeza");
   document.getElementById("ppTitle").textContent=(isReprint?"🔄 ":"")+stepLabel;
   const _st=KS.getSettings();
-  const count=step==="legs"?(_st.legStickerCount!=null?_st.legStickerCount:2):(_st.headStickerCount!=null?_st.headStickerCount:5);
+  const count=step==="legs"?(_st.legStickerCount!=null?_st.legStickerCount:2):(_st.headStickerCount!=null?_st.headStickerCount:7);
   document.getElementById("ppCount").textContent="x "+count;
   document.getElementById("ppInfo").textContent=new Date().toLocaleTimeString("he-IL");
   const bar=document.getElementById("ppBarInner");
@@ -8206,7 +8216,10 @@ function lgTap(idx){
   let first=-1;for(let i=0;i<a.length;i++){if(_lgNeeds(a[i])){first=i;break;}}
   if(idx!==first){showNoSkip();return;}
   const x=a[idx];
-  if(!x.legsStickers){
+  const _r=_lgRole();
+  if(_r==='legs'){ KS.setLegsStickers(idx); showPrintPopup(idx,"legs"); }
+  else if(_r==='head'){ KS.setHeadStickers(idx); showPrintPopup(idx,"head"); }
+  else if(!x.legsStickers){
     KS.setLegsStickers(idx);
     if(KS.getSettings().legsMode!==false)showPrintPopup(idx,"legs");
     else{KS.setHeadStickers(idx);showPrintPopup(idx,"head");}
@@ -8218,8 +8231,20 @@ function lgTap(idx){
   lgRenderGrid();lgUpdateSummary();
 }
 let lgReprintIdx=-1,lgReprintStep="";
+// v10.34: the screen says which one it is when legs and head are split
+function _lgTitle(){
+  const r=_lgRole(); const at=document.getElementById('lgAT'); if(!at) return;
+  let el=document.getElementById('lgRoleLbl');
+  if(!el){ el=document.createElement('span'); el.id='lgRoleLbl'; el.setAttribute('data-no-i18n','');
+    el.style.cssText='color:var(--gold);font-weight:800;font-size:16px;margin-inline-start:8px;'; at.parentNode.insertBefore(el, at); }
+  el.textContent = r==='head' ? L('מסך ראש','Head screen','Pantalla cabeza') : r==='legs' ? L('מסך רגליים','Legs screen','Pantalla patas') : '';
+}
 function lgReprintWarn(idx){
   lgReprintIdx=idx;
+  if(_lgRole()!=='both'){   // v10.34: a split screen reprints its own stickers
+    if(!confirm(L('הדפסה חוזרת ל-#','Reprint for #','¿Reimprimir #')+(idx+1)+'? '+L('תירשם בדוח ראש הצוות.','It is recorded in the team leader report.','Queda registrada.'))) { lgReprintIdx=-1; return; }
+    return lgDoReprint(_lgRole());
+  }
   const a=KS.getAnimal(idx);
   const step=a.legsStickers&&!a.headStickers?"head":a.headStickers?"both":"legs";
   document.getElementById("lgRpDesc").innerHTML=
@@ -11088,7 +11113,7 @@ function mgrSyncUI(){
   if(sw)sw.value=s.stickerW||50;if(sh)sh.value=s.stickerH||50;
   // Restore number inputs
   const li=document.getElementById('legStickerInput');if(li)li.value=s.legStickerCount!=null?s.legStickerCount:2;
-  const hi=document.getElementById('headStickerInput');if(hi)hi.value=s.headStickerCount!=null?s.headStickerCount:5;
+  const hi=document.getElementById('headStickerInput');if(hi)hi.value=s.headStickerCount!=null?s.headStickerCount:7;
   const pi=document.getElementById('partsStickerInput');if(pi)pi.value=s.partsTotalStickers||3;
   const si=document.getElementById('stampsStickerInput');if(si)si.value=s.stampsCount||5;
   // Screen config
@@ -12083,6 +12108,14 @@ function buildNavCards(){
   if(!inner||!outer)return;
 
   const rdy=`<span class="nav-badge r">${t.ready||'מוכן'}</span>`;
+  // v10.34: legs and head split → a second card "head"
+  { const lc=document.getElementById('navLegsCard');
+    if(lc){ const split=_lgSplit(); const nm=document.getElementById('tNLg'); if(nm) nm.textContent=split?L('רגליים','Legs','Patas'):(t.lg||'רגלים / ראש');
+      let hc=document.getElementById('navHeadCard');
+      if(split && !hc){ hc=lc.cloneNode(true); hc.id='navHeadCard'; hc.onclick=()=>{ lgInstance=1; try{_lgTitle()}catch(e){} goTo('scLegsLogin'); };
+        hc.querySelectorAll('[id]').forEach(e=>e.removeAttribute('id')); lc.parentNode.insertBefore(hc, lc.nextSibling); }
+      if(hc){ hc.style.display=split?'':'none'; const n2=hc.querySelector('.nav-card-name'); if(n2) n2.textContent=L('ראש','Head','Cabeza');
+        const d2=hc.querySelector('.nav-card-desc'); if(d2) d2.textContent=L('מדבקות ראש, ריאה ובית הכוסות','Head, lung and maw stickers','Etiquetas de cabeza, pulmón y cuajar'); } } }
   const makeIn=(i,total)=>{
     const lbl=total>1?(lang==='he'?'בודק פנים '+(i+1):(lang==='es'?'Insp. Interno '+(i+1):'Inner '+(i+1))):(t.inner||'בודק פנים');
     return`<div class="nav-card ready" onclick="inLogin(${i});goTo('scInnerLogin')"><div class="ready-dot"></div><div class="nav-card-name">${lbl}</div><div class="nav-card-desc">${t.innerD||'בדיקת ריאות'}</div>${rdy}</div>`;
@@ -14488,7 +14521,7 @@ function _kioskApplyAssignment(role, idx){
   _kioskApplied = {role, idx};
   if(role==='slaughter') goTo('scSlaughterLogin');
   else if(role==='esophagus') goTo('scEsophagusLogin');
-  else if(role==='legs') goTo('scLegsLogin');
+  else if(role==='legs'){ lgInstance=idx||0; try{ _lgTitle(); }catch(e){} goTo('scLegsLogin'); }
   else if(role==='inner'){ if(typeof inLogin==='function') inLogin(idx); goTo('scInnerLogin'); }
   else if(role==='outer'){ if(typeof outLogin==='function') outLogin(idx); goTo('scOuterLogin'); }
   else if(role==='parts') goTo('scPartsLogin');
@@ -14544,7 +14577,8 @@ function _kioskRoleLabels(){
   return {
     slaughter: he?'שחיטה':es?'Matanza':'Slaughter',
     esophagus: he?'בדיקת וושט':es?'Chequeo esófago':'Esophagus check',
-    legs: he?'רגלים / ראש':es?'Patas / Cabeza':'Legs / Head',
+    legs: (typeof _lgSplit==='function' && _lgSplit()) ? (he?'רגליים':es?'Patas':'Legs') : (he?'רגלים / ראש':es?'Patas / Cabeza':'Legs / Head'),
+    'legs-1': he?'ראש':es?'Cabeza':'Head',
     'inner-0': he?'בודק פנים':es?'Inspector interno':'Inner inspector',
     'inner-1': he?'בודק פנים 2':es?'Inspector interno 2':'Inner inspector 2',
     'outer-0': he?'בודק חוץ':es?'Inspector externo':'Outer inspector',
@@ -14559,7 +14593,7 @@ function _kioskRoleLabels(){
     'leader-3': he?'ראש צוות 4':es?'Jefe de equipo 4':'Team leader 4',
   };
 }
-const KIOSK_ROLE_KEYS = ['slaughter','esophagus','legs','inner-0','inner-1','outer-0','outer-1','parts','stamps','display-0','display-1'];
+const KIOSK_ROLE_KEYS = ['slaughter','esophagus','legs','legs-1','inner-0','inner-1','outer-0','outer-1','parts','stamps','display-0','display-1'];
 
 /** Registers this device (heartbeat), listens for the manager assigning or
  *  resetting ITS role, and — separately — keeps the manager's devices panel
@@ -16556,6 +16590,7 @@ function gtPlanSlots(){
     if(p.screens.has('outer')) for(let i=0;i<cfg[1];i++) out.push(['outer',i]);
   }
   ['legs','parts','stamps'].forEach(r => { if(p.screens.has(r)) out.push([r,0]); });
+  if(p.screens.has('legs') && s.legsHeadSplit===true && s.legsMode!==false) out.push(['legs',1]);   // v10.34: the head screen
   if(p.screens.has('display')) out.push(['display',0]);
   return out;
 }
@@ -16586,7 +16621,7 @@ async function mgrRenderPlan(){
   const s = KS.getSettings(), p = gtPlan();
   if(!_gtPlanDraft){
     const cfg = _GT_CFG[s.screenConfig] || [1,1];
-    _gtPlanDraft = { screens: new Set(p.screens), ni: cfg[0], no: cfg[1], shared: s.screenConfig==='1both', legsMode: s.legsMode!==false, sort: s.legsSortEnabled===true && s.legsMode!==false };
+    _gtPlanDraft = { screens: new Set(p.screens), ni: cfg[0], no: cfg[1], shared: s.screenConfig==='1both', legsMode: s.legsMode!==false, sort: s.legsSortEnabled===true && s.legsMode!==false, split: s.legsHeadSplit===true };
   }
   const D = _gtPlanDraft, E = escapeHtml;
   const devs = await _gtDevices();
@@ -16629,7 +16664,9 @@ async function mgrRenderPlan(){
       x += `<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:8px 32px 0 0;">
         ${opt(D.legsMode, L('רגלים + ראש','Legs + head','Patas + cabeza'), 'gtPlanLegs(true)')} ${opt(!D.legsMode, L('ראש בלבד','Head only','Solo cabeza'), 'gtPlanLegs(false)')}
         ${opt(D.sort && D.legsMode, (D.sort && D.legsMode ? '✓ ' : '') + L('מיון רגלים','Leg sorting','Clasificación de patas'), 'gtPlanSort()', !D.legsMode)}</div>
-        <div style="font-size:11px;color:var(--muted);margin:4px 32px 0 0;">${D.legsMode ? L('מדבקות ראש (5) ממשיכות כרגיל.','Head stickers (5) as usual.','Etiquetas de cabeza (5) como siempre.') : L('בלי רגלים אין מיון רגלים. מדבקות הראש (5) ממשיכות.','Without legs there is no leg sorting. Head stickers (5) continue.','Sin patas no hay clasificación; las etiquetas de cabeza (5) siguen.')}</div>`;
+        ${D.legsMode ? `<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:8px 32px 0 0;font-size:12px;color:var(--muted);">${L('רגליים וראש:','Legs and head:','Patas y cabeza:')}
+          ${opt(!D.split, L('מסך אחד','One screen','Una pantalla'), 'gtPlanSplit(false)')} ${opt(D.split, L('שני מסכים — רגליים · ראש','Two screens — legs · head','Dos pantallas — patas · cabeza'), 'gtPlanSplit(true)')}</div>` : ''}
+        <div style="font-size:11px;color:var(--muted);margin:4px 32px 0 0;">${D.legsMode ? L('מדבקות ראש (7: 3 לראש, 2 לצדדים, ריאה, בית הכוסות) — הכמות בהגדרות. בשני מסכים: הרגליים קודם, ואחריהם הראש.','Head stickers (7: 3 head, 2 sides, lung, maw) — the count is in the settings. With two screens: legs first, then head.','Etiquetas de cabeza (7: 3 cabeza, 2 lados, pulmón, cuajar) — la cantidad en ajustes. Con dos pantallas: patas primero, luego cabeza.') : L('בלי רגלים אין מיון רגלים. מדבקות הראש (7) ממשיכות.','Without legs there is no leg sorting. Head stickers (7) continue.','Sin patas no hay clasificación; las etiquetas de cabeza (7) siguen.')}</div>`;
     }
     x += `</div>`;
   });
@@ -16654,6 +16691,7 @@ function gtPlanToggle(k){
 function gtPlanCfg(k){ const D=_gtPlanDraft; if(!D) return; if(k==='1both'){ D.shared=true; } else { D.shared=false; const c=_GT_CFG[k]||[1,1]; D.ni=c[0]; D.no=c[1]; } mgrRenderPlan(); }
 function gtPlanShared(on){ const D=_gtPlanDraft; if(!D) return; D.shared=!!on; mgrRenderPlan(); }
 function gtPlanCount(k, n){ const D=_gtPlanDraft; if(!D) return; if(k==='inner') D.ni=n; else D.no=n; mgrRenderPlan(); }
+function gtPlanSplit(on){ const D=_gtPlanDraft; if(!D) return; D.split=!!on; mgrRenderPlan(); }
 function gtPlanLegs(on){ const D=_gtPlanDraft; if(!D) return; D.legsMode=!!on; if(!on) D.sort=false; mgrRenderPlan(); }
 function gtPlanSort(){ const D=_gtPlanDraft; if(!D || !D.legsMode) return; D.sort=!D.sort; mgrRenderPlan(); }
 async function gtPlanSave(){
@@ -16680,7 +16718,8 @@ async function gtPlanSave(){
     screensPlan: { decided: true, screens: [...D.screens], at: new Date().toISOString() },
     screenConfig: (D.shared && D.screens.has('inner') && D.screens.has('outer')) ? '1both' : _gtCfgFor(D.ni, D.no),
     legsMode: !!D.legsMode,
-    legsSortEnabled: !!(D.legsMode && D.sort)
+    legsSortEnabled: !!(D.legsMode && D.sort),
+    legsHeadSplit: !!(D.legsMode && D.split)
   };
   if(eso && !s.esophagusEnabled){ upd.esophagusEnabled = true; upd.esoFromIdx = _esoComputeFromIdx(); upd.esoFromReset = s.lastServerResetAt || ''; }
   else if(!eso && s.esophagusEnabled) upd.esophagusEnabled = false;

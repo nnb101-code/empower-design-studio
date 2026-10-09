@@ -877,6 +877,15 @@ begin
   ok := ok and r5 ->> 'reason' = 'legs_not_done';
   r5 := pg_temp.api(pg_temp.dev('IN1'), pg_temp.q_push(878, jsonb_build_object('inner_status', 'confirmed', 'inner_time', 9)));
   ok := ok and r5 ->> 'error' = 'out_of_order' and (pg_temp.ar(878)).inner_status = 'in_progress';
+  -- v10.34 (owner): legs → head: head stickers before the leg stickers are refused (legs + head plant)
+  perform set_config('gt.reset_in_progress', 'true', true);
+  update animals_pilot set slaughter = 'slaughtered', slaughter_time = 1, eso_checked = true, eso_result = 'ok' where id = 879;
+  perform set_config('gt.reset_in_progress', 'false', true);
+  r5 := pg_temp.api(pg_temp.dev('LEGS'), pg_temp.q_push(879, '{"head_stickers":true}'));
+  ok := ok and r5 ->> 'error' = 'out_of_order' and not (pg_temp.ar(879)).head_stickers;
+  r5 := pg_temp.api(pg_temp.dev('LEGS'), pg_temp.q_push(879, '{"legs_stickers":true}'));
+  r5 := pg_temp.api(pg_temp.dev('LEGS'), pg_temp.q_push(879, '{"head_stickers":true}'));
+  ok := ok and pg_temp.ok(r5) and (pg_temp.ar(879)).head_stickers;
   -- v10.34 (owner): USDA belongs to the station the animal is at on the line
   perform set_config('gt.reset_in_progress', 'true', true);
   update settings_pilot set settings = settings || '{"esophagusEnabled":true,"screensPlan":{"decided":true,"screens":["slaughter","esophagus","legs","inner","outer","parts","stamps"]}}'::jsonb where id = 1;
@@ -902,7 +911,7 @@ begin
         and (pg_temp.ar(874)).eso_checked;
   r5 := pg_temp.api(pg_temp.dev('ESO1'), pg_temp.q_claim(873, 'eso', 'ok', '', pg_temp.devid('ESO1')));
   ok := ok and pg_temp.claimed(r5) and not exists (select 1 from animal_holds where animal_id = 873 and station = 'eso' and resolved_at is null);
-  perform pg_temp.rec('v10.34 the inner check comes after legs / head stickers (when the plant uses the legs screen); the esophagus turns its ok into a "?" until legs print; USDA belongs to the station the animal is at on the line', ok,
+  perform pg_temp.rec('v10.34 the inner check comes after legs / head stickers (when the plant uses the legs screen); the esophagus turns its ok into a "?" until legs print; USDA belongs to the station the animal is at on the line; head stickers only after the leg stickers', ok,
     concat_ws(' | ', r ->> 'error', r ->> 'reason', r ->> 'claimed', r2 ->> 'claimed', r2 ->> 'error', r3 ->> 'error', r4 ->> 'claimed', r4 ->> 'error'));
 end $$;
 $gt39$;
