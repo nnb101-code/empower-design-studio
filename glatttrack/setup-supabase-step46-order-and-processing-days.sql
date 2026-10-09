@@ -164,6 +164,22 @@ begin
 end $$;
 revoke execute on function _eso_required(integer) from public, anon, authenticated;
 
+-- v10.34 (owner): the legs screen can be switched off for a while (legsPaused). The head stickers are
+-- never skipped (the barcode that identifies the animal) — only the leg stickers. Switched on again, it
+-- applies from the first number the head screen has not printed yet (legsFromIdx, void after a new day).
+create or replace function _legs_required(p_id integer) returns boolean
+language plpgsql stable security definer set search_path = public, extensions, pg_temp as $$
+declare s jsonb := _gt_settings(); v_from int := 0;
+begin
+  if _gt_flag(s, 'legsPaused', false) then return false; end if;
+  if jsonb_typeof(s -> 'legsFromIdx') = 'number' and (s ->> 'legsFromIdx')::numeric > 0
+     and coalesce(s ->> 'legsFromReset', '') = coalesce(s ->> 'lastServerResetAt', '') then
+    v_from := floor((s ->> 'legsFromIdx')::numeric)::int;
+  end if;
+  return p_id >= v_from;
+end $$;
+revoke execute on function _legs_required(integer) from public, anon, authenticated;
+
 -- the statuses that count as kosher (the app's getKosherStatuses)
 create or replace function _kosher_statuses() returns text[]
 language sql stable security definer set search_path = public, extensions, pg_temp as $$
@@ -430,7 +446,8 @@ begin
   end if;
   -- v10.34 (owner): with legs + head, the head stickers come after the leg stickers (legs → head → inner)
   if v_err is null and not coalesce(old.head_stickers, false) and coalesce(new.head_stickers, false)
-     and _gt_flag(_gt_settings(), 'legsMode', true) and _gt_legs_first() and not coalesce(new.legs_stickers, false) then
+     and _gt_flag(_gt_settings(), 'legsMode', true) and _gt_legs_first() and not coalesce(new.legs_stickers, false)
+     and _legs_required(new.id) then
     v_stage := 'legs_stickers'; v_err := 'legs_not_done';
   end if;
   if not coalesce(old.legs_sorted, false) and coalesce(new.legs_sorted, false) then

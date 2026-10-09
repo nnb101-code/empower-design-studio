@@ -7334,10 +7334,21 @@ function _syncPendingWeight(){ pendingWeightIdx=_stampsWeightPendingIdx(); retur
 // A number shows on a screen only after it passed the one before it: esophagus → legs → head → inner.
 let lgInstance=0;
 function _lgSplit(){ const s=KS.getSettings(); return s.legsHeadSplit===true && s.legsMode!==false; }
-function _lgRole(){ return _lgSplit() ? (lgInstance===1 ? 'head' : 'legs') : 'both'; }
-function _lgArrived(x){ return _lgRole()==='head' ? !!x.legsStickers : passedEso(x); }
+// v10.34 (owner): legs can be switched off for a while (legsPaused) — the head stickers never are (the
+// barcode that identifies the animal). Not split: the one screen prints the head only. Split: the legs
+// tablet shows "switched off", the head screen takes the numbers straight from the esophagus.
+function _legsFromIdx(){ const st=KS.getSettings(); const f=st.legsFromIdx;
+  if(typeof f!=='number' || !(f>0)) return 0; if((st.legsFromReset||'')!==(st.lastServerResetAt||'')) return 0; return f; }
+function _legsRequired(x){ return KS.getSettings().legsPaused!==true && !!x && x.id>=_legsFromIdx(); }
+function _lgRole(){
+  if(KS.getSettings().legsPaused===true) return (_lgSplit() && lgInstance!==1) ? 'paused' : 'head';
+  return _lgSplit() ? (lgInstance===1 ? 'head' : 'legs') : 'both';
+}
+function _lgArrived(x){ const r=_lgRole(); if(r==='paused') return false;
+  return (r==='head' && KS.getSettings().legsMode!==false && _legsRequired(x)) ? !!x.legsStickers : passedEso(x); }
 function _lgDone(x){ return _lgRole()==='legs' ? !!x.legsStickers : !!x.headStickers; }
-function _lgNeeds(x){ return (x.slaughter!==null || _gtSlQx(x)) && _lgArrived(x) && !_lgDone(x) && !gtSkip(x.id,'legs'); }
+function _lgNeeds(x){ return (x.slaughter!==null || _gtSlQx(x)) && _lgArrived(x) && !_lgDone(x) && !gtSkip(x.id,'legs')
+  && (_lgRole()!=='legs' || _legsRequired(x)); }
 
 function slOpenWarn(idx){
   if(!_gtCorrectionGate('slaughter', idx)) return;
@@ -8219,7 +8230,7 @@ function lgTap(idx){
   const _r=_lgRole();
   if(_r==='legs'){ KS.setLegsStickers(idx); showPrintPopup(idx,"legs"); }
   else if(_r==='head'){ KS.setHeadStickers(idx); showPrintPopup(idx,"head"); }
-  else if(!x.legsStickers){
+  else if(!x.legsStickers && _legsRequired(x)){
     KS.setLegsStickers(idx);
     if(KS.getSettings().legsMode!==false)showPrintPopup(idx,"legs");
     else{KS.setHeadStickers(idx);showPrintPopup(idx,"head");}
@@ -8231,13 +8242,63 @@ function lgTap(idx){
   lgRenderGrid();lgUpdateSummary();
 }
 let lgReprintIdx=-1,lgReprintStep="";
+// ── v10.34 (owner): screens switched off for a while — esophagus, legs, small parts ──
+// The tablet stays paired and shows "switched off"; the line goes on without it.
+function _gtScreenPaused(scr){
+  const s=KS.getSettings();
+  if(scr==='scEsophagus') return !!(s.screensPlan && Array.isArray(s.screensPlan.screens) && s.screensPlan.screens.includes('esophagus')) && s.esophagusEnabled===false;
+  if(scr==='scLegs') return _lgRole()==='paused';
+  if(scr==='scParts') return s.partsPaused===true;
+  return false;
+}
+setInterval(()=>{ try{
+  const scr=(document.querySelector('.screen.active')||{}).id; const on=_gtScreenPaused(scr);
+  let o=document.getElementById('gtPausedOv');
+  if(on && !o){ o=document.createElement('div'); o.id='gtPausedOv'; o.setAttribute('data-no-i18n','');
+    o.style.cssText='position:fixed;inset:0;z-index:99990;background:rgba(5,8,14,.94);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;color:#E8EDF5;text-align:center;padding:20px;';
+    document.body.appendChild(o); }
+  if(o){ o.style.display=on?'flex':'none';
+    if(on) o.innerHTML='<div style="font-size:54px">⏸</div><div style="font-size:26px;font-weight:800;color:#D4A843">'+L('המסך כבוי זמנית','This screen is switched off for now','Esta pantalla está apagada por ahora')+'</div><div style="font-size:15px;color:#8A9BB5">'+L('ראש הצוות מדליק אותו שוב בלשונית "היום". הקו ממשיך בלעדיו.','The team leader switches it on again in the "Today" tab. The line goes on without it.','El jefe de equipo la enciende de nuevo en "Hoy". La línea sigue sin ella.')+'</div><button onclick="goTo(\'scNav\')" style="margin-top:10px;padding:10px 18px;border-radius:10px;border:1px solid #2A3D5C;background:transparent;color:#8A9BB5;font-size:14px;cursor:pointer;">🏠</button>';
+  }
+  if(scr==='scLegs'){ try{ _lgTitle(); }catch(e){} }
+}catch(e){} }, 1000);
+function gtPauseCardRender(){
+  const el=document.getElementById('gtPauseCard'); if(!el) return;
+  const s=KS.getSettings(); const p=s.screensPlan; const has=k=>!(p && Array.isArray(p.screens)) || p.screens.includes(k);
+  const rows=[];
+  const row=(k,label,on,desc)=>rows.push(`<div class="mgr-toggle-row" style="align-items:center;"><div><div style="font-size:13px;font-weight:700;">${label}</div><div style="font-size:11px;color:var(--muted);">${desc}</div></div>
+    <button onclick="gtPauseToggle('${k}')" style="padding:7px 12px;border-radius:8px;border:1px solid ${on?'var(--green)':'#E03030'};background:transparent;color:${on?'var(--green)':'#FF6B6B'};font-weight:800;cursor:pointer;">${on?L('פעיל','On','Activa'):L('כבוי ⏸','Off ⏸','Apagada ⏸')}</button></div>`);
+  if(has('esophagus')) row('eso', L('וושט','Esophagus','Esófago'), s.esophagusEnabled!==false, L('כבוי: מהשחיטה ישר לרגליים / לראש.','Off: from slaughter straight to legs / head.','Apagado: de la faena directo a patas / cabeza.'));
+  if(has('legs') && s.legsMode!==false) row('legs', L('רגליים','Legs','Patas'), s.legsPaused!==true, L('כבוי: רק מדבקות ראש (הראש לא מדלגים — הברקוד מזהה את הבהמה).','Off: head stickers only (the head is never skipped — its barcode identifies the animal).','Apagado: solo cabeza (la cabeza nunca se salta).'));
+  if(has('parts')) row('parts', L('חלקים קטנים','Small parts','Partes pequeñas'), s.partsPaused!==true, L('כבוי: הבהמות מחכות לחלקים עד שמדליקים (או ראש הצוות סוגר את היום לחלקים).','Off: the animals wait for parts until it is on again (or the team leader closes the day for parts).','Apagado: los animales esperan a partes.'));
+  el.innerHTML = rows.length ? '<div style="font-size:14px;font-weight:800;color:var(--gold);margin-bottom:6px;">⏸ '+L('כיבוי מסך זמני','Switch a screen off for now','Apagar una pantalla por ahora')+'</div>'+rows.join('') : '';
+  el.style.display = rows.length ? '' : 'none';
+}
+function gtPauseToggle(k){
+  const s=KS.getSettings(); const a=KS.getAnimals(); let upd=null, nowOn=null;
+  if(k==='eso'){ nowOn = s.esophagusEnabled===false;
+    upd = nowOn ? { esophagusEnabled:true, esoFromIdx:_esoComputeFromIdx(), esoFromReset:s.lastServerResetAt||'' } : { esophagusEnabled:false }; }
+  if(k==='legs'){ nowOn = s.legsPaused===true;
+    let from=-1; for(let i=0;i<a.length;i++){ if(a[i] && (a[i].slaughter || _gtSlQx(a[i])) && !a[i].headStickers){ from=i; break; } }
+    if(from<0){ for(let i=0;i<a.length;i++){ if(a[i] && a[i].slaughter) from=i+1; } if(from<0) from=0; }
+    upd = nowOn ? { legsPaused:false, legsFromIdx:from, legsFromReset:s.lastServerResetAt||'' } : { legsPaused:true }; }
+  if(k==='parts'){ nowOn = s.partsPaused===true; upd = { partsPaused: !nowOn }; }
+  if(!upd) return;
+  const nm={eso:L('וושט','Esophagus','Esófago'),legs:L('רגליים','Legs','Patas'),parts:L('חלקים קטנים','Small parts','Partes')}[k];
+  if(!confirm((nowOn?L('להדליק את ','Switch on ','¿Encender '):L('לכבות זמנית את ','Switch off for now: ','¿Apagar por ahora '))+nm+'?')) return;
+  KS.updateSettings(upd);
+  try{ KS.addAuditLog({type: nowOn?'screen_on':'screen_paused', screen:k}); }catch(e){}
+  try{ _sbRecordEvent && _sbRecordEvent('system', nowOn?'screen_on':'screen_paused', { screen:k }); }catch(e){}
+  gtPauseCardRender();
+}
 // v10.34: the screen says which one it is when legs and head are split
 function _lgTitle(){
   const r=_lgRole(); const at=document.getElementById('lgAT'); if(!at) return;
   let el=document.getElementById('lgRoleLbl');
   if(!el){ el=document.createElement('span'); el.id='lgRoleLbl'; el.setAttribute('data-no-i18n','');
     el.style.cssText='color:var(--gold);font-weight:800;font-size:16px;margin-inline-start:8px;'; at.parentNode.insertBefore(el, at); }
-  el.textContent = r==='head' ? L('מסך ראש','Head screen','Pantalla cabeza') : r==='legs' ? L('מסך רגליים','Legs screen','Pantalla patas') : '';
+  el.textContent = r==='head' ? L('מסך ראש','Head screen','Pantalla cabeza') + (KS.getSettings().legsPaused===true ? ' · '+L('רגליים כבוי','legs off','patas apagado') : '')
+                 : r==='legs' ? L('מסך רגליים','Legs screen','Pantalla patas') : r==='paused' ? L('מסך רגליים — כבוי','Legs screen — off','Pantalla patas — apagada') : '';
 }
 function lgReprintWarn(idx){
   lgReprintIdx=idx;
@@ -9973,7 +10034,7 @@ function updateMgr(){
 // v10.32 (owner): the team leader's Today tab in three — Overview (opens first) · Tracking · System.
 // Too much on one page hides everything; system health is not on the first page.
 var _gtTodaySub='ov';
-const GT_TODAY_PANES={ ov:['gtSetupGuide','gtTodaySum','@mgrSecLive','mgrMonitor','@mgrSecProgress','mgrProgress','gtTodayAtt'],
+const GT_TODAY_PANES={ ov:['gtSetupGuide','gtPauseCard','gtTodaySum','@mgrSecLive','mgrMonitor','@mgrSecProgress','mgrProgress','gtTodayAtt'],
                        tr:['gtOpenCard','mgrProc','todayIntakeAcc'], sys:['mgrHealth','gtTestHome'] };
 function _gtTodayEl(id){ return id[0]==='@' ? document.querySelector('#mgr-monitor .mgr-sec[data-t="'+id.slice(1)+'"]') : document.getElementById(id); }
 function gtTodayArrange(){
@@ -9985,6 +10046,7 @@ function gtTodayArrange(){
     let after=bar;
     ['ov','tr','sys'].forEach(k=>{ const d=document.createElement('div'); d.id='gtToday_'+k; pane.insertBefore(d, after.nextSibling); after=d; });
     const sum=document.createElement('div'); sum.id='gtTodaySum'; sum.className='mgr-card'; sum.setAttribute('data-no-i18n',''); sum.style.marginBottom='12px';
+    if(!document.getElementById('gtPauseCard')){ const pc=document.createElement('div'); pc.id='gtPauseCard'; pc.className='mgr-card'; pc.setAttribute('data-no-i18n',''); pc.style.marginBottom='12px'; pane.appendChild(pc); }
     const att=document.createElement('div'); att.id='gtTodayAtt'; att.setAttribute('data-no-i18n','');
     document.getElementById('gtToday_ov').append(sum, att);
   }
@@ -9999,6 +10061,7 @@ function gtTodayArrange(){
 function gtTodaySub(k){ _gtTodaySub=k; gtTodayArrange(); gtTodayRender(); try{ window.scrollTo(0,0); }catch(e){} }
 function gtTodayRender(){
   const bar=document.getElementById('gtTodayBar'); if(!bar) return;
+  try{ gtPauseCardRender(); }catch(e){}
   const open=(_gtFlags.holds||[]).filter(h=>h.open && !h.local).length + (_gtFlags.changes||[]).filter(c=>!c.ackAt).length;
   let sysN=0; try{ sysN=_gtHealthAttention().length; }catch(e){}
   const chip=(k,t,n,col)=>`<button onclick="gtTodaySub('${k}')" style="padding:9px 18px;border-radius:20px;font:700 15px Arial;cursor:pointer;`

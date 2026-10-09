@@ -886,6 +886,13 @@ begin
   r5 := pg_temp.api(pg_temp.dev('LEGS'), pg_temp.q_push(879, '{"legs_stickers":true}'));
   r5 := pg_temp.api(pg_temp.dev('LEGS'), pg_temp.q_push(879, '{"head_stickers":true}'));
   ok := ok and pg_temp.ok(r5) and (pg_temp.ar(879)).head_stickers;
+  -- v10.34 (owner): legs switched off for a while → head straight after the esophagus
+  perform set_config('gt.reset_in_progress', 'true', true);
+  update animals_pilot set slaughter = 'slaughtered', slaughter_time = 1, eso_checked = true, eso_result = 'ok' where id = 880;
+  update settings_pilot set settings = settings || '{"legsPaused":true}'::jsonb where id = 1;
+  perform set_config('gt.reset_in_progress', 'false', true);
+  r5 := pg_temp.api(pg_temp.dev('LEGS'), pg_temp.q_push(880, '{"head_stickers":true}'));
+  ok := ok and pg_temp.ok(r5) and (pg_temp.ar(880)).head_stickers and not _legs_required(880);
   -- v10.34 (owner): USDA belongs to the station the animal is at on the line
   perform set_config('gt.reset_in_progress', 'true', true);
   update settings_pilot set settings = settings || '{"esophagusEnabled":true,"screensPlan":{"decided":true,"screens":["slaughter","esophagus","legs","inner","outer","parts","stamps"]}}'::jsonb where id = 1;
@@ -911,7 +918,7 @@ begin
         and (pg_temp.ar(874)).eso_checked;
   r5 := pg_temp.api(pg_temp.dev('ESO1'), pg_temp.q_claim(873, 'eso', 'ok', '', pg_temp.devid('ESO1')));
   ok := ok and pg_temp.claimed(r5) and not exists (select 1 from animal_holds where animal_id = 873 and station = 'eso' and resolved_at is null);
-  perform pg_temp.rec('v10.34 the inner check comes after legs / head stickers (when the plant uses the legs screen); the esophagus turns its ok into a "?" until legs print; USDA belongs to the station the animal is at on the line; head stickers only after the leg stickers', ok,
+  perform pg_temp.rec('v10.34 the inner check comes after legs / head stickers (when the plant uses the legs screen); the esophagus turns its ok into a "?" until legs print; USDA belongs to the station the animal is at on the line; head stickers only after the leg stickers (not while legs is switched off)', ok,
     concat_ws(' | ', r ->> 'error', r ->> 'reason', r ->> 'claimed', r2 ->> 'claimed', r2 ->> 'error', r3 ->> 'error', r4 ->> 'claimed', r4 ->> 'error'));
 end $$;
 $gt39$;
