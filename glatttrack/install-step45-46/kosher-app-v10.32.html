@@ -1255,7 +1255,7 @@ const LUNG_B64="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICA
           <div class="mgr-toggle-row">
             <div>
               <div style="font-size:13px;color:var(--text);font-weight:600;">"לא חלק" ושליחה למסך רבנות</div>
-              <div style="font-size:11px;color:var(--muted);">כפתור "לא חלק" בשחיטה ובבית הכוסות. כשיש שני מסכי חוץ — המסך השני הוא מסך הרבנות, ובמסך הגלאט יש "שליחה למסך רבנות" (זו שליחה, לא סטטוס). במסך הרבנות פוסקים רבנות כשר / רבנות חלק / טרף.</div>
+              <div style="font-size:11px;color:var(--muted);">כפתור "לא חלק" בשחיטה ובבית הכוסות — עם כל מספר של מסכי חוץ (גם מסך אחד, גם מסך משותף פנים+חוץ): בודק החוץ פוסק לבהמה "לא חלק" רבנות כשר / טרף. כשיש שני מסכי חוץ — הבהמות "לא חלק" מנותבות למסך B (מסך הרבנות), ובמסך הגלאט יש גם "שליחה למסך רבנות" (שליחה, לא סטטוס).</div>
             </div>
             <div class="mgr-toggle" id="mgrNotChalakT" onclick="mgrToggleRab('notChalakEnabled',this)"><div class="mgr-toggle-dot" style="right:26px"></div></div>
           </div>
@@ -5421,6 +5421,7 @@ Object.assign(I18N_DOM,{"המפעל": ["Plant", "Planta"], "רשימות המש�
 // (lists, grids, windows) is translated as it appears. Switching back to
 // Hebrew restores the original text.
 const _HEB=/[֐-׿]/;
+Object.assign(I18N_DOM,{"כפתור \"לא חלק\" בשחיטה ובבית הכוסות — עם כל מספר של מסכי חוץ (גם מסך אחד, גם מסך משותף פנים+חוץ): בודק החוץ פוסק לבהמה \"לא חלק\" רבנות כשר / טרף. כשיש שני מסכי חוץ — הבהמות \"לא חלק\" מנותבות למסך B (מסך הרבנות), ובמסך הגלאט יש גם \"שליחה למסך רבנות\" (שליחה, לא סטטוס).": ["A \"Non-Chalak\" button at slaughter and at the maw — with any number of outer screens (one screen, or one shared inner + outer screen too): the outer inspector rules a non-chalak animal Rabbinate kosher / treif. With two outer screens, non-chalak animals are routed to screen B (the rabbinate screen), and the glatt screen also has \"Send to the rabbinate screen\" (routing, not a status).", "Un botón \"No Jalak\" en la faena y en el cuajar — con cualquier número de pantallas externas (una sola, o una compartida interna + externa): el inspector externo dictamina a un animal no jalak Kosher rabinato / treif. Con dos pantallas externas, los animales no jalak se envían a la pantalla B (rabinato), y la pantalla glatt también tiene \"Enviar a la pantalla del rabinato\" (envío, no un estado)."]});   // v10.32: the not-chalak switch text
 // v10.30: known pieces of a longer text that holds a name (e.g. "🟢 ראש צוות — <name> (המכשיר הזה)")
 const I18N_PARTS=[['ראש צוות — ',['Team leader — ','Jefe de equipo — ']],['(המכשיר הזה)',['(this device)','(este dispositivo)']],
                   ['"סגור" — רק כשמה שנשאר לא יעובד בתחנה הזו.',['"Close" — only when what is left will not be processed at this station.','"Cerrar" — solo cuando lo que queda no se procesará en esta estación.']],
