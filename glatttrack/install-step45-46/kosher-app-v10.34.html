@@ -3339,7 +3339,8 @@ const KS = (function(){
       _sbFetchSettingsSnapshot(true);
       return 'stop';
     }
-    if(code==='moved_on' || code==='correction_not_allowed' || code==='eso_locked'){
+    if(code==='moved_on' || code==='correction_not_allowed' || code==='eso_locked'
+       || code==='outer_ruled' || code==='next_station_done' || code==='held' || code==='wrong_zone'){   // v10.34: the v10.32 locks too — never retried forever
       const targets=id!=null ? [id] : ids;
       targets.forEach(i=>{
         // the change did NOT happen on the server: show the real, recorded ruling again
@@ -3348,7 +3349,7 @@ const KS = (function(){
         _revertToServer(i, id!=null ? d.row : null, _RULING_COLS);
         const rest=_sbAnimalPayload(i, _state.animals[i]);
         if(!rest || rej[i]>1 || Object.keys(rest).some(k=>_RULING_COLS.includes(k))) _clearAnimalDirty(i);
-        _sbRecordEvent('correction', 'rejected', { reason: code==='correction_not_allowed' ? 'not-allowed' : code==='eso_locked' ? 'eso-locked' : 'moved-on' }, i+1);
+        _sbRecordEvent('correction', 'rejected', { reason: code==='correction_not_allowed' ? 'not-allowed' : code==='eso_locked' ? 'eso-locked' : code==='moved_on' ? 'moved-on' : code.replace(/_/g,'-') }, i+1);
       });
       _showRuleNotice(gtErrText(code));
       return 'again';
@@ -3381,6 +3382,14 @@ const KS = (function(){
       return 'again';
     }
     if(code==='command_id_conflict') return 'again';   // sent again under a new command id
+    // v10.34: a refusal of ONE known number (any other code) never holds back the rest of the queue:
+    // that number takes the server's row again and its change is dropped; the others go on
+    if(id!=null && code!=='server_error'){
+      _clearAnimalDirty(id); _revertToServer(id, d.row || null, Object.keys(sentOf(id)));
+      _sbRecordEvent('correction', 'rejected', { reason: code.replace(/_/g,'-') }, id+1);
+      _showRuleNotice(L('#'+(id+1)+' — ','#'+(id+1)+' — ','#'+(id+1)+' — ')+gtErrText(code));
+      return 'again';
+    }
     // server_error / anything unknown: kept, tried again a little later
     _sbDebugBanner(L('השליחה לשרת נכשלה — ','Sending to server failed — ','Falló el envío al servidor — ') + gtErrText(code), false);
     _pushBackoffUntil=Date.now()+20000;
