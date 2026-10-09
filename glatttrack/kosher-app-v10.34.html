@@ -8985,6 +8985,8 @@ function outCellTap(idx){
   outOpenDec(idx);
 }
 let outFlipped=false;
+['online','focus'].forEach(ev=>window.addEventListener(ev, ()=>{ try{ window._outTakeNow && window._outTakeNow(); }catch(e){} }));
+document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible'){ try{ window._outTakeNow && window._outTakeNow(); }catch(e){} } });
 function outOpenDec(idx){
   outPendingDec=idx;
   outFlipped=false;
@@ -9009,6 +9011,17 @@ function outOpenDec(idx){
     if(outPendingDec!==idx || !document.getElementById("decModal").classList.contains("open")){ clearInterval(_outHoldTimer); _outHoldTimer=null; return; }
     _take();
   },40000);
+  // v10.34 (owner): back on / back online — take the number again at once (if no other screen took it meanwhile)
+  window._outTakeNow=()=>{
+    if(outPendingDec!==idx || !document.getElementById("decModal").classList.contains("open")) return;
+    _take().then(res=>{
+      if(!res || res.claimed!==false || outPendingDec!==idx) return;
+      document.getElementById("decModal").classList.remove("open");
+      if(_outHoldTimer){ clearInterval(_outHoldTimer); _outHoldTimer=null; }
+      outPendingDec=-1; _outBusyNotice(idx);
+      try{ outManualPage=false; outRenderGrid(); outUpdateSummary(); }catch(e){}
+    });
+  };
   // the drawing may have been made on the inner inspector's tablet — read it from the server
   try{ KS.fetchLungDrawing(idx).then(d=>{ if(d && outPendingDec===idx && document.getElementById("decModal").classList.contains("open")) outDrawCanvas(idx); }); }catch(e){}
 }
