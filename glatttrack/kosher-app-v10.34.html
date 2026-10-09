@@ -725,6 +725,7 @@ const LUNG_B64="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICA
       <button onclick="esoDecide('ok')" style="flex:1;padding:16px;border-radius:12px;border:2px solid var(--green);background:transparent;color:var(--green);font-size:16px;font-weight:700;cursor:pointer;font-family:'Frank Ruhl Libre',serif;">תקין</button>
       <button onclick="esoDecide('nevela')" style="flex:1;padding:16px;border-radius:12px;border:2px solid var(--red);background:transparent;color:var(--red-light);font-size:16px;font-weight:700;cursor:pointer;font-family:'Frank Ruhl Libre',serif;">נבלה</button>
     </div>
+    <button onclick="esoAskQ()" style="width:100%;margin-top:10px;padding:13px;border-radius:12px;border:2px solid #FFC400;background:transparent;color:#FFC400;font-size:16px;font-weight:700;cursor:pointer;">? שאלה</button>
   </div>
 </div>
 
@@ -4700,6 +4701,7 @@ const KS = (function(){
       return ['slaughter','innerStatus','outerStatus','esoChecked','esoResult'].some(k=>{ const f=SB_FIELD_MAP.find(g=>g.local===k); return !!f && !_svEq(a[k], sh[f.col]); });
     }catch(e){ return false; } },
     outerOpen, outerOpenElsewhere, setOuterNotChalak, notice: (t)=>_showRuleNotice(t),
+    refetch: (i)=>_sbRefetchAnimal(i),
     _resaveQueue: ()=>{ try{ _saveSyncQueue(_loadSyncQueue()); }catch(e){} },   // retry storing the queue (storage was full)
     pendingCount: ()=>{ try{ const q=_loadSyncQueue(); const s=new Set(q.animals); (q.ops||[]).forEach(o=>s.add(o.idx)); return s.size + Object.keys(_lungQ()).length; }catch(e){ return 0; } },
     verifyEventChain,
@@ -4876,6 +4878,12 @@ async function gtHoldPut(idx, st, kind, part){
   if(!d || !d.ok){
     _gtFlags.holds=_gtFlags.holds.filter(h=>h!==loc); _gtFlags.sig=''; gtRerenderAll();
     if(d && d.error==='worker_login_required') return _gtHoldNeedsLogin();
+    if(d && d.error==='already_ruled'){   // v10.34: a "?" after the number went on (or after a ruling that cannot become "?")
+      KS.notice(L('לא סומן: #'+(idx+1)+' כבר נפסק ועבר הלאה (או נפסק נבלה — קודם משנים לתקין). "?" אפשר רק לפני שהתחנה הבאה עבדה עליו.',
+                  'Not marked: #'+(idx+1)+' was already ruled and went on (or ruled nevela — change it to OK first). A "?" only before the next station worked on it.',
+                  'No se marcó: #'+(idx+1)+' ya fue dictaminado y siguió (o nevelá — primero cámbielo a OK). "?" solo antes de que la siguiente estación trabaje en él.'));
+      return false;
+    }
     KS.notice(L('לא סומן: ','Not marked: ','No se marcó: ')+gtErrText((d&&d.error)||(r&&r.error)||'network'));
     return false;
   }
@@ -7357,6 +7365,18 @@ function esoOpenChangeWarn(idx){
   document.getElementById("esoWarnModal").classList.add("open");
 }
 let esoIsChange=false;
+// v10.34 (owner): "?" from the esophagus window — also for a number already checked "ok" (a change),
+// as long as it has not reached the next station (the server checks it and opens the check again)
+async function esoAskQ(){
+  const idx=esoPendingDec; if(idx<0) return;
+  document.getElementById("esoModal").style.display="none";
+  esoPendingDec=-1; esoIsChange=false;
+  if(await gtHoldPut(idx, 'eso', 'question', 'whole')){
+    try{ KS.refetch(idx); }catch(e){}
+    KS.notice(L('#'+(idx+1)+' סומן "?" — ממשיכים למספר הבא.','#'+(idx+1)+' marked "?" — go on to the next number.','#'+(idx+1)+' marcado "?" — siga con el siguiente.'));
+  }
+  esoManualPage=false; try{ esoRenderGrid(); esoUpdateSummary(); }catch(e){}
+}
 function esoConfirmChange(){
   document.getElementById("esoWarnModal").classList.remove("open");
   if(esoChangeIdx<0)return;

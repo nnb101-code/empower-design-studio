@@ -3870,6 +3870,19 @@ begin
   if p_kind = 'usda' and p_station <> 'parts' and _usda_zone(a) is distinct from p_station then
     return jsonb_build_object('ok', false, 'error', 'wrong_zone', 'zone', _usda_zone(a));
   end if;
+  -- v10.34 (owner): the esophagus may turn its own "ok" into a "?" while the number has not reached the
+  -- next station (no legs / head stickers, no inner / outer ruling): the check is opened again and the
+  -- number waits for the "?" like any other (nevela: change it to ok first)
+  if p_kind = 'question' and p_station = 'eso' and p_board is null and coalesce(a.eso_checked, false)
+     and a.eso_result = 'ok' and _cmd_get(p_command_id, v_dev, 'hold_set') is null
+     and not (coalesce(a.legs_stickers, false) or coalesce(a.head_stickers, false)
+              or a.inner_status is not null or a.outer_status is not null) then
+    perform set_config('gt.reset_in_progress', 'true', true);
+    update animals_pilot set eso_checked = false, eso_result = null, eso_by_device = null, updated_at = now() where id = p_id;
+    perform set_config('gt.reset_in_progress', 'false', true);
+    perform _gt_event(p_id + 1, 'eso', 'reopened_question', jsonb_build_object('was', 'ok'), null, v_dev);
+    select * into a from animals_pilot where id = p_id;
+  end if;
   -- a question only while the station has not ruled the number
   if p_kind = 'question' and ((p_station = 'slaughter' and a.slaughter is not null)
                               or (p_station = 'eso' and coalesce(a.eso_checked, false))

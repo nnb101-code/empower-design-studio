@@ -879,7 +879,19 @@ begin
   perform set_config('gt.reset_in_progress', 'false', true);
   r4 := pg_temp.api(pg_temp.dev('IN1'), pg_temp.q_claim(875, 'inner_start', 'in_progress', '', pg_temp.devid('IN1')));
   ok := ok and pg_temp.claimed(r4);
-  perform pg_temp.rec('v10.34 the inner check comes after legs / head stickers (when the plant uses the legs screen)', ok,
+  -- v10.34 (owner): the esophagus turns its own "ok" into a "?" until the number reached the next station
+  perform set_config('gt.reset_in_progress', 'true', true);
+  update animals_pilot set slaughter = 'slaughtered', slaughter_time = 1, eso_checked = true, eso_result = 'ok' where id in (873, 874);
+  update animals_pilot set head_stickers = true where id = 874;
+  perform set_config('gt.reset_in_progress', 'false', true);
+  r5 := pg_temp.api(pg_temp.dev('ESO1'), 'select hold_set(873, ''eso'', ''question'')');
+  ok := ok and pg_temp.ok(r5) and not (pg_temp.ar(873)).eso_checked and (pg_temp.ar(873)).eso_result is null
+        and exists (select 1 from animal_holds where animal_id = 873 and station = 'eso' and kind = 'question' and resolved_at is null)
+        and pg_temp.api(pg_temp.dev('ESO1'), 'select hold_set(874, ''eso'', ''question'')') ->> 'error' = 'already_ruled'
+        and (pg_temp.ar(874)).eso_checked;
+  r5 := pg_temp.api(pg_temp.dev('ESO1'), pg_temp.q_claim(873, 'eso', 'ok', '', pg_temp.devid('ESO1')));
+  ok := ok and pg_temp.claimed(r5) and not exists (select 1 from animal_holds where animal_id = 873 and station = 'eso' and resolved_at is null);
+  perform pg_temp.rec('v10.34 the inner check comes after legs / head stickers (when the plant uses the legs screen); the esophagus turns its ok into a "?" until legs print', ok,
     concat_ws(' | ', r ->> 'error', r ->> 'reason', r ->> 'claimed', r2 ->> 'claimed', r2 ->> 'error', r3 ->> 'error', r4 ->> 'claimed', r4 ->> 'error'));
 end $$;
 $gt39$;
