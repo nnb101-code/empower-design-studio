@@ -8080,6 +8080,7 @@ function renderSticker(containerId,idx,kind,sample){
     // every sticker carries the status in Hebrew AND English: [Hebrew, color, English]
     const stMap={glatt:['גלאט','#28C76F','Glatt'],beit:['בית יוסף','#4DA6FF','Beit Yosef'],kosher:['כשר','#D4A843','Kosher'],mk:['MK','#A080F0','MK'],rabChalak:['רבנות חלק','#16A085','Rabbinate Chalak'],treif:['טרף','#E03030','Treif'],slaughtered:['נשחט','#2A7FFF','Slaughtered'],notChalak:['לא חלק','#C99A00','Non-Chalak'],nevela:['נבלה','#E03030','Nevela'],shot:['נבלה','#E03030','Nevela']};
     st=stMap[stRaw]||(stRaw?[statusDisplayName(stRaw)||stRaw,(getAllStatuses().find(x=>x.key===stRaw)||{}).color||'#888',statusEnglishName(stRaw)]:['—','#888','']);
+    { const _sn=_gtStickerNames(stRaw); if(_sn) st=[_sn.he, st[1], _sn.en]; }   // v10.36: the plant's names (and sticker names)
     const _d=slTime||new Date();
     if(opt.showHeb){try{heb=(typeof getHebrewDate==='function')?getHebrewDate(_d):'';
       }catch(e){heb='';}}
@@ -8594,16 +8595,22 @@ function _isNCAnimal(x){ return _gtIsNC(x) && !_gtNCPlain(x); }   // v10.33: rul
 // Stickers print it with its English name too (statusEnglishName).
 function statusDisplayName(key, x){
   if(!key)return '';
-  const d=DEFAULT_STATUSES.find(st=>st.key===key); if(d) return d.he;
+  const d=DEFAULT_STATUSES.find(st=>st.key===key); if(d){ const o=(KS.getSettings().statusNames||{})[key]; return (o&&o.he&&String(o.he).trim())||d.he; }
   const c=(KS.getSettings().customStatuses||[]).find(st=>st.key===key);
   if(c) return c.he||c.en||key;
   if(key==='kosherRab' || key==='rabKosher') return 'רבנות כשר';   // a key from before v10.36 (old logs only)
   return key;
 }
+// v10.36 (owner): the names a kashrut status prints on stickers — its own sticker name (Hebrew / English,
+// both optional) or else its name; null for what is not a kashrut status (נשחט, נבלה …)
+function _gtStickerNames(key){
+  const st=getAllStatuses().find(x=>x.key===key); if(!st || key==='treif') return null;
+  return { he:String(st.stickerHe||'').trim()||st.he||key, en:String(st.en||'').trim() };
+}
 function statusEnglishName(key, x){
   if(!key)return '';
   if(key==='kosherRab' || key==='rabKosher') return 'Rabbinate Kosher';   // a key from before v10.36 (old logs only)
-  const d=DEFAULT_STATUSES.find(st=>st.key===key); if(d) return d.en;
+  const d=DEFAULT_STATUSES.find(st=>st.key===key); if(d){ const o=(KS.getSettings().statusNames||{})[key]; return (o&&o.en!=null)?String(o.en):d.en; }
   const c=(KS.getSettings().customStatuses||[]).find(st=>st.key===key);
   if(c) return c.en||'';
   return '';
@@ -11606,9 +11613,11 @@ function getAllStatuses(){
   const overrides=s.statusColorOverrides||{};
   const removed=s.removedDefaults||[];
   // Default statuses, minus any the manager removed, with color overrides applied
+  const names=s.statusNames||{};   // v10.36: a built-in status renamed by the plant
   const defaults=DEFAULT_STATUSES
     .filter(st=>!removed.includes(st.key))
-    .map(st=>({...st,color:overrides[st.key]||st.color}));
+    .map(st=>{ const o=names[st.key]||{}; return {...st,color:overrides[st.key]||st.color,
+      he:(o.he&&String(o.he).trim())||st.he, en:(o.en!=null?String(o.en):st.en), stickerHe:o.stickerHe||''}; });
   return[...defaults,...custom];
 }
 // Keep ALL_STATUSES as alias
@@ -11674,7 +11683,7 @@ function mgrUpdateStatusToggles(){
      <div style="display:flex;align-items:center;gap:8px;">
       <button onclick="mgrPickColor(${K},${_jsArg(color)})"
         style="width:30px;height:30px;min-width:30px;border-radius:7px;border:2px solid rgba(255,255,255,.3);background:${color};cursor:pointer;"></button>
-      <span style="flex:1;min-width:50px;font-size:13px;color:#E8EDF5;font-weight:600;">${escapeHtml(label)}${enName?`<span style="font-size:11px;color:var(--muted);font-weight:400;margin-inline-start:6px;" title="${escapeHtml(L('השם באנגלית — מודפס במדבקות','English name — printed on the stickers','Nombre en inglés — se imprime en las etiquetas'))}">· ${escapeHtml(enName)}</span>`:''}${ncTag}</span>
+      <span ${st.key==="treif"?"":`onclick="mgrEditStatusName(${K})" title="${escapeHtml(L("לחץ לשינוי שם","Tap to rename","Toque para renombrar"))}"`} style="flex:1;min-width:50px;font-size:13px;color:#E8EDF5;font-weight:600;${st.key==="treif"?"":"cursor:pointer;"}">${escapeHtml(label)}${st.key==="treif"?"":`<span style="font-size:11px;opacity:.6;margin-inline-start:4px;">✏️</span>`}${enName?`<span style="font-size:11px;color:var(--muted);font-weight:400;margin-inline-start:6px;" title="${escapeHtml(L('השם באנגלית — מודפס במדבקות','English name — printed on the stickers','Nombre en inglés — se imprime en las etiquetas'))}">· ${escapeHtml(enName)}</span>`:''}${ncTag}</span>
       <button onclick="mgrToggleStatus(${K})"
         style="width:50px;height:28px;min-width:50px;border-radius:14px;border:none;cursor:pointer;position:relative;background:${on?'#28C76F':'#1F2D45'};transition:background .2s;">
         <div style="position:absolute;top:3px;${on?'right:3px':'left:3px'};width:22px;height:22px;border-radius:50%;background:white;transition:all .2s;pointer-events:none;"></div>
@@ -11688,7 +11697,7 @@ function mgrUpdateStatusToggles(){
         <input type="file" accept="image/*" onchange="mgrUploadSeal(${K},this)" style="display:none">
       </label>
       ${seal?`<button onclick="mgrRemoveSeal(${K})" style="font-size:11px;color:#FF6B6B;background:rgba(224,48,48,.1);border:1px solid rgba(224,48,48,.3);border-radius:5px;padding:4px 7px;cursor:pointer;">⌫</button>`:''}
-      ${DEFAULT_STATUSES.some(d=>d.key===st.key)?'':`<button onclick="mgrRenameStatus(${K})" style="font-size:11px;color:var(--gold);background:rgba(212,168,67,.08);border:1px solid var(--border);border-radius:5px;padding:4px 7px;cursor:pointer;">${L('✏️ שם','✏️ Name','✏️ Nombre')}</button>`}
+
       ${st.key==='treif'?'':`<button data-nc-st="${escapeHtml(st.key)}" data-on="${ncAll.includes(st.key)?1:0}" onclick="mgrToggleNcStatus(${K})" style="font-size:11px;border-radius:5px;padding:4px 7px;cursor:pointer;background:transparent;border:1px solid ${ncAll.includes(st.key)?'#C99A00':'#28C76F'};color:${ncAll.includes(st.key)?'#C99A00':'#28C76F'};">${ncAll.includes(st.key)?L('לא חלק','Not chalak','No jalak'):L('חלק','Chalak','Jalak')}</button>`}
       <button onclick="mgrRemoveStatus(${K})" style="font-size:12px;color:#FF6B6B;background:rgba(224,48,48,.1);border:1px solid rgba(224,48,48,.3);border-radius:5px;padding:4px 9px;cursor:pointer;">✕</button>
      </div>
@@ -11705,7 +11714,11 @@ function mgrUpdateStatusToggles(){
     style="width:100%;margin-top:10px;padding:11px;border-radius:8px;border:2px dashed #D4A843;background:transparent;color:#D4A843;font-size:13px;font-weight:700;cursor:pointer;">
     + ${lang==='he'?'הוסף סטטוס':lang==='es'?'Agregar Estado':'Add Status'}
   </button>`;
+  // v10.36: a list drawn again (a settings refresh) keeps an open "new status" form / name edit with what was typed
+  const _keepForm=document.getElementById('mgrAddStatusForm'), _keepEdit=document.getElementById('mgrNameEdit');
   el.innerHTML=html;
+  if(_keepForm) el.appendChild(_keepForm);
+  if(_keepEdit){ const r=el.querySelector('[data-status-row="'+CSS.escape(_keepEdit.dataset.key||'')+'"]'); if(r) r.appendChild(_keepEdit); }
 }
 // Remove the custom seal picture of one status key (called from the seal-upload grid
 // and from the status list) — refreshes both places.
@@ -11720,6 +11733,18 @@ function mgrRemoveSeal(key){
 }
 
 
+// v10.36 (owner): many colours to choose from — 12 hues × 5 shades + greys
+function _gtPalette(){
+  const out=[], hsl=(h,s,l)=>{ s/=100; l/=100; const k=n=>(n+h/30)%12, a=s*Math.min(l,1-l), f=n=>l-a*Math.max(-1,Math.min(k(n)-3,Math.min(9-k(n),1)));
+    return '#'+[f(0),f(8),f(4)].map(x=>Math.round(x*255).toString(16).padStart(2,'0')).join('').toUpperCase(); };
+  [[85,28],[80,40],[75,52],[70,64],[60,78]].forEach(([sat,l])=>{ for(let h=0;h<360;h+=30) out.push(hsl(h,sat,l)); });
+  ['#FFFFFF','#D0D5DD','#A0A8B5','#6B7D99','#3A4458','#1A1F2B','#8B5A2B','#C99A00','#D4A843','#16A085','#28C76F','#E03030'].forEach(c=>out.push(c));
+  return out;
+}
+function _gtPaletteHtml(onPick, cur){
+  return `<div style="display:grid;grid-template-columns:repeat(8,1fr);gap:6px;max-height:46vh;overflow-y:auto;padding:2px;">${_gtPalette().map(c=>
+    `<button type="button" data-col="${c}" onclick="${onPick}" style="width:100%;aspect-ratio:1;border-radius:7px;border:3px solid ${c===cur?'#fff':'transparent'};background:${c};cursor:pointer;padding:0;"></button>`).join('')}</div>`;
+}
 function mgrPickColor(key,currentColor){
   currentColor=_safeColor(currentColor,'#888');
   const K=_jsArg(key);
@@ -11730,14 +11755,12 @@ function mgrPickColor(key,currentColor){
   const modal=document.createElement('div');
   modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:9999;display:flex;align-items:center;justify-content:center;';
   const box=document.createElement('div');
-  box.style.cssText='background:#0F1521;border:1px solid #1F2D45;border-radius:14px;padding:16px;width:280px;max-width:92vw;';
+  box.style.cssText='background:#0F1521;border:1px solid #1F2D45;border-radius:14px;padding:16px;width:360px;max-width:94vw;';
   box.innerHTML=`
     <div style="font-family:'Frank Ruhl Libre',serif;font-size:16px;color:#D4A843;margin-bottom:12px;text-align:center;">${L('בחר צבע','Choose Color','Elegir color')}</div>
-    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:12px;">
-      ${colors.map(c=>`<button onclick="mgrPickColorApply(${K},'${c}',this.closest('.mgr-color-modal'))"
-        style="width:100%;aspect-ratio:1;border-radius:8px;border:3px solid ${c===currentColor?'white':'transparent'};background:${c};cursor:pointer;"></button>`).join('')}
-    </div>
+    <div style="margin-bottom:12px;">${_gtPaletteHtml(`mgrPickColorApply(${K},this.dataset.col,this.closest('.mgr-color-modal'))`, currentColor)}</div>
     <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;">
+      <input type="color" value="${currentColor.length===7?currentColor:'#888888'}" title="${L('צבע אחר','Other colour','Otro color')}" onchange="document.getElementById('colorHexInput').value=this.value.toUpperCase()" style="width:44px;height:34px;border:none;background:transparent;padding:0;cursor:pointer;">
       <span style="font-size:12px;color:#6B7D99;">Hex:</span>
       <input id="colorHexInput" type="text" value="${currentColor}"
         style="flex:1;background:#161E2E;border:1px solid #1F2D45;border-radius:6px;padding:6px 8px;color:#E8EDF5;font-size:13px;font-family:monospace;"
@@ -11771,33 +11794,27 @@ function mgrAddStatus(){
   form.id='mgrAddStatusForm';
   form.style.cssText='background:var(--panel);border:1px solid var(--gold);border-radius:10px;padding:12px;margin-top:10px;';
   form.innerHTML=`
-    <div style="font-size:12px;color:var(--gold);margin-bottom:8px;font-weight:700;">${L('סטטוס חדש','New Status','Nuevo estado')}</div>
-    <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">${L('השם יופיע בדיוק כך בכל המסכים ובכל השפות.','The name shows exactly like this on every screen and in every language.','El nombre aparece exactamente así en todas las pantallas y en todos los idiomas.')}</div>
-    <input id="newStatusHe" type="text" placeholder="${L('שם הסטטוס','Status name','Nombre del estado')}"
-      style="width:100%;background:var(--panel2);border:1px solid var(--border);border-radius:6px;padding:7px 10px;color:var(--text);font-size:13px;margin-bottom:6px;direction:rtl;">
-    <input id="newStatusEn" type="text" placeholder="${L('שם באנגלית — למדבקות (עברית + אנגלית)','English name — for the stickers (Hebrew + English)','Nombre en inglés — para las etiquetas (hebreo + inglés)')}"
-      style="width:100%;background:var(--panel2);border:1px solid var(--border);border-radius:6px;padding:7px 10px;color:var(--text);font-size:13px;margin-bottom:8px;direction:ltr;">
-    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
-      <span style="font-size:12px;color:var(--muted);">${lang==='he'?'צבע:':'Color:'}</span>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;">
-        ${['#28C76F','#4DA6FF','#D4A843','#A080F0','#FF6B35','#FF2D9B','#00D4D4','#DC143C'].map(c=>
-          `<div onclick="document.getElementById('newStatusColor').value='${c}';document.querySelectorAll('.nsc-swatch').forEach(s=>s.style.borderColor='transparent');this.style.borderColor='white';"
-            class="nsc-swatch" style="width:26px;height:26px;border-radius:6px;background:${c};cursor:pointer;border:2px solid transparent;flex-shrink:0;"></div>`
-        ).join('')}
-      </div>
-      <input id="newStatusColor" type="text" value="#FF6B35" placeholder="#hex"
-        style="width:70px;background:var(--panel2);border:1px solid var(--border);border-radius:6px;padding:5px 6px;color:var(--text);font-size:11px;font-family:monospace;">
-    </div>
-    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap;">
-      <span style="font-size:12px;color:var(--muted);">${L('קבוצה:','Group:','Grupo:')}</span>
-      <label style="font-size:12px;color:var(--text);cursor:pointer;"><input type="radio" name="newStatusGroup" id="newStatusGroupChalak" value="0" checked> ${L('חלק (כמו גלאט, בית יוסף, רבנות חלק)','Chalak (like glatt, Beit Yosef, Rabbinate Chalak)','Jalak (como glatt, Beit Yosef, Rabinato Jalak)')}</label>
-      <label style="font-size:12px;color:var(--text);cursor:pointer;"><input type="radio" name="newStatusGroup" id="newStatusGroupNC" value="1"> ${L('לא חלק (כשר — למשל מגן דוד)','Not chalak (kosher — e.g. Magen David)','No jalak (kosher — p. ej. Magen David)')}</label>
-    </div>
+    <div style="font-size:13px;color:var(--gold);margin-bottom:8px;font-weight:700;">${L('סטטוס חדש','New status','Nuevo estado')}</div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">${L('שם הסטטוס — כך יופיע בכל המסכים ובכל השפות','Status name — shown like this on every screen, in every language','Nombre — así aparece en todas las pantallas e idiomas')}</div>
+    <input id="newStatusHe" type="text" maxlength="40" placeholder="${L('למשל: מגן דוד','e.g. Magen David','p. ej. Magen David')}" style="width:100%;background:var(--panel2);border:1px solid var(--border);border-radius:6px;padding:8px 10px;color:var(--text);font-size:13px;margin-bottom:6px;">
+    <div style="font-size:11px;color:var(--muted);margin:6px 0 4px;">${L('קבוצה','Group','Grupo')}</div>
+    <select id="newStatusGroup" style="width:100%;background:var(--panel2);border:1px solid var(--border);border-radius:6px;padding:8px 10px;color:var(--text);font-size:13px;margin-bottom:6px;;appearance:auto;-webkit-appearance:menulist;">
+      <option value="" selected disabled>${L('בחר: חלק / לא חלק','Choose: chalak / not chalak','Elija: jalak / no jalak')}</option>
+      <option value="chalak">${L('חלק (כמו גלאט, בית יוסף, רבנות חלק)','Chalak (like glatt, Beit Yosef, Rabbinate Chalak)','Jalak (como glatt, Beit Yosef)')}</option>
+      <option value="nc">${L('לא חלק (כשר — למשל מגן דוד)','Not chalak (kosher — e.g. Magen David)','No jalak (kosher — p. ej. Magen David)')}</option>
+    </select>
+    <div style="font-size:11px;color:var(--muted);margin:6px 0 4px;">${L('שם על המדבקות (רשות) — אם ריק, יודפס שם הסטטוס','Name on the stickers (optional) — if empty, the status name is printed','Nombre en las etiquetas (opcional) — si está vacío, se imprime el nombre')}</div>
+    <input id="newStatusStickerHe" type="text" maxlength="40" placeholder="${L('שורה 1 — עברית','Line 1 — Hebrew','Línea 1 — hebreo')}" style="width:100%;background:var(--panel2);border:1px solid var(--border);border-radius:6px;padding:8px 10px;color:var(--text);font-size:13px;margin-bottom:6px;;direction:rtl;">
+    <input id="newStatusEn" type="text" maxlength="40" placeholder="${L('שורה 2 — אנגלית','Line 2 — English','Línea 2 — inglés')}" style="width:100%;background:var(--panel2);border:1px solid var(--border);border-radius:6px;padding:8px 10px;color:var(--text);font-size:13px;margin-bottom:6px;;direction:ltr;">
+    <div style="font-size:11px;color:var(--muted);margin:6px 0 4px;">${L('צבע','Colour','Color')}</div>
+    <input id="newStatusColor" type="hidden" value="#FF6B35">
+    ${_gtPaletteHtml("document.getElementById('newStatusColor').value=this.dataset.col;this.parentElement.querySelectorAll('button').forEach(b=>b.style.borderColor='transparent');this.style.borderColor='#fff';", '#FF6B35')}
+    <div style="display:flex;align-items:center;gap:8px;margin:8px 0 10px;"><input type="color" value="#FF6B35" onchange="document.getElementById('newStatusColor').value=this.value.toUpperCase()" style="width:44px;height:34px;border:none;background:transparent;padding:0;cursor:pointer;"><span style="font-size:11px;color:var(--muted);">${L('צבע אחר','Other colour','Otro color')}</span></div>
     <div style="display:flex;gap:8px;">
       <button onclick="document.getElementById('mgrAddStatusForm').remove()"
-        style="flex:1;padding:8px;border-radius:7px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:12px;cursor:pointer;">${L('ביטול','Cancel','Cancelar')}</button>
+        style="flex:1;padding:9px;border-radius:7px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:13px;cursor:pointer;">${L('ביטול','Cancel','Cancelar')}</button>
       <button onclick="mgrConfirmAddStatus()"
-        style="flex:1;padding:8px;border-radius:7px;background:var(--gold);border:none;color:#07090F;font-size:13px;font-weight:700;cursor:pointer;">${L('הוסף','Add','Agregar')}</button>
+        style="flex:1;padding:9px;border-radius:7px;background:var(--gold);border:none;color:#07090F;font-size:13px;font-weight:700;cursor:pointer;">${L('הוסף','Add','Agregar')}</button>
     </div>`;
   el.appendChild(form);
   // v10.36: show the new form right away (it opens under the list, out of sight on a phone)
@@ -11813,8 +11830,12 @@ function mgrConfirmAddStatus(){
   const custom=s.customStatuses||[];
   // v10.36 (owner): every status is a kashrut status (no "not kosher" — only טרף); it is in the "chalak"
   // group or in the "not chalak" group (shown in the rulings only while "not chalak" is on)
-  const nc=!!document.getElementById('newStatusGroupNC')?.checked;
-  custom.push({key,he,en:en||he,es:he,color,kosher:true});   // he = the name as written (all screens); en = stickers
+  const grp=document.getElementById('newStatusGroup')?.value||'';
+  if(!grp){ alert(L('בחר קבוצה: חלק או לא חלק','Choose a group: chalak or not chalak','Elija un grupo: jalak o no jalak')); return; }
+  const nc=grp==='nc';
+  const stickerHe=(document.getElementById('newStatusStickerHe')?.value||'').trim().slice(0,40);
+  if(getAllStatuses().some(st=>!st.removed && String(st.he||'').trim()===he)){ alert(L('יש כבר סטטוס בשם הזה.','A status with this name already exists.','Ya existe un estado con ese nombre.')); return; }
+  custom.push({key,he,en:en||'',stickerHe,es:he,color,kosher:true});   // he = the name on every screen; stickerHe / en = the stickers (optional)
   KS.updateSettings(nc?{customStatuses:custom, ncStatuses:gtNCStatuses(s).concat([key])}:{customStatuses:custom});
   document.getElementById('mgrAddStatusForm')?.remove();
   mgrUpdateStatusToggles();
@@ -11856,7 +11877,44 @@ function mgrRemoveStatus(key){
   if(typeof rebuildOuterButtons==='function')rebuildOuterButtons();
 }
 // v10.35 (owner): an added status can be renamed (Hebrew + English); the ruling stays the same
-function mgrRenameStatus(key){
+// v10.36 (owner): tap the name → edit it in place (name; sticker name Hebrew / English, optional) → save
+function mgrEditStatusName(key){
+  if(key==='treif') return;
+  const old=document.getElementById('mgrNameEdit'); if(old){ const was=old.dataset.key; old.remove(); if(was===key) return; }
+  const row=document.querySelector('[data-status-row="'+CSS.escape(key)+'"]'); if(!row) return;
+  const st=getAllStatuses().find(x=>x.key===key); if(!st) return;
+  const IN='width:100%;background:var(--panel2);border:1px solid var(--border);border-radius:6px;padding:8px 10px;color:var(--text);font-size:13px;margin-bottom:6px;';
+  const box=document.createElement('div'); box.id='mgrNameEdit'; box.dataset.key=key;
+  box.style.cssText='margin-top:8px;background:var(--panel);border:1px solid var(--gold);border-radius:10px;padding:10px;';
+  box.innerHTML=`<div style="font-size:11px;color:var(--muted);margin-bottom:4px;">${L('שם הסטטוס','Status name','Nombre')}</div>
+    <input id="mgrNameEditHe" type="text" maxlength="40" value="${escapeHtml(st.he||'')}" style="${IN}direction:rtl;">
+    <div style="font-size:11px;color:var(--muted);margin:4px 0;">${L('שם על המדבקות (רשות)','Name on the stickers (optional)','Nombre en las etiquetas (opcional)')}</div>
+    <input id="mgrNameEditStHe" type="text" maxlength="40" value="${escapeHtml(st.stickerHe||'')}" placeholder="${L('שורה 1 — עברית','Line 1 — Hebrew','Línea 1 — hebreo')}" style="${IN}direction:rtl;">
+    <input id="mgrNameEditEn" type="text" maxlength="40" value="${escapeHtml(st.en||'')}" placeholder="${L('שורה 2 — אנגלית','Line 2 — English','Línea 2 — inglés')}" style="${IN}direction:ltr;">
+    <div style="display:flex;gap:8px;margin-top:4px;">
+      <button onclick="document.getElementById('mgrNameEdit').remove()" style="flex:1;padding:9px;border-radius:7px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:13px;cursor:pointer;">${L('ביטול','Cancel','Cancelar')}</button>
+      <button onclick="mgrSaveStatusName(${_jsArg(key)})" style="flex:1;padding:9px;border-radius:7px;background:var(--gold);border:none;color:#07090F;font-size:13px;font-weight:700;cursor:pointer;">${L('שמור','Save','Guardar')}</button>
+    </div>`;
+  row.appendChild(box);
+  setTimeout(()=>{ try{ box.scrollIntoView({block:'center'}); const i=document.getElementById('mgrNameEditHe'); i.focus({preventScroll:true}); i.select(); }catch(e){} },60);
+}
+function mgrSaveStatusName(key){
+  const g=id=>String((document.getElementById(id)||{}).value||'').trim().slice(0,40);
+  const he=g('mgrNameEditHe'), stHe=g('mgrNameEditStHe'), en=g('mgrNameEditEn');
+  if(!he){ alert(L('חובה למלא שם','Name required','El nombre es obligatorio')); return; }
+  if(getAllStatuses().some(st=>st.key!==key && !st.removed && String(st.he||'').trim()===he)){ alert(L('יש כבר סטטוס בשם הזה.','A status with this name already exists.','Ya existe un estado con ese nombre.')); return; }
+  const s=KS.getSettings();
+  if(DEFAULT_STATUSES.some(d=>d.key===key)){
+    const names=Object.assign({}, s.statusNames||{}); names[key]={he, stickerHe:stHe, en};
+    KS.updateSettings({statusNames:names});
+  } else {
+    KS.updateSettings({customStatuses:(s.customStatuses||[]).map(st=>st.key===key?Object.assign({},st,{he, stickerHe:stHe, en}):st)});
+  }
+  mgrUpdateStatusToggles();
+  try{ rebuildOuterButtons(); outRenderGrid(); partsRenderGrid(); stampsRenderGrid(); }catch(x){}
+}
+function mgrRenameStatus(key){ mgrEditStatusName(key); }
+function _mgrRenameStatusOld(key){
   const s=KS.getSettings();
   const cur=(s.customStatuses||[]).find(st=>st.key===key); if(!cur) return;
   const he=prompt(L('שם הסטטוס (עברית):','Status name (Hebrew):','Nombre (hebreo):'), cur.he||''); if(he===null) return;

@@ -1180,7 +1180,8 @@ begin
       (array['loginModeByRole', '{"inspector":"face-id"}']), (array['users', '[{"role":"inspector"}]']),
       (array['users', '"moshe"']), (array['dailyIntake', '[{"farm":"A","type":"B","qty":5000}]']),
       (array['dailyIntake', '[3]']), (array['customStatuses', '[{"he":"x"}]']), (array['lang', '"fr"']),
-      (array['legStickerCount', 'true']), (array['headStickerCount', '5000'])) x(a) loop
+      (array['legStickerCount', 'true']), (array['headStickerCount', '5000']), (array['statusNames', '{"glatt":{"x":1}}']),
+      (array['customStatuses', '[{"key":"custom_q","he":"x","stickerHe":5}]'])) x(a) loop
     -- (v10.32: the plant's own statuses are kept in the list — one in use on the board may not be removed: status_in_use)
     r := pg_temp.api(pg_temp.mgr(), format('select push_settings(%L::jsonb, ''x'', %L)',
            jsonb_build_object(t[1], case when t[1] = 'customStatuses'

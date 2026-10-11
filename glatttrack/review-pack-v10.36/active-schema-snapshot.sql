@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict kNVt5shWMdFHRSJqlyJrKvi2jAgFLBC5pkciTBvJsfha2t1mjjSI9Feym7xYt3N
+\restrict yWiaAhS1RsLHeXGtzPqyNm6nMxMmrYdKX6aAZxlfr7WQb4z3Bzc1hKDteAI185k
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -3078,12 +3078,23 @@ begin
          or jsonb_typeof(e -> 'key') is distinct from 'string' or (e ->> 'key') !~ '^[A-Za-z0-9_-]{1,60}$'
          or (e ? 'he' and not _jstr_ok(e -> 'he', 80)) or (e ? 'en' and not _jstr_ok(e -> 'en', 80))
          or (e ? 'es' and not _jstr_ok(e -> 'es', 80)) or (e ? 'color' and not _jstr_ok(e -> 'color', 40))
+         or (e ? 'stickerHe' and not _jstr_ok(e -> 'stickerHe', 80))          -- v10.36: the name on the stickers
          or (e ? 'kosher' and jsonb_typeof(e -> 'kosher') not in ('boolean', 'null'))
          or (e ? 'removed' and jsonb_typeof(e -> 'removed') not in ('boolean', 'null')) then
         return 'expected statuses {key, he, en, es, color, kosher}';
       end if;
     end loop;
     return null;
+  end if;
+  if p_key = 'statusNames' then   -- v10.36: a built-in status renamed by the plant {key: {he, stickerHe, en}}
+    if t = 'object' and (select count(*) from jsonb_object_keys(v)) <= 20
+       and not exists (select 1 from jsonb_each(v) x
+                        where x.key !~ '^[A-Za-z0-9_-]{1,60}$' or jsonb_typeof(x.value) <> 'object'
+                           or exists (select 1 from jsonb_each(x.value) y
+                                       where y.key not in ('he', 'stickerHe', 'en') or not _jstr_ok(y.value, 80))) then
+      return null;
+    end if;
+    return 'expected {status: {he, stickerHe, en}}';
   end if;
   if p_key = 'ncStatuses' then   -- v10.36: the statuses a "not chalak" animal may get at the outer ruling
     if t = 'array' and jsonb_array_length(v) <= 50
@@ -10920,5 +10931,5 @@ GRANT ALL ON TABLE public.system_flags TO service_role;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict kNVt5shWMdFHRSJqlyJrKvi2jAgFLBC5pkciTBvJsfha2t1mjjSI9Feym7xYt3N
+\unrestrict yWiaAhS1RsLHeXGtzPqyNm6nMxMmrYdKX6aAZxlfr7WQb4z3Bzc1hKDteAI185k
 
