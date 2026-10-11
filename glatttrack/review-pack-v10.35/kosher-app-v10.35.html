@@ -4046,7 +4046,8 @@ const KS = (function(){
     let seen = null;
     try{ seen = localStorage.getItem('gt_reload_seen'); localStorage.setItem('gt_reload_seen', at); }catch(e){ return; }
     if(seen === null || seen === at) return;
-    setTimeout(()=>{ try{ location.reload(); }catch(e){} }, 1500);
+    // v10.35 (owner): through the safe update path — never in the middle of someone's work
+    setTimeout(()=>{ try{ if(typeof window.gtUpdateOffer==='function') window.gtUpdateOffer('reload'); else location.reload(); }catch(e){} }, 1500);
   }
 
   // The server numbers each day's board (boardEpoch, step33). A board from a
@@ -4785,7 +4786,8 @@ const KS = (function(){
     }catch(e){ return false; } },
     outerOpen, outerOpenElsewhere, setOuterNotChalak, notice: (t)=>_showRuleNotice(t),
     refetch: (i)=>_sbRefetchAnimal(i),
-    _resaveQueue: ()=>{ try{ _saveSyncQueue(_loadSyncQueue()); }catch(e){} },   // retry storing the queue (storage was full)
+    _resaveQueue: ()=>{ try{ _saveSyncQueue(_loadSyncQueue()); }catch(e){} },
+    flushNow: ()=>{ try{ _retryPendingSync(); }catch(e){} },   // v10.35: send what waits now (before an update)   // retry storing the queue (storage was full)
     pendingCount: ()=>{ try{ const q=_loadSyncQueue(); const s=new Set(q.animals); (q.ops||[]).forEach(o=>s.add(o.idx)); return s.size + Object.keys(_lungQ()).length; }catch(e){ return 0; } },
     verifyEventChain,
     rejectedEventsCount: ()=>_evRejectedLoad().length,
@@ -5155,6 +5157,83 @@ function gtSlRule(i,status){
 }
 
 // ── the buttons on every station's top bar ──
+
+// ── v10.35 (owner): updates without anyone's approval, never harming the work ──
+// A new app version on the plant server (or the manufacturer's "reload all tablets") is found by
+// itself. A tablet nobody is working on (login / home / counter screen, or no touch for 10 minutes)
+// updates at once. A tablet in use shows "update now / later"; "later" → it updates by itself after
+// 10 minutes without a touch. Before reloading, everything waiting is sent to the server; after it,
+// the tablet comes back to the same screen with the same worker.
+var _gtLastTouch = Date.now(), _gtUpd = { ver:null, offered:false, later:false, busy:false };
+['pointerdown','keydown','touchstart'].forEach(ev=>{ try{ document.addEventListener(ev, ()=>{ _gtLastTouch = Date.now(); }, {capture:true, passive:true}); }catch(e){} });
+const GT_UPD_IDLE_MS = 10*60*1000;
+function _gtUpdIdleScreen(){ const a=document.querySelector('.screen.active'); const id=a&&a.id||'';
+  return !id || /Login$|^scNav$|^scPair|^scCounter$|^scPlant$/.test(id); }
+function _gtUpdWorking(){ return !_gtUpdIdleScreen() && (Date.now()-_gtLastTouch) < GT_UPD_IDLE_MS; }
+async function _gtUpdFlush(maxMs){
+  const t0=Date.now();
+  while(Date.now()-t0 < maxMs){
+    let q=0; try{ q=KS.pendingCount(); }catch(e){}
+    if(!q) return true;
+    try{ KS.flushNow && KS.flushNow(); }catch(e){}
+    await new Promise(r=>setTimeout(r, 1000));
+  }
+  return false;
+}
+async function _gtUpdApply(){
+  if(_gtUpd.busy) return; _gtUpd.busy = true;
+  try{
+    const ok = await _gtUpdFlush(60000);
+    if(!ok){ _gtUpd.busy=false; window.gtStatusSet && window.gtStatusSet('update', L('⬆ עדכון ממתין — עוד יש פעולות שלא נשלחו לשרת','⬆ Update waiting — some actions are not sent yet','⬆ Actualización en espera'), {color:'amber', ttl:30000}); return; }
+    const a=document.querySelector('.screen.active');
+    try{ sessionStorage.setItem('gt_resume', JSON.stringify({ screen: a && a.id || '', at: Date.now() })); }catch(e){}
+    try{ document.getElementById('gtUpdModal')?.remove(); }catch(e){}
+    location.reload();
+  }catch(e){ _gtUpd.busy=false; }
+}
+function _gtUpdModal(){
+  if(document.getElementById('gtUpdModal')) return;
+  const m=document.createElement('div'); m.id='gtUpdModal'; m.setAttribute('data-no-i18n','');
+  m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:100000;display:flex;align-items:center;justify-content:center;';
+  m.innerHTML='<div style="background:var(--panel);border:2px solid var(--gold);border-radius:16px;padding:22px;width:88%;max-width:440px;text-align:center;direction:'+(lang==='he'?'rtl':'ltr')+';">'
+    +'<div style="font-size:40px;">⬆</div><div style="font-size:22px;font-weight:800;color:var(--text);margin:6px 0;">'+L('יש עדכון למערכת','A system update','Actualización del sistema')+'</div>'
+    +'<div style="font-size:15px;color:var(--muted);line-height:1.6;">'+(_gtUpd.ver?L('גרסה ','Version ','Versión ')+escapeHtml(_gtUpd.ver)+' · ':'')+L('לוקח כ-10 שניות. כל מה שנלחץ נשלח לשרת קודם — חוזרים לאותו מסך ולאותו עובד.','About 10 seconds. Everything pressed is sent first — back to the same screen and worker.','Unos 10 segundos. Todo se envía antes — vuelve a la misma pantalla.')+'</div>'
+    +'<div style="display:flex;gap:10px;margin-top:16px;"><button id="gtUpdNow" style="flex:1;padding:14px;border-radius:10px;border:none;background:var(--gold);color:#07090F;font-size:17px;font-weight:800;cursor:pointer;">'+L('עדכן עכשיו','Update now','Actualizar ya')+'</button>'
+    +'<button id="gtUpdLater" style="flex:1;padding:14px;border-radius:10px;border:1px solid var(--gold);background:transparent;color:var(--gold);font-size:17px;font-weight:800;cursor:pointer;">'+L('אחר כך','Later','Después')+'</button></div>'
+    +'<div style="font-size:12px;color:var(--muted);margin-top:10px;">'+L('"אחר כך" — העדכון ייכנס לבד כשהמסך לא בשימוש 10 דקות','"Later" — it updates by itself after 10 minutes without use','"Después" — se actualiza solo tras 10 minutos sin uso')+'</div></div>';
+  document.body.appendChild(m);
+  m.querySelector('#gtUpdNow').onclick=()=>{ _gtUpdApply(); };
+  m.querySelector('#gtUpdLater').onclick=()=>{ _gtUpd.later=true; m.remove(); };
+}
+window.gtUpdateOffer = function(ver){
+  if(ver && ver!=='reload') _gtUpd.ver = ver;
+  _gtUpd.offered = true;
+  if(!_gtUpdWorking()) { _gtUpdApply(); return; }
+  if(!_gtUpd.later) _gtUpdModal();
+};
+// a newer app on the plant server? (the page itself, read again without cache)
+async function _gtUpdCheck(){
+  try{
+    if(!/^https?:/.test(location.protocol)) return;
+    const r=await fetch(location.pathname+'?gtv='+Date.now(), {cache:'no-store'});
+    if(!r.ok) return;
+    // (the pattern must not match its own text in this file: the version starts with a letter and a digit)
+    const t=await r.text(); const m=t.match(new RegExp("var GT_APP_VERSION='([a-z][0-9][^']*)';"));
+    if(m && m[1] && typeof GT_APP_VERSION!=='undefined' && m[1]!==GT_APP_VERSION) window.gtUpdateOffer(m[1]);
+  }catch(e){}
+}
+setInterval(_gtUpdCheck, 2*60*1000);
+setInterval(()=>{ try{ if(_gtUpd.offered && !_gtUpd.busy && !_gtUpdWorking()) _gtUpdApply(); }catch(e){} }, 30*1000);
+// after the update: back to the same screen with the same worker (the worker's session is still valid)
+function _gtResumeAfterUpdate(){
+  let r=null; try{ r=JSON.parse(sessionStorage.getItem('gt_resume')||'null'); sessionStorage.removeItem('gt_resume'); }catch(e){}
+  if(!r || !r.screen || Date.now()-Number(r.at||0) > 5*60*1000) return;
+  const a=document.querySelector('.screen.active'); const cur=a&&a.id||'';
+  const loginId = /Login$/.test(r.screen) ? r.screen : r.screen+'Login';
+  if(cur!==loginId || !document.getElementById(loginId) || r.screen===loginId) return;
+  try{ _doLoginProceed(loginId); }catch(e){}
+}
+
 // v10.35: the four supervisor screens — infrastructure only (pairing, worker list, login, a read-only
 // screen). They have no write rights on the server yet; each screen's own work comes after its design.
 const GT_SUP_SCREENS={
@@ -5541,7 +5620,7 @@ function _gtDoneAfterHtml(stage, a){
     +'</div>';
 }
 
-var GT_APP_VERSION='v10.34';
+var GT_APP_VERSION='v10.35';
 document.addEventListener('DOMContentLoaded',()=>{ try{ document.querySelectorAll('.gt-ver').forEach(e=>e.textContent=GT_APP_VERSION); }catch(e){} });
 function escapeHtml(str){
   return String(str==null?'':str).replace(/[&<>"']/g, c=>({
@@ -14736,6 +14815,7 @@ function _kioskApplyAssignment(role, idx){
   else if(role==='stamps') goTo('scStampsLogin');
   else if(role==='display') goTo('scCounter');
   else if(GT_SUP_SCREENS[role]) supOpen(role);          // v10.35: the supervisor screens
+  setTimeout(()=>{ try{ _gtResumeAfterUpdate(); }catch(e){} }, 400);   // v10.35: back to work after an update
 }
 
 // Apply instantly from whatever was last known locally — before any network
@@ -16576,9 +16656,17 @@ function _gtHealthCodeText(c){
   return t ? L(t[0],t[1],t[2]) : c;
 }
 function _gtHealthAttention(){ const h=window._gtHealth; return (h && h.ok && Array.isArray(h.attention)) ? h.attention : []; }
+// v10.35 (owner): the team leader sees only what he can deal with himself; the technical part
+// (backups, servers, the nightly check, the event chain, security counters) belongs to the
+// manufacturer's customer service — the team leader gets one line: "the manufacturer was alerted".
+const GT_HEALTH_TECH = ['backup_stale','backup_unknown','chain_broken','failed_logins','revoked_device_writes',
+  'nightly_check_problems','nightly_check_fixed','nightly_check_missing','standby_down','standby_lag','standby_async','failover_recent'];
+function _gtHealthFull(){ return (KS.getManagerRole && KS.getManagerRole())==='manufacturer'; }
+function _gtHealthLeaderAttn(){ return _gtHealthAttention().filter(c=>GT_HEALTH_TECH.indexOf(c)<0); }
+function _gtHealthTechAttn(){ return _gtHealthAttention().filter(c=>GT_HEALTH_TECH.indexOf(c)>=0); }
 function _gtHealthStatusRow(){
   const leader = !!(typeof KS!=='undefined' && KS.getManagerToken && KS.getManagerToken()) && KS.getManagerRole()==='manager';
-  if(leader && _gtHealthAttention().length){
+  if(leader && _gtHealthLeaderAttn().length){
     window.gtStatusSet('health', L('⚠ נדרשת תשומת לב — מסך בריאות מערכת','⚠ Attention needed — System health screen','⚠ Se requiere atención — pantalla Estado del sistema'),
                        {color:'red', onclick:gtOpenHealth});
   } else window.gtStatusClear('health');
@@ -16594,7 +16682,7 @@ let _gtHealthBusy=false, _gtHealthAt=0;
 async function gtHealthRefresh(){
   if(!window.sb || _gtHealthBusy) return;
   const tok=KS.getManagerToken && KS.getManagerToken(); const role=KS.getManagerRole && KS.getManagerRole();
-  if(!tok || (role!=='manager' && role!=='owner')){ window._gtHealth=null; _gtHealthStatusRow(); mgrRenderHealth(); return; }
+  if(!tok || (role!=='manager' && role!=='owner' && role!=='manufacturer')){ window._gtHealth=null; _gtHealthStatusRow(); mgrRenderHealth(); return; }
   _gtHealthBusy=true;
   try{ await _withTimeout(_gtSealsPull(), 8000); }catch(e){}   // the kashrut-marks row reads the server's marks
   try{
@@ -16641,11 +16729,11 @@ function mgrRenderHealth(){
   let errs=0; try{ errs=gtErrorLogLoad().length; }catch(e){}
   x+=row(net?'g':'r', L('חיבור לשרת','Server connection','Conexión'), net?L('מחובר','connected','conectado'):L('אין חיבור','offline','sin conexión'));
   x+=row(q===0?'g':(q<20?'y':'r'), L('ממתינים לשליחה בטאבלט הזה','Waiting to send on this tablet','Pendientes en esta tableta'), q);
-  x+=row(errs===0?'g':'y', L('שגיאות ביומן המכשיר','Errors in this device\'s log','Errores en el registro del dispositivo'), errs);
+  if(_gtHealthFull()) x+=row(errs===0?'g':'y', L('שגיאות ביומן המכשיר','Errors in this device\'s log','Errores en el registro del dispositivo'), errs);
   const step=Number(h.schemaStep)||null;
-  x+=row('g', L('גרסת האפליקציה','App version','Versión de la app'), GT_APP_VERSION);
+  if(_gtHealthFull()) x+=row('g', L('גרסת האפליקציה','App version','Versión de la app'), GT_APP_VERSION);
   try{ const miss=_gtSealsMissing(); x+=row(miss.length?'r':'g', L('סימני כשרות למדבקות','Kashrut marks for the stickers','Sellos para las etiquetas'), miss.length?(L('חסר: ','missing: ','faltan: ')+miss.join(', ')):L('יש לכל הסטטוסים','every status has one','todos')); }catch(e){}
-  x+=row(step==null?'y':(step>=GT_MIN_SCHEMA?'g':'r'), L('שלב השרת (נדרש / בשרת)','Server step (required / server)','Paso del servidor (requerido / servidor)'), GT_MIN_SCHEMA+' / '+(step==null?'?':step));
+  if(_gtHealthFull()) x+=row(step==null?'y':(step>=GT_MIN_SCHEMA?'g':'r'), L('שלב השרת (נדרש / בשרת)','Server step (required / server)','Paso del servidor (requerido / servidor)'), GT_MIN_SCHEMA+' / '+(step==null?'?':step));
   if(!h.ok){
     const why=h.error==='missing_fn'?L('השרת לא מעודכן (צריך step45)','Server not updated (needs step45)','Servidor sin actualizar (step45)')
              :h.error==='unauthorized'?L('כניסת ראש הצוות פגה','Team-leader session expired','Sesión caducada')
@@ -16655,6 +16743,22 @@ function mgrRenderHealth(){
   }
   const dv=h.devices||{}, tm=h.testMode||{}, ch=h.eventChain||{}, sec=h.security||{}, bk=h.backup||{};
   x+=row((dv.offline|0)>0?'r':'g', L('מכשירים מצומדים / לא מחוברים','Paired devices / offline','Dispositivos / sin conexión'), (dv.active|0)+' / '+(dv.offline|0));
+  if(!_gtHealthFull()){
+    // v10.35 (owner): the team leader's view — only what he can deal with; the technical part is the manufacturer's
+    x+=row(tm.on?'r':'g', L('מצב בדיקה','Test mode','Modo prueba'), tm.on?(L('פעיל עד ','on until ','activo hasta ')+new Date(tm.expires_at).toLocaleTimeString()):L('כבוי','off','apagado'));
+    const sv0=h.server||{}, a0=_gtHealthAttention();
+    if(sv0.ups || a0.indexOf('ups_on_battery')>=0 || a0.indexOf('ups_low_battery')>=0){
+      const u=a0.indexOf('ups_low_battery')>=0?'low':a0.indexOf('ups_on_battery')>=0?'bat':'ok';
+      x+=row(u==='ok'?'g':'r', L('חשמל (UPS)','Power (UPS)','Energía (SAI)'),
+        u==='low'?L('סוללה כמעט ריקה','battery almost empty','batería casi vacía'):u==='bat'?L('על סוללה — אין חשמל','on battery — power cut','con batería'):L('תקין','ok','bien'));
+    }
+    const la=_gtHealthLeaderAttn(), ta=_gtHealthTechAttn();
+    if(la.length) x+='<div class="gt-hattn">'+la.map(c=>'⚠ '+E(_gtHealthCodeText(c))).join('<br>')+'</div>';
+    if(ta.length) x+='<div style="margin-top:8px;padding:8px 10px;border-radius:8px;background:rgba(212,168,67,.10);border:1px solid var(--gold);font-size:13px;">🛠 '
+        +E(L('תקלה טכנית במערכת — היצרן קיבל התראה ומטפל. אין צורך לעשות דבר.','A technical problem — the manufacturer was alerted and is handling it. Nothing to do.','Un problema técnico — el fabricante fue avisado y lo atiende.'))+'</div>';
+    if(!la.length && !ta.length) x+='<div style="font-size:13px;color:var(--green);margin-top:8px;">✓ '+E(L('הכול תקין','All good','Todo bien'))+'</div>';
+    el.innerHTML=x; return;
+  }
   x+=row('g', L('מושבתים · בקשות צימוד פתוחות','Retired · open pairing requests','Retirados · solicitudes abiertas'), (dv.retired|0)+' · '+(dv.unpaired_requests|0));
   x+=row(tm.on?'r':'g', L('מצב בדיקה','Test mode','Modo prueba'), tm.on?(L('פעיל עד ','on until ','activo hasta ')+new Date(tm.expires_at).toLocaleTimeString()):L('כבוי','off','apagado'));
   const bkTxt = bk.status==='ok' ? (L('מאומת לפני ','verified ','verificada hace ')+bk.ageHours+L(' שעות',' h ago',' h'))

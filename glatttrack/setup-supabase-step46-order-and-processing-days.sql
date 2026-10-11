@@ -2840,10 +2840,9 @@ grant execute on function plant_server_status(text) to anon, authenticated;
 revoke execute on function _gt_standbys() from public, anon, authenticated;
 
 -- ── system_health: processing boards waiting, rollover waiting, label mismatches ──
-create or replace function system_health(p_token text) returns jsonb
+create or replace function _system_health_data() returns jsonb
 language plpgsql security definer set search_path = public, extensions, pg_temp as $$
 declare
-  v_role text := coalesce(_session_role(p_token), '');
   v_tm boolean; v_on_at timestamptz; v_devs jsonb; v_chain jsonb; v_sec jsonb;
   v_ver timestamptz; v_fail timestamptz; v_plant boolean; v_backup text; v_age numeric;
   v_attn text[] := '{}'; v_info text[] := '{}';
@@ -2852,10 +2851,6 @@ declare
   v_stb jsonb; v_ups text; v_ups_at timestamptz; v_fo timestamptz;
   v_night jsonb; v_night_at timestamptz;
 begin
-  -- v10.35 (owner): the technical health belongs to the manufacturer's customer service — it reads it too
-  if v_role not in ('manager', 'owner', 'manufacturer') then
-    return jsonb_build_object('ok', false, 'error', 'unauthorized');
-  end if;
   v_tm := _test_mode_on();                  -- also switches an expired flag off
   v_on_at := _test_mode_on_at();
 
@@ -2977,6 +2972,18 @@ begin
                      'problems', v_night -> 'problems', 'fixed', v_night -> 'fixed', 'checks', v_night -> 'checks') end,
     'attention', to_jsonb(v_attn),
     'info', to_jsonb(v_info));
+end $$;
+revoke execute on function _system_health_data() from public, anon, authenticated;
+
+-- v10.35: the health data itself (also sent by the plant server to the manufacturer's support center)
+-- and who may read it here: the team leader, the owner, the manufacturer (view)
+create or replace function system_health(p_token text) returns jsonb
+language plpgsql security definer set search_path = public, extensions, pg_temp as $$
+begin
+  if coalesce(_session_role(p_token), '') not in ('manager', 'owner', 'manufacturer') then
+    return jsonb_build_object('ok', false, 'error', 'unauthorized');
+  end if;
+  return _system_health_data();
 end $$;
 revoke execute on function system_health(text) from public;
 grant execute on function system_health(text) to anon, authenticated;
@@ -4678,6 +4685,25 @@ begin
 end $$;
 revoke execute on function worker_code_set(text, text, text, text) from public;
 grant execute on function worker_code_set(text, text, text, text) to anon, authenticated;
+
+-- ── §32 the plant's report to the manufacturer's support center (v10.35, owner) ──
+-- Read only by the plant server itself (plant-server/report-to-center.sh, as the database owner) —
+-- never by the app. The health of the plant + its app version + whether anyone works now + each
+-- tablet (connected, version). No kashrut data, no worker names, no codes.
+create or replace function _plant_report() returns jsonb
+language sql stable security definer set search_path = public, extensions, pg_temp as $$
+  select _system_health_data() || jsonb_build_object(
+    'appVersion', (select value from plant_state where key = 'appVersion'),
+    'appUpdatedAt', (select value from plant_state where key = 'appUpdatedAt'),
+    'working', exists (select 1 from animals_pilot where updated_at > now() - interval '10 minutes'),
+    'tablets', coalesce((select jsonb_agg(jsonb_build_object(
+                  'role', d.assigned_role, 'index', coalesce(d.assigned_index, 0), 'name', left(coalesce(d.device_name, ''), 40),
+                  'online', d.last_seen > now() - interval '3 minutes', 'lastSeen', d.last_seen,
+                  'version', d.app_info ->> 'v', 'screen', d.app_info ->> 'screen')
+                  order by d.assigned_role, d.assigned_index)
+                from devices_pilot d where d.assigned_role is not null and coalesce(d.device_status, 'active') <> 'retired'), '[]'::jsonb));
+$$;
+revoke execute on function _plant_report() from public, anon, authenticated;
 
 -- ── self-check ──────────────────────────────────────────────────────────────
 do $$

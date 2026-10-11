@@ -87,7 +87,7 @@ NOTICE:  PASS  chaos (f): test mode switched on 9 hours ago → off: the team le
 NOTICE:  PASS  v10.32 test mode expired: the same team-leader session puts no "?" / USDA; a station tablet carrying it gets nothing beyond its own station; a USDA half only at outer / stamps (the animal is split after the inner check); v10.34: any station but slaughter holds USDA, one whole-animal hold at a time, only that station releases it
 NOTICE:  PASS  reason_required: device replace / retire / reactivate / unpair without a reason are refused (normal pairing + rename need none); the reason is logged
 NOTICE:  PASS  reason_required: support access open / billing / force reload / manufacturer settings without a reason are refused (closing access needs none); the reason is audited
-NOTICE:  PASS  system_health: team leader / owner only; all sections; no backup ever on this server = info backup_unknown (not attention)
+NOTICE:  PASS  system_health: team leader / owner / manufacturer (view) only; all sections; no backup ever on this server = info backup_unknown (not attention)
 NOTICE:  PASS  system_health: backup never / verified / older than 26 h / failed after the last good one
 NOTICE:  PASS  system_health: test mode on / writes with a revoked or retired key (counted) / a changed event → attention
 NOTICE:  PASS  daily reset twice: each ok, new day each time, board + cursors empty, old day refused

@@ -1,0 +1,15 @@
+NOTICE:    PASS the app reads no table and calls no internal function
+NOTICE:    PASS staff login: wrong code refused, right code → session  :: {"ok": false, "error": "code_invalid"}
+NOTICE:    PASS overview without a session refused
+NOTICE:    PASS a plant is added once; its secret is given once  :: {"ok": true, "code": "9001", "secret": "7ee8b63b5c6b3559a552a1f73cc74109fdfa"}
+NOTICE:    PASS report: wrong secret refused; right one → green  :: {"ok": true, "level": "ok", "release": null, "commands": []}
+NOTICE:    PASS a new problem → red + one alert per problem (not again on the next report)  :: {"ok": true, "level": "bad", "release": null, "commands": []}
+NOTICE:    PASS a tablet offline while the plant works → orange  :: {"ok": true, "level": "warn", "release": null, "commands": []}
+NOTICE:    PASS the problem is gone → green, alerts closed
+NOTICE:    PASS a plant silent 15 minutes → red "no_report" + one alert  :: {"ok": true, "plants": [{"code": "1003", "name": "בקר הגליל", "level": "bad", "working": false, "problems": ["backup_stale"], "appVersion": "v10.34", "openAlerts": 1, "reportedAt": "2026-10-11T20:46:1
+NOTICE:    PASS only known commands
+NOTICE:    PASS a release needs https and a sha256
+NOTICE:    PASS the plant gets the command once and the release  :: {"ok": true, "level": "ok", "release": {"appUrl": "https://example.com/app.html", "sqlUrl": null, "version": "v10.36", "appSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", 
+NOTICE:    PASS command done only with the plant secret
+NOTICE:    PASS notifications: each channel on / off; addresses checked  :: {"ok": true, "settings": {"sms": {"on": false, "to": ["+972501234567"]}, "email": {"on": true, "to": ["support@example.com"]}, "minLevel": "warn", "whatsapp": {"on": true, "to": ["+972501234567"]}}}
+NOTICE:  PASSED — 14 of 14 support-center checks (nothing was changed)

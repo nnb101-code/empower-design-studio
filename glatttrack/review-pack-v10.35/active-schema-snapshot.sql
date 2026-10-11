@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict Ih6DhLL2PkCGRIfd8MHku3yohUqhgYUzhPb5G33EchPndAIyBDwcvXGxfNuHgXe
+\restrict atz24IcbeyiUix75QFsvI7UPaymtihsB6MVyK2hxX8xn06gpiXpegtl7MFT7nb0
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -2521,6 +2521,29 @@ end $$;
 ALTER FUNCTION public._parts_print_block(p_epoch bigint, p_id integer, o_tongue boolean, n_tongue boolean, o_cheek boolean, n_cheek boolean, o_count integer, n_count integer) OWNER TO postgres;
 
 --
+-- Name: _plant_report(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public._plant_report() RETURNS jsonb
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $$
+  select _system_health_data() || jsonb_build_object(
+    'appVersion', (select value from plant_state where key = 'appVersion'),
+    'appUpdatedAt', (select value from plant_state where key = 'appUpdatedAt'),
+    'working', exists (select 1 from animals_pilot where updated_at > now() - interval '10 minutes'),
+    'tablets', coalesce((select jsonb_agg(jsonb_build_object(
+                  'role', d.assigned_role, 'index', coalesce(d.assigned_index, 0), 'name', left(coalesce(d.device_name, ''), 40),
+                  'online', d.last_seen > now() - interval '3 minutes', 'lastSeen', d.last_seen,
+                  'version', d.app_info ->> 'v', 'screen', d.app_info ->> 'screen')
+                  order by d.assigned_role, d.assigned_index)
+                from devices_pilot d where d.assigned_role is not null and coalesce(d.device_status, 'active') <> 'retired'), '[]'::jsonb));
+$$;
+
+
+ALTER FUNCTION public._plant_report() OWNER TO postgres;
+
+--
 -- Name: _plant_state_test_mode_trg(); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -3489,6 +3512,149 @@ $$;
 
 
 ALTER FUNCTION public._support_access_open() OWNER TO postgres;
+
+--
+-- Name: _system_health_data(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public._system_health_data() RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $$
+declare
+  v_tm boolean; v_on_at timestamptz; v_devs jsonb; v_chain jsonb; v_sec jsonb;
+  v_ver timestamptz; v_fail timestamptz; v_plant boolean; v_backup text; v_age numeric;
+  v_attn text[] := '{}'; v_info text[] := '{}';
+  v_offline int; v_failed int; v_revoked int; v_brakes int; v_locks int;
+  v_boards int; v_oldest date; v_wait timestamptz; v_mismatch int; v_order int; v_leaders int;
+  v_stb jsonb; v_ups text; v_ups_at timestamptz; v_fo timestamptz;
+  v_night jsonb; v_night_at timestamptz;
+begin
+  v_tm := _test_mode_on();                  -- also switches an expired flag off
+  v_on_at := _test_mode_on_at();
+
+  select jsonb_build_object(
+           'active',  count(*) filter (where assigned_role is not null and coalesce(device_status, 'active') <> 'retired'),
+           'offline', count(*) filter (where assigned_role is not null and coalesce(device_status, 'active') <> 'retired'
+                                         and (last_seen is null or last_seen < now() - interval '3 minutes')),
+           'retired', count(*) filter (where device_status = 'retired'),
+           'unpaired_requests', (select count(*) from device_pairing where paired_at is null and expires_at > now()))
+    into v_devs from devices_pilot;
+  v_offline := (v_devs ->> 'offline')::int;
+
+  v_chain := _event_chain_recent(500);
+
+  v_failed  := (select count(*) from login_attempts where not ok and at > now() - interval '1 day');
+  v_revoked := (select coalesce(sum(n), 0) from revoked_device_writes where minute > now() - interval '1 day');
+  select count(distinct key) into v_brakes from (
+    select key, at - lag(at, 9) over (partition by key order by at, id) as span
+      from rate_events where kind = 'correction_rejected' and at > now() - interval '1 day') a
+   where span <= interval '10 minutes';
+  select count(distinct ip) into v_locks from (
+    select ip, at - lag(at, 7) over (partition by ip order by at, id) as span
+      from login_attempts where not ok and at > now() - interval '1 day') b
+   where span <= interval '15 minutes';
+  v_mismatch := (select count(*) from events_pilot where stage = 'security' and action = 'label_mismatch'
+                                                     and created_at > now() - interval '1 day');
+  v_order := (select count(*) from events_pilot where stage = 'security' and action in ('out_of_order', 'earlier_day_open')
+                                                  and created_at > now() - interval '1 day');
+  v_sec := jsonb_build_object(
+    'revokedDeviceWrites24h', v_revoked,
+    'failedLogins24h', v_failed,
+    'rejectedCorrections24h', (select count(*) from rate_events where kind = 'correction_rejected' and at > now() - interval '1 day'),
+    'rateLimited24h', v_brakes + v_locks,
+    'labelMismatch24h', v_mismatch,
+    'outOfOrder24h', v_order,
+    'chainBroken', not coalesce((v_chain ->> 'ok')::boolean, false));
+
+  v_ver  := _ts_or_null((select value from plant_state where key = 'lastBackupVerifiedAt'));
+  v_fail := _ts_or_null((select value from plant_state where key = 'lastBackupFailedAt'));
+  v_plant := v_ver is not null or v_fail is not null
+             or coalesce((select lower(value) from plant_state where key = 'plantServer'), '') in ('on', 'true', '1');
+  v_age := case when v_ver is not null then round((extract(epoch from (now() - v_ver)) / 3600)::numeric, 1) end;
+  v_backup := case when not v_plant then 'unknown'
+                   when v_ver is null then 'never'
+                   when v_fail is not null and v_fail > v_ver then 'failed'
+                   when v_ver < now() - interval '26 hours' then 'stale'
+                   else 'ok' end;
+  select count(distinct board_id), min(slaughter_day) into v_boards, v_oldest from animals_carry;
+  v_wait := _ts_or_null((select value from plant_state where key = 'rolloverWaitingSince'));
+
+  if v_backup = 'unknown' then v_info := v_info || 'backup_unknown'::text;
+  elsif v_backup <> 'ok' then v_attn := v_attn || 'backup_stale'::text; end if;
+  if (v_sec ->> 'chainBroken')::boolean then v_attn := v_attn || 'chain_broken'::text; end if;
+  if v_tm then v_attn := v_attn || 'test_mode_on'::text; end if;
+  if v_offline > 0 then v_attn := v_attn || 'devices_offline'::text; end if;
+  if v_failed >= 10 or v_locks > 0 then v_attn := v_attn || 'failed_logins'::text; end if;
+  if v_revoked > 0 then v_attn := v_attn || 'revoked_device_writes'::text; end if;
+  if v_mismatch > 0 then v_attn := v_attn || 'label_mismatch'::text; end if;
+  if v_wait is not null then v_attn := v_attn || 'rollover_waiting'::text; end if;
+  if v_boards > 0 then v_info := v_info || 'processing_days_open'::text; end if;
+  v_leaders := (select count(*) from devices_pilot d where d.assigned_role = 'leader' and coalesce(d.device_status, 'active') <> 'retired'
+                   and exists (select 1 from device_credentials c where c.device_id = d.id and not c.revoked));
+  if v_leaders > 0 and not exists (select 1 from plant_state where key = 'leaderRecoveryHash') then
+    v_attn := v_attn || 'leader_recovery_missing'::text;            -- without it a lost team-leader device needs the server
+  end if;
+  if exists (select 1 from plant_state where key = 'workerListsCheck') then v_info := v_info || 'worker_lists_check'::text; end if;
+  -- §22 the plant's standby server and UPS (written by the plant-server tools)
+  v_stb := _gt_standbys();
+  if not pg_is_in_recovery() and coalesce((select value from plant_state where key = 'standbyExpected'), '') = '1' then
+    if not exists (select 1 from jsonb_array_elements(v_stb) x where x ->> 'state' = 'streaming') then
+      v_attn := v_attn || 'standby_down'::text;
+      if coalesce(current_setting('synchronous_standby_names', true), '') = '' then v_info := v_info || 'standby_async'::text; end if;
+    elsif exists (select 1 from jsonb_array_elements(v_stb) x where (x ->> 'lagSeconds')::numeric > 30) then
+      v_attn := v_attn || 'standby_lag'::text;
+    end if;
+  end if;
+  v_ups := (select value from plant_state where key = 'upsStatus');
+  v_ups_at := _ts_or_null((select value from plant_state where key = 'upsAt'));
+  if v_ups_at > now() - interval '1 day' then
+    if v_ups = 'lowbattery' then v_attn := v_attn || 'ups_low_battery'::text;
+    elsif v_ups = 'onbattery' then v_attn := v_attn || 'ups_on_battery'::text; end if;
+  end if;
+  v_fo := _ts_or_null((select value from plant_state where key = 'lastFailoverAt'));
+  if v_fo > now() - interval '7 days' then v_info := v_info || 'failover_recent'::text; end if;
+  -- v10.16: the nightly check (plant-server/nightly-check.sh, before work) — its problems, what it
+  -- fixed by itself, and a warning when it did not run (on a plant server only)
+  begin v_night := (select value from plant_state where key = 'nightlyCheck')::jsonb; exception when others then v_night := null; end;
+  v_night_at := _ts_or_null(v_night ->> 'at');
+  if v_night_at is not null and v_night_at > now() - interval '30 hours' then
+    if jsonb_typeof(v_night -> 'problems') = 'array' and jsonb_array_length(v_night -> 'problems') > 0 then
+      v_attn := v_attn || 'nightly_check_problems'::text;
+    end if;
+    if jsonb_typeof(v_night -> 'fixed') = 'array' and jsonb_array_length(v_night -> 'fixed') > 0 then
+      v_info := v_info || 'nightly_check_fixed'::text;
+    end if;
+  elsif v_plant or v_night_at is not null then
+    v_attn := v_attn || 'nightly_check_missing'::text;
+  end if;
+
+  return jsonb_build_object(
+    'ok', true,
+    'schemaStep', (select value from plant_state where key = 'schemaStep'),
+    'serverTime', now(),
+    'devices', v_devs || jsonb_build_object('leader', v_leaders),
+    'server', jsonb_build_object('name', nullif(current_setting('gt.server_name', true), ''),
+                                 'role', case when pg_is_in_recovery() then 'standby' else 'primary' end,
+                                 'standbys', v_stb, 'ups', v_ups, 'lastFailoverAt', v_fo),
+    'testMode', jsonb_build_object('on', v_tm, 'on_at', case when v_tm then v_on_at end,
+                                   'expires_at', case when v_tm then v_on_at + _test_mode_max() end),
+    'lastBackupVerifiedAt', v_ver,
+    'lastBackupFailedAt', v_fail,
+    'lastBackupFailReason', case when v_fail is not null then (select value from plant_state where key = 'lastBackupFailReason') end,
+    'backup', jsonb_build_object('status', v_backup, 'ageHours', v_age),
+    'eventChain', v_chain,
+    'security', v_sec,
+    'processing', jsonb_build_object('openBoards', v_boards, 'oldestDay', v_oldest,
+                                     'rolloverWaitingSince', v_wait, 'unfinishedOnBoard', _board_unfinished()),
+    'nightly', case when v_night is not null then jsonb_build_object('at', v_night -> 'at', 'ok', v_night -> 'ok',
+                     'problems', v_night -> 'problems', 'fixed', v_night -> 'fixed', 'checks', v_night -> 'checks') end,
+    'attention', to_jsonb(v_attn),
+    'info', to_jsonb(v_info));
+end $$;
+
+
+ALTER FUNCTION public._system_health_data() OWNER TO postgres;
 
 --
 -- Name: _test_mode_active(); Type: FUNCTION; Schema: public; Owner: postgres
@@ -6857,140 +7023,11 @@ CREATE FUNCTION public.system_health(p_token text) RETURNS jsonb
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public', 'extensions', 'pg_temp'
     AS $$
-declare
-  v_role text := coalesce(_session_role(p_token), '');
-  v_tm boolean; v_on_at timestamptz; v_devs jsonb; v_chain jsonb; v_sec jsonb;
-  v_ver timestamptz; v_fail timestamptz; v_plant boolean; v_backup text; v_age numeric;
-  v_attn text[] := '{}'; v_info text[] := '{}';
-  v_offline int; v_failed int; v_revoked int; v_brakes int; v_locks int;
-  v_boards int; v_oldest date; v_wait timestamptz; v_mismatch int; v_order int; v_leaders int;
-  v_stb jsonb; v_ups text; v_ups_at timestamptz; v_fo timestamptz;
-  v_night jsonb; v_night_at timestamptz;
 begin
-  if v_role not in ('manager', 'owner') then
+  if coalesce(_session_role(p_token), '') not in ('manager', 'owner', 'manufacturer') then
     return jsonb_build_object('ok', false, 'error', 'unauthorized');
   end if;
-  v_tm := _test_mode_on();                  -- also switches an expired flag off
-  v_on_at := _test_mode_on_at();
-
-  select jsonb_build_object(
-           'active',  count(*) filter (where assigned_role is not null and coalesce(device_status, 'active') <> 'retired'),
-           'offline', count(*) filter (where assigned_role is not null and coalesce(device_status, 'active') <> 'retired'
-                                         and (last_seen is null or last_seen < now() - interval '3 minutes')),
-           'retired', count(*) filter (where device_status = 'retired'),
-           'unpaired_requests', (select count(*) from device_pairing where paired_at is null and expires_at > now()))
-    into v_devs from devices_pilot;
-  v_offline := (v_devs ->> 'offline')::int;
-
-  v_chain := _event_chain_recent(500);
-
-  v_failed  := (select count(*) from login_attempts where not ok and at > now() - interval '1 day');
-  v_revoked := (select coalesce(sum(n), 0) from revoked_device_writes where minute > now() - interval '1 day');
-  select count(distinct key) into v_brakes from (
-    select key, at - lag(at, 9) over (partition by key order by at, id) as span
-      from rate_events where kind = 'correction_rejected' and at > now() - interval '1 day') a
-   where span <= interval '10 minutes';
-  select count(distinct ip) into v_locks from (
-    select ip, at - lag(at, 7) over (partition by ip order by at, id) as span
-      from login_attempts where not ok and at > now() - interval '1 day') b
-   where span <= interval '15 minutes';
-  v_mismatch := (select count(*) from events_pilot where stage = 'security' and action = 'label_mismatch'
-                                                     and created_at > now() - interval '1 day');
-  v_order := (select count(*) from events_pilot where stage = 'security' and action in ('out_of_order', 'earlier_day_open')
-                                                  and created_at > now() - interval '1 day');
-  v_sec := jsonb_build_object(
-    'revokedDeviceWrites24h', v_revoked,
-    'failedLogins24h', v_failed,
-    'rejectedCorrections24h', (select count(*) from rate_events where kind = 'correction_rejected' and at > now() - interval '1 day'),
-    'rateLimited24h', v_brakes + v_locks,
-    'labelMismatch24h', v_mismatch,
-    'outOfOrder24h', v_order,
-    'chainBroken', not coalesce((v_chain ->> 'ok')::boolean, false));
-
-  v_ver  := _ts_or_null((select value from plant_state where key = 'lastBackupVerifiedAt'));
-  v_fail := _ts_or_null((select value from plant_state where key = 'lastBackupFailedAt'));
-  v_plant := v_ver is not null or v_fail is not null
-             or coalesce((select lower(value) from plant_state where key = 'plantServer'), '') in ('on', 'true', '1');
-  v_age := case when v_ver is not null then round((extract(epoch from (now() - v_ver)) / 3600)::numeric, 1) end;
-  v_backup := case when not v_plant then 'unknown'
-                   when v_ver is null then 'never'
-                   when v_fail is not null and v_fail > v_ver then 'failed'
-                   when v_ver < now() - interval '26 hours' then 'stale'
-                   else 'ok' end;
-  select count(distinct board_id), min(slaughter_day) into v_boards, v_oldest from animals_carry;
-  v_wait := _ts_or_null((select value from plant_state where key = 'rolloverWaitingSince'));
-
-  if v_backup = 'unknown' then v_info := v_info || 'backup_unknown'::text;
-  elsif v_backup <> 'ok' then v_attn := v_attn || 'backup_stale'::text; end if;
-  if (v_sec ->> 'chainBroken')::boolean then v_attn := v_attn || 'chain_broken'::text; end if;
-  if v_tm then v_attn := v_attn || 'test_mode_on'::text; end if;
-  if v_offline > 0 then v_attn := v_attn || 'devices_offline'::text; end if;
-  if v_failed >= 10 or v_locks > 0 then v_attn := v_attn || 'failed_logins'::text; end if;
-  if v_revoked > 0 then v_attn := v_attn || 'revoked_device_writes'::text; end if;
-  if v_mismatch > 0 then v_attn := v_attn || 'label_mismatch'::text; end if;
-  if v_wait is not null then v_attn := v_attn || 'rollover_waiting'::text; end if;
-  if v_boards > 0 then v_info := v_info || 'processing_days_open'::text; end if;
-  v_leaders := (select count(*) from devices_pilot d where d.assigned_role = 'leader' and coalesce(d.device_status, 'active') <> 'retired'
-                   and exists (select 1 from device_credentials c where c.device_id = d.id and not c.revoked));
-  if v_leaders > 0 and not exists (select 1 from plant_state where key = 'leaderRecoveryHash') then
-    v_attn := v_attn || 'leader_recovery_missing'::text;            -- without it a lost team-leader device needs the server
-  end if;
-  if exists (select 1 from plant_state where key = 'workerListsCheck') then v_info := v_info || 'worker_lists_check'::text; end if;
-  -- §22 the plant's standby server and UPS (written by the plant-server tools)
-  v_stb := _gt_standbys();
-  if not pg_is_in_recovery() and coalesce((select value from plant_state where key = 'standbyExpected'), '') = '1' then
-    if not exists (select 1 from jsonb_array_elements(v_stb) x where x ->> 'state' = 'streaming') then
-      v_attn := v_attn || 'standby_down'::text;
-      if coalesce(current_setting('synchronous_standby_names', true), '') = '' then v_info := v_info || 'standby_async'::text; end if;
-    elsif exists (select 1 from jsonb_array_elements(v_stb) x where (x ->> 'lagSeconds')::numeric > 30) then
-      v_attn := v_attn || 'standby_lag'::text;
-    end if;
-  end if;
-  v_ups := (select value from plant_state where key = 'upsStatus');
-  v_ups_at := _ts_or_null((select value from plant_state where key = 'upsAt'));
-  if v_ups_at > now() - interval '1 day' then
-    if v_ups = 'lowbattery' then v_attn := v_attn || 'ups_low_battery'::text;
-    elsif v_ups = 'onbattery' then v_attn := v_attn || 'ups_on_battery'::text; end if;
-  end if;
-  v_fo := _ts_or_null((select value from plant_state where key = 'lastFailoverAt'));
-  if v_fo > now() - interval '7 days' then v_info := v_info || 'failover_recent'::text; end if;
-  -- v10.16: the nightly check (plant-server/nightly-check.sh, before work) — its problems, what it
-  -- fixed by itself, and a warning when it did not run (on a plant server only)
-  begin v_night := (select value from plant_state where key = 'nightlyCheck')::jsonb; exception when others then v_night := null; end;
-  v_night_at := _ts_or_null(v_night ->> 'at');
-  if v_night_at is not null and v_night_at > now() - interval '30 hours' then
-    if jsonb_typeof(v_night -> 'problems') = 'array' and jsonb_array_length(v_night -> 'problems') > 0 then
-      v_attn := v_attn || 'nightly_check_problems'::text;
-    end if;
-    if jsonb_typeof(v_night -> 'fixed') = 'array' and jsonb_array_length(v_night -> 'fixed') > 0 then
-      v_info := v_info || 'nightly_check_fixed'::text;
-    end if;
-  elsif v_plant or v_night_at is not null then
-    v_attn := v_attn || 'nightly_check_missing'::text;
-  end if;
-
-  return jsonb_build_object(
-    'ok', true,
-    'schemaStep', (select value from plant_state where key = 'schemaStep'),
-    'serverTime', now(),
-    'devices', v_devs || jsonb_build_object('leader', v_leaders),
-    'server', jsonb_build_object('name', nullif(current_setting('gt.server_name', true), ''),
-                                 'role', case when pg_is_in_recovery() then 'standby' else 'primary' end,
-                                 'standbys', v_stb, 'ups', v_ups, 'lastFailoverAt', v_fo),
-    'testMode', jsonb_build_object('on', v_tm, 'on_at', case when v_tm then v_on_at end,
-                                   'expires_at', case when v_tm then v_on_at + _test_mode_max() end),
-    'lastBackupVerifiedAt', v_ver,
-    'lastBackupFailedAt', v_fail,
-    'lastBackupFailReason', case when v_fail is not null then (select value from plant_state where key = 'lastBackupFailReason') end,
-    'backup', jsonb_build_object('status', v_backup, 'ageHours', v_age),
-    'eventChain', v_chain,
-    'security', v_sec,
-    'processing', jsonb_build_object('openBoards', v_boards, 'oldestDay', v_oldest,
-                                     'rolloverWaitingSince', v_wait, 'unfinishedOnBoard', _board_unfinished()),
-    'nightly', case when v_night is not null then jsonb_build_object('at', v_night -> 'at', 'ok', v_night -> 'ok',
-                     'problems', v_night -> 'problems', 'fixed', v_night -> 'fixed', 'checks', v_night -> 'checks') end,
-    'attention', to_jsonb(v_attn),
-    'info', to_jsonb(v_info));
+  return _system_health_data();
 end $$;
 
 
@@ -10028,6 +10065,13 @@ REVOKE ALL ON FUNCTION public._parts_print_block(p_epoch bigint, p_id integer, o
 
 
 --
+-- Name: FUNCTION _plant_report(); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public._plant_report() FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION _plant_state_test_mode_trg(); Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -10302,6 +10346,13 @@ REVOKE ALL ON FUNCTION public._statuses_in_use() FROM PUBLIC;
 --
 
 REVOKE ALL ON FUNCTION public._support_access_open() FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION _system_health_data(); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public._system_health_data() FROM PUBLIC;
 
 
 --
@@ -11211,5 +11262,5 @@ GRANT ALL ON TABLE public.system_flags TO service_role;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict Ih6DhLL2PkCGRIfd8MHku3yohUqhgYUzhPb5G33EchPndAIyBDwcvXGxfNuHgXe
+\unrestrict atz24IcbeyiUix75QFsvI7UPaymtihsB6MVyK2hxX8xn06gpiXpegtl7MFT7nb0
 
