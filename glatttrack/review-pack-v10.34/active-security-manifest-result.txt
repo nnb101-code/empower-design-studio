@@ -1,9 +1,9 @@
 == 1. plant state =======================================================
     key     |     value     |          updated_at           
 ------------+---------------+-------------------------------
- boardEpoch | 1791725512004 | 2026-10-11 13:31:52.00347+00
- schemaStep | 46            | 2026-10-11 13:31:53.546249+00
- testMode   | off           | 2026-10-11 13:31:52.921856+00
+ boardEpoch | 1791731901249 | 2026-10-11 15:18:21.248643+00
+ schemaStep | 46            | 2026-10-11 15:18:22.410097+00
+ testMode   | off           | 2026-10-11 15:18:21.840687+00
 (3 rows)
 
 == 2. functions (public, gt_rls) ========================================
@@ -74,6 +74,7 @@
  public | support_force_reload(text,text)                                                    | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
  public | system_health(text)                                                                | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
  public | verify_event_chain()                                                               | function | t                | public, extensions, pg_temp | postgres | t    | t             | t           | f
+ public | worker_code_set(text,text,text,text)                                               | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
  public | worker_login(text,text,text)                                                       | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
  public | worker_logout(text)                                                                | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
  public | worker_session_check()                                                             | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
@@ -213,6 +214,7 @@
  public | _ts_or_null(text)                                                                  | function | f                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _usda_zone(animals_pilot)                                                          | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _worker_code_hash(text)                                                            | function | f                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _worker_code_ok(text,text)                                                         | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _worker_gate(text)                                                                 | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _worker_lists_saved()                                                              | trigger  | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _worker_role_norm(text)                                                            | function | f                | public, extensions, pg_temp | postgres | f    | f             | f           | f
@@ -224,7 +226,7 @@
  public | leader_account_remove(text)                                                        | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | leader_device_recovery(text)                                                       | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | manufacturer_set_code(text,text)                                                   | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
-(215 rows)
+(217 rows)
 
 == 2b. API surface: functions the app roles can run ======================
                        callable_by_app                       | security_definer 
@@ -294,10 +296,11 @@
  support_force_reload(text,text)                             | t
  system_health(text)                                         | t
  verify_event_chain()                                        | t
+ worker_code_set(text,text,text,text)                        | t
  worker_login(text,text,text)                                | t
  worker_logout(text)                                         | t
  worker_session_check()                                      | t
-(68 rows)
+(69 rows)
 
 == 3. triggers on the key tables ========================================
         table        |               trigger               |               function                |                 fires                 |  state  | security_definer 
@@ -371,8 +374,9 @@
  settings_pilot          | t      | f          |        1
  source_farms            | t      | f          |        2
  system_flags            | t      | f          |        0
+ worker_codes            | t      | f          |        0
  worker_sessions         | t      | f          |        0
-(37 rows)
+(38 rows)
 
           table          |            policy            |  cmd   | permissive |        roles         |                                                                    using_expr                                                                     |                          check_expr                           
 -------------------------+------------------------------+--------+------------+----------------------+---------------------------------------------------------------------------------------------------------------------------------------------------+---------------------------------------------------------------

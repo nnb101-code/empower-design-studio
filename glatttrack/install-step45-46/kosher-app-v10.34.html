@@ -11222,7 +11222,7 @@ function mgrRenderFarmSystem(){
   }catch(e){}
 }
 function mgrRemoveFarm(i){mgrRemoveIntake(i);}
-async function mgrAddUser(){const name=prompt('שם משתמש:');if(!name)return;const role=prompt('תפקיד (שוחט/משגיח/בודק):');const code=prompt('קוד (אופציונלי):');const s=KS.getSettings();const users=s.users||[];users.push(code?{name,role:role||'משגיח',codeHash:await _workerCodeHash(code),hv:2}:{name,role:role||'משגיח'});KS.updateSettings({users});mgrSyncUI();}
+async function mgrAddUser(){const name=prompt('שם משתמש:');if(!name)return;const role=prompt('תפקיד (שוחט/משגיח/בודק):');const code=prompt('קוד (אופציונלי):');const s=KS.getSettings();const users=s.users||[];users.push({name,role:role||'משגיח'});if(code){KS.updateSettings({users});const res=await gtWorkerCodeSet(role||'משגיח',name,code);if(!res||!res.ok)alert(_gtWorkerCodeErr(res));}KS.updateSettings({users});mgrSyncUI();}
 function mgrClearReprintLog(){KS.updateSettings({reprintLog:[]});mgrUpdateLog();}
 function mgrClearErrors(){KS.updateSettings({errorLog:[]});mgrUpdateLog();}
 function mgrSetPeriod(p){
@@ -11988,7 +11988,7 @@ function mgrRenderUsers(){
     return`<div style="display:flex;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);">
       <div style="flex:1;">
         <div style="font-size:13px;color:var(--text);font-weight:600;">${escapeHtml(u.name)}</div>
-        ${(u.code||u.codeHash)?`<div style="font-size:11px;color:var(--muted);">${L('קוד','Code','Código')}: ••••${_userCodeLegacy(u)?` <span style="color:var(--amber);">⚠ ${L('יש להגדיר קוד חדש','set a new code','defina un código nuevo')}</span>`:''}</div>`:''}
+        ${(u.code||u.codeHash||u.hasCode)?`<div style="font-size:11px;color:var(--muted);">${L('קוד','Code','Código')}: ••••${_userCodeLegacy(u)?` <span style="color:var(--amber);">⚠ ${L('יש להגדיר קוד חדש','set a new code','defina un código nuevo')}</span>`:''}</div>`:''}
       </div>
       <button onclick="mgrSetUserCode(${realIdx})" style="color:var(--gold);background:none;border:1px solid var(--border);border-radius:6px;font-size:11px;cursor:pointer;padding:3px 8px;margin-inline-end:4px;">🔑 ${L('קוד חדש','Set new code','Nuevo código')}</button>
       <button onclick="mgrRemoveUser(${realIdx})" style="color:var(--red-light);background:none;border:none;font-size:14px;cursor:pointer;padding:4px 8px;">✕</button>
@@ -12009,11 +12009,33 @@ function mgrHideAddUser(){
 function _workerCodeTaken(role, hash, exceptIdx){
   return (KS.getSettings().users||[]).some((u,i)=>i!==exceptIdx && u && u.role===role && u.codeHash===hash);
 }
+// v10.35 review: a worker's code goes ONLY to the server (worker_code_set → worker_codes, bcrypt) — never
+// into the settings every tablet reads. The server checks that the code is unique on the screen.
+async function gtWorkerCodeSet(role, name, code){
+  if(!window.sb || !(KS.getManagerToken && KS.getManagerToken())) return { ok:false, error:'unauthorized' };
+  try{
+    const r = await _withTimeout(Promise.resolve(window.sb.rpc('worker_code_set', { p_token: KS.getManagerToken(), p_role: role, p_name: name, p_code: code || '' })), 12000);
+    if(r.error) return { ok:false, error: gtErrText(r.error) };
+    return r.data || { ok:false, error:'server_error' };
+  }catch(e){ return { ok:false, error: gtErrText('network') }; }
+}
+function _gtWorkerCodeErr(res){
+  if(res && res.error==='code_taken') return L('הקוד הזה כבר בשימוש אצל עובד אחר במסך הזה — בחר קוד אחר.','This code is already used by another worker of this screen — choose another.','Código ya usado en esta pantalla — elija otro.');
+  if(res && res.error==='bad_value') return L('קוד בין 4 ל-40 תווים.','A code of 4 to 40 characters.','Un código de 4 a 40 caracteres.');
+  return L('הקוד לא נשמר בשרת: ','The code was not saved on the server: ','El código no se guardó: ') + ((res && res.error) || '');
+}
+function _gtMarkHasCode(role, name, on){
+  const users=(KS.getSettings().users||[]).map(u=>{ if(!u || u.name!==name || u.role!==role) return u; const {code:_c, codeHash:_h, hv:_v, ...rest}=u; return {...rest, hasCode:!!on}; });
+  KS.updateSettings({users});
+}
 async function mgrSetUserCode(i){
   const u=(KS.getSettings().users||[])[i]; if(!u) return;
   const code=prompt(L('קוד חדש עבור ','New code for ','Código nuevo para ')+u.name+':');
   if(code===null) return;
   const c=String(code).trim(); if(!c) return;
+  { const res=await gtWorkerCodeSet(u.role, u.name, c);                 // v10.35 review: only on the server
+    if(!res || !res.ok){ alert(_gtWorkerCodeErr(res)); return; }
+    _gtMarkHasCode(u.role, u.name, true); mgrRenderUsers(); return; }
   const h=await _workerCodeHash(c);
   const cur=(KS.getSettings().users||[]).slice();
   const j=cur.findIndex(x=>x && x.name===u.name && x.role===u.role); if(j<0) return;
@@ -12027,7 +12049,14 @@ async function mgrConfirmAddUser(){
   const name=document.getElementById('newUserName')?.value?.trim();
   if(!name)return;
   const code=document.getElementById('newUserCode')?.value?.trim();
-  const h=code ? await _workerCodeHash(code) : null;
+  if(code){                                                           // v10.35 review: the code only on the server
+    const role=mgrCurrentUserRole, users0=(KS.getSettings().users||[]).slice();
+    if(!users0.some(u=>u && u.name===name && u.role===role)){ users0.push({name, role}); KS.updateSettings({users:users0}); }
+    const res=await gtWorkerCodeSet(role, name, code);
+    if(!res || !res.ok){ alert(_gtWorkerCodeErr(res)); mgrRenderUsers(); return; }
+    _gtMarkHasCode(role, name, true); mgrHideAddUser(); mgrRenderUsers(); return;
+  }
+  const h=null;
   if(h && _workerCodeTaken(mgrCurrentUserRole, h, -1)){ alert(L('הקוד הזה כבר בשימוש אצל עובד אחר בתחנה — בחר קוד אחר.','This code is already used by another worker at this station — choose another.','Este código ya lo usa otro trabajador de la estación — elija otro.')); return; }
   const s=KS.getSettings();
   const users=s.users||[];
@@ -17326,7 +17355,16 @@ function gtWizMode(r, m){ const lm = Object.assign({}, KS.getSettings().loginMod
 async function gtWizAddWorker(r){
   const n = (document.getElementById('gtWn_'+r).value||'').trim(), c = (document.getElementById('gtWc_'+r).value||'').trim();
   if(!n) return;
-  const h = c ? await _workerCodeHash(c) : null;
+  if(c){                                                              // v10.35 review: the code only on the server
+    const users0 = (KS.getSettings().users || []).slice();
+    if(!users0.some(u => u && u.name===n && u.role===r)){ users0.push({ name:n, role:r }); KS.updateSettings({ users: users0 }); }
+    const res = await gtWorkerCodeSet(r, n, c);
+    if(!res || !res.ok){ alert(_gtWorkerCodeErr(res)); gtWizRenderWorkers(); return; }
+    _gtMarkHasCode(r, n, true); gtWizRenderWorkers();
+    setTimeout(() => { const e = document.getElementById('gtWn_'+r); if(e) e.focus(); }, 50);
+    return;
+  }
+  const h = null;
   if(h && _workerCodeTaken(r, h, -1)){ alert(L('הקוד הזה כבר בשימוש אצל עובד אחר במסך הזה — בחר קוד אחר.','This code is already used by another worker of this screen — choose another.','Código ya usado en esta pantalla.')); return; }
   const users = (KS.getSettings().users || []).slice();
   users.push(h ? { name:n, codeHash:h, hv:2, role:r } : { name:n, role:r });

@@ -13762,13 +13762,19 @@ begin
     v_h1 := _worker_code_hash(trim(p_code));
     v_h2 := case when coalesce(s ->> 'codeSalt', '') <> ''
                  then encode(digest('gt1:' || (s ->> 'codeSalt') || ':' || trim(p_code), 'sha256'), 'hex') end;
-    select x into u from jsonb_array_elements(s -> 'users') x
-     where jsonb_typeof(x) = 'object'
-       and _worker_role_norm(x ->> 'role') = v_role
-       and (p_name is null or x ->> 'name' = p_name)
-       and coalesce(x ->> 'name', '') <> ''
-       and (x ->> 'codeHash' = v_h1 or (v_h2 is not null and x ->> 'codeHash' = v_h2))   -- step 46: hashes only
+    -- v10.35 review: the codes are only in worker_codes (bcrypt; an old sha form until its first good login)
+    select l.x into u
+      from worker_codes w
+      join lateral (select x from jsonb_array_elements(s -> 'users') x
+                     where jsonb_typeof(x) = 'object' and x ->> 'name' = w.name
+                       and _worker_role_norm(x ->> 'role') = v_role limit 1) l on true
+     where w.role = v_role and (p_name is null or w.name = p_name) and coalesce(w.name, '') <> ''
+       and _worker_code_ok(w.hash, p_code)
      limit 1;
+    if u is not null then
+      update worker_codes set hash = crypt(trim(p_code), gen_salt('bf', 8)), updated_at = now()
+       where role = v_role and name = u ->> 'name' and hash like 'sha:%';
+    end if;
   end if;
   if u is null then
     insert into login_attempts (ip, ok) values (v_ip, false), (v_key2, false);
@@ -14289,7 +14295,8 @@ begin
          or (e ? 'role' and not _jstr_ok(e -> 'role', 40))
          or (e ? 'role' and _worker_role_norm(e ->> 'role') is null and e ->> 'role' <> 'manager')   -- step 46: one list per screen
          or (e ? 'code' and not (jsonb_typeof(e -> 'code') in ('string', 'number', 'null') and length(e ->> 'code') <= 40))
-         or (e ? 'codeHash' and not _jstr_ok(e -> 'codeHash', 128)) then
+         or (e ? 'codeHash' and not _jstr_ok(e -> 'codeHash', 128))
+         or (e ? 'hasCode' and jsonb_typeof(e -> 'hasCode') not in ('boolean', 'null')) then
         return 'expected workers {name, role, code/codeHash}';
       end if;
     end loop;
@@ -15242,13 +15249,19 @@ begin
     v_h1 := _worker_code_hash(trim(p_code));
     v_h2 := case when coalesce(s ->> 'codeSalt', '') <> ''
                  then encode(digest('gt1:' || (s ->> 'codeSalt') || ':' || trim(p_code), 'sha256'), 'hex') end;
-    select x into u from jsonb_array_elements(s -> 'users') x
-     where jsonb_typeof(x) = 'object'
-       and _worker_role_norm(x ->> 'role') = v_role
-       and (p_name is null or x ->> 'name' = p_name)
-       and coalesce(x ->> 'name', '') <> ''
-       and (x ->> 'codeHash' = v_h1 or (v_h2 is not null and x ->> 'codeHash' = v_h2))   -- step 46: hashes only
+    -- v10.35 review: the codes are only in worker_codes (bcrypt; an old sha form until its first good login)
+    select l.x into u
+      from worker_codes w
+      join lateral (select x from jsonb_array_elements(s -> 'users') x
+                     where jsonb_typeof(x) = 'object' and x ->> 'name' = w.name
+                       and _worker_role_norm(x ->> 'role') = v_role limit 1) l on true
+     where w.role = v_role and (p_name is null or w.name = p_name) and coalesce(w.name, '') <> ''
+       and _worker_code_ok(w.hash, p_code)
      limit 1;
+    if u is not null then
+      update worker_codes set hash = crypt(trim(p_code), gen_salt('bf', 8)), updated_at = now()
+       where role = v_role and name = u ->> 'name' and hash like 'sha:%';
+    end if;
   end if;
   if u is null then
     insert into login_attempts (ip, ok) values (v_ip, false), (v_key2, false);
@@ -16657,6 +16670,118 @@ revoke execute on function _animals_nc_plain() from public, anon, authenticated;
 drop trigger if exists a_animals_nc_plain on animals_pilot;
 create trigger a_animals_nc_plain before insert or update on animals_pilot
   for each row execute function _animals_nc_plain();
+
+-- ── §31 worker codes out of the readable settings (v10.35 review, Gemini) ──────
+-- Before: users[].codeHash (sha256 of the code, no salt) sat in settings_pilot, which every paired
+-- tablet reads — a 6-digit code is found from it in under a second. Now the codes live ONLY in
+-- worker_codes (no grant to the app): bcrypt with salt; settings keep {name, role, hasCode}.
+-- A code is set by the team leader through worker_code_set; an old hash moves over as 'sha:<hash>'
+-- (still accepted at login, and turned into bcrypt at the first good login).
+create table if not exists worker_codes (
+  role       text not null,
+  name       text not null,
+  hash       text not null,
+  updated_at timestamptz not null default now(),
+  primary key (role, name)
+);
+alter table worker_codes enable row level security;
+revoke all on worker_codes from public, anon, authenticated;
+
+-- does this code fit this stored hash (bcrypt, or an old sha256 form)?
+create or replace function _worker_code_ok(p_hash text, p_code text) returns boolean
+language plpgsql stable security definer set search_path = public, extensions, pg_temp as $$
+declare c text := trim(coalesce(p_code, '')); s jsonb;
+begin
+  if p_hash is null or c = '' then return false; end if;
+  if p_hash like '$2%' then return crypt(c, p_hash) = p_hash; end if;
+  if p_hash like 'sha:%' then
+    if substr(p_hash, 5) = _worker_code_hash(c) then return true; end if;
+    s := _gt_settings();
+    return coalesce(s ->> 'codeSalt', '') <> ''
+       and substr(p_hash, 5) = encode(digest('gt1:' || (s ->> 'codeSalt') || ':' || c, 'sha256'), 'hex');
+  end if;
+  return false;
+end $$;
+revoke execute on function _worker_code_ok(text, text) from public, anon, authenticated;
+
+-- settings: every code / codeHash moves into worker_codes; a worker gone from the list loses his code
+create or replace function _settings_hash_worker_codes() returns trigger
+language plpgsql security definer set search_path = public, extensions, pg_temp as $$
+declare u jsonb; out_users jsonb := '[]'::jsonb; c text; r text; n text;
+begin
+  if new.settings is null or jsonb_typeof(new.settings -> 'users') is distinct from 'array' then return new; end if;
+  for u in select value from jsonb_array_elements(new.settings -> 'users') loop
+    if jsonb_typeof(u) = 'object' then
+      r := coalesce(_worker_role_norm(u ->> 'role'), u ->> 'role'); n := u ->> 'name';
+      if r is not null and coalesce(n, '') <> '' then
+        if u ? 'code' then
+          c := nullif(trim(u ->> 'code'), '');
+          if c is not null then
+            insert into worker_codes (role, name, hash) values (r, n, crypt(c, gen_salt('bf', 8)))
+              on conflict (role, name) do update set hash = excluded.hash, updated_at = now();
+          end if;
+        elsif coalesce(u ->> 'codeHash', '') <> '' then
+          insert into worker_codes (role, name, hash) values (r, n, 'sha:' || (u ->> 'codeHash'))
+            on conflict (role, name) do update set hash = excluded.hash, updated_at = now();
+        end if;
+        u := (u - 'code' - 'codeHash' - 'hv')
+             || jsonb_build_object('hasCode', exists (select 1 from worker_codes w where w.role = r and w.name = n));
+      else
+        u := u - 'code' - 'codeHash' - 'hv';
+      end if;
+    end if;
+    out_users := out_users || jsonb_build_array(u);
+  end loop;
+  new.settings := jsonb_set(new.settings, '{users}', out_users);
+  delete from worker_codes w
+   where not exists (select 1 from jsonb_array_elements(new.settings -> 'users') x
+                      where jsonb_typeof(x) = 'object' and x ->> 'name' = w.name
+                        and coalesce(_worker_role_norm(x ->> 'role'), x ->> 'role') = w.role);
+  return new;
+end $$;
+revoke execute on function _settings_hash_worker_codes() from public, anon, authenticated;
+drop trigger if exists zz_settings_hash_worker_codes on settings_pilot;
+create trigger zz_settings_hash_worker_codes before insert or update on settings_pilot
+  for each row execute function _settings_hash_worker_codes();
+-- move what is already there (runs the trigger once)
+update settings_pilot set settings = settings where id = 1 and jsonb_typeof(settings -> 'users') = 'array';
+
+-- the team leader sets / clears a worker's code (one code per worker per screen, unique on the screen)
+create or replace function worker_code_set(p_token text, p_role text, p_name text, p_code text) returns jsonb
+language plpgsql security definer set search_path = public, extensions, pg_temp as $$
+declare r text := _worker_role_norm(p_role); n text := left(trim(coalesce(p_name, '')), 100);
+        c text := nullif(trim(coalesce(p_code, '')), ''); s jsonb; w record;
+begin
+  if coalesce(_session_role(p_token), '') <> 'manager' or not _is_real_manager(p_token) then
+    return jsonb_build_object('ok', false, 'error', 'unauthorized');
+  end if;
+  if r is null or n = '' or (c is not null and (length(c) < 4 or length(c) > 40)) then
+    return jsonb_build_object('ok', false, 'error', 'bad_value');
+  end if;
+  perform pg_advisory_xact_lock(hashtext('glatttrack_settings'));
+  if c is not null then
+    for w in select * from worker_codes where role = r and name <> n loop
+      if _worker_code_ok(w.hash, c) then return jsonb_build_object('ok', false, 'error', 'code_taken'); end if;
+    end loop;
+  end if;
+  select coalesce(settings, '{}'::jsonb) into s from settings_pilot where id = 1;
+  if not exists (select 1 from jsonb_array_elements(case when jsonb_typeof(s -> 'users') = 'array' then s -> 'users' else '[]'::jsonb end) x
+                  where x ->> 'name' = n and coalesce(_worker_role_norm(x ->> 'role'), x ->> 'role') = r) then
+    s := jsonb_set(s, '{users}', coalesce(case when jsonb_typeof(s -> 'users') = 'array' then s -> 'users' end, '[]'::jsonb)
+                                 || jsonb_build_array(jsonb_build_object('name', n, 'role', r)));
+  end if;
+  if c is null then
+    delete from worker_codes where role = r and name = n;
+  else
+    insert into worker_codes (role, name, hash) values (r, n, crypt(c, gen_salt('bf', 8)))
+      on conflict (role, name) do update set hash = excluded.hash, updated_at = now();
+  end if;
+  update settings_pilot set settings = s, device_id = 'team-leader', updated_at = now() where id = 1;   -- the trigger sets hasCode
+  perform _admin_audit(p_token, 'worker_code_set', 'worker_codes', jsonb_build_object('role', r, 'name', n, 'cleared', c is null));
+  return jsonb_build_object('ok', true, 'hasCode', c is not null);
+end $$;
+revoke execute on function worker_code_set(text, text, text, text) from public;
+grant execute on function worker_code_set(text, text, text, text) to anon, authenticated;
 
 -- ── self-check ──────────────────────────────────────────────────────────────
 do $$

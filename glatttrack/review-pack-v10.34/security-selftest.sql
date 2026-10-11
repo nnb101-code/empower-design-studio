@@ -1319,19 +1319,31 @@ $gt45$;
 do $$
 declare r jsonb; r2 jsonb; r3 jsonb; r4 jsonb; r5 jsonb; r6 jsonb; cmd uuid; tok text; h jsonb; i int;
 begin
-  perform pg_temp.rec('worker codes are stored only as hashes',
-    not exists (select 1 from settings_pilot s, jsonb_array_elements(s.settings -> 'users') u where u ? 'code')
+  -- v10.35 review: no code and no hash in the settings every tablet reads — only in worker_codes (no grant)
+  perform pg_temp.rec('worker codes are not in the readable settings (only in worker_codes, which the app cannot read)',
+    not exists (select 1 from settings_pilot s, jsonb_array_elements(s.settings -> 'users') u where u ? 'code' or u ? 'codeHash')
     and exists (select 1 from settings_pilot s, jsonb_array_elements(s.settings -> 'users') u
-                 where u ->> 'name' = 'Selftest Inspector' and u ->> 'codeHash' = encode(digest('gt-worker:739104', 'sha256'), 'hex')));
+                 where u ->> 'name' = 'Selftest Inspector' and (u ->> 'hasCode')::boolean)
+    and exists (select 1 from worker_codes where role = 'inner' and name = 'Selftest Inspector' and _worker_code_ok(hash, '739104'))
+    and not has_table_privilege('anon', 'worker_codes', 'select') and not has_table_privilege('authenticated', 'worker_codes', 'select'));
   r := pg_temp.api(pg_temp.mgr(),
          format('select push_settings(%L::jsonb, ''leader'', %L)',
                 (select jsonb_build_object('users', (s.settings -> 'users') || jsonb_build_array(jsonb_build_object('name', 'Selftest Supervisor', 'role', 'legs', 'code', '81818')))
                    from settings_pilot s where id = 1),
                 pg_temp.v('mgr')));
-  perform pg_temp.rec('push_settings stores a worker code hashed',
+  perform pg_temp.rec('push_settings: a worker code goes only to worker_codes, salted bcrypt',
     pg_temp.ok(r) and exists (select 1 from settings_pilot s, jsonb_array_elements(s.settings -> 'users') u
-                               where u ->> 'name' = 'Selftest Supervisor' and not (u ? 'code')
-                                 and u ->> 'codeHash' = encode(digest('gt-worker:81818', 'sha256'), 'hex')), r::text);
+                               where u ->> 'name' = 'Selftest Supervisor' and not (u ? 'code') and not (u ? 'codeHash'))
+    and exists (select 1 from worker_codes where role = 'legs' and name = 'Selftest Supervisor' and hash like '$2%'
+                                              and _worker_code_ok(hash, '81818') and not _worker_code_ok(hash, '81819')), r::text);
+  -- the team leader sets a code (unique on the screen); the owner / a tablet cannot; an old sha code turns into bcrypt at login
+  r  := pg_temp.api('{}', format('select worker_code_set(%L, ''inner'', ''Selftest Inspector 2'', ''739104'')', pg_temp.v('mgr')));
+  r2 := pg_temp.api('{}', format('select worker_code_set(%L, ''inner'', ''Selftest Inspector 2'', ''652201'')', pg_temp.v('mgr')));
+  r3 := pg_temp.api(pg_temp.dev('IN1'), format('select worker_code_set(%L, ''inner'', ''Selftest Inspector 2'', ''111111'')', 'x'));
+  perform pg_temp.rec('worker_code_set: team leader only, a code already used on the screen is refused',
+    r ->> 'error' = 'code_taken' and pg_temp.ok(r2) and r3 ->> 'error' = 'unauthorized'
+    and exists (select 1 from worker_codes where role = 'inner' and name = 'Selftest Inspector 2' and _worker_code_ok(hash, '652201')),
+    concat_ws(' | ', r::text, r2::text, r3::text));
   r := pg_temp.api(pg_temp.dev('IN1'), 'select worker_login(''inner'', ''000000'')');
   perform pg_temp.rec('worker login: wrong code rejected', r ->> 'error' = 'code_invalid' and r ->> 'token' is null, r::text);
   r := pg_temp.api(pg_temp.dev('SL1'), 'select worker_login(''inner'', ''739104'')');
@@ -2917,7 +2929,7 @@ begin
                 'processing_board(text)', 'carry_push(bigint,jsonb,uuid)', 'carry_claim(bigint,integer,text,uuid)',
                 'processing_day_close(text,bigint,text,text)', 'processing_status(text)',
                 'server_now_ms()', 'server_schema_step()', 'server_test_mode()', 'server_test_mode_info()', 'set_not_chalak_outer(integer,bigint,uuid)', 'support_access_set(text,integer,text)',
-                'support_diagnostics(text)', 'support_force_reload(text,text)', 'system_health(text)', 'verify_event_chain()', 'worker_login(text,text,text)',
+                'support_diagnostics(text)', 'support_force_reload(text,text)', 'system_health(text)', 'verify_event_chain()', 'worker_login(text,text,text)', 'worker_code_set(text,text,text,text)',
                 'worker_logout(text)', 'worker_session_check()', '_reader_ok()',
                 'gt_rls.devices_read_all()', 'gt_rls.devices_read_own_ids()', 'gt_rls.events_reader_ok()') loop
     problems := array_append(problems, 'unexpected function grant: ' || x.sig);

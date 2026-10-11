@@ -30,6 +30,21 @@ elif [ -n "${GT_API_RESTART_CMD:-}" ]; then
   if api_ok; then fix "שרת האפליקציה" "לא ענה — הופעל מחדש, עונה עכשיו"; else bad "שרת האפליקציה" "לא עונה, גם אחרי הפעלה מחדש — לקרוא למתקין"; fi
 else bad "שרת האפליקציה" "לא עונה — לקרוא למתקין"; fi
 
+# 2b. (v10.35 review) the web server in front of the API writes the tablet's address itself
+#     (proxy_set_header X-GT-Client-IP $remote_addr;) — otherwise a tablet could send its own value
+#     and slip past the "too many wrong codes" brake. A wrong team-leader code is sent with a made-up
+#     address; the address the server recorded must NOT be the made-up one. The test attempt is removed.
+if [ -n "${GT_API_URL:-}" ]; then
+  fake="203.0.113.77"
+  curl -s -m 8 -o /dev/null -X POST -H 'Content-Type: application/json' ${GT_API_KEY:+-H "apikey: $GT_API_KEY"} \
+       -H "X-GT-Client-IP: $fake" "$GT_API_URL/rest/v1/rpc/manager_login" -d '{"p_code":"gt-nightly-ip-check"}' >/dev/null 2>&1
+  seen="$(PSQLV -c "select ip from login_attempts where not ok and at > now() - interval '1 minute' order by at desc limit 1" 2>/dev/null)"
+  PSQLV -c "delete from login_attempts where not ok and at > now() - interval '1 minute' and (ip = '$fake' or ip = '${seen:-x}')" >/dev/null 2>&1
+  if [ "$seen" = "$fake" ]; then bad "כתובת הטאבלט" "שרת האינטרנט מעביר כתובת שהטאבלט כתב — להוסיף ב-nginx: proxy_set_header X-GT-Client-IP \$remote_addr;"
+  elif [ -z "$seen" ]; then ok "כתובת הטאבלט" "לא נבדק (אין תשובה)"
+  else ok "כתובת הטאבלט" "השרת רושם את הכתובת האמיתית"; fi
+fi
+
 # 3. the security self-test (03) — every protection still in place; it changes nothing (all undone).
 #    Skipped while someone is working (an animal changed in the last 10 minutes).
 if [ -n "${GT_SELFTEST_SQL:-}" ] && [ -f "$GT_SELFTEST_SQL" ]; then

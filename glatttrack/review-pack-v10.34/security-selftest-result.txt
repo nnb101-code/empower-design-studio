@@ -60,8 +60,9 @@ NOTICE:  PASS  step 46 billing currency: ₪ $ € £ or a 3-letter code; anythi
 NOTICE:  PASS  refused corrections: logged and braked per device (10 in 10 min → rate_limited)
 NOTICE:  PASS  manufacturer login: braked (6 per hour) and audited; team-leader login unaffected
 NOTICE:  PASS  invalid slaughter / inner / outer / eso / role / weight values rejected
-NOTICE:  PASS  worker codes are stored only as hashes
-NOTICE:  PASS  push_settings stores a worker code hashed
+NOTICE:  PASS  worker codes are not in the readable settings (only in worker_codes, which the app cannot read)
+NOTICE:  PASS  push_settings: a worker code goes only to worker_codes, salted bcrypt
+NOTICE:  PASS  worker_code_set: team leader only, a code already used on the screen is refused
 NOTICE:  PASS  worker login: wrong code rejected
 NOTICE:  PASS  worker login: wrong station / unpaired tablet rejected
 NOTICE:  PASS  worker login through a team-leader session: only in test mode
@@ -143,5 +144,5 @@ NOTICE:  PASS  v10.32 shared inner + outer screen: its inner tablet puts / close
 NOTICE:  PASS  v10.32 a part on USDA hold is not printed on the server: the full set (3) and that part's flag refused; the other parts recorded; after the release the part and the full set are recorded; an inner "?" answered when its window is decided; an open esophagus "?" stops the legs stickers and the lungs
 NOTICE:  PASS  ACTIVE security surface matches the expected manifest (triggers, policies, grants, definer settings)
 NOTICE:  PASS  kashrut seals: team leader sets, a printing tablet reads; a tablet can't set; bad picture / key refused; no device → refused
-NOTICE:  145 checks, 145 passed, 0 failed  (nothing was changed — all undone)
- PASSED — 145 of 145 security checks (nothing was changed)
+NOTICE:  146 checks, 146 passed, 0 failed  (nothing was changed — all undone)
+ PASSED — 146 of 146 security checks (nothing was changed)

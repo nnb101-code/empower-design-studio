@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict fR2aT6Dw0Kv40Ah54R7Gk4lg6VGpdaiCAXjovfScr6CtdngUBVHogL2UbAEg2Hf
+\restrict Ih6DhLL2PkCGRIfd8MHku3yohUqhgYUzhPb5G33EchPndAIyBDwcvXGxfNuHgXe
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -3109,22 +3109,36 @@ CREATE FUNCTION public._settings_hash_worker_codes() RETURNS trigger
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public', 'extensions', 'pg_temp'
     AS $$
-declare u jsonb; out_users jsonb := '[]'::jsonb; changed boolean := false; c text;
+declare u jsonb; out_users jsonb := '[]'::jsonb; c text; r text; n text;
 begin
   if new.settings is null or jsonb_typeof(new.settings -> 'users') is distinct from 'array' then return new; end if;
   for u in select value from jsonb_array_elements(new.settings -> 'users') loop
-    if jsonb_typeof(u) = 'object' and u ? 'code' then
-      c := nullif(trim(u ->> 'code'), '');
-      if c is not null then
-        u := jsonb_set(u - 'code', '{codeHash}', to_jsonb(_worker_code_hash(c)));
+    if jsonb_typeof(u) = 'object' then
+      r := coalesce(_worker_role_norm(u ->> 'role'), u ->> 'role'); n := u ->> 'name';
+      if r is not null and coalesce(n, '') <> '' then
+        if u ? 'code' then
+          c := nullif(trim(u ->> 'code'), '');
+          if c is not null then
+            insert into worker_codes (role, name, hash) values (r, n, crypt(c, gen_salt('bf', 8)))
+              on conflict (role, name) do update set hash = excluded.hash, updated_at = now();
+          end if;
+        elsif coalesce(u ->> 'codeHash', '') <> '' then
+          insert into worker_codes (role, name, hash) values (r, n, 'sha:' || (u ->> 'codeHash'))
+            on conflict (role, name) do update set hash = excluded.hash, updated_at = now();
+        end if;
+        u := (u - 'code' - 'codeHash' - 'hv')
+             || jsonb_build_object('hasCode', exists (select 1 from worker_codes w where w.role = r and w.name = n));
       else
-        u := u - 'code';
+        u := u - 'code' - 'codeHash' - 'hv';
       end if;
-      changed := true;
     end if;
     out_users := out_users || jsonb_build_array(u);
   end loop;
-  if changed then new.settings := jsonb_set(new.settings, '{users}', out_users); end if;
+  new.settings := jsonb_set(new.settings, '{users}', out_users);
+  delete from worker_codes w
+   where not exists (select 1 from jsonb_array_elements(new.settings -> 'users') x
+                      where jsonb_typeof(x) = 'object' and x ->> 'name' = w.name
+                        and coalesce(_worker_role_norm(x ->> 'role'), x ->> 'role') = w.role);
   return new;
 end $$;
 
@@ -3215,7 +3229,8 @@ begin
          or (e ? 'role' and not _jstr_ok(e -> 'role', 40))
          or (e ? 'role' and _worker_role_norm(e ->> 'role') is null and e ->> 'role' <> 'manager')   -- step 46: one list per screen
          or (e ? 'code' and not (jsonb_typeof(e -> 'code') in ('string', 'number', 'null') and length(e ->> 'code') <= 40))
-         or (e ? 'codeHash' and not _jstr_ok(e -> 'codeHash', 128)) then
+         or (e ? 'codeHash' and not _jstr_ok(e -> 'codeHash', 128))
+         or (e ? 'hasCode' and jsonb_typeof(e -> 'hasCode') not in ('boolean', 'null')) then
         return 'expected workers {name, role, code/codeHash}';
       end if;
     end loop;
@@ -3633,6 +3648,30 @@ $$;
 
 
 ALTER FUNCTION public._worker_code_hash(p_code text) OWNER TO postgres;
+
+--
+-- Name: _worker_code_ok(text, text); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public._worker_code_ok(p_hash text, p_code text) RETURNS boolean
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $_$
+declare c text := trim(coalesce(p_code, '')); s jsonb;
+begin
+  if p_hash is null or c = '' then return false; end if;
+  if p_hash like '$2%' then return crypt(c, p_hash) = p_hash; end if;
+  if p_hash like 'sha:%' then
+    if substr(p_hash, 5) = _worker_code_hash(c) then return true; end if;
+    s := _gt_settings();
+    return coalesce(s ->> 'codeSalt', '') <> ''
+       and substr(p_hash, 5) = encode(digest('gt1:' || (s ->> 'codeSalt') || ':' || c, 'sha256'), 'hex');
+  end if;
+  return false;
+end $_$;
+
+
+ALTER FUNCTION public._worker_code_ok(p_hash text, p_code text) OWNER TO postgres;
 
 --
 -- Name: _worker_gate(text); Type: FUNCTION; Schema: public; Owner: postgres
@@ -6994,6 +7033,49 @@ end $$;
 ALTER FUNCTION public.verify_event_chain() OWNER TO postgres;
 
 --
+-- Name: worker_code_set(text, text, text, text); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.worker_code_set(p_token text, p_role text, p_name text, p_code text) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $$
+declare r text := _worker_role_norm(p_role); n text := left(trim(coalesce(p_name, '')), 100);
+        c text := nullif(trim(coalesce(p_code, '')), ''); s jsonb; w record;
+begin
+  if coalesce(_session_role(p_token), '') <> 'manager' or not _is_real_manager(p_token) then
+    return jsonb_build_object('ok', false, 'error', 'unauthorized');
+  end if;
+  if r is null or n = '' or (c is not null and (length(c) < 4 or length(c) > 40)) then
+    return jsonb_build_object('ok', false, 'error', 'bad_value');
+  end if;
+  perform pg_advisory_xact_lock(hashtext('glatttrack_settings'));
+  if c is not null then
+    for w in select * from worker_codes where role = r and name <> n loop
+      if _worker_code_ok(w.hash, c) then return jsonb_build_object('ok', false, 'error', 'code_taken'); end if;
+    end loop;
+  end if;
+  select coalesce(settings, '{}'::jsonb) into s from settings_pilot where id = 1;
+  if not exists (select 1 from jsonb_array_elements(case when jsonb_typeof(s -> 'users') = 'array' then s -> 'users' else '[]'::jsonb end) x
+                  where x ->> 'name' = n and coalesce(_worker_role_norm(x ->> 'role'), x ->> 'role') = r) then
+    s := jsonb_set(s, '{users}', coalesce(case when jsonb_typeof(s -> 'users') = 'array' then s -> 'users' end, '[]'::jsonb)
+                                 || jsonb_build_array(jsonb_build_object('name', n, 'role', r)));
+  end if;
+  if c is null then
+    delete from worker_codes where role = r and name = n;
+  else
+    insert into worker_codes (role, name, hash) values (r, n, crypt(c, gen_salt('bf', 8)))
+      on conflict (role, name) do update set hash = excluded.hash, updated_at = now();
+  end if;
+  update settings_pilot set settings = s, device_id = 'team-leader', updated_at = now() where id = 1;   -- the trigger sets hasCode
+  perform _admin_audit(p_token, 'worker_code_set', 'worker_codes', jsonb_build_object('role', r, 'name', n, 'cleared', c is null));
+  return jsonb_build_object('ok', true, 'hasCode', c is not null);
+end $$;
+
+
+ALTER FUNCTION public.worker_code_set(p_token text, p_role text, p_name text, p_code text) OWNER TO postgres;
+
+--
 -- Name: worker_login(text, text, text); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -7041,13 +7123,19 @@ begin
     v_h1 := _worker_code_hash(trim(p_code));
     v_h2 := case when coalesce(s ->> 'codeSalt', '') <> ''
                  then encode(digest('gt1:' || (s ->> 'codeSalt') || ':' || trim(p_code), 'sha256'), 'hex') end;
-    select x into u from jsonb_array_elements(s -> 'users') x
-     where jsonb_typeof(x) = 'object'
-       and _worker_role_norm(x ->> 'role') = v_role
-       and (p_name is null or x ->> 'name' = p_name)
-       and coalesce(x ->> 'name', '') <> ''
-       and (x ->> 'codeHash' = v_h1 or (v_h2 is not null and x ->> 'codeHash' = v_h2))   -- step 46: hashes only
+    -- v10.35 review: the codes are only in worker_codes (bcrypt; an old sha form until its first good login)
+    select l.x into u
+      from worker_codes w
+      join lateral (select x from jsonb_array_elements(s -> 'users') x
+                     where jsonb_typeof(x) = 'object' and x ->> 'name' = w.name
+                       and _worker_role_norm(x ->> 'role') = v_role limit 1) l on true
+     where w.role = v_role and (p_name is null or w.name = p_name) and coalesce(w.name, '') <> ''
+       and _worker_code_ok(w.hash, p_code)
      limit 1;
+    if u is not null then
+      update worker_codes set hash = crypt(trim(p_code), gen_salt('bf', 8)), updated_at = now()
+       where role = v_role and name = u ->> 'name' and hash like 'sha:%';
+    end if;
   end if;
   if u is null then
     insert into login_attempts (ip, ok) values (v_ip, false), (v_key2, false);
@@ -7886,6 +7974,20 @@ CREATE TABLE public.system_flags (
 ALTER TABLE public.system_flags OWNER TO postgres;
 
 --
+-- Name: worker_codes; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.worker_codes (
+    role text NOT NULL,
+    name text NOT NULL,
+    hash text NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+ALTER TABLE public.worker_codes OWNER TO postgres;
+
+--
 -- Name: worker_sessions; Type: TABLE; Schema: public; Owner: postgres
 --
 
@@ -8274,6 +8376,14 @@ ALTER TABLE ONLY public.source_farms
 
 ALTER TABLE ONLY public.system_flags
     ADD CONSTRAINT system_flags_pkey PRIMARY KEY (key);
+
+
+--
+-- Name: worker_codes worker_codes_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.worker_codes
+    ADD CONSTRAINT worker_codes_pkey PRIMARY KEY (role, name);
 
 
 --
@@ -9223,6 +9333,12 @@ CREATE POLICY statuses_write ON public.custom_statuses USING (((plant_id = publi
 --
 
 ALTER TABLE public.system_flags ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: worker_codes; Type: ROW SECURITY; Schema: public; Owner: postgres
+--
+
+ALTER TABLE public.worker_codes ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: worker_sessions; Type: ROW SECURITY; Schema: public; Owner: postgres
@@ -10252,6 +10368,13 @@ REVOKE ALL ON FUNCTION public._worker_code_hash(p_code text) FROM PUBLIC;
 
 
 --
+-- Name: FUNCTION _worker_code_ok(p_hash text, p_code text); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public._worker_code_ok(p_hash text, p_code text) FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION _worker_gate(p_device_role text); Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -10884,6 +11007,15 @@ GRANT ALL ON FUNCTION public.verify_event_chain() TO authenticated;
 
 
 --
+-- Name: FUNCTION worker_code_set(p_token text, p_role text, p_name text, p_code text); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public.worker_code_set(p_token text, p_role text, p_name text, p_code text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.worker_code_set(p_token text, p_role text, p_name text, p_code text) TO anon;
+GRANT ALL ON FUNCTION public.worker_code_set(p_token text, p_role text, p_name text, p_code text) TO authenticated;
+
+
+--
 -- Name: FUNCTION worker_login(p_role text, p_code text, p_name text); Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -11079,5 +11211,5 @@ GRANT ALL ON TABLE public.system_flags TO service_role;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict fR2aT6Dw0Kv40Ah54R7Gk4lg6VGpdaiCAXjovfScr6CtdngUBVHogL2UbAEg2Hf
+\unrestrict Ih6DhLL2PkCGRIfd8MHku3yohUqhgYUzhPb5G33EchPndAIyBDwcvXGxfNuHgXe
 
