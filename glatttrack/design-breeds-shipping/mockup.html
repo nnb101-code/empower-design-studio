@@ -43,24 +43,24 @@ table{width:100%;border-collapse:collapse;font-size:15px} td,th{padding:8px;bord
 </div>
 
 <div class="pg" id="p2">
- <h1>2 · מסך משלוח (שלב 3) — סורקים קרטון, המערכת יודעת איזה בשר ומה המשקל</h1>
- <div class="sub">כל קרטון / חלק שיוצא למשלוח נסרק. מהברקוד המערכת קוראת: סוג הבשר + משקל נטו (+ מספר בהמה אם יש). הסיכום מתעדכן מיד.</div>
+ <h1>2 · מסך משלוח — סורקים ארגז, המערכת יודעת איזה בשר ומה המשקל</h1>
+ <div class="sub">כל ארגז שיוצא נסרק. מהברקוד המערכת קוראת רק: סוג הבשר + משקל. בלי בהמה, בלי לקוח. הסיכום של היום מתעדכן מיד.</div>
  <div style="display:flex;gap:12px;flex:1">
   <div class="card" style="flex:1;display:flex;flex-direction:column;gap:10px">
-   <div class="sec">📦 משלוח #2026-1011-03 · לקוח: אטליז ירושלים</div>
+   <div class="sec">📦 משלוח היום · 11.10.2026</div>
    <div class="card" style="background:var(--panel2);text-align:center">
      <div class="tag">נסרק עכשיו</div>
      <div style="font-size:24px;font-weight:800;margin:6px 0">ריב (Rib)</div>
      <div class="big ok num">18.40 ק״ג</div>
-     <div class="sub">קרטון 0147 · בהמה 23 · אנגוס · גלאט</div>
+     <div class="sub">ארגז מס׳ 422 היום · 10:42</div>
    </div>
    <input class="in" placeholder="📷 סורק / מצלמה / הקלדת ברקוד..." style="font-size:16px">
-   <div class="sub">סריקה כפולה של אותו קרטון נחסמת · קרטון של בהמה בעיכוב (USDA / ?) נחסם</div>
-   <div style="display:flex;gap:8px"><button class="btn" style="flex:1">✔ סגור משלוח והדפס תעודה</button><button class="btn" style="background:transparent;color:var(--red);border:1px solid var(--red)">↩ בטל סריקה אחרונה</button></div>
+   <div class="sub">אותו ארגז פעמיים (אותו ברקוד בדיוק) — המסך שואל לפני שסופר שוב</div>
+   <div style="display:flex;gap:8px"><button class="btn" style="flex:1">📊 דוח היום / ייצוא Excel</button><button class="btn" style="background:transparent;color:var(--red);border:1px solid var(--red)">↩ בטל סריקה אחרונה</button></div>
   </div>
   <div class="card" style="flex:1.2">
-   <div class="sec">סיכום המשלוח לפי סוג בשר</div>
-   <table><tr><th>סוג בשר</th><th>קרטונים</th><th>משקל</th></tr>
+   <div class="sec">סיכום היום לפי סוג בשר</div>
+   <table><tr><th>סוג בשר</th><th>ארגזים</th><th>משקל</th></tr>
    <tr><td>ריב</td><td class="num">112</td><td class="num">2,000.0 ק״ג</td></tr>
    <tr><td>לשונות</td><td class="num">175</td><td class="num">350.0 ק״ג</td></tr>
    <tr><td>צלעות</td><td class="num">64</td><td class="num">1,120.5 ק״ג</td></tr>
@@ -72,12 +72,12 @@ table{width:100%;border-collapse:collapse;font-size:15px} td,th{padding:8px;bord
 </div>
 
 <div class="pg" id="p3">
- <h1>3 · הגדרות ← משלוח: רשימת סוגי הבשר והברקוד</h1>
- <div class="sub">המפעל מגדיר את סוגי הבשר ואיך לקרוא את הברקוד של הקרטון (תווית מחדר הפירוק).</div>
+ <h1>3 · הגדרות ← משלוח: סוגי הבשר + בדיקת הברקוד של הארגז</h1>
+ <div class="sub">המפעל מגדיר את סוגי הבשר ובודק מה כתוב בברקוד של הארגז (תווית מחדר הפירוק).</div>
  <div style="display:flex;gap:12px;flex:1">
   <div class="card" style="flex:1">
    <div class="sec">🥩 סוגי בשר</div>
-   <table><tr><th>שם</th><th>קוד בברקוד</th><th>English</th></tr>
+   <table><tr><th>שם</th><th>קוד מוצר בברקוד</th><th>English</th></tr>
    <tr><td>ריב</td><td class="num">1001</td><td>Rib</td></tr>
    <tr><td>לשונות</td><td class="num">2001</td><td>Tongue</td></tr>
    <tr><td>צלעות</td><td class="num">1002</td><td>Short ribs</td></tr>
@@ -86,14 +86,15 @@ table{width:100%;border-collapse:collapse;font-size:15px} td,th{padding:8px;bord
    <div class="sub" style="margin-top:8px">החלקים הקטנים שכבר מוגדרים (לשון, לחי, כבד...) נכנסים לרשימה אוטומטית.</div>
   </div>
   <div class="card" style="flex:1">
-   <div class="sec">🏷️ איך לקרוא את הברקוד של הקרטון</div>
-   <div class="row"><span>◉ תקן GS1-128 (קוד מוצר + משקל נטו)</span><span class="pill">הכי נפוץ</span></div>
-   <div class="row"><span>○ ברקוד של GlattTrack (מדפיסים מכאן)</span><span class="pill">BH|C:1001|W:18.40|N:23</span></div>
-   <div class="row"><span>○ קוד מוצר בלבד → משקל מהמאזניים</span><span class="pill">מאזניים מחוברים</span></div>
-   <div class="sec" style="margin-top:14px">דוחות</div>
-   <div class="row"><span>יום / שבוע / חודש: משקל לפי סוג בשר</span><span class="ok">✓</span></div>
-   <div class="row"><span>לפי לקוח · לפי זן · לפי משק</span><span class="ok">✓</span></div>
-   <div class="row"><span>ייצוא Excel / CSV</span><span class="ok">✓</span></div>
+   <div class="sec">🔍 בדיקת ברקוד — סורקים ארגז אמיתי ורואים מה כתוב בו</div>
+   <input dir="ltr" class="in" style="width:100%;box-sizing:border-box;text-align:left" value="(01)07290012345678(3102)001840(13)261011">
+   <div class="row"><span>מה כתוב (גולמי)</span><span class="pill num">0107290012345678310200184013261011</span></div>
+   <div class="row"><span>תקן שזוהה</span><span class="ok">GS1-128</span></div>
+   <div class="row"><span>קוד מוצר</span><span class="num">07290012345678</span></div>
+   <div class="row"><span>משקל נטו</span><span class="ok num">18.40 ק״ג</span></div>
+   <div class="row"><span>תאריך אריזה</span><span class="num">11.10.2026</span></div>
+   <div class="row"><span>סוג בשר</span><span><select class="in"><option>ריב ← שייך לקוד הזה</option></select></span></div>
+   <div class="sub" style="margin-top:8px">אם הברקוד לא בתקן — המסך מציג את מה שנקרא, ומסמנים איפה הקוד ואיפה המשקל (או שהמשקל מגיע מהמאזניים).</div>
   </div>
  </div>
 </div>
