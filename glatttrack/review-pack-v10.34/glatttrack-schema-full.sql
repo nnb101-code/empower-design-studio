@@ -12269,6 +12269,22 @@ begin
 end $$;
 revoke execute on function _eso_required(integer) from public, anon, authenticated;
 
+-- v10.34 (owner): the legs screen can be switched off for a while (legsPaused). The head stickers are
+-- never skipped (the barcode that identifies the animal) — only the leg stickers. Switched on again, it
+-- applies from the first number the head screen has not printed yet (legsFromIdx, void after a new day).
+create or replace function _legs_required(p_id integer) returns boolean
+language plpgsql stable security definer set search_path = public, extensions, pg_temp as $$
+declare s jsonb := _gt_settings(); v_from int := 0;
+begin
+  if _gt_flag(s, 'legsPaused', false) then return false; end if;
+  if jsonb_typeof(s -> 'legsFromIdx') = 'number' and (s ->> 'legsFromIdx')::numeric > 0
+     and coalesce(s ->> 'legsFromReset', '') = coalesce(s ->> 'lastServerResetAt', '') then
+    v_from := floor((s ->> 'legsFromIdx')::numeric)::int;
+  end if;
+  return p_id >= v_from;
+end $$;
+revoke execute on function _legs_required(integer) from public, anon, authenticated;
+
 -- the statuses that count as kosher (the app's getKosherStatuses)
 create or replace function _kosher_statuses() returns text[]
 language sql stable security definer set search_path = public, extensions, pg_temp as $$
@@ -12318,7 +12334,7 @@ revoke execute on function _kosher_ready(animals_pilot) from public, anon, authe
 create or replace function _printed_as_key(a animals_pilot) returns text
 language sql immutable set search_path = public, extensions, pg_temp as $$
   select case when a.outer_status is null then null
-              when a.outer_status = 'kosher' and _is_nc(a) and not coalesce(a.nc_plain, false) then 'kosherRab'
+              when a.outer_status = 'kosher' and _is_nc(a) then 'kosherRab'   -- (v10.34: nc_plain retired)
               else a.outer_status end;
 $$;
 revoke execute on function _printed_as_key(animals_pilot) from public, anon, authenticated;
@@ -12517,7 +12533,10 @@ begin
     if v_err is null and (new.inner_status is not null or new.outer_status is not null) then v_err := 'later_stage_started'; end if;
   end if;
   -- (a value that is not valid at all is left to the table's own checks: invalid_value)
-  if v_err is null and old.inner_status is null and new.inner_status is not null and _gt_value_ok('inner', new.inner_status) then
+  -- (v10.34 review A3: also the open check → its final ruling, so a check opened before the rule
+  --  cannot be finished past it)
+  if v_err is null and new.inner_status is not null and _gt_value_ok('inner', new.inner_status)
+     and (old.inner_status is null or (old.inner_status = 'in_progress' and new.inner_status in ('confirmed', 'treif'))) then
     v_stage := 'inner'; v_err := _stage_order_error('inner', new, true);
   end if;
   if v_err is null and old.outer_status is null and new.outer_status is not null and _gt_value_ok('outer', new.outer_status) then
@@ -12529,6 +12548,12 @@ begin
   if v_err is null and ((not coalesce(old.head_stickers, false) and coalesce(new.head_stickers, false))
                         or (not coalesce(old.legs_stickers, false) and coalesce(new.legs_stickers, false))) then
     v_stage := 'legs_stickers'; v_err := _stage_order_error('legs_stickers', new, true); v_groups := v_groups || 'legs'::text;
+  end if;
+  -- v10.34 (owner): with legs + head, the head stickers come after the leg stickers (legs → head → inner)
+  if v_err is null and not coalesce(old.head_stickers, false) and coalesce(new.head_stickers, false)
+     and _gt_flag(_gt_settings(), 'legsMode', true) and _gt_legs_first() and not coalesce(new.legs_stickers, false)
+     and _legs_required(new.id) then
+    v_stage := 'legs_stickers'; v_err := 'legs_not_done';
   end if;
   if not coalesce(old.legs_sorted, false) and coalesce(new.legs_sorted, false) then
     v_groups := v_groups || 'legs'::text;
@@ -14326,7 +14351,7 @@ begin
   if p_role not in ('slaughter','esophagus','legs','inner','outer','parts','stamps','display','leader') then
     return jsonb_build_object('ok', false, 'error', 'bad_role');
   end if;
-  v_idx := case when p_role in ('inner','outer','display','leader') then coalesce(p_index, 0) else 0 end;
+  v_idx := case when p_role in ('inner','outer','display','leader','legs') then coalesce(p_index, 0) else 0 end;   -- v10.34: legs slot 1 = the head screen
   if (p_role in ('display', 'leader') and v_idx not between 0 and 3) or (p_role not in ('display', 'leader') and v_idx not in (0, 1)) then
     return jsonb_build_object('ok', false, 'error', 'bad_slot');
   end if;
@@ -15765,10 +15790,10 @@ begin
       if not v_alive then return 'not_slaughtered'; end if;
       if not v_eso_ok then return 'eso_not_passed'; end if;
       if a.outer_status is not null then return 'later_stage_started'; end if;
-      -- v10.34 (owner): the inner inspector works AFTER legs / head — on a plant whose screen choice
-      -- has the legs screen, the stickers come first (today's board; an earlier day is not held back)
-      if p_today and _gt_legs_first()
-         and not (coalesce(a.legs_stickers, false) or coalesce(a.head_stickers, false)) then
+      -- v10.34 (owner): the inner inspector works AFTER the head stickers (they include the lung and
+      -- maw stickers) — on a plant whose screen choice has the legs screen (today's board; an
+      -- earlier day is not held back). Leg stickers alone are not enough.
+      if p_today and _gt_legs_first() and not coalesce(a.head_stickers, false) then
         return 'legs_not_done';
       end if;
     when 'outer' then
@@ -15982,6 +16007,8 @@ begin
     return jsonb_build_object('ok', false, 'error', 'bad_station');
   end if;
   if p_kind = 'usda' and v_part = 'whole' then
+    -- (v10.34 review A1: two stations at the same moment — one waits for the other)
+    perform pg_advisory_xact_lock(hashtext('glatttrack_usda_whole'), hashtext(v_ep::text || ':' || p_id::text));
     select station into v_order from animal_holds
      where board_epoch = v_ep and animal_id = p_id and kind = 'usda' and part = 'whole' and resolved_at is null
        and station <> p_station limit 1;
@@ -16513,10 +16540,9 @@ begin
          is not distinct from (old.outer_status, old.outer_time, old.outer_by, old.outer_by_device) then
     new.nc_plain := old.nc_plain;
   end if;
-  if new.outer_status is distinct from 'kosher' or not coalesce(_is_nc(new), false) then
-    new.nc_plain := false;
-  end if;
-  new.nc_plain := coalesce(new.nc_plain, false);
+  -- v10.34 (owner, review A2): a "not chalak" animal gets ONE status at the outer ruling (the plant
+  -- names it) — the plain-kosher flag of v10.33 is retired: always false, on every write path
+  new.nc_plain := false;
   return new;
 end $$;
 revoke execute on function _animals_nc_plain() from public, anon, authenticated;
@@ -16576,7 +16602,7 @@ begin
      or not exists (select 1 from pg_trigger where tgrelid = 'animals_pilot'::regclass and tgname = 'zzzzz_close_questions' and tgenabled <> 'D') then
     problems := problems || 'hold triggers missing (v10.26)'::text; end if;
   if not exists (select 1 from pg_trigger where tgrelid = 'animals_pilot'::regclass and tgname = 'a_animals_nc_plain' and tgenabled <> 'D')
-     or _printed_as_key(jsonb_populate_record(null::animals_pilot, '{"id":5,"slaughter":"notChalak","outer_status":"kosher","nc_plain":true}')) <> 'kosher'
+     or _printed_as_key(jsonb_populate_record(null::animals_pilot, '{"id":5,"slaughter":"notChalak","outer_status":"kosher","nc_plain":true}')) <> 'kosherRab'
      or _printed_as_key(jsonb_populate_record(null::animals_pilot, '{"id":5,"slaughter":"notChalak","outer_status":"kosher"}')) <> 'kosherRab' then
     problems := problems || '"not chalak" plain kosher at the outer ruling (v10.33)'::text; end if;
   if (select value from plant_state where key = 'schemaStep')::int < 46 then

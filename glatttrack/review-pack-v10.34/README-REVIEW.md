@@ -18,6 +18,27 @@ This pack is the CURRENT state. Review these files only.
 | `test-mode-on.sql` / `test-mode-off.sql` | The owner's SQL-only test switch. |
 | `plant-server/` | Plant resilience kit (bash, runs as root on the plant servers, NOT in the database): standby server, floating address, UPS, nightly checked backup. Guide: `PLANT-RESILIENCE-HE.md`. |
 
+## Changed after the v10.34 review (server 02 + app, still v10.34) — fixes A1–A4 + owner's decisions
+
+- **A1 — two USDA holds at once** (fixed): a whole-animal USDA in `hold_set` now takes `pg_advisory_xact_lock(hashtext('glatttrack_usda_whole'), hashtext(day||':'||id))` before checking `usda_held_elsewhere`. Tested with 15 pairs of truly concurrent calls: never two open holds.
+- **A2 — `nc_plain`** (fixed): retired. Trigger `a_animals_nc_plain` always sets false; `_printed_as_key` ignores it. The not-chalak animal gets ONE status at the outer ruling (stored `kosher`, shown with the plant's name).
+- **A3 — inner order on `in_progress → confirmed/treif`** (fixed): `_animals_stage_guard` checks the inner order on that transition too.
+- **A4 — the same `server_error` twice for the same number** (fixed, app): only that number is dropped, the queue goes on.
+- **USDA from any station except slaughter** (owner): the `wrong_zone` check is removed from `hold_set` (`_usda_zone` is display only). The cell shows "USDA" and the marking station's name; only that station releases / condemns (`_hold_caller_error`). Halves only at outer / stamps. Slaughter + usda → `bad_station`.
+- **Visibility** (app): a number shows on a screen only after it passed the previous screen, except nevela, shot, "?" and USDA — shown on all screens.
+- **Inner only after the HEAD stickers** (owner): `_stage_order_error('inner')` requires `head_stickers` when `_gt_legs_first()` (screensPlan has legs). Leg stickers alone are not enough.
+- **Legs / head split** (owner, option `legsHeadSplit`): legs tablet index 0 = legs screen, index 1 = head screen (`device_pair` allows legs index 0/1). Server rule: head stickers only after leg stickers (`legs_not_done` in `_animals_stage_guard`) when `_legs_required(id)`. Legs sticker count 2/3/4; head default 7. The head screen has its own printer and scanner (`screenDevices.head`).
+- **Temporary screen off** (owner): esophagus, legs, small parts only; tablet stays paired and shows "screen off".
+  - Esophagus off = `esophagusEnabled=false`; on again from `esoFromIdx`.
+  - Legs off = `legsPaused`: the head is never skipped. Not split → the legs screen becomes head only; split → the head screen takes numbers straight from the esophagus. On again: `legsFromIdx` = first number without head stickers (+ `legsFromReset`). `_legs_required(p_id)` reads these.
+  - Parts off = `partsPaused`: animals wait for parts.
+- **Esophagus "ok" → "?"**: allowed until legs/head printed or inner/outer acted; the check reopens (`eso_checked=false`, event `reopened_question`).
+- **Outer lock** (app): 2 minutes for a dead tablet; a tablet back online re-takes its open number or closes it if another screen took it.
+- **Barcode scan** (option `scanInOut`) at inner / outer opens exactly the scanned number.
+- **Team leader**: settings search; the test-mode "reset day now" button only in server test mode.
+- Self-test: 144/144 (new checks for legs order, legsPaused, eso reopen, single not-chalak status). Browser tests: `browser-tests/v1034-*.test.js` with the helper `browser-tests/explore.js` (B3).
+- Still open from the v10.34 review: B1 (half hold during a whole hold), B2 (local encryption), B5 (README wording), B6 (sync exceptions list for the team leader).
+
 ## Changed in v10.33 – v10.34 (server 02 + app) — owner's decisions after testing
 
 Server (02):

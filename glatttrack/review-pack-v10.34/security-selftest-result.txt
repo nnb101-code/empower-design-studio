@@ -35,8 +35,8 @@ NOTICE:  PASS  rabbinate send by inner / slaughter / team leader / a plain push:
 NOTICE:  PASS  rabbinate send by an outer station: allowed (command id replay, stale day, bad id)
 NOTICE:  PASS  a "not chalak" animal (slaughter / inner / outer) can only be ruled kosher or treif; ruled → can't be sent
 NOTICE:  PASS  rabbinate screen: a sent animal may be ruled רבנות חלק (and is kosher-ready); a shochet / maw "not chalak" may not
-NOTICE:  PASS  v10.33 "not chalak" at the outer ruling: רבנות כשר or plain כשר (flag only with the outer ruling, only for "not chalak")
-NOTICE:  PASS  v10.34 the inner check comes after legs / head stickers (when the plant uses the legs screen); the esophagus turns its ok into a "?" until legs print; USDA belongs to the station the animal is at on the line
+NOTICE:  PASS  v10.34 "not chalak" gets one status at the outer ruling: no plain-kosher flag on any write path (claim or push)
+NOTICE:  PASS  v10.34 the inner check comes after legs / head stickers (when the plant uses the legs screen); the esophagus turns its ok into a "?" until legs print; USDA belongs to the station the animal is at on the line; head stickers only after the leg stickers (not while legs is switched off)
 NOTICE:  PASS  pairing into a taken slot without replace: slot_taken
 NOTICE:  PASS  replacement: the old key is dead; old + new device events share one replacement_id
 NOTICE:  PASS  device_pair with p_replace still works (new device holds the slot)
