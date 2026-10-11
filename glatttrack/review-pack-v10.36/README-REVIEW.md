@@ -18,6 +18,34 @@ This pack is the CURRENT state. Review these files only.
 | `test-mode-on.sql` / `test-mode-off.sql` | The owner's SQL-only test switch. |
 | `plant-server/` | Plant resilience kit (bash, runs as root on the plant servers, NOT in the database): standby server, floating address, UPS, nightly checked backup. Guide: `PLANT-RESILIENCE-HE.md`. |
 
+## Changed in v10.36 (owner, server 02 + app) — kashrut statuses: chalak / not chalak, no "not kosher"
+
+- **"Not chalak" is not a status and is not tied to the rabbinate.** It is a mark (slaughter `notChalak` / maw `not_chalak_inner`) that holds until the outer ruling.
+  - The fixed "רבנות כשר" (`kosherRab`) row and the hidden mapping `kosher → kosherRab` are gone. `_printed_as_key` now returns `outer_status`.
+- **Two groups of statuses.**
+  - Every status is "chalak" (גלאט, בית יוסף, רבנות חלק …) or "not chalak" (כשר, מגן דוד …). The setting `ncStatuses` is the list of the not-chalak keys; the default is `["kosher"]`.
+  - `_nc_statuses()` reads it.
+- **Rulings.**
+  - A shochet / maw "not chalak" animal may only be ruled a not-chalak status or treif.
+  - An animal only *sent* to screen B (`not_chalak_outer`) may get any status.
+  - This is enforced by `_nc_outer_value_ok` in `claim_animal_stage` and in the trigger `_animals_nc_outer_value`.
+- **"Not chalak" switched off** (`notChalakEnabled` ≠ true): no not-chalak status may be ruled at all.
+  - `_nc_group_off`, checked at write time only. An animal already ruled stays as it is, and `_kosher_ready` is unaffected.
+- **`push_settings`.** A not-chalak status that a ruled not-chalak animal on the board carries cannot be taken out of `ncStatuses` until the reset (`status_in_use`, reason `nc_status_in_use`).
+- **No "not kosher" status.** There is only treif (plus nevela / shot).
+  - Every own status is a kashrut status: `_kosher_statuses()` ignores the old `kosher` flag of `customStatuses`.
+  - A one-time migration sets `kosher:true` on every custom status.
+  - A plant that had named or sealed the old `kosherRab` gets it as an ordinary status `custom_rab` (seal copied), chosen for not chalak.
+- **Names.**
+  - Built-in statuses can be renamed: setting `statusNames` = `{key: {he, stickerHe, en}}`, validated by `_settings_value_error`.
+  - Custom statuses may have a sticker name (`stickerHe`, validated).
+  - Stickers print "Hebrew-English" on one line.
+- **Screens.**
+  - Only "טרף" / "נבלה" on the work screens; "ירוי" only on the slaughter screen.
+  - The summaries split treif by kind (maw / rumen / lungs).
+- **App only.** A tap repaints the scrolling area and brings a newly opened part into view (the team leader's screen). Settings refreshes keep an open form.
+- **Self-test: 148/148.**
+
 ## Added in v10.36 (owner) — system health for the manufacturer, safe updates, the support center
 
 - **Health split:** the team leader sees only what he can act on (offline tablets, missing kashrut marks, test mode, UPS, waiting rollover); technical codes (backup, standby, nightly check, event chain, failed logins, revoked writes) appear to him as one line "the manufacturer was alerted". `system_health` now also for the manufacturer (view); the data is `_system_health_data()` (internal).
