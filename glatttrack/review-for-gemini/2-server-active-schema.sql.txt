@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict yWiaAhS1RsLHeXGtzPqyNm6nMxMmrYdKX6aAZxlfr7WQb4z3Bzc1hKDteAI185k
+\restrict T1mZUifcccDBGlNVhiyetRk8ugX5BSm7cFBzyAF0gIJdRhiYWhCZPrCPJrxgBl2
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -528,7 +528,8 @@ begin
   end if;
   if new.outer_status is not null
      and (tg_op = 'INSERT' or new.outer_status is distinct from old.outer_status)
-     and (not _nc_outer_value_ok(new, new.outer_status) or _nc_group_off(new.outer_status)) then
+     and (not _nc_outer_value_ok(new, new.outer_status)
+          or (_nc_group_off(new.outer_status) and not coalesce(_is_nc(new), false))) then
     raise exception 'GT:INVALID_VALUE a "not chalak" animal can only be ruled kosher or treif (nc_kosher_or_treif_only)'
       using errcode = '23514';
   end if;
@@ -4443,7 +4444,8 @@ begin
 
   -- a "not chalak" animal: only רבנות כשר (kosher) or treif — one only SENT to the rabbinate
   -- screen may also be ruled רבנות חלק (§25)
-  if p_stage = 'outer' and a.outer_status is null and (not _nc_outer_value_ok(a, p_value) or _nc_group_off(p_value)) then
+  if p_stage = 'outer' and a.outer_status is null
+     and (not _nc_outer_value_ok(a, p_value) or (_nc_group_off(p_value) and not coalesce(_is_nc(a), false))) then
     v_res := jsonb_build_object('claimed', false, 'error', 'bad_value', 'reason', 'nc_kosher_or_treif_only',
                                 'row', to_jsonb(a), 'serverNow', v_now);
     perform _cmd_put(p_command_id, v_dev, 'claim_animal_stage', v_res);
@@ -10931,5 +10933,5 @@ GRANT ALL ON TABLE public.system_flags TO service_role;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict yWiaAhS1RsLHeXGtzPqyNm6nMxMmrYdKX6aAZxlfr7WQb4z3Bzc1hKDteAI185k
+\unrestrict T1mZUifcccDBGlNVhiyetRk8ugX5BSm7cFBzyAF0gIJdRhiYWhCZPrCPJrxgBl2
 

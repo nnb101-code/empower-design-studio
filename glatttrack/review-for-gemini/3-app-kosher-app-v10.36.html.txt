@@ -608,8 +608,15 @@ function _gtNCFixed(x){ return !!(x && (x.slaughter==='notChalak' || x.notChalak
     const mo=new MutationObserver(recs=>{
       if(done) return;
       for(const r of recs){
-        const els = r.type==='childList' ? [...r.addedNodes].filter(n=>n.nodeType===1) : [r.target];
-        if(els.length>3) continue;                      // a whole list drawn again — not a new part
+        let els;
+        if(r.type==='childList'){ els=[...r.addedNodes].filter(n=>n.nodeType===1); if(els.length>3) continue; }   // a whole list drawn again — not a new part
+        else {                                          // only a part that was closed / hidden and is now open
+          const o=r.oldValue||'', el=r.target;
+          const opened = r.attributeName==='open' ? (r.oldValue===null && el.hasAttribute('open'))
+                       : r.attributeName==='style' ? /display\s*:\s*none/.test(o) && !/display\s*:\s*none/.test(el.getAttribute('style')||'')
+                       : (!/\b(open|show|active)\b/.test(o) && /\b(open|show|active)\b/.test(el.className||''));
+          if(!opened) continue; els=[el];
+        }
         for(const el of els){
           if(!el.isConnected || el.offsetParent===null || el.closest('.modal,.overlay,[class*="-modal"]')) continue;
           if(getComputedStyle(el).position==='fixed') continue;
@@ -617,7 +624,7 @@ function _gtNCFixed(x){ return !!(x && (x.slaughter==='notChalak' || x.notChalak
         }
       }
     });
-    mo.observe(scr,{childList:true,subtree:true,attributes:true,attributeFilter:['style','class','open']});
+    mo.observe(scr,{childList:true,subtree:true,attributes:true,attributeOldValue:true,attributeFilter:['style','class','open']});
     setTimeout(()=>mo.disconnect(), 700);
   }, true);
 })();
@@ -12055,7 +12062,8 @@ function rebuildOuterButtons(){
     if(disabled.includes(st.key)&&st.key!=='treif' && !(ncOnly&&gtNCStatuses().includes(st.key)) && !isCur)return'';
     // v10.34 (owner): רבנות חלק is a regular status of screen A (screen B rules only the "not chalak" status)
     if(st.removed && !isCur)return'';
-    if(gtNCOff(st.key,s) && !isCur)return'';   // v10.36: "not chalak" off → no כשר / מגן דוד … in the ruling
+    if(gtNCOff(st.key,s) && !isCur && !ncAnimal)return'';   // v10.36: "not chalak" off → no כשר / מגן דוד … for a regular animal
+                                                            // (one already marked "not chalak" keeps them — deep review)
     const override=s.statusColorOverrides||{};
     const color=_safeColor(override[st.key]||st.color,'#888');
     const bgStyle=cssMap[st.key]||`background:${color}`;

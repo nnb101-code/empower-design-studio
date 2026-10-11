@@ -883,18 +883,21 @@ begin
   -- v10.36 (owner): "not chalak" switched off → its statuses (כשר …) are not ruled at all; an animal ruled stays
   perform set_config('gt.reset_in_progress', 'true', true);
   update settings_pilot set settings = settings || '{"notChalakEnabled":false}'::jsonb where id = 1;
-  update animals_pilot set outer_status = null, outer_by = null, outer_time = null, outer_by_device = null where id = 940;
+  update animals_pilot set outer_status = null, outer_by = null, outer_time = null, outer_by_device = null where id in (940, 942);
   perform set_config('gt.reset_in_progress', 'false', true);
   r  := pg_temp.api(pg_temp.dev('OUT1'), pg_temp.q_claim(940, 'outer', 'kosher', '', ''));
   r2 := pg_temp.api(pg_temp.dev('OUT1'), pg_temp.q_claim(940, 'outer', 'glatt', '', ''));
+  -- (deep review) an animal already marked "not chalak" keeps its "not chalak" statuses when the switch goes off mid-day
+  r3 := pg_temp.api(pg_temp.dev('OUT2'), pg_temp.q_claim(942, 'outer', 'kosher', '', ''));
   ok := r ->> 'error' = 'bad_value' and pg_temp.claimed(r2) and (pg_temp.ar(940)).outer_status = 'glatt'
+        and pg_temp.claimed(r3) and (pg_temp.ar(942)).outer_status = 'kosher'
         and _kosher_ready(pg_temp.ar(938)) is not distinct from _kosher_ready(pg_temp.ar(938))
         and 'custom_nc36' = any(_kosher_statuses());
   perform set_config('gt.reset_in_progress', 'true', true);
   update settings_pilot set settings = settings || '{"notChalakEnabled":true}'::jsonb where id = 1;
   perform set_config('gt.reset_in_progress', 'false', true);
-  perform pg_temp.rec('v10.36 "not chalak" off: no "not chalak" status is ruled; every own status is a kashrut status', ok,
-    concat_ws(' | ', left(r::text, 80), left(r2::text, 60)));
+  perform pg_temp.rec('v10.36 "not chalak" off: no "not chalak" status for a regular animal (a marked one keeps them); every own status is a kashrut status', ok,
+    concat_ws(' | ', left(r::text, 80), left(r2::text, 60), left(r3::text, 60)));
   -- v10.34 (owner): the inner inspector works after legs / head — with the legs screen in the plant's
   -- screen choice, no inner check before the stickers; without a screen choice nothing changes
   perform set_config('gt.reset_in_progress', 'true', true);
