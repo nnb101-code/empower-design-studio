@@ -14339,7 +14339,8 @@ end $_$;
 -- device (the session moves onto it). Owner and manufacturer logins are unchanged.
 alter table devices_pilot drop constraint if exists devices_pilot_role_ok;
 alter table devices_pilot add constraint devices_pilot_role_ok check (assigned_role is null or assigned_role = any (array[
-  'slaughter', 'esophagus', 'legs', 'inner', 'outer', 'parts', 'stamps', 'display', 'leader']));
+  'slaughter', 'esophagus', 'legs', 'inner', 'outer', 'parts', 'stamps', 'display', 'leader',
+  'cooler', 'nikur', 'salting', 'shipping']));          -- v10.35: the four supervisor screens (read-only for now)
 
 create or replace function _is_leader_device(p_dev text) returns boolean
 language sql stable security definer set search_path = public, extensions, pg_temp as $$
@@ -14370,7 +14371,7 @@ CREATE OR REPLACE FUNCTION public._gt_value_ok(p_kind text, v text) RETURNS bool
     when 'printed'   then v in ('glatt', 'beit', 'kosher', 'mk', 'treif', 'rabChalak', 'kosherRab') or v ~ '^custom_[A-Za-z0-9_-]{1,40}$'
     when 'eso'       then v in ('ok', 'nevela')
     when 'maw'       then v in ('kosher', 'treif')
-    when 'device_role' then v in ('slaughter', 'esophagus', 'legs', 'inner', 'outer', 'parts', 'stamps', 'display', 'leader')
+    when 'device_role' then v in ('slaughter', 'esophagus', 'legs', 'inner', 'outer', 'parts', 'stamps', 'display', 'leader', 'cooler', 'nikur', 'salting', 'shipping')
     else false end;
 $_$;
 
@@ -14383,7 +14384,7 @@ begin
   if not _is_real_manager(p_token) then
     return jsonb_build_object('ok', false, 'error', 'unauthorized');
   end if;
-  if p_role not in ('slaughter','esophagus','legs','inner','outer','parts','stamps','display','leader') then
+  if p_role not in ('slaughter','esophagus','legs','inner','outer','parts','stamps','display','leader','cooler','nikur','salting','shipping') then
     return jsonb_build_object('ok', false, 'error', 'bad_role');
   end if;
   v_idx := case when p_role in ('inner','outer','display','leader','legs') then coalesce(p_index, 0) else 0 end;   -- v10.34: legs slot 1 = the head screen
@@ -14513,7 +14514,7 @@ begin
   -- manufacturer watch from any other device, never from a station tablet
   if v_manager.role in ('owner', 'manufacturer') and _is_api_request() and not _request_is_service_role()
      and exists (select 1 from devices_pilot where id = _current_device_id()
-                   and assigned_role in ('slaughter', 'esophagus', 'legs', 'inner', 'outer', 'parts', 'stamps')
+                   and assigned_role in ('slaughter', 'esophagus', 'legs', 'inner', 'outer', 'parts', 'stamps', 'cooler', 'nikur', 'salting', 'shipping')
                    and coalesce(device_status, 'active') <> 'retired') then
     perform _security_event(null, 'login_on_station_device', jsonb_build_object('ip', v_ip, 'device', _current_device_id(), 'role', v_manager.role),
                             v_manager.name, _current_device_id());
@@ -14753,6 +14754,10 @@ language sql immutable set search_path = public, extensions, pg_temp as $$
     when 'outer' then 'outer' when 'בודק חוץ' then 'outer' when 'בודקי חוץ' then 'outer'
     when 'parts' then 'parts' when 'חלקים' then 'parts' when 'חלקים קטנים' then 'parts'
     when 'stamps' then 'stamps' when 'חותמות' then 'stamps'
+    when 'cooler' then 'cooler' when 'קולר' then 'cooler'                   -- v10.35: the supervisor screens
+    when 'nikur' then 'nikur' when 'מנקר' then 'nikur'
+    when 'salting' then 'salting' when 'מליחה' then 'salting'
+    when 'shipping' then 'shipping' when 'שיפינג' then 'shipping'
     else null end;                         -- the old shared lists ('inspector', 'supervisor') no longer log in anywhere
 $$;
 revoke execute on function _worker_role_norm(text) from public, anon, authenticated;
@@ -14771,10 +14776,10 @@ $$;
 revoke execute on function _stage_worker_role(text) from public, anon, authenticated;
 
 -- worker sessions carry the screen
-delete from worker_sessions where role not in ('slaughter', 'esophagus', 'legs', 'inner', 'outer', 'parts', 'stamps');
+delete from worker_sessions where role not in ('slaughter', 'esophagus', 'legs', 'inner', 'outer', 'parts', 'stamps', 'cooler', 'nikur', 'salting', 'shipping');
 alter table worker_sessions drop constraint if exists worker_sessions_role_check;
 alter table worker_sessions add constraint worker_sessions_role_check
-  check (role in ('slaughter', 'esophagus', 'legs', 'inner', 'outer', 'parts', 'stamps'));
+  check (role in ('slaughter', 'esophagus', 'legs', 'inner', 'outer', 'parts', 'stamps', 'cooler', 'nikur', 'salting', 'shipping'));
 
 -- the old shared lists → one list per screen (copied to every screen of the old list)
 do $$
@@ -15315,7 +15320,7 @@ begin
   perform pg_advisory_xact_lock(hashtext('glatttrack_leader_device_replace'));
   -- a station tablet serves only its station
   if v_dev is not null and exists (select 1 from devices_pilot where id = v_dev
-       and assigned_role in ('slaughter', 'esophagus', 'legs', 'inner', 'outer', 'parts', 'stamps', 'display')) then
+       and assigned_role in ('slaughter', 'esophagus', 'legs', 'inner', 'outer', 'parts', 'stamps', 'display', 'cooler', 'nikur', 'salting', 'shipping')) then
     return jsonb_build_object('ok', false, 'reason', 'station_device');
   end if;
   select count(*), max(at) into v_fails, v_last from login_attempts

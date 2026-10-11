@@ -18,6 +18,13 @@ This pack is the CURRENT state. Review these files only.
 | `test-mode-on.sql` / `test-mode-off.sql` | The owner's SQL-only test switch. |
 | `plant-server/` | Plant resilience kit (bash, runs as root on the plant servers, NOT in the database): standby server, floating address, UPS, nightly checked backup. Guide: `PLANT-RESILIENCE-HE.md`. |
 
+## Added in v10.35 (server 02 + app) — infrastructure for four supervisor screens
+
+- New device roles `cooler`, `nikur`, `salting`, `shipping`: `devices_pilot_role_ok`, `_gt_value_ok('device_role')`, `device_pair`, `worker_sessions_role_check`, `_worker_role_norm`, and the "station tablet" lists in `manager_login` / the leader-device replacement.
+- They have NO write rights: `_stage_allowed` does not know them, so `animal_push` ignores their columns, `claim_animal_stage` and `hold_set` refuse them. Self-test check (146/146).
+- App: the four screens in "choose screens", pairing, worker lists, printer/scanner per screen, one shared login + read-only screen (`scSupLogin` / `scSup`) titled by the tablet's role.
+- Self-test fix: it now sets aside `legsHeadSplit`, `legsPaused`, `partsPaused` at the start (it failed on a plant with the legs/head split on).
+
 ## Fixed after round 14 (server 02, still v10.34) — the legs slot vs the head slot
 
 - **Round-14 finding 1 (confirmed, fixed):** with `legsHeadSplit` the server only checked the role `legs`, so the head tablet (legs slot 1) could write `legs_stickers` and the legs tablet (slot 0) could write `head_stickers`. New `_legs_slot_error(p_legs, p_head, p_sorted)`, called from `_animals_stage_guard` (covers `animal_push`) and from `carry_push`:
@@ -25,7 +32,7 @@ This pack is the CURRENT state. Review these files only.
   - slot 0 (legs screen): no `head_stickers` while the head screen works (split and not `legsPaused`);
   - `legs_sorted` is allowed on both (the sorting page can be open on either legs tablet);
   - refused as `out_of_order`, reason `wrong_screen`; the app drops only that number (queue goes on).
-- Self-test: new check (145/145) — slot 0 head refused, slot 0 legs ok, slot 1 legs refused, slot 1 head ok, slot 1 refused when not split; it fails when the rule is removed.
+- Self-test: new check (146/146) — slot 0 head refused, slot 0 legs ok, slot 1 legs refused, slot 1 head ok, slot 1 refused when not split; it fails when the rule is removed.
 - Browser test `browser-tests/v1034-tslot.test.js`: legs tablet pretending head → refused; the next legs number still reaches the server; slot 1 prints the head.
 - Round-14 section 2.1 (USDA), for the reviewer to verify: concurrency — the advisory lock in `hold_set` (A1); only the marking station resolves — `_hold_caller_error`; a revoked / retired device has no role (`_caller_device_role` returns null) so it cannot resolve; the check, the hold row and the event are in one function call (one transaction).
 
@@ -47,7 +54,7 @@ This pack is the CURRENT state. Review these files only.
 - **Outer lock** (app): 2 minutes for a dead tablet; a tablet back online re-takes its open number or closes it if another screen took it.
 - **Barcode scan** (option `scanInOut`) at inner / outer opens exactly the scanned number.
 - **Team leader**: settings search; the test-mode "reset day now" button only in server test mode.
-- Self-test: 145/145 (new checks for legs order, legsPaused, eso reopen, single not-chalak status). Browser tests: `browser-tests/v1034-*.test.js` with the helper `browser-tests/explore.js` (B3).
+- Self-test: 146/146 (new checks for legs order, legsPaused, eso reopen, single not-chalak status). Browser tests: `browser-tests/v1034-*.test.js` with the helper `browser-tests/explore.js` (B3).
 - Still open from the v10.34 review: B1 (half hold during a whole hold), B2 (local encryption), B5 (README wording), B6 (sync exceptions list for the team leader).
 
 ## Changed in v10.33 – v10.34 (server 02 + app) — owner's decisions after testing

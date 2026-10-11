@@ -835,6 +835,33 @@ const LUNG_B64="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICA
 </div>
 
 
+<!-- v10.35: the four supervisor screens (cooler / nikur / salting / shipping) — ONE login + ONE work screen; the title follows the tablet's role -->
+<div class="screen screen-login" id="scSupLogin">
+  <div class="topbar"><div class="globe-btn" onclick="cycleLang()" style="cursor:pointer;-webkit-tap-highlight-color:rgba(255,255,255,.2);">&#127760;<span class="glang">עב</span></div><div class="tb-mid"></div><div class="tb-right"><div class="icon-btn" onclick="goTo('scNav')">&#127968;</div></div></div>
+  <div class="login-wrap"><div class="login-card">
+    <div class="login-title" id="supLTitle">משגיח</div>
+    <div class="login-sub" id="supLSub"></div>
+    <button class="login-btn" onclick="supLogin()" data-t="loginBtn">כניסה למערכת</button>
+    <div class="divider"></div>
+    <div class="sys-info"><div class="sys-dot"></div><span data-t="sys">מחובר לרשת</span></div>
+  </div></div>
+</div>
+
+<div class="screen" id="scSup">
+  <div class="topbar">
+    <div class="globe-btn" onclick="cycleLang()" style="cursor:pointer;-webkit-tap-highlight-color:rgba(255,255,255,.2);">&#127760;<span class="glang">עב</span></div>
+    <div class="tb-mid"><span class="heb" id="supTitle" style="font-weight:800;color:var(--gold);"></span></div>
+    <div class="tb-right">
+      <div class="online-dot"></div>
+      <div class="tb-user"><span id="supWelcome">ברוך הבא</span>: <strong id="supUser">משגיח</strong></div>
+      <div class="icon-btn" onclick="goTo('scNav')">&#127968;</div>
+      <div class="icon-btn" onclick="reportProblem(supName())" title="דווח בעיה" style="color:var(--amber)">&#9888;</div>
+      <div class="icon-btn" onclick="goTo('scSupLogin')" style="color:var(--red-light)">&#10005;</div>
+    </div>
+  </div>
+  <div id="supBody" style="flex:1;overflow:auto;padding:14px;"></div>
+</div>
+
 <div class="screen screen-login" id="scPartsLogin">
   <div class="topbar"><div class="globe-btn" onclick="cycleLang()" style="cursor:pointer;-webkit-tap-highlight-color:rgba(255,255,255,.2);">&#127760;<span class="glang" id="gl10">עב</span></div><div class="tb-mid"><span class="heb" id="partsLHeb"></span><span id="partsLT"></span></div><div class="icon-btn" onclick="goTo('scNav')">&#127968;</div></div>
   <div class="login-wrap"><div class="login-card">
@@ -1535,6 +1562,10 @@ const LUNG_B64="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICA
           <button class="mgr-mini-tab" id="utab-outer" onclick="mgrUserTab('outer')">בודק חוץ</button>
           <button class="mgr-mini-tab" id="utab-parts" onclick="mgrUserTab('parts')">חלקים</button>
           <button class="mgr-mini-tab" id="utab-stamps" onclick="mgrUserTab('stamps')">חותמות</button>
+          <button class="mgr-mini-tab" id="utab-cooler" onclick="mgrUserTab('cooler')">קולר</button>
+          <button class="mgr-mini-tab" id="utab-nikur" onclick="mgrUserTab('nikur')">מנקר</button>
+          <button class="mgr-mini-tab" id="utab-salting" onclick="mgrUserTab('salting')">מליחה</button>
+          <button class="mgr-mini-tab" id="utab-shipping" onclick="mgrUserTab('shipping')">שיפינג</button>
         </div>
         <div style="font-size:11px;color:var(--muted);margin:-6px 0 10px;line-height:1.6;" id="mgrUsersHint">
           רשימה נפרדת לכל מסך: נכנס למסך רק מי שברשימה שלו. אותו אדם יכול להופיע בכמה רשימות (גם עם אותו קוד).
@@ -5108,6 +5139,50 @@ function gtSlRule(i,status){
 }
 
 // ── the buttons on every station's top bar ──
+// v10.35: the four supervisor screens — infrastructure only (pairing, worker list, login, a read-only
+// screen). They have no write rights on the server yet; each screen's own work comes after its design.
+const GT_SUP_SCREENS={
+  cooler:  {icon:'❄️', t:['משגיח קולר','Cooler supervisor','Supervisor de cámara'],   n:['קולר (קירור)','Cooler','Cámara fría'],      w:['משגיח קולר','Cooler supervisor','Supervisor de cámara']},
+  nikur:   {icon:'🔪', t:['משגיח מנקר','Nikur supervisor','Supervisor de nikur'],     n:['מנקר','Nikur (deveining)','Nikur'],         w:['משגיח מנקר','Nikur supervisor','Supervisor de nikur']},
+  salting: {icon:'🧂', t:['משגיח מליחה','Salting supervisor','Supervisor de salado'], n:['מליחה','Salting','Salado'],                 w:['משגיח מליחה','Salting supervisor','Supervisor de salado']},
+  shipping:{icon:'📦', t:['משגיח שיפינג','Shipping supervisor','Supervisor de envíos'],n:['שיפינג (משלוח)','Shipping','Envíos'],      w:['משגיח שיפינג','Shipping supervisor','Supervisor de envíos']}
+};
+const GT_SUP_KEYS=Object.keys(GT_SUP_SCREENS);
+var supRole='cooler';
+function supName(r){ const c=GT_SUP_SCREENS[r||supRole]; return c?L(c.n[0],c.n[1],c.n[2]):''; }
+function supTitles(){
+  const c=GT_SUP_SCREENS[supRole]; if(!c) return;
+  const t=c.icon+' '+L(c.t[0],c.t[1],c.t[2]);
+  const set=(id,v)=>{const e=document.getElementById(id); if(e) e.textContent=v;};
+  set('supLTitle', t); set('supTitle', t);
+  set('supLSub', L('המסך בהכנה — כניסה ותצוגה בלבד','Screen in preparation — login and view only','Pantalla en preparación — solo acceso y vista'));
+  set('supWelcome', L('ברוך הבא','Welcome','Bienvenido'));
+}
+function supOpen(role){ if(GT_SUP_SCREENS[role]) supRole=role; supTitles(); goTo('scSupLogin'); }
+function supLogin(){ if(!_checkLogin(supRole,'scSupLogin')) return; supEnter(); }
+function supEnter(){
+  supTitles();
+  let nm=null; try{ nm=(JSON.parse(localStorage.getItem('gt_active_users')||'{}'))[supRole]||null; }catch(e){}
+  const c=GT_SUP_SCREENS[supRole]; const u=document.getElementById('supUser'); if(u) u.textContent=nm||(c?L(c.w[0],c.w[1],c.w[2]):'');
+  goTo('scSup'); supRender();
+}
+// read-only: what reached this part of the line today (after the outer ruling)
+function supRender(){
+  const el=document.getElementById('supBody'); if(!el) return;
+  const a=KS.getAnimals()||[];
+  const slaughtered=a.filter(x=>x.slaughter==='slaughtered').length;
+  const ruled=a.filter(x=>x.outerStatus);
+  const treif=ruled.filter(x=>x.outerStatus==='treif').length;
+  const kosher=ruled.length-treif;
+  const held=a.filter(x=>typeof gtHeldAt==='function' && gtHeldAt(x.id,'stamps')).length;
+  const by={}; ruled.forEach(x=>{ if(x.outerStatus!=='treif'){ const k=x.outerStatus; by[k]=(by[k]||0)+1; } });
+  const tile=(v,l,c)=>`<div style="flex:1;min-width:120px;background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:12px;text-align:center;"><div style="font-size:30px;font-weight:800;color:${c};">${v}</div><div style="font-size:12px;color:var(--muted);">${l}</div></div>`;
+  const rows=Object.keys(by).map(k=>`<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:14px;"><span>${escapeHtml(_gtStatusInfo(k).name)}</span><b>${by[k]}</b></div>`).join('');
+  el.innerHTML=`<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;">${tile(slaughtered,L('נשחטו היום','Slaughtered today','Faenados hoy'),'var(--text)')}${tile(kosher,L('כשר אחרי פסיקת חוץ','Kosher after the outer ruling','Kosher tras el dictamen'),'var(--glatt)')}${tile(treif,L('טרף','Treif','Treif'),'var(--red-light)')}${tile(held,L('בעיכוב','On hold','Retenidos'),'var(--amber)')}</div>
+    ${rows?`<div style="background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:12px;"><div style="font-size:13px;font-weight:700;color:var(--gold);margin-bottom:6px;">${L('לפי סטטוס כשרות','By kashrut status','Por estado')}</div>${rows}</div>`:''}
+    <div style="background:rgba(212,168,67,.08);border:1px dashed var(--gold);border-radius:12px;padding:14px;font-size:13px;color:var(--muted);line-height:1.7;">🛠️ ${L('התשתית של המסך מוכנה: צימוד טאבלט, רשימת עובדים וכניסה. העבודה של המסך עצמו תיבנה אחרי שהעיצוב שלו יאושר.','The screen\'s infrastructure is ready: tablet pairing, worker list and login. The screen\'s own work will be built after its design is approved.','La infraestructura está lista: emparejamiento, lista de trabajadores y acceso. El trabajo de la pantalla se construirá tras aprobar su diseño.')}</div>`;
+}
+setInterval(()=>{ const s=document.querySelector('.screen.active'); if(s && s.id==='scSup') supRender(); }, 5000);
 const GT_SCREEN_STATION={scSlaughter:'slaughter',scEsophagus:'eso',scLegs:'legs',scInner:'inner',scOuter:'outer',scParts:'parts',scStamps:'stamps'};
 function gtTopBarsInit(){
   Object.keys(GT_SCREEN_STATION).forEach(id=>{
@@ -6689,6 +6764,7 @@ function _doLoginProceed(loginScreenId){
   else if(loginScreenId==='scPartsLogin'){goTo("scParts");partsRenderGrid();partsUpdateSummary();setTimeout(()=>focusScan&&focusScan(),300);}
   else if(loginScreenId==='scStampsLogin'){goTo("scStamps");stampsRenderGrid();stampsUpdateSummary();setTimeout(()=>stampsFocusScan&&stampsFocusScan(),300);}
   else if(loginScreenId==='scManagerLogin'){goTo("scManager");updateMgr();mgrSyncUI();}
+  else if(loginScreenId==='scSupLogin'){supEnter();}
 }
 
 // Entry point for the manager screen. Goes through the same role-based
@@ -7905,7 +7981,7 @@ function mgrSetPrintCount(which,val){
 }
 // ── PRINTERS / SCANNERS ──
 const CONN_LABELS={bluetooth:'Bluetooth',wifi:'WiFi/רשת',usb:'USB'};
-const SCREEN_LIST=[['legs','רגלים / ראש'],['parts','חלקים קטנים'],['stamps','חותמות'],['cooler','קולר (עתידי)']];
+const SCREEN_LIST=[['legs','רגלים / ראש'],['parts','חלקים קטנים'],['stamps','חותמות'],['cooler','קולר'],['nikur','מנקר'],['salting','מליחה'],['shipping','שיפינג']];
 function mgrAddDevice(kind){
   const nameEl=document.getElementById(kind==='printer'?'newDevName':'newScanName');
   const connEl=document.getElementById(kind==='printer'?'newDevConn':'newScanConn');
@@ -7975,7 +8051,8 @@ function mgrRenderDevices(){
   if(sa){
     // v10.34: legs and head split → the head screen has its own printer and scanner
     const _split=(typeof _lgSplit==='function') && _lgSplit();
-    const _list=_split ? [['legs','רגליים'],['head','ראש']].concat(SCREEN_LIST.slice(1)) : SCREEN_LIST;
+    const _list=(_split ? [['legs','רגליים'],['head','ראש']].concat(SCREEN_LIST.slice(1)) : SCREEN_LIST)
+      .filter(([k])=>!GT_SUP_SCREENS[k] || gtPlanned(k));          // v10.35: a supervisor screen only when the plant chose it
     sa.innerHTML=_list.map(([key,label])=>{
       const cur=sd[key]||{printer:'',scanner:''};
       const pOpts='<option value="">— '+L('מדפסת','Printer','Impresora')+' —</option>'+printers.map(d=>`<option value="${escapeHtml(d.id)}" ${cur.printer===d.id?'selected':''}>${escapeHtml(d.name)}</option>`).join('');
@@ -10750,7 +10827,8 @@ function mgrDrawCharts(){
 function _gtScreenName(s){
   const M={'שחיטה':['Slaughter','Matanza'],'וושט':['Esophagus','Esófago'],'רגלים':['Legs','Patas'],'ראש':['Head','Cabeza'],
     'פנים':['Inner','Interno'],'חוץ':['Outer','Externo'],'חלקים':['Parts','Partes'],'חותמות':['Stamps','Sellos'],
-    'רגלים / ראש':['Legs / Head','Patas / Cabeza'],'חלקים קטנים':['Small parts','Partes pequeñas'],'קולר (עתידי)':['Cooler (future)','Cámara (futuro)']};
+    'רגלים / ראש':['Legs / Head','Patas / Cabeza'],'חלקים קטנים':['Small parts','Partes pequeñas'],'קולר (עתידי)':['Cooler (future)','Cámara (futuro)'],
+    'קולר':['Cooler','Cámara'],'מנקר':['Nikur','Nikur'],'מליחה':['Salting','Salado'],'שיפינג':['Shipping','Envíos']};
   const m=M[s]; return m?L(s,m[0],m[1]):s;
 }
 // errors caught on THIS device (gtLogError) — count + last 20 + clear
@@ -11786,7 +11864,7 @@ function rebuildOuterButtons(){
 // ── USER ROLE TABS ──
 let mgrCurrentUserRole='slaughter';
 // step 46: one worker list per screen
-const WORKER_SCREENS=['slaughter','esophagus','legs','inner','outer','parts','stamps'];
+const WORKER_SCREENS=['slaughter','esophagus','legs','inner','outer','parts','stamps','cooler','nikur','salting','shipping'];
 const ROLE_LABELS={
   slaughter:{he:'שוחט',en:'Slaughterer',es:'Matarife'},
   esophagus:{he:'משגיח וושט',en:'Esophagus supervisor',es:'Supervisor de esófago'},
@@ -11795,6 +11873,10 @@ const ROLE_LABELS={
   outer:{he:'בודק חוץ',en:'Outer inspector',es:'Inspector externo'},
   parts:{he:'עובד חלקים',en:'Small-parts worker',es:'Trabajador de partes'},
   stamps:{he:'עובד חותמות',en:'Stamps worker',es:'Trabajador de sellos'},
+  cooler:{he:'משגיח קולר',en:'Cooler supervisor',es:'Supervisor de cámara'},
+  nikur:{he:'משגיח מנקר',en:'Nikur supervisor',es:'Supervisor de nikur'},
+  salting:{he:'משגיח מליחה',en:'Salting supervisor',es:'Supervisor de salado'},
+  shipping:{he:'משגיח שיפינג',en:'Shipping supervisor',es:'Supervisor de envíos'},
   manager:{he:'ראש צוות',en:'Team leader',es:'Jefe de equipo'},
 };
 
@@ -11840,7 +11922,7 @@ function mgrUserTab(role){
   const title=document.getElementById('mgrAddUserTitle');
   if(title)title.textContent=(lang==='he'?'הוסף ':lang==='es'?'Agregar ':'Add ')+(lbl[lang]||lbl.he);
   // Update role login label + highlight current mode
-  const roleLabels={slaughter:L('שחיטה','slaughter','matanza'),esophagus:L('בדיקת וושט','esophagus','esófago'),legs:L('רגלים / ראש','legs / head','patas / cabeza'),inner:L('בודק פנים','inner','interior'),outer:L('בודק חוץ','outer','exterior'),parts:L('חלקים קטנים','small parts','partes'),stamps:L('חותמות','stamps','sellos')};
+  const roleLabels={slaughter:L('שחיטה','slaughter','matanza'),esophagus:L('בדיקת וושט','esophagus','esófago'),legs:L('רגלים / ראש','legs / head','patas / cabeza'),inner:L('בודק פנים','inner','interior'),outer:L('בודק חוץ','outer','exterior'),parts:L('חלקים קטנים','small parts','partes'),stamps:L('חותמות','stamps','sellos'),cooler:L('קולר','cooler','cámara'),nikur:L('מנקר','nikur','nikur'),salting:L('מליחה','salting','salado'),shipping:L('שיפינג','shipping','envíos')};
   const rl=document.getElementById('roleLoginLabel');
   if(rl)rl.textContent=roleLabels[role]||role;
   mgrUpdateRoleLoginBtns();
@@ -14574,7 +14656,7 @@ function _kioskApplyAssignment(role, idx){
     if(prev && prev.role===role && prev.idx===idx) return;
     _kioskApplied = {role, idx};
     const a=document.querySelector('.screen.active');
-    if(!(KS.getManagerToken && KS.getManagerToken()) || (a && /^sc(Pair|Nav|SlaughterLogin|EsophagusLogin|LegsLogin|InnerLogin|OuterLogin|PartsLogin|StampsLogin|Counter)$/.test(a.id))) goTo('scNav');
+    if(!(KS.getManagerToken && KS.getManagerToken()) || (a && /^sc(Pair|Nav|SlaughterLogin|EsophagusLogin|LegsLogin|InnerLogin|OuterLogin|PartsLogin|StampsLogin|SupLogin|Counter)$/.test(a.id))) goTo('scNav');
     return;
   }
   if(!role){
@@ -14594,6 +14676,7 @@ function _kioskApplyAssignment(role, idx){
   else if(role==='parts') goTo('scPartsLogin');
   else if(role==='stamps') goTo('scStampsLogin');
   else if(role==='display') goTo('scCounter');
+  else if(GT_SUP_SCREENS[role]) supOpen(role);          // v10.35: the supervisor screens
 }
 
 // Apply instantly from whatever was last known locally — before any network
@@ -14652,6 +14735,10 @@ function _kioskRoleLabels(){
     'outer-1': he?'בודק חוץ 2':es?'Inspector externo 2':'Outer inspector 2',
     parts: he?'חלקים קטנים':es?'Partes pequeñas':'Small parts',
     stamps: he?'חותמות':es?'Sellos':'Stamps',
+    cooler: he?'משגיח קולר':es?'Supervisor de cámara':'Cooler supervisor',
+    nikur: he?'משגיח מנקר':es?'Supervisor de nikur':'Nikur supervisor',
+    salting: he?'משגיח מליחה':es?'Supervisor de salado':'Salting supervisor',
+    shipping: he?'משגיח שיפינג':es?'Supervisor de envíos':'Shipping supervisor',
     'display-0': he?'מסך ספירה':es?'Pantalla de conteo':'Counter screen',
     'display-1': he?'מסך ספירה 2':es?'Pantalla de conteo 2':'Counter screen 2',
     'leader-0': he?'ראש צוות':es?'Jefe de equipo':'Team leader',
@@ -14660,7 +14747,7 @@ function _kioskRoleLabels(){
     'leader-3': he?'ראש צוות 4':es?'Jefe de equipo 4':'Team leader 4',
   };
 }
-const KIOSK_ROLE_KEYS = ['slaughter','esophagus','legs','legs-1','inner-0','inner-1','outer-0','outer-1','parts','stamps','display-0','display-1'];
+const KIOSK_ROLE_KEYS = ['slaughter','esophagus','legs','legs-1','inner-0','inner-1','outer-0','outer-1','parts','stamps','cooler','nikur','salting','shipping','display-0','display-1'];
 
 /** Registers this device (heartbeat), listens for the manager assigning or
  *  resetting ITS role, and — separately — keeps the manager's devices panel
@@ -16638,6 +16725,10 @@ const GT_PLAN_SCREENS = [
   { k:'legs', t:['רגלים / ראש','Legs / head','Patas / cabeza'], d:['מדבקות רגלים וראש. מיון רגלים הוא חלק ממסך הרגלים.','Leg and head stickers. Leg sorting is part of the legs screen.','Etiquetas de patas y cabeza; la clasificación de patas es parte de esta pantalla.'] },
   { k:'parts', t:['חלקים קטנים','Small parts','Partes pequeñas'], d:['','',''] },
   { k:'stamps', t:['חותמות ושקילה','Stamps & weight','Sellos y peso'], d:['','',''] },
+  { k:'cooler', t:['משגיח קולר (קירור)','Cooler supervisor','Supervisor de cámara'], d:['מסך חדש — בהכנה (צימוד, עובדים וכניסה מוכנים)','New screen — in preparation (pairing, workers and login ready)','Pantalla nueva — en preparación'] },
+  { k:'nikur', t:['משגיח מנקר','Nikur supervisor','Supervisor de nikur'], d:['מסך חדש — בהכנה (צימוד, עובדים וכניסה מוכנים)','New screen — in preparation (pairing, workers and login ready)','Pantalla nueva — en preparación'] },
+  { k:'salting', t:['משגיח מליחה','Salting supervisor','Supervisor de salado'], d:['מסך חדש — בהכנה (צימוד, עובדים וכניסה מוכנים)','New screen — in preparation (pairing, workers and login ready)','Pantalla nueva — en preparación'] },
+  { k:'shipping', t:['משגיח שיפינג','Shipping supervisor','Supervisor de envíos'], d:['מסך חדש — בהכנה (צימוד, עובדים וכניסה מוכנים)','New screen — in preparation (pairing, workers and login ready)','Pantalla nueva — en preparación'] },
   { k:'display', t:['מסך ספירה (תצוגה בלבד)','Counter screen (display only)','Pantalla de conteo (solo vista)'], d:['','',''] }
 ];
 const _GT_CFG = { '1in1out':[1,1], '2in1out':[2,1], '2in2out':[2,2], '1in2out':[1,2] };
@@ -16661,6 +16752,7 @@ function gtPlanSlots(){
   }
   ['legs','parts','stamps'].forEach(r => { if(p.screens.has(r)) out.push([r,0]); });
   if(p.screens.has('legs') && s.legsHeadSplit===true && s.legsMode!==false) out.push(['legs',1]);   // v10.34: the head screen
+  GT_SUP_KEYS.forEach(r => { if(p.screens.has(r)) out.push([r,0]); });   // v10.35: the supervisor screens
   if(p.screens.has('display')) out.push(['display',0]);
   return out;
 }

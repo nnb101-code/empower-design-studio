@@ -275,13 +275,16 @@ declare
     array['OUT1','outer','90','active'], array['OUT2','outer','91','active'], array['LEGS','legs','90','active'],
     array['PARTS','parts','90','active'], array['STAMPS','stamps','90','active'], array['RET','outer','92','retired'],
     array['UNP','','','active'], array['BRK','slaughter','92','active'], array['DISP','display','90','active'],
-    array['NEW','','','active']];
+    array['NEW','','','active'], array['COOL','cooler','90','active']];
   i int;
 begin
   -- v10.34: the checks run without the plant's own screen choice (the inner check waits for legs only
   -- when the plant chose the legs screen — the test that needs it sets it); all of it is undone at the end
   perform set_config('gt.reset_in_progress', 'true', true);
   update settings_pilot set settings = settings - 'screensPlan' where id = 1 and settings ? 'screensPlan';
+  -- (also the plant's legs / head split and its screens switched off for a while — the tests that need them set them)
+  update settings_pilot set settings = settings - 'legsHeadSplit' - 'legsPaused' - 'partsPaused'
+   where id = 1 and (settings ? 'legsHeadSplit' or settings ? 'legsPaused' or settings ? 'partsPaused');
   perform set_config('gt.reset_in_progress', 'false', true);
   perform set_config('app.device_admin', 'on', true);
   for i in 1 .. array_length(devs, 1) loop
@@ -945,6 +948,23 @@ begin
   update devices_pilot set assigned_index = 90 where id = pg_temp.devid('LEGS');
   perform pg_temp.rec('v10.34 legs / head on two screens: the head slot never prints leg stickers, the legs slot never prints the head while the head screen works, slot 1 is refused when the screens are not split', ok,
     concat_ws(' | ', r ->> 'error', r2 ->> 'error', r3 ->> 'error', r4 ->> 'error', r5 ->> 'error'));
+  -- v10.35: the four supervisor screens (cooler / nikur / salting / shipping) are paired tablets with NO write rights yet
+  ok := true;
+  perform set_config('gt.reset_in_progress', 'true', true);
+  update animals_pilot set slaughter = 'slaughtered', slaughter_time = 1, eso_checked = true, eso_result = 'ok' where id = 888;
+  perform set_config('gt.reset_in_progress', 'false', true);
+  r  := pg_temp.api(pg_temp.dev('COOL'), pg_temp.q_push(888, '{"legs_stickers":true,"head_stickers":true,"stamped":true}'));
+  r2 := pg_temp.api(pg_temp.dev('COOL'), 'select hold_set(888, ''stamps'', ''question'')');
+  r3 := pg_temp.api(pg_temp.dev('COOL'), pg_temp.q_claim(888, 'inner_start', 'in_progress', '', pg_temp.devid('COOL')));
+  ok := ok and not pg_temp.ok(r2) and not pg_temp.claimed(r3)          -- (animal_push answers ok but ignores columns it may not write)
+           and not coalesce((pg_temp.ar(888)).legs_stickers, false) and not coalesce((pg_temp.ar(888)).stamped, false)
+           and (pg_temp.ar(888)).inner_status is null
+           and not exists (select 1 from animal_holds where animal_id = 888 and resolved_at is null)
+           and _gt_value_ok('device_role', 'shipping') and _worker_role_norm('מליחה') = 'salting';
+  perform pg_temp.rec('v10.35 supervisor screens (cooler / nikur / salting / shipping): paired, but no ruling, processing or hold rights', ok,
+    concat_ws(' | ', r ->> 'error', r2 ->> 'error', r3 ->> 'error', r3 ->> 'claimed', (pg_temp.ar(888)).legs_stickers, (pg_temp.ar(888)).stamped,
+              (pg_temp.ar(888)).inner_status, (select count(*) from animal_holds where animal_id = 888 and resolved_at is null),
+              _gt_value_ok('device_role', 'shipping'), _worker_role_norm('מליחה')));
 end $$;
 $gt39$;
     v_step := 'identity chaos: old key after a replacement, fake actor / role';

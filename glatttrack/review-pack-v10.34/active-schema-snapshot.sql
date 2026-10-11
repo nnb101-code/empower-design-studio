@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict qAz95dduLYd8bw1Zf13vPQZNLZWcX7AtQv6SAIQJtUgNrwxwOim6ZZoWnQ5x0Wt
+\restrict AR6h6hKCvmuuFQnDG1swlBZ0LQ6Wib3173kdrw31crvZMQZEUJkcdK5U6QiEDdx
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -1842,7 +1842,7 @@ CREATE FUNCTION public._gt_value_ok(p_kind text, v text) RETURNS boolean
     when 'printed'   then v in ('glatt', 'beit', 'kosher', 'mk', 'treif', 'rabChalak', 'kosherRab') or v ~ '^custom_[A-Za-z0-9_-]{1,40}$'
     when 'eso'       then v in ('ok', 'nevela')
     when 'maw'       then v in ('kosher', 'treif')
-    when 'device_role' then v in ('slaughter', 'esophagus', 'legs', 'inner', 'outer', 'parts', 'stamps', 'display', 'leader')
+    when 'device_role' then v in ('slaughter', 'esophagus', 'legs', 'inner', 'outer', 'parts', 'stamps', 'display', 'leader', 'cooler', 'nikur', 'salting', 'shipping')
     else false end;
 $_$;
 
@@ -3633,6 +3633,10 @@ CREATE FUNCTION public._worker_role_norm(p text) RETURNS text
     when 'outer' then 'outer' when 'בודק חוץ' then 'outer' when 'בודקי חוץ' then 'outer'
     when 'parts' then 'parts' when 'חלקים' then 'parts' when 'חלקים קטנים' then 'parts'
     when 'stamps' then 'stamps' when 'חותמות' then 'stamps'
+    when 'cooler' then 'cooler' when 'קולר' then 'cooler'                   -- v10.35: the supervisor screens
+    when 'nikur' then 'nikur' when 'מנקר' then 'nikur'
+    when 'salting' then 'salting' when 'מליחה' then 'salting'
+    when 'shipping' then 'shipping' when 'שיפינג' then 'shipping'
     else null end;                         -- the old shared lists ('inspector', 'supervisor') no longer log in anywhere
 $$;
 
@@ -4717,7 +4721,7 @@ begin
   if not _is_real_manager(p_token) then
     return jsonb_build_object('ok', false, 'error', 'unauthorized');
   end if;
-  if p_role not in ('slaughter','esophagus','legs','inner','outer','parts','stamps','display','leader') then
+  if p_role not in ('slaughter','esophagus','legs','inner','outer','parts','stamps','display','leader','cooler','nikur','salting','shipping') then
     return jsonb_build_object('ok', false, 'error', 'bad_role');
   end if;
   v_idx := case when p_role in ('inner','outer','display','leader','legs') then coalesce(p_index, 0) else 0 end;   -- v10.34: legs slot 1 = the head screen
@@ -5447,7 +5451,7 @@ begin
   perform pg_advisory_xact_lock(hashtext('glatttrack_leader_device_replace'));
   -- a station tablet serves only its station
   if v_dev is not null and exists (select 1 from devices_pilot where id = v_dev
-       and assigned_role in ('slaughter', 'esophagus', 'legs', 'inner', 'outer', 'parts', 'stamps', 'display')) then
+       and assigned_role in ('slaughter', 'esophagus', 'legs', 'inner', 'outer', 'parts', 'stamps', 'display', 'cooler', 'nikur', 'salting', 'shipping')) then
     return jsonb_build_object('ok', false, 'reason', 'station_device');
   end if;
   select count(*), max(at) into v_fails, v_last from login_attempts
@@ -5759,7 +5763,7 @@ begin
   -- manufacturer watch from any other device, never from a station tablet
   if v_manager.role in ('owner', 'manufacturer') and _is_api_request() and not _request_is_service_role()
      and exists (select 1 from devices_pilot where id = _current_device_id()
-                   and assigned_role in ('slaughter', 'esophagus', 'legs', 'inner', 'outer', 'parts', 'stamps')
+                   and assigned_role in ('slaughter', 'esophagus', 'legs', 'inner', 'outer', 'parts', 'stamps', 'cooler', 'nikur', 'salting', 'shipping')
                    and coalesce(device_status, 'active') <> 'retired') then
     perform _security_event(null, 'login_on_station_device', jsonb_build_object('ip', v_ip, 'device', _current_device_id(), 'role', v_manager.role),
                             v_manager.name, _current_device_id());
@@ -7406,7 +7410,7 @@ CREATE TABLE public.devices_pilot (
     auth_uid uuid,
     cursor_eso integer,
     CONSTRAINT devices_pilot_device_status_check CHECK ((device_status = ANY (ARRAY['active'::text, 'retired'::text]))),
-    CONSTRAINT devices_pilot_role_ok CHECK (((assigned_role IS NULL) OR (assigned_role = ANY (ARRAY['slaughter'::text, 'esophagus'::text, 'legs'::text, 'inner'::text, 'outer'::text, 'parts'::text, 'stamps'::text, 'display'::text, 'leader'::text]))))
+    CONSTRAINT devices_pilot_role_ok CHECK (((assigned_role IS NULL) OR (assigned_role = ANY (ARRAY['slaughter'::text, 'esophagus'::text, 'legs'::text, 'inner'::text, 'outer'::text, 'parts'::text, 'stamps'::text, 'display'::text, 'leader'::text, 'cooler'::text, 'nikur'::text, 'salting'::text, 'shipping'::text]))))
 );
 
 ALTER TABLE ONLY public.devices_pilot REPLICA IDENTITY FULL;
@@ -7817,7 +7821,7 @@ CREATE TABLE public.worker_sessions (
     expires_at timestamp with time zone DEFAULT (now() + '14:00:00'::interval) NOT NULL,
     revoked boolean DEFAULT false NOT NULL,
     revoked_at timestamp with time zone,
-    CONSTRAINT worker_sessions_role_check CHECK ((role = ANY (ARRAY['slaughter'::text, 'esophagus'::text, 'legs'::text, 'inner'::text, 'outer'::text, 'parts'::text, 'stamps'::text])))
+    CONSTRAINT worker_sessions_role_check CHECK ((role = ANY (ARRAY['slaughter'::text, 'esophagus'::text, 'legs'::text, 'inner'::text, 'outer'::text, 'parts'::text, 'stamps'::text, 'cooler'::text, 'nikur'::text, 'salting'::text, 'shipping'::text])))
 );
 
 
@@ -10982,5 +10986,5 @@ GRANT ALL ON TABLE public.system_flags TO service_role;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict qAz95dduLYd8bw1Zf13vPQZNLZWcX7AtQv6SAIQJtUgNrwxwOim6ZZoWnQ5x0Wt
+\unrestrict AR6h6hKCvmuuFQnDG1swlBZ0LQ6Wib3173kdrw31crvZMQZEUJkcdK5U6QiEDdx
 
