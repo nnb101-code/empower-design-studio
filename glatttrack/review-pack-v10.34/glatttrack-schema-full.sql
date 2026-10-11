@@ -12285,6 +12285,30 @@ begin
 end $$;
 revoke execute on function _legs_required(integer) from public, anon, authenticated;
 
+-- v10.34 review (round 14): with legs and head on TWO screens the server tells the two legs slots apart.
+-- Slot 1 is the head screen: only when the plant split the screens, and never the leg stickers (the
+-- sorting page may be open on either legs tablet). Slot 0 is the legs screen: no head stickers while the head screen works (split, not paused).
+-- (null = allowed; the owner / service / the team leader in test mode are not a legs slot)
+create or replace function _legs_slot_error(p_legs boolean, p_head boolean, p_sorted boolean) returns text
+language plpgsql stable security definer set search_path = public, extensions, pg_temp as $$
+declare s jsonb; v_idx int; v_role text; v_split boolean;
+begin
+  if not (coalesce(p_legs, false) or coalesce(p_head, false) or coalesce(p_sorted, false)) then return null; end if;
+  if not _is_api_request() or _request_is_service_role() then return null; end if;
+  select d.assigned_role, coalesce(d.assigned_index, 0) into v_role, v_idx
+    from devices_pilot d where d.id = _current_device_id() and coalesce(d.device_status, 'active') <> 'retired';
+  if v_role is distinct from 'legs' then return null; end if;
+  s := _gt_settings();
+  v_split := _gt_flag(s, 'legsHeadSplit', false) and _gt_flag(s, 'legsMode', true);
+  if v_idx = 1 then
+    if not v_split or coalesce(p_legs, false) then return 'wrong_screen'; end if;
+  elsif v_split and coalesce(p_head, false) and not _gt_flag(s, 'legsPaused', false) then
+    return 'wrong_screen';
+  end if;
+  return null;
+end $$;
+revoke execute on function _legs_slot_error(boolean, boolean, boolean) from public, anon, authenticated;
+
 -- the statuses that count as kosher (the app's getKosherStatuses)
 create or replace function _kosher_statuses() returns text[]
 language sql stable security definer set search_path = public, extensions, pg_temp as $$
@@ -12548,6 +12572,12 @@ begin
   if v_err is null and ((not coalesce(old.head_stickers, false) and coalesce(new.head_stickers, false))
                         or (not coalesce(old.legs_stickers, false) and coalesce(new.legs_stickers, false))) then
     v_stage := 'legs_stickers'; v_err := _stage_order_error('legs_stickers', new, true); v_groups := v_groups || 'legs'::text;
+  end if;
+  if v_err is null then                                 -- v10.34 review: the legs slot vs the head slot
+    v_err := _legs_slot_error(not coalesce(old.legs_stickers, false) and coalesce(new.legs_stickers, false),
+                              not coalesce(old.head_stickers, false) and coalesce(new.head_stickers, false),
+                              not coalesce(old.legs_sorted, false) and coalesce(new.legs_sorted, false));
+    if v_err is not null then v_stage := 'legs_stickers'; end if;
   end if;
   -- v10.34 (owner): with legs + head, the head stickers come after the leg stickers (legs → head → inner)
   if v_err is null and not coalesce(old.head_stickers, false) and coalesce(new.head_stickers, false)
@@ -13475,6 +13505,11 @@ begin
       end loop;
       if to_jsonb(n) is distinct from to_jsonb(c) then
         a := _carry_row(n);
+        v_reason := _legs_slot_error(n.legs_stickers is distinct from c.legs_stickers, n.head_stickers is distinct from c.head_stickers,
+                                     n.legs_sorted is distinct from c.legs_sorted);      -- v10.34 review: legs slot vs head slot
+        if v_reason is not null then
+          raise exception 'GT:OUT_OF_ORDER out-of-order: stage=legs reason=%', v_reason using errcode = 'P0001';
+        end if;
         -- the order: a processing step only after the last ruling
         foreach g in array (select array_agg(distinct x) from unnest(v_groups) x) loop
           v_reason := _stage_order_error(case g when 'legs' then (case when n.legs_sorted is distinct from c.legs_sorted then 'legs' else 'legs_stickers' end)

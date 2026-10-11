@@ -920,6 +920,31 @@ begin
   ok := ok and pg_temp.claimed(r5) and not exists (select 1 from animal_holds where animal_id = 873 and station = 'eso' and resolved_at is null);
   perform pg_temp.rec('v10.34 the inner check comes after legs / head stickers (when the plant uses the legs screen); the esophagus turns its ok into a "?" until legs print; USDA belongs to the station the animal is at on the line; head stickers only after the leg stickers (not while legs is switched off)', ok,
     concat_ws(' | ', r ->> 'error', r ->> 'reason', r ->> 'claimed', r2 ->> 'claimed', r2 ->> 'error', r3 ->> 'error', r4 ->> 'claimed', r4 ->> 'error'));
+  -- v10.34 review (round 14): legs and head on two screens — the legs slot (0) and the head slot (1) apart
+  ok := true;
+  perform set_config('gt.reset_in_progress', 'true', true);
+  update settings_pilot set settings = (settings - 'legsPaused') || '{"legsHeadSplit":true,"legsMode":true}'::jsonb where id = 1;
+  update animals_pilot set slaughter = 'slaughtered', slaughter_time = 1, eso_checked = true, eso_result = 'ok' where id in (885, 886, 887);
+  update animals_pilot set legs_stickers = true where id = 887;
+  update devices_pilot set assigned_index = 191 where assigned_role = 'legs' and assigned_index = 1 and device_status = 'active';
+  perform set_config('gt.reset_in_progress', 'false', true);
+  r  := pg_temp.api(pg_temp.dev('LEGS'), pg_temp.q_push(885, '{"legs_stickers":true,"head_stickers":true}'));
+  ok := ok and r ->> 'error' = 'out_of_order' and not coalesce((pg_temp.ar(885)).head_stickers, false);
+  r2 := pg_temp.api(pg_temp.dev('LEGS'), pg_temp.q_push(885, '{"legs_stickers":true}'));
+  ok := ok and pg_temp.ok(r2) and (pg_temp.ar(885)).legs_stickers;
+  update devices_pilot set assigned_index = 1 where id = pg_temp.devid('LEGS');          -- now the head screen
+  r3 := pg_temp.api(pg_temp.dev('LEGS'), pg_temp.q_push(886, '{"legs_stickers":true}'));
+  ok := ok and r3 ->> 'error' = 'out_of_order' and not coalesce((pg_temp.ar(886)).legs_stickers, false);
+  r4 := pg_temp.api(pg_temp.dev('LEGS'), pg_temp.q_push(885, '{"head_stickers":true}'));
+  ok := ok and pg_temp.ok(r4) and (pg_temp.ar(885)).head_stickers;
+  perform set_config('gt.reset_in_progress', 'true', true);
+  update settings_pilot set settings = settings - 'legsHeadSplit' where id = 1;        -- one screen again: slot 1 is not used
+  perform set_config('gt.reset_in_progress', 'false', true);
+  r5 := pg_temp.api(pg_temp.dev('LEGS'), pg_temp.q_push(887, '{"head_stickers":true}'));
+  ok := ok and r5 ->> 'error' = 'out_of_order' and not coalesce((pg_temp.ar(887)).head_stickers, false);
+  update devices_pilot set assigned_index = 90 where id = pg_temp.devid('LEGS');
+  perform pg_temp.rec('v10.34 legs / head on two screens: the head slot never prints leg stickers, the legs slot never prints the head while the head screen works, slot 1 is refused when the screens are not split', ok,
+    concat_ws(' | ', r ->> 'error', r2 ->> 'error', r3 ->> 'error', r4 ->> 'error', r5 ->> 'error'));
 end $$;
 $gt39$;
     v_step := 'identity chaos: old key after a replacement, fake actor / role';

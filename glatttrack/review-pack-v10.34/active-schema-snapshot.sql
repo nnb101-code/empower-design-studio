@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict egidVEBU8HA0WxyPl1CYTxtCzj2u3FcoahnvN9cyeK1GQFgwZ6AKNRTmUoanK2l
+\restrict qAz95dduLYd8bw1Zf13vPQZNLZWcX7AtQv6SAIQJtUgNrwxwOim6ZZoWnQ5x0Wt
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -615,6 +615,12 @@ begin
   if v_err is null and ((not coalesce(old.head_stickers, false) and coalesce(new.head_stickers, false))
                         or (not coalesce(old.legs_stickers, false) and coalesce(new.legs_stickers, false))) then
     v_stage := 'legs_stickers'; v_err := _stage_order_error('legs_stickers', new, true); v_groups := v_groups || 'legs'::text;
+  end if;
+  if v_err is null then                                 -- v10.34 review: the legs slot vs the head slot
+    v_err := _legs_slot_error(not coalesce(old.legs_stickers, false) and coalesce(new.legs_stickers, false),
+                              not coalesce(old.head_stickers, false) and coalesce(new.head_stickers, false),
+                              not coalesce(old.legs_sorted, false) and coalesce(new.legs_sorted, false));
+    if v_err is not null then v_stage := 'legs_stickers'; end if;
   end if;
   -- v10.34 (owner): with legs + head, the head stickers come after the leg stickers (legs → head → inner)
   if v_err is null and not coalesce(old.head_stickers, false) and coalesce(new.head_stickers, false)
@@ -2137,6 +2143,34 @@ end $$;
 
 
 ALTER FUNCTION public._legs_required(p_id integer) OWNER TO postgres;
+
+--
+-- Name: _legs_slot_error(boolean, boolean, boolean); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public._legs_slot_error(p_legs boolean, p_head boolean, p_sorted boolean) RETURNS text
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $$
+declare s jsonb; v_idx int; v_role text; v_split boolean;
+begin
+  if not (coalesce(p_legs, false) or coalesce(p_head, false) or coalesce(p_sorted, false)) then return null; end if;
+  if not _is_api_request() or _request_is_service_role() then return null; end if;
+  select d.assigned_role, coalesce(d.assigned_index, 0) into v_role, v_idx
+    from devices_pilot d where d.id = _current_device_id() and coalesce(d.device_status, 'active') <> 'retired';
+  if v_role is distinct from 'legs' then return null; end if;
+  s := _gt_settings();
+  v_split := _gt_flag(s, 'legsHeadSplit', false) and _gt_flag(s, 'legsMode', true);
+  if v_idx = 1 then
+    if not v_split or coalesce(p_legs, false) then return 'wrong_screen'; end if;
+  elsif v_split and coalesce(p_head, false) and not _gt_flag(s, 'legsPaused', false) then
+    return 'wrong_screen';
+  end if;
+  return null;
+end $$;
+
+
+ALTER FUNCTION public._legs_slot_error(p_legs boolean, p_head boolean, p_sorted boolean) OWNER TO postgres;
 
 --
 -- Name: _log_correction_rejected(text, integer, text, text, jsonb); Type: FUNCTION; Schema: public; Owner: postgres
@@ -4167,6 +4201,11 @@ begin
       end loop;
       if to_jsonb(n) is distinct from to_jsonb(c) then
         a := _carry_row(n);
+        v_reason := _legs_slot_error(n.legs_stickers is distinct from c.legs_stickers, n.head_stickers is distinct from c.head_stickers,
+                                     n.legs_sorted is distinct from c.legs_sorted);      -- v10.34 review: legs slot vs head slot
+        if v_reason is not null then
+          raise exception 'GT:OUT_OF_ORDER out-of-order: stage=legs reason=%', v_reason using errcode = 'P0001';
+        end if;
         -- the order: a processing step only after the last ruling
         foreach g in array (select array_agg(distinct x) from unnest(v_groups) x) loop
           v_reason := _stage_order_error(case g when 'legs' then (case when n.legs_sorted is distinct from c.legs_sorted then 'legs' else 'legs_stickers' end)
@@ -9653,6 +9692,13 @@ REVOKE ALL ON FUNCTION public._legs_required(p_id integer) FROM PUBLIC;
 
 
 --
+-- Name: FUNCTION _legs_slot_error(p_legs boolean, p_head boolean, p_sorted boolean); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public._legs_slot_error(p_legs boolean, p_head boolean, p_sorted boolean) FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION _log_correction_rejected(p_dev text, p_id integer, p_stage text, p_reason text, p_detail jsonb); Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -10936,5 +10982,5 @@ GRANT ALL ON TABLE public.system_flags TO service_role;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict egidVEBU8HA0WxyPl1CYTxtCzj2u3FcoahnvN9cyeK1GQFgwZ6AKNRTmUoanK2l
+\unrestrict qAz95dduLYd8bw1Zf13vPQZNLZWcX7AtQv6SAIQJtUgNrwxwOim6ZZoWnQ5x0Wt
 

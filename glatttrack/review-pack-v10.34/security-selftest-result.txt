@@ -37,6 +37,7 @@ NOTICE:  PASS  a "not chalak" animal (slaughter / inner / outer) can only be rul
 NOTICE:  PASS  rabbinate screen: a sent animal may be ruled רבנות חלק (and is kosher-ready); a shochet / maw "not chalak" may not
 NOTICE:  PASS  v10.34 "not chalak" gets one status at the outer ruling: no plain-kosher flag on any write path (claim or push)
 NOTICE:  PASS  v10.34 the inner check comes after legs / head stickers (when the plant uses the legs screen); the esophagus turns its ok into a "?" until legs print; USDA belongs to the station the animal is at on the line; head stickers only after the leg stickers (not while legs is switched off)
+NOTICE:  PASS  v10.34 legs / head on two screens: the head slot never prints leg stickers, the legs slot never prints the head while the head screen works, slot 1 is refused when the screens are not split
 NOTICE:  PASS  pairing into a taken slot without replace: slot_taken
 NOTICE:  PASS  replacement: the old key is dead; old + new device events share one replacement_id
 NOTICE:  PASS  device_pair with p_replace still works (new device holds the slot)
@@ -142,5 +143,5 @@ NOTICE:  PASS  v10.32 shared inner + outer screen: its inner tablet puts / close
 NOTICE:  PASS  v10.32 a part on USDA hold is not printed on the server: the full set (3) and that part's flag refused; the other parts recorded; after the release the part and the full set are recorded; an inner "?" answered when its window is decided; an open esophagus "?" stops the legs stickers and the lungs
 NOTICE:  PASS  ACTIVE security surface matches the expected manifest (triggers, policies, grants, definer settings)
 NOTICE:  PASS  kashrut seals: team leader sets, a printing tablet reads; a tablet can't set; bad picture / key refused; no device → refused
-NOTICE:  144 checks, 144 passed, 0 failed  (nothing was changed — all undone)
- PASSED — 144 of 144 security checks (nothing was changed)
+NOTICE:  145 checks, 145 passed, 0 failed  (nothing was changed — all undone)
+ PASSED — 145 of 145 security checks (nothing was changed)
