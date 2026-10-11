@@ -805,7 +805,7 @@ const LUNG_B64="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICA
 <div id="lgWarnModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:9999;align-items:center;justify-content:center;">
   <div style="background:var(--panel);border:3px solid var(--red);border-radius:18px;padding:30px 40px;text-align:center;max-width:85%;">
     <div style="font-size:48px;margin-bottom:10px;">⚠️</div>
-    <div id="lgWarnTitle" style="font-size:28px;font-weight:800;color:var(--red-light);font-family:'Frank Ruhl Libre',serif;margin-bottom:6px;">לא כשר!</div>
+    <div id="lgWarnTitle" style="font-size:28px;font-weight:800;color:var(--red-light);font-family:'Frank Ruhl Libre',serif;margin-bottom:6px;">טרף!</div>
     <div id="lgWarnDesc" style="font-size:14px;color:var(--muted);"></div>
   </div>
 </div>
@@ -895,7 +895,7 @@ const LUNG_B64="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICA
   <div class="summary-bar">
     <div class="sum-item"><div class="sum-dot" style="background:var(--green)"></div><span id="tPartsScanned">טופלו</span>:&nbsp;<strong id="partsCScanned">0</strong></div>
     <div class="sum-item"><div class="sum-dot" style="background:var(--amber)"></div><span id="tPartsWaiting">ממתינים</span>:&nbsp;<strong id="partsCWaiting">0</strong></div>
-    <div class="sum-item"><div class="sum-dot" style="background:var(--red)"></div><span id="tPartsNot">לא כשר</span>:&nbsp;<strong id="partsCNot">0</strong></div>
+    <div class="sum-item"><div class="sum-dot" style="background:var(--red)"></div><span id="tPartsNot">טרף</span>:&nbsp;<strong id="partsCNot">0</strong></div>
     <div class="sum-total"><span id="tPartsTot">סה״כ</span>: <strong id="partsCTot">0</strong></div>
   </div>
 
@@ -967,7 +967,7 @@ const LUNG_B64="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICA
   <div class="summary-bar">
     <div class="sum-item"><div class="sum-dot" style="background:var(--green)"></div><span id="tStampsDone">חותמו</span>:&nbsp;<strong id="stampsCDone">0</strong></div>
     <div class="sum-item"><div class="sum-dot" style="background:var(--amber)"></div><span id="tStampsWait">ממתינים</span>:&nbsp;<strong id="stampsCWait">0</strong></div>
-    <div class="sum-item"><div class="sum-dot" style="background:var(--red)"></div><span id="tStampsNot">לא כשר</span>:&nbsp;<strong id="stampsCNot">0</strong></div>
+    <div class="sum-item"><div class="sum-dot" style="background:var(--red)"></div><span id="tStampsNot">טרף</span>:&nbsp;<strong id="stampsCNot">0</strong></div>
     <div class="sum-total"><span id="tStampsTot">סה״כ</span>: <strong id="stampsCTot">0</strong></div>
   </div>
 
@@ -7857,8 +7857,7 @@ function lgSortRenderGrid(){
     i=>{
       const x=a[i];
       if(x.outerStatus==="treif"||x.innerStatus==="treif")return t.treif||"טרף";
-      if(x.slaughter==="nevela")return t.slN||"נבלה";
-      if(x.slaughter==="shot")return t.slSh||"ירוי";
+      if(x.slaughter==="nevela"||x.slaughter==="shot")return t.slN||"נבלה";   // v10.36: only the slaughter screen says ירוי
       if(!isKosherReady(x))return"";
       if(!x.legsStickers && !x.legsSorted)return L('אין רגליים','No legs','Sin patas');
       return statusDisplayName(x.outerStatus,x);
@@ -7895,8 +7894,8 @@ function lgProcessSort(code){
   // Not kosher: nevela, shot, treif
   if(a.slaughter==='nevela'||a.slaughter==='shot'){
     lgShowWarn(
-      L('לא כשר!','Not Kosher!','¡No kosher!'),
-      L('רגל #','Leg #','Pata #')+(idx+1)+' — '+(a.slaughter==='nevela'?L('נבלה','Nevela','Nevelá'):L('ירוי','Shot','Baleado'))
+      L('נבלה!','Nevela!','¡Nevelá!'),
+      L('רגל #','Leg #','Pata #')+(idx+1)+' — '+L('נבלה','Nevela','Nevelá')
     );return;
   }
   if(a.innerStatus==='treif'||a.outerStatus==='treif'){
@@ -7974,8 +7973,7 @@ function lgRenderGrid(){
     return"slaughtered";
   };
   const baseLabel=(x)=>{
-    if(x.slaughter==="shot")return t.slSh||L('ירוי','Shot','Baleado');
-    if(x.slaughter==="nevela")return t.stNev;
+    if(x.slaughter==="shot"||x.slaughter==="nevela")return t.stNev;   // v10.36: only the slaughter screen says ירוי
     if(x.slaughter==="notChalak")return ncL;
     return t.stSlaughtered;
   };
@@ -9659,13 +9657,20 @@ function gtAnHtml(acc, K, C){
                    ['mk', acc.mk, c => c.acc.mk]]
     .concat(Object.keys(Object.assign({}, acc.custom, ...C.map(c => c.acc.custom))).map(k => [k, acc.custom[k] || 0, c => c.acc.custom[k] || 0]))
     .concat([['treif', acc.treif + acc.innerTreif, c => c.acc.treif + c.acc.innerTreif]])
+    // v10.36 (owner): טרף by kind — בית הכוסות / כרסים / ריאות (rows under טרף; not in the bar)
+    .concat([['treifMaw', acc.treifMaw || 0, c => c.acc.treifMaw || 0], ['treifRumen', acc.treifRumen || 0, c => c.acc.treifRumen || 0],
+             ['treifLung', acc.treifLung || 0, c => c.acc.treifLung || 0], ['treifOther', acc.treifOther || 0, c => c.acc.treifOther || 0]])
     // v10.32 (owner): nevela and shot are kashrut results too — each on its own row. ("not chalak" is not a
     // result: it is a mark until the inspectors rule, so it is not counted here.)
     .concat([['nevela', acc.nevela, c => c.acc.nevela], ['shot', acc.shot, c => c.acc.shot]]);
-  const _resNm = { nevela: L('נבלה', 'Nevela', 'Nevelá'), shot: L('ירוי', 'Shot', 'Baleado') }, _resCol = { nevela: '#8B1E1E', shot: '#8A8F98' };
+  const _resNm = { nevela: L('נבלה', 'Nevela', 'Nevelá'), shot: L('ירוי', 'Shot', 'Baleado'),
+                   treifMaw: '↳ ' + L('טרף — בית הכוסות', 'טרף — maw', 'טרף — cuajar'), treifRumen: '↳ ' + L('טרף — כרסים', 'טרף — rumen', 'טרף — panza'),
+                   treifLung: '↳ ' + L('טרף — ריאות', 'טרף — lungs', 'טרף — pulmones'), treifOther: '↳ ' + L('טרף — סוג לא נשמר', 'טרף — kind not kept', 'טרף — tipo no guardado') },
+        _resCol = { nevela: '#8B1E1E', shot: '#8A8F98', treifMaw: '#E03030', treifRumen: '#E03030', treifLung: '#E03030', treifOther: '#E03030' };
+  const _sub = k => /^treif[A-Z]/.test(k);
   const ruled = K.graded + K.treif + acc.nevela + acc.shot;          // every animal with a result
   const _rn = k => _resNm[k] || nm(k), _rc = k => _resCol[k] || col(k);
-  const bar = rowsDef.filter(r => r[1] > 0).map(([k, v]) => `<div title="${escapeHtml(_rn(k))}" style="width:${ruled ? v / ruled * 100 : 0}%;background:${_rc(k)};height:100%;"></div>`).join('');
+  const bar = rowsDef.filter(r => r[1] > 0 && !_sub(r[0])).map(([k, v]) => `<div title="${escapeHtml(_rn(k))}" style="width:${ruled ? v / ruled * 100 : 0}%;background:${_rc(k)};height:100%;"></div>`).join('');
   const tbl = `<div style="height:14px;border-radius:7px;overflow:hidden;display:flex;background:var(--border);margin-bottom:10px;">${bar}</div>
     <table class="gt-tbl"><tr><th></th><th>${L('כמות', 'Count', 'Cant.')}</th><th>%</th>${C.map(c => `<th>${escapeHtml(c.l)}</th>`).join('')}</tr>
     ${rowsDef.filter(r => r[1] > 0 || r[0] === 'nevela' || r[0] === 'shot' || C.some(c => r[2](c) > 0)).map(([k, v, f]) => `<tr><td><span style="color:${_rc(k)};">●</span> ${escapeHtml(_rn(k))}</td><td>${_gtNum(v)}</td><td>${ruled ? _gtNum(v / ruled * 100, 1) + '%' : '—'}</td>${C.map(c => { const cr = c.K.graded + c.K.treif + c.acc.nevela + c.acc.shot; return `<td>${_gtNum(f(c))}${cr ? ' <span class="gt-flat">(' + _gtNum(f(c) / cr * 100, 0) + '%)</span>' : ''}</td>`; }).join('')}</tr>`).join('')}
@@ -10500,6 +10505,7 @@ function _freshPeriodAcc(){
     total:0, slaughtered:0, nevela:0, shot:0, notChalak:0,
     glatt:0, beit:0, kosher:0, rabKosher:0, mk:0, treif:0,
     innerTreif:0, custom:{},
+    treifMaw:0, treifRumen:0, treifLung:0, treifOther:0,   // v10.36 (owner): טרף by kind, for the summaries
     // carcass weights (stage 1, right + left halves) for the weight report
     weights:{n:0,sumR:0,nR:0,sumL:0,nL:0,sumFull:0,nFull:0},
     workers:{slaughter:{},inner:{},outer:{}},
@@ -10508,6 +10514,11 @@ function _freshPeriodAcc(){
     hours:new Array(24).fill(0),
     days:1
   };
+}
+// v10.36 (owner): " (בית הכוסות 2 · כרסים 1 · ריאות 5)" after טרף in the summaries
+function _gtTreifKinds(d){
+  const p=[[d.treifMaw,L('בית הכוסות','maw','cuajar')],[d.treifRumen,L('כרסים','rumen','panza')],[d.treifLung,L('ריאות','lungs','pulmones')]].filter(x=>x[0]>0).map(x=>x[1]+' '+x[0]);
+  return p.length?' ('+p.join(' · ')+')':'';
 }
 function _accumulateAnimalStats(acc, animals, dailyIntake){
   let running=0;
@@ -10549,6 +10560,11 @@ function _accumulateAnimalStats(acc, animals, dailyIntake){
     // inner-check treif that never got an outer ruling (nevela/shot and
     // outer-ruled animals are already counted above — was counted twice)
     if(x.innerStatus==='treif' && !deadAfterRuling && !x.outerStatus)acc.innerTreif++;
+    if(!deadAfterRuling && (x.outerStatus==='treif'||x.innerStatus==='treif')){
+      const k = x.maw==='treif' ? 'treifMaw' : x.rumen==='treif' ? 'treifRumen'
+              : (x.outerStatus==='treif' || 'maw' in x || 'rumen' in x) ? 'treifLung' : 'treifOther';   // (an old archived day: kind not kept)
+      acc[k]=(acc[k]||0)+1;
+    }
     {
       const wr=Number(x.weightRight), wl=Number(x.weightLeft);
       const hasR=x.weightRight!=null&&wr>0, hasL=x.weightLeft!=null&&wl>0;
@@ -10774,7 +10790,7 @@ function mgrUpdateSummaries(){
   ];
   Object.entries(d.custom).forEach(([k,v])=>{const c=getAllStatuses().find(x=>x.key===k);rows.push([c?statusDisplayName(k):k,c?c.color:'var(--gold)',v]);});
   const treifTotal=d.treif+d.innerTreif;
-  rows.push(['טרף','var(--red)',treifTotal]);
+  rows.push(['טרף'+_gtTreifKinds(d),'var(--red)',treifTotal]);
   // nevela/shot and not-yet-ruled animals too, so the rows add up to the total
   const _ruledOnly=rows.reduce((a,r)=>a+(Number(r[2])||0),0);
   rows.push([L('נבלה / ירי','Nevela / shot','Nevelá / baleado'),'var(--red-light)',(d.nevela||0)+(d.shot||0)]);
@@ -10889,7 +10905,7 @@ function mgrDrawCharts(){
     ['בית יוסף','#4DA6FF',d.beit],
     ['כשר','#D4A843',d.kosher],
     ['MK','#A080F0',d.mk],
-    ['טרף','#E03030',d.treif+d.innerTreif],
+    ['טרף'+_gtTreifKinds(d),'#E03030',d.treif+d.innerTreif],
   ];
   Object.entries(d.custom).forEach(([k,v])=>{const c=getAllStatuses().find(x=>x.key===k);verdicts.push([c?statusDisplayName(k):k,(c&&c.color)||'#FF8C00',v]);});
   {
@@ -12726,7 +12742,7 @@ function mgrCreateArchiveEntry(){
     entry.data.summary = sum;
     entry.data.animals = KS.getAnimals().map(a=>({
       slaughter:a.slaughter, innerStatus:a.innerStatus,
-      outerStatus:a.outerStatus, innerTreif:a.innerStatus==='treif',
+      outerStatus:a.outerStatus, innerTreif:a.innerStatus==='treif', maw:a.maw||null, rumen:a.rumen||null,
       slaughteredBy:a.slaughteredBy, innerBy:a.innerBy, outerBy:a.outerBy,
       slaughterTime:a.slaughterTime, notChalakInner:(a.notChalakInner===true||a.notChalakOuter===true),
       weightRight:a.weightRight!=null?a.weightRight:null, weightLeft:a.weightLeft!=null?a.weightLeft:null,
@@ -13479,9 +13495,10 @@ function partsTapAnimal(idx){
 
   // Not kosher at all - blocked
   if(!a.slaughter||a.slaughter==="nevela"||a.slaughter==="shot"){
+    const _nv=a.slaughter==="nevela"||a.slaughter==="shot";
     showPartsError(
-      L("לא נשחט","Not Slaughtered","No faenado"),
-      L(`בהמה #${idx+1} — ${a.slaughter==="nevela"?"נבלה":"לא נשחט"}`,`Animal #${idx+1} — ${a.slaughter==="nevela"?"nevela":"not slaughtered"}`,`Animal #${idx+1} — ${a.slaughter==="nevela"?"nevelá":"no faenado"}`)
+      _nv?L("נבלה!","Nevela!","¡Nevelá!"):L("לא נשחט","Not Slaughtered","No faenado"),
+      L(`בהמה #${idx+1} — ${_nv?"נבלה":"לא נשחט"}`,`Animal #${idx+1} — ${_nv?"nevela":"not slaughtered"}`,`Animal #${idx+1} — ${_nv?"nevelá":"no faenado"}`)
     );
     return;
   }
@@ -13543,6 +13560,12 @@ No se pueden imprimir etiquetas kosher.`)
   partsRenderGrid();partsUpdateSummary();
 }
 
+// v10.36 (owner): there is no "לא כשר" — the animal is טרף or נבלה (or has no kosher ruling)
+function _gtNoKosherTitle(a){
+  if(a && (a.slaughter==='nevela'||a.slaughter==='shot')) return L('נבלה!','Nevela!','¡Nevelá!');
+  if(a && (a.innerStatus==='treif'||a.outerStatus==='treif')) return 'טרף!';
+  return L('אין פסיקה כשרה','No kosher ruling','Sin dictamen kosher');
+}
 function showPartsError(title,desc){
   document.getElementById("partsErrTitle").textContent=title;
   document.getElementById("partsErrDesc").innerHTML=escapeHtml(desc||"").split("\n").join("<br>");
@@ -13644,7 +13667,7 @@ function partsDoReprint(){
   if(_gtRulingPending(partsReprintIdx)){ const _i=partsReprintIdx; partsReprintIdx=-1; showPartsError(_gtRulingPendingTitle(), _gtRulingPendingText(_i)); return; }
   if(!isKosherReady(a)){
     const _i=partsReprintIdx; partsReprintIdx=-1;
-    showPartsError(L("לא כשר","Not Kosher","No kosher"),
+    showPartsError(_gtNoKosherTitle(a),
       L(`בהמה #${_i+1} — אינה כשרה כרגע. אין להדפיס מדבקות כשרות.`,`Animal #${_i+1} — not kosher right now. Do not print kosher stickers.`,`Animal #${_i+1} — no es kosher ahora. No imprima etiquetas kosher.`));
     partsRenderGrid();partsUpdateSummary();
     return;
@@ -14577,9 +14600,10 @@ function stampsTapAnimal(idx){
 
   // Not slaughtered
   if(!a.slaughter||a.slaughter==="nevela"||a.slaughter==="shot"){
+    const _nv=a.slaughter==="nevela"||a.slaughter==="shot";
     stampsShowError(
-      L("לא נשחט","Not Slaughtered","No faenado"),
-      L("בהמה #"+(idx+1)+" — לא נשחטה כשר.","Animal #"+(idx+1)+" — not slaughtered kosher.","Animal #"+(idx+1)+" — no faenado kosher.")
+      _nv?L("נבלה!","Nevela!","¡Nevelá!"):L("לא נשחט","Not Slaughtered","No faenado"),
+      _nv?L("בהמה #"+(idx+1)+" — נבלה.","Animal #"+(idx+1)+" — nevela.","Animal #"+(idx+1)+" — nevelá."):L("בהמה #"+(idx+1)+" — לא נשחטה.","Animal #"+(idx+1)+" — not slaughtered.","Animal #"+(idx+1)+" — no faenado.")
     );return;
   }
   // Treif
@@ -14651,7 +14675,7 @@ function stampsDoReprint(){
   if(_gtRulingPending(stampsRpIdx)){ const _i=stampsRpIdx; stampsRpIdx=-1; stampsShowError(_gtRulingPendingTitle(), _gtRulingPendingText(_i)); return; }
   if(!isKosherReady(a)){
     const _i=stampsRpIdx; stampsRpIdx=-1;
-    stampsShowError(L("לא כשר","Not Kosher","No kosher"),
+    stampsShowError(_gtNoKosherTitle(a),
       L("בהמה #"+(_i+1)+" — אינה כשרה כרגע. אין להדפיס חותמות כשרות.","Animal #"+(_i+1)+" — not kosher right now. Do not print kosher stamps.","Animal #"+(_i+1)+" — no es kosher ahora. No imprima sellos kosher."));
     stampsRenderGrid();stampsUpdateSummary();
     return;
@@ -16234,7 +16258,7 @@ window.addEventListener("touchcancel",function(){isDrawing=false;},true);
 <div class="overlay" id="partsErrorModal" style="z-index:870">
   <div style="background:#2A0A0A;border:2px solid var(--red);border-radius:14px;padding:24px 20px;width:300px;max-width:93vw;text-align:center;animation:fadeUp .3s ease;">
     <div style="font-size:40px;margin-bottom:10px">&#128683;</div>
-    <div style="font-family:'Frank Ruhl Libre',serif;font-size:18px;color:var(--red-light);margin-bottom:8px" id="partsErrTitle">מספר לא כשר!</div>
+    <div style="font-family:'Frank Ruhl Libre',serif;font-size:18px;color:var(--red-light);margin-bottom:8px" id="partsErrTitle">טרף!</div>
     <div style="font-size:13px;color:var(--muted);margin-bottom:18px;line-height:1.6" id="partsErrDesc"></div>
     <button onclick="document.getElementById('partsErrorModal').classList.remove('open')" style="width:100%;padding:12px;border-radius:8px;background:var(--red);border:none;color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:'Frank Ruhl Libre',serif">סגור</button>
   </div>
