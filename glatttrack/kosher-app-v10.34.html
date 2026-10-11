@@ -16576,9 +16576,17 @@ function _gtHealthCodeText(c){
   return t ? L(t[0],t[1],t[2]) : c;
 }
 function _gtHealthAttention(){ const h=window._gtHealth; return (h && h.ok && Array.isArray(h.attention)) ? h.attention : []; }
+// v10.35 (owner): the team leader sees only what he can deal with himself; the technical part
+// (backups, servers, the nightly check, the event chain, security counters) belongs to the
+// manufacturer's customer service — the team leader gets one line: "the manufacturer was alerted".
+const GT_HEALTH_TECH = ['backup_stale','backup_unknown','chain_broken','failed_logins','revoked_device_writes',
+  'nightly_check_problems','nightly_check_fixed','nightly_check_missing','standby_down','standby_lag','standby_async','failover_recent'];
+function _gtHealthFull(){ return (KS.getManagerRole && KS.getManagerRole())==='manufacturer'; }
+function _gtHealthLeaderAttn(){ return _gtHealthAttention().filter(c=>GT_HEALTH_TECH.indexOf(c)<0); }
+function _gtHealthTechAttn(){ return _gtHealthAttention().filter(c=>GT_HEALTH_TECH.indexOf(c)>=0); }
 function _gtHealthStatusRow(){
   const leader = !!(typeof KS!=='undefined' && KS.getManagerToken && KS.getManagerToken()) && KS.getManagerRole()==='manager';
-  if(leader && _gtHealthAttention().length){
+  if(leader && _gtHealthLeaderAttn().length){
     window.gtStatusSet('health', L('⚠ נדרשת תשומת לב — מסך בריאות מערכת','⚠ Attention needed — System health screen','⚠ Se requiere atención — pantalla Estado del sistema'),
                        {color:'red', onclick:gtOpenHealth});
   } else window.gtStatusClear('health');
@@ -16594,7 +16602,7 @@ let _gtHealthBusy=false, _gtHealthAt=0;
 async function gtHealthRefresh(){
   if(!window.sb || _gtHealthBusy) return;
   const tok=KS.getManagerToken && KS.getManagerToken(); const role=KS.getManagerRole && KS.getManagerRole();
-  if(!tok || (role!=='manager' && role!=='owner')){ window._gtHealth=null; _gtHealthStatusRow(); mgrRenderHealth(); return; }
+  if(!tok || (role!=='manager' && role!=='owner' && role!=='manufacturer')){ window._gtHealth=null; _gtHealthStatusRow(); mgrRenderHealth(); return; }
   _gtHealthBusy=true;
   try{ await _withTimeout(_gtSealsPull(), 8000); }catch(e){}   // the kashrut-marks row reads the server's marks
   try{
@@ -16641,11 +16649,11 @@ function mgrRenderHealth(){
   let errs=0; try{ errs=gtErrorLogLoad().length; }catch(e){}
   x+=row(net?'g':'r', L('חיבור לשרת','Server connection','Conexión'), net?L('מחובר','connected','conectado'):L('אין חיבור','offline','sin conexión'));
   x+=row(q===0?'g':(q<20?'y':'r'), L('ממתינים לשליחה בטאבלט הזה','Waiting to send on this tablet','Pendientes en esta tableta'), q);
-  x+=row(errs===0?'g':'y', L('שגיאות ביומן המכשיר','Errors in this device\'s log','Errores en el registro del dispositivo'), errs);
+  if(_gtHealthFull()) x+=row(errs===0?'g':'y', L('שגיאות ביומן המכשיר','Errors in this device\'s log','Errores en el registro del dispositivo'), errs);
   const step=Number(h.schemaStep)||null;
-  x+=row('g', L('גרסת האפליקציה','App version','Versión de la app'), GT_APP_VERSION);
+  if(_gtHealthFull()) x+=row('g', L('גרסת האפליקציה','App version','Versión de la app'), GT_APP_VERSION);
   try{ const miss=_gtSealsMissing(); x+=row(miss.length?'r':'g', L('סימני כשרות למדבקות','Kashrut marks for the stickers','Sellos para las etiquetas'), miss.length?(L('חסר: ','missing: ','faltan: ')+miss.join(', ')):L('יש לכל הסטטוסים','every status has one','todos')); }catch(e){}
-  x+=row(step==null?'y':(step>=GT_MIN_SCHEMA?'g':'r'), L('שלב השרת (נדרש / בשרת)','Server step (required / server)','Paso del servidor (requerido / servidor)'), GT_MIN_SCHEMA+' / '+(step==null?'?':step));
+  if(_gtHealthFull()) x+=row(step==null?'y':(step>=GT_MIN_SCHEMA?'g':'r'), L('שלב השרת (נדרש / בשרת)','Server step (required / server)','Paso del servidor (requerido / servidor)'), GT_MIN_SCHEMA+' / '+(step==null?'?':step));
   if(!h.ok){
     const why=h.error==='missing_fn'?L('השרת לא מעודכן (צריך step45)','Server not updated (needs step45)','Servidor sin actualizar (step45)')
              :h.error==='unauthorized'?L('כניסת ראש הצוות פגה','Team-leader session expired','Sesión caducada')
@@ -16655,6 +16663,22 @@ function mgrRenderHealth(){
   }
   const dv=h.devices||{}, tm=h.testMode||{}, ch=h.eventChain||{}, sec=h.security||{}, bk=h.backup||{};
   x+=row((dv.offline|0)>0?'r':'g', L('מכשירים מצומדים / לא מחוברים','Paired devices / offline','Dispositivos / sin conexión'), (dv.active|0)+' / '+(dv.offline|0));
+  if(!_gtHealthFull()){
+    // v10.35 (owner): the team leader's view — only what he can deal with; the technical part is the manufacturer's
+    x+=row(tm.on?'r':'g', L('מצב בדיקה','Test mode','Modo prueba'), tm.on?(L('פעיל עד ','on until ','activo hasta ')+new Date(tm.expires_at).toLocaleTimeString()):L('כבוי','off','apagado'));
+    const sv0=h.server||{}, a0=_gtHealthAttention();
+    if(sv0.ups || a0.indexOf('ups_on_battery')>=0 || a0.indexOf('ups_low_battery')>=0){
+      const u=a0.indexOf('ups_low_battery')>=0?'low':a0.indexOf('ups_on_battery')>=0?'bat':'ok';
+      x+=row(u==='ok'?'g':'r', L('חשמל (UPS)','Power (UPS)','Energía (SAI)'),
+        u==='low'?L('סוללה כמעט ריקה','battery almost empty','batería casi vacía'):u==='bat'?L('על סוללה — אין חשמל','on battery — power cut','con batería'):L('תקין','ok','bien'));
+    }
+    const la=_gtHealthLeaderAttn(), ta=_gtHealthTechAttn();
+    if(la.length) x+='<div class="gt-hattn">'+la.map(c=>'⚠ '+E(_gtHealthCodeText(c))).join('<br>')+'</div>';
+    if(ta.length) x+='<div style="margin-top:8px;padding:8px 10px;border-radius:8px;background:rgba(212,168,67,.10);border:1px solid var(--gold);font-size:13px;">🛠 '
+        +E(L('תקלה טכנית במערכת — היצרן קיבל התראה ומטפל. אין צורך לעשות דבר.','A technical problem — the manufacturer was alerted and is handling it. Nothing to do.','Un problema técnico — el fabricante fue avisado y lo atiende.'))+'</div>';
+    if(!la.length && !ta.length) x+='<div style="font-size:13px;color:var(--green);margin-top:8px;">✓ '+E(L('הכול תקין','All good','Todo bien'))+'</div>';
+    el.innerHTML=x; return;
+  }
   x+=row('g', L('מושבתים · בקשות צימוד פתוחות','Retired · open pairing requests','Retirados · solicitudes abiertas'), (dv.retired|0)+' · '+(dv.unpaired_requests|0));
   x+=row(tm.on?'r':'g', L('מצב בדיקה','Test mode','Modo prueba'), tm.on?(L('פעיל עד ','on until ','activo hasta ')+new Date(tm.expires_at).toLocaleTimeString()):L('כבוי','off','apagado'));
   const bkTxt = bk.status==='ok' ? (L('מאומת לפני ','verified ','verificada hace ')+bk.ageHours+L(' שעות',' h ago',' h'))

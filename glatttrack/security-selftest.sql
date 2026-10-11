@@ -1637,15 +1637,19 @@ begin
   r  := pg_temp.api('{}', format('select system_health(%L)', pg_temp.v('mgr')));
   r2 := pg_temp.api3('{}', jsonb_build_object('role', 'authenticated', 'sub', '11111111-1111-1111-1111-111111111111'),   -- (owner bound above)
                      format('select system_health(%L)', pg_temp.v('owner')));
-  r3 := pg_temp.api('{}', format('select system_health(%L)', pg_temp.v('maker')));
+  insert into manager_sessions (manager_id)
+    select id from plant_managers where role = 'manufacturer' and name = 'selftest maker' and active limit 1;
+  r3 := pg_temp.api('{}', format('select system_health(%L)',            -- (a fresh manufacturer session: v10.35, he reads the health too)
+          (select s.token from manager_sessions s join plant_managers m on m.id = s.manager_id
+            where m.role = 'manufacturer' and m.name = 'selftest maker' order by s.created_at desc limit 1)));
   r4 := pg_temp.api(pg_temp.dev('SL1'), 'select system_health(''x'')');
-  ok := pg_temp.ok(r) and pg_temp.ok(r2) and r3 ->> 'error' = 'unauthorized' and r4 ->> 'error' = 'unauthorized'
+  ok := pg_temp.ok(r) and pg_temp.ok(r2) and pg_temp.ok(r3) and r4 ->> 'error' = 'unauthorized'   -- (v10.35: the manufacturer reads it too)
         and r ? 'schemaStep' and r ? 'serverTime' and r -> 'devices' ? 'offline' and r -> 'devices' ? 'unpaired_requests'
         and r -> 'eventChain' ? 'checked' and r -> 'security' ? 'revokedDeviceWrites24h' and r -> 'security' ? 'rateLimited24h'
         and (r -> 'eventChain' ->> 'ok')::boolean
         and r -> 'info' ? 'backup_unknown' and not (r -> 'attention' ? 'backup_stale')
         and not (r -> 'attention' ? 'test_mode_on') and not (r -> 'attention' ? 'chain_broken');
-  perform pg_temp.rec('system_health: team leader / owner only; all sections; no backup ever on this server = info backup_unknown (not attention)', ok,
+  perform pg_temp.rec('system_health: team leader / owner / manufacturer (view) only; all sections; no backup ever on this server = info backup_unknown (not attention)', ok,
     concat_ws(' | ', left(r::text, 300), r3::text, r4::text));
   -- backups on a plant server
   insert into plant_state (key, value) values ('plantServer', 'on');

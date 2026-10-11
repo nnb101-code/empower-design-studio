@@ -2852,7 +2852,8 @@ declare
   v_stb jsonb; v_ups text; v_ups_at timestamptz; v_fo timestamptz;
   v_night jsonb; v_night_at timestamptz;
 begin
-  if v_role not in ('manager', 'owner') then
+  -- v10.35 (owner): the technical health belongs to the manufacturer's customer service — it reads it too
+  if v_role not in ('manager', 'owner', 'manufacturer') then
     return jsonb_build_object('ok', false, 'error', 'unauthorized');
   end if;
   v_tm := _test_mode_on();                  -- also switches an expired flag off
