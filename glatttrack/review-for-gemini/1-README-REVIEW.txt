@@ -18,6 +18,19 @@ This pack is the CURRENT state. Review these files only.
 | `test-mode-on.sql` / `test-mode-off.sql` | The owner's SQL-only test switch. |
 | `plant-server/` | Plant resilience kit (bash, runs as root on the plant servers, NOT in the database): standby server, floating address, UPS, nightly checked backup. Guide: `PLANT-RESILIENCE-HE.md`. |
 
+## Fixed after our own deep review of the kashrut statuses (v10.36, server 02 + app)
+
+1. **Old printed-as keys.**
+   - Problem: `parts_printed_as` / `stamped_as` = `kosherRab` (the old hidden "רבנות כשר") no longer matched `_printed_as_key`, so a not-chalak animal printed before the update showed "print again".
+   - Fix: 02 now maps these to the animal's `outer_status` on every run, in `animals_pilot` and `animals_carry`, with `updated_at` moved.
+2. **One-time migration did not reach the tablets.** It changed rows without moving `updated_at`, so tablets that pull by `updated_at` did not see the change. Fixed.
+3. **"Not chalak" switched off mid-day.**
+   - Problem: an animal already marked not chalak could only be ruled treif, because not-chalak statuses were off and chalak statuses are not allowed for it.
+   - Fix: the off rule (`_nc_group_off`) now applies only to a regular animal (`not _is_nc(a)`), in `claim_animal_stage` and in `_animals_nc_outer_value`. The app (outer buttons) matches, and the self-test covers it.
+4. **App: the auto-scroll after a tap.** It now reacts only to a part that really opened (new nodes, or `display:none` / closed → open, using `attributeOldValue`).
+
+Self-test: 148/148.
+
 ## Changed in v10.36 (owner, server 02 + app) — kashrut statuses: chalak / not chalak, no "not kosher"
 
 - **"Not chalak" is not a status and is not tied to the rabbinate.** It is a mark (slaughter `notChalak` / maw `not_chalak_inner`) that holds until the outer ruling.
