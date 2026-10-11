@@ -11624,10 +11624,19 @@ function mgrUpdateStatusToggles(){
     const seal=_safeImg(seals[st.key]);
     const K=_jsArg(st.key);
     // Every status (default or custom) can be removed.
-    html+=`<div style="display:flex;align-items:center;gap:8px;padding:10px 2px;border-bottom:1px solid var(--border);flex-wrap:wrap;">
+    // v10.36 (owner): each status is one block — its name with its on/off switch on the first line,
+    // its buttons on the line under it (never wrapping into the next status on a phone)
+    html+=`<div data-status-row="${escapeHtml(st.key)}" style="padding:10px 2px;border-bottom:1px solid var(--border);">
+     <div style="display:flex;align-items:center;gap:8px;">
       <button onclick="mgrPickColor(${K},${_jsArg(color)})"
         style="width:30px;height:30px;min-width:30px;border-radius:7px;border:2px solid rgba(255,255,255,.3);background:${color};cursor:pointer;"></button>
       <span style="flex:1;min-width:50px;font-size:13px;color:#E8EDF5;font-weight:600;">${escapeHtml(label)}${enName?`<span style="font-size:11px;color:var(--muted);font-weight:400;margin-inline-start:6px;" title="${escapeHtml(L('השם באנגלית — מודפס במדבקות','English name — printed on the stickers','Nombre en inglés — se imprime en las etiquetas'))}">· ${escapeHtml(enName)}</span>`:''}${ncTag}</span>
+      <button onclick="mgrToggleStatus(${K})"
+        style="width:50px;height:28px;min-width:50px;border-radius:14px;border:none;cursor:pointer;position:relative;background:${on?'#28C76F':'#1F2D45'};transition:background .2s;">
+        <div style="position:absolute;top:3px;${on?'right:3px':'left:3px'};width:22px;height:22px;border-radius:50%;background:white;transition:all .2s;pointer-events:none;"></div>
+      </button>
+     </div>
+     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px;padding-inline-start:38px;">
       <label style="display:flex;align-items:center;gap:5px;cursor:pointer;background:rgba(212,168,67,.08);border-radius:7px;padding:3px 6px;">
         ${seal?`<img src="${seal}" style="width:38px;height:38px;object-fit:contain;border:1px solid var(--border);border-radius:6px;background:#fff;">`
               :`<span style="font-size:11px;color:var(--gold);">${L('+ חותמת','+ Seal','+ Sello')}</span>`}
@@ -11638,10 +11647,7 @@ function mgrUpdateStatusToggles(){
       ${DEFAULT_STATUSES.some(d=>d.key===st.key)?'':`<button onclick="mgrRenameStatus(${K})" style="font-size:11px;color:var(--gold);background:rgba(212,168,67,.08);border:1px solid var(--border);border-radius:5px;padding:4px 7px;cursor:pointer;">${L('✏️ שם','✏️ Name','✏️ Nombre')}</button>`}
       ${DEFAULT_STATUSES.some(d=>d.key===st.key)?'':`<button data-custom-kosher="${st.kosher===true?'1':'0'}" onclick="mgrToggleCustomKosher(${K})" style="font-size:11px;border-radius:5px;padding:4px 7px;cursor:pointer;background:transparent;border:1px solid ${st.kosher===true?'#28C76F':'#E03030'};color:${st.kosher===true?'#28C76F':'#FF6B6B'};">${st.kosher===true?L('כשר','Kosher','Kosher'):L('לא כשר','Not kosher','No kosher')}</button>`}
       <button onclick="mgrRemoveStatus(${K})" style="font-size:12px;color:#FF6B6B;background:rgba(224,48,48,.1);border:1px solid rgba(224,48,48,.3);border-radius:5px;padding:4px 9px;cursor:pointer;">✕</button>
-      <button onclick="mgrToggleStatus(${K})"
-        style="width:50px;height:28px;min-width:50px;border-radius:14px;border:none;cursor:pointer;position:relative;background:${on?'#28C76F':'#1F2D45'};transition:background .2s;">
-        <div style="position:absolute;top:3px;${on?'right:3px':'left:3px'};width:22px;height:22px;border-radius:50%;background:white;transition:all .2s;pointer-events:none;"></div>
-      </button>
+     </div>
     </div>`;
   });
   {const removedDef=(s.removedDefaults||[]).map(k=>DEFAULT_STATUSES.find(d=>d.key===k)).filter(d=>d&&d.key!=='treif');
