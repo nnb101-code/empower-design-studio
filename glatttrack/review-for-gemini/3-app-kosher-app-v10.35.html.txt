@@ -3956,6 +3956,15 @@ const KS = (function(){
         }
         return;
       }
+      if(data && data.ok === false && data.error === 'status_in_use'){
+        // v10.35: a status ruled today keeps its kosher meaning — say so clearly and show the server's statuses again
+        _clearSettingsDirty(['customStatuses']);
+        _sbRestoreSettingKey('customStatuses');
+        const others = keys.filter(k=>k!=='customStatuses'); if(others.length){ _markSettingsDirty(); setTimeout(()=>_sbPushSettings(), 50); }
+        try{ alert(gtErrText('status_in_use') + (data.key ? ' ('+data.key+')' : '') + L(' אפשר לשנות אחרי האיפוס היומי.',' It can be changed after the daily reset.',' Se puede cambiar tras el reinicio diario.')); }catch(e){}
+        try{ if(typeof mgrUpdateStatusToggles==='function') setTimeout(mgrUpdateStatusToggles, 600); }catch(e){}
+        return;
+      }
       if(data && data.ok === false){
         _markSettingsDirty();
         console.warn('[KS→Supabase] settings push rejected:', data.error); gtLogError('sync.settingsPush', String(data.error));
@@ -11636,6 +11645,7 @@ function mgrUpdateStatusToggles(){
         <input type="file" accept="image/*" onchange="mgrUploadSeal(${K},this)" style="display:none">
       </label>
       ${seal?`<button onclick="mgrRemoveSeal(${K})" style="font-size:11px;color:#FF6B6B;background:rgba(224,48,48,.1);border:1px solid rgba(224,48,48,.3);border-radius:5px;padding:4px 7px;cursor:pointer;">⌫</button>`:''}
+      ${DEFAULT_STATUSES.some(d=>d.key===st.key)?'':`<button onclick="mgrRenameStatus(${K})" style="font-size:11px;color:var(--gold);background:rgba(212,168,67,.08);border:1px solid var(--border);border-radius:5px;padding:4px 7px;cursor:pointer;">${L('✏️ שם','✏️ Name','✏️ Nombre')}</button>`}
       ${DEFAULT_STATUSES.some(d=>d.key===st.key)?'':`<button data-custom-kosher="${st.kosher===true?'1':'0'}" onclick="mgrToggleCustomKosher(${K})" style="font-size:11px;border-radius:5px;padding:4px 7px;cursor:pointer;background:transparent;border:1px solid ${st.kosher===true?'#28C76F':'#E03030'};color:${st.kosher===true?'#28C76F':'#FF6B6B'};">${st.kosher===true?L('כשר','Kosher','Kosher'):L('לא כשר','Not kosher','No kosher')}</button>`}
       <button onclick="mgrRemoveStatus(${K})" style="font-size:12px;color:#FF6B6B;background:rgba(224,48,48,.1);border:1px solid rgba(224,48,48,.3);border-radius:5px;padding:4px 9px;cursor:pointer;">✕</button>
       <button onclick="mgrToggleStatus(${K})"
@@ -11799,9 +11809,30 @@ function mgrRemoveStatus(key){
   mgrUpdateStatusToggles();
   if(typeof rebuildOuterButtons==='function')rebuildOuterButtons();
 }
+// v10.35 (owner): an added status can be renamed (Hebrew + English); the ruling stays the same
+function mgrRenameStatus(key){
+  const s=KS.getSettings();
+  const cur=(s.customStatuses||[]).find(st=>st.key===key); if(!cur) return;
+  const he=prompt(L('שם הסטטוס (עברית):','Status name (Hebrew):','Nombre (hebreo):'), cur.he||''); if(he===null) return;
+  const h=String(he).trim().slice(0,40); if(!h) return;
+  const en=prompt(L('שם הסטטוס באנגלית (למדבקות ולמסכים באנגלית):','Status name in English:','Nombre en inglés:'), cur.en||''); if(en===null) return;
+  const e=String(en).trim().slice(0,40);
+  const taken=getAllStatuses().some(st=>st.key!==key && !st.removed && (String(st.he||'').trim()===h || (e && String(st.en||'').trim()===e)));
+  if(taken){ alert(L('יש כבר סטטוס בשם הזה.','A status with this name already exists.','Ya existe un estado con ese nombre.')); return; }
+  const custom=(s.customStatuses||[]).map(st=>st.key===key?Object.assign({},st,{he:h, en:e||h}):st);
+  KS.updateSettings({customStatuses:custom});
+  mgrUpdateStatusToggles();
+  try{ if(typeof rebuildOuterButtons==='function') rebuildOuterButtons(); outRenderGrid(); partsRenderGrid(); stampsRenderGrid(); }catch(x){}
+}
+// a status already ruled today keeps its kosher meaning until the daily reset (the rulings of the day)
+function _gtStatusUsedToday(key){ try{ return (KS.getAnimals()||[]).filter(a=>a && a.outerStatus===key).map(a=>a.id+1); }catch(e){ return []; } }
 function mgrToggleCustomKosher(key){
   const s=KS.getSettings();
   const cur=(s.customStatuses||[]).find(st=>st.key===key); if(!cur) return;
+  { const used=_gtStatusUsedToday(key);
+    if(used.length){ alert(L('"'+statusDisplayName(key)+'" כבר נפסק היום על בהמות: '+used.slice(0,12).join(', ')+(used.length>12?'…':'')+'.\nכשר / לא כשר שלו נשאר כמו שהוא עד האיפוס היומי (כדי לא לשנות פסיקות של היום). אפשר לשנות אחרי האיפוס. שינוי שם אפשר תמיד.',
+                             '"'+statusDisplayName(key)+'" was already ruled today on animals: '+used.slice(0,12).join(', ')+'.\nIts kosher / not kosher stays until the daily reset (not to change today\'s rulings). The name can always be changed.',
+                             '"'+statusDisplayName(key)+'" ya se dictaminó hoy: '+used.slice(0,12).join(', ')+'. Su kosher / no kosher queda hasta el reinicio diario.')); return; } }
   const to=!(cur.kosher===true);
   const nm=statusDisplayName(key);
   if(!confirm(to
