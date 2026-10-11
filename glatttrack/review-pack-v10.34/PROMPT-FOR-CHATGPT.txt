@@ -1,0 +1,38 @@
+מצורפת חבילת הבדיקה העדכנית של GlattTrack (אפליקציה v10.34, שרת שלב 46).
+זה סבב ארבעה-עשר: תיקוני A1–A4 מהסבב הקודם, והחלטות חדשות של בעל המערכת.
+קודם תקרא את README-REVIEW.md, החלק "Changed after the v10.34 review", ואחריו "Changed in v10.33 – v10.34" ומטה.
+
+הכללים של בעל המערכת (המצב הנוכחי):
+- סדר הקו: שחיטה ← וושט ← רגליים ← ראש (אם מפוצל) ← פנים ← חוץ ← חותמות / חלקים.
+- מספר מופיע במסך רק אחרי שעבר את המסך הקודם. חוץ מנבלה, ירוי, "?" ו-USDA — אלה מופיעים בכל המסכים.
+- בודק הפנים עובד רק אחרי מדבקות הראש (כולל ריאה ובית הכוסות). מדבקות רגליים לבד לא מספיקות.
+- מספר שהגיע לתחנה הבאה שייך לה: התחנה הקודמת לא משנה את הפסיקה שלה. הוושט יכול להפוך "תקין" ל-"?" עד שהודפסו רגליים/ראש.
+- USDA: כל מסך חוץ משחיטה יכול לסמן; כתוב מאיזה מסך; רק אותו מסך משחרר או פוסל. USDA אחד לבהמה שלמה בכל פעם. חצאים רק בחוץ/חותמות.
+- פיצול רגליים/ראש (אופציה): טאבלט רגליים 0 = רגליים, 1 = ראש. ראש רק אחרי מדבקות רגליים. לראש מדפסת וסורק משלו.
+- כיבוי מסך זמני: וושט, רגליים, חלקים קטנים. הראש אף פעם לא מדולג. רגליים כבוי: אם לא מפוצל המסך הופך לראש בלבד; אם מפוצל, הראש לוקח ישר מהוושט. החזרה: legsFromIdx.
+- "לא חלק" עד פסיקת החוץ, ושם סטטוס אחד (שם שהמפעל קובע) או טרף. שני מסכי חוץ: משולב, או מסך B רק ל"לא חלק".
+- נעילת חוץ: 2 דקות לטאבלט שמת. סריקת ברקוד בפנים ובחוץ פותחת בדיוק את המספר הסרוק.
+
+בדוק במיוחד:
+(00) _legs_required + legsPaused/legsFromIdx/legsFromReset: האם כיבוי/הדלקה של רגליים (או שינוי ההגדרות) יכול לאפשר בדיקת פנים או ראש בלי המדבקות הנדרשות? האם device_pair עם אינדקס 1 לרגליים פותח משהו מעבר למסך ראש?
+(0) A1–A4: האם התיקונים סוגרים את הבעיה (נעילת usda_held_elsewhere, nc_plain מבוטל, in_progress→confirmed, server_error כפול)?
+(1) hold_set בלי בדיקת אזור: מי יכול לשחרר USDA של מסך אחר? האם reopened_question של הוושט יכול לעקוף את נעילת התחנה הבאה?
+(2) _stage_order_error('inner') עם head_stickers: האם יש מסלול כתיבה של פסיקת פנים לפני מדבקות ראש (claim, animal_push, carry_push, המסך המשותף)?
+(3) באפליקציה: _pushAnswer, הסדר במסך ראש מפוצל, כיבוי מסך — האם יכול להיתקע תור או לאבד שינוי תקין?
+(4) הנקודות הפתוחות B1, B2, B5, B6 מהסבב הקודם, ו-_hold_caller_error, _parts_print_block, _correction_check, מצב בדיקה.
+בדיקת האבטחה: 144/144 (מסד נקי מ-glatttrack-schema-full.sql + הרצה שנייה של 02).
+
+Please review this pack according to README-REVIEW.md.
+
+Rules for the review:
+1. Audit the ACTIVE state in active-schema-snapshot.sql (one definition per function). Do not audit older step files or the history inside glatttrack-schema-full.sql as if it were active.
+2. Use SECURITY-MANIFEST.md and security-selftest-result.txt (144/144) to see what is already enforced and tested. Before reporting a vulnerability, check whether a self-test already covers it; if it does, say so and explain why you still think it is exploitable (with the exact function name and line from the snapshot).
+3. Separate your findings into:
+   A. Real, exploitable problems (with a concrete attack: which role, which call, which parameters, what wrong result).
+   B. Defense-in-depth improvements (not exploitable today).
+   C. Things that are already fine.
+4. For every A-finding give: the function name as it appears in the snapshot, the exact problem, and a minimal fix (SQL or JS) that keeps the existing function signatures.
+5. Check the business rules listed in README-REVIEW.md one by one against the code, and say for each: enforced on the server (where) / only in the app / not enforced.
+6. Do not propose rewriting the architecture. Do not invent tables, columns, roles or RPCs that are not in the snapshot.
+
+Answer in Hebrew, with code blocks in English.

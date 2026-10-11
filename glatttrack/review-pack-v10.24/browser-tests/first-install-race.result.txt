@@ -1,0 +1,14 @@
+== v10.19 (before)
+RPC system_health 200 {"ok": true, "info": ["backup_unknown"], "backup": {"status": "unknown", "ageHours": nul
+RPC system_health 200 {"ok": false, "error": "unauthorized"}
+DIALOG alert הכניסה של ראש הצוות כבר לא בתוקף (פג הזמן, או שהשרת עוד
+RPC manager_session_check 200 {"ok": false, "role": null, "expires_at": null}
+DIALOG alert ✅ המכשיר הזה נרשם כמכשיר ראש הצוות. מעכשיו ראש צוות נ�
+screen scPair wizard null
+== v10.20 (after)
+RPC system_health 200 {"ok": false, "error": "unauthorized"}
+RPC system_health 200 {"ok": false, "error": "unauthorized"}
+DIALOG alert ✅ המכשיר הזה נרשם כמכשיר ראש הצוות. מעכשיו ראש צוות נ�
+RPC manager_session_check 200 {"ok": true, "role": "manager", "expires_at": "2026-10-08T07:28:01.524215+00:00"
+RPC system_health 200 {"ok": true, "info": ["backup_unknown"], "backup": {"status": "unknown", "ageHours": nul
+screen scManager wizard block

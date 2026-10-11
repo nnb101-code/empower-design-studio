@@ -1,0 +1,7 @@
+(v10.16, Chromium + PostgREST + PostgreSQL 16; outer screen with "code" login)
+1) logged in — worker sessions on the server: 1
+2) ruling #991 (index 990) with the login → server: glatt by E2E Outer
+3) the login ended on the server (session revoked)
+4) ruling #992 without a valid login → server: - | tablet shows: scOuterLogin | kept on tablet: glatt
+5) after logging in again → server: glatt by E2E Outer
+errors: none

@@ -1,0 +1,6 @@
+NC button: לא חלק visible=true
+server: 0:slaughtered:שוחט 1:notChalak:שוחט 2:slaughtered:שוחט
+legs QR payload #1: BH|N:1|D:2026-10-07|SH:שוחט|T:2026-10-07T20:54:10.707Z|S:slaughtered
+sticker text: 1 | יום ד׳ · כ״ו בתשרי תשפ״ז | 07.10.2026 · Wed | שוחט / Shochet: שוחט · 20:54 | נשחט | Slaughtered
+server #1 outer: glatt
+sort result for printed payload: #1 גלאט

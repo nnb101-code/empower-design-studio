@@ -1,0 +1,83 @@
+<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8"><title>Scan and lock design</title>
+<style>
+:root{--bg:#07090F;--panel:#0F1626;--panel2:#16213A;--border:#2A3D5C;--text:#E8EDF5;--muted:#8A9BB5;--gold:#D4A843;--green:#28C76F;--red:#E03030;--blue:#2A7FFF}
+body{margin:0;background:#000;font-family:Arial,Helvetica,sans-serif;color:var(--text)}
+.frame{width:760px;background:var(--bg);margin:20px;border-radius:14px;overflow:hidden;border:1px solid var(--border)}
+.cap{background:#1b2338;color:var(--gold);font-weight:800;padding:10px 14px;font-size:17px}
+.note{color:var(--muted);font-size:13px;padding:8px 14px 12px;line-height:1.6}
+.top{display:flex;gap:8px;align-items:center;padding:10px 12px;border-bottom:1px solid var(--border)}
+.btn{border-radius:12px;padding:10px 16px;font-weight:800;font-size:16px;border:2px solid}
+.scan{background:#0E5C7A;border-color:#4FC3F7;color:#fff}
+.q{background:#FFC400;border-color:#FFC400;color:#000}
+.us{background:#6A3FB5;border-color:#B39DFF;color:#fff}
+.who{margin-inline-start:auto;color:var(--gold);font-weight:700;background:var(--panel2);padding:6px 10px;border-radius:8px}
+.grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;padding:12px}
+.c{border:2px solid #3B82F6;background:#0B3A86;border-radius:12px;text-align:center;padding:8px 0;min-height:62px}
+.c b{display:block;font-size:26px}.c span{font-size:13px}
+.ok{border-color:var(--green);background:#0E4A2A}.tr{border-color:var(--red);background:#5A0E0E}
+.lock{border-color:#6B7280;background:#1F2937;color:#9CA3AF}
+.next{background:#00E676;color:#000;border-color:#fff;box-shadow:0 0 18px #00E676}
+.dim{border-color:#1F2A3F;background:#0B1120;color:#33415C}
+.modal{margin:14px auto;width:420px;background:var(--panel);border:2px solid var(--gold);border-radius:16px;padding:18px;text-align:center}
+.cam{height:200px;border-radius:12px;background:linear-gradient(135deg,#222,#444);position:relative;margin:10px 0}
+.cam:after{content:"";position:absolute;left:15%;right:15%;top:35%;bottom:35%;border:3px solid #4FC3F7;border-radius:8px}
+.line{height:2px;background:#FF5252;position:absolute;left:15%;right:15%;top:50%}
+input{width:120px;font-size:22px;text-align:center;padding:8px;border-radius:10px;border:1px solid var(--border);background:var(--panel2);color:var(--text)}
+.row{display:flex;justify-content:space-between;align-items:center;padding:10px 4px;border-bottom:1px solid var(--border)}
+.seg{display:flex;gap:6px}.seg div{padding:7px 12px;border-radius:8px;border:1px solid var(--border);font-size:13px}.seg .on{border-color:var(--gold);color:var(--gold);background:rgba(212,168,67,.12)}
+.tg{width:48px;height:26px;border-radius:13px;background:var(--green);position:relative}.tg:after{content:"";position:absolute;right:3px;top:3px;width:20px;height:20px;border-radius:50%;background:#fff}
+.sticker{width:300px;height:190px;background:#fff;color:#000;border-radius:8px;margin:16px auto;padding:10px;box-sizing:border-box;font-family:Arial}
+.bars{height:60px;margin:8px 0;background:repeating-linear-gradient(90deg,#000 0 2px,#fff 2px 4px,#000 4px 7px,#fff 7px 8px,#000 8px 9px,#fff 9px 12px)}
+.banner{background:#9A5B00;color:#fff;text-align:center;padding:8px;font-weight:700}
+</style></head><body>
+
+<div class="frame" id="p1">
+ <div class="cap">1 · מדבקת ריאה מהרגליים — עם ברקוד</div>
+ <div class="sticker"><div style="display:flex;justify-content:space-between;font-weight:800"><span style="font-size:34px">#12</span><span style="font-size:20px;align-self:center">ריאה · LUNG</span></div>
+  <div class="bars"></div><div style="text-align:center;font-size:12px">GT·0012·L · 09/10/2026</div></div>
+ <div class="note">הרגליים מדפיסים את המדבקות כמו היום. המדבקה של הריאה מקבלת ברקוד עם מספר הבהמה (ובית הכוסות — מדבקה משלו). את אותה מדבקה סורקים גם בפנים וגם בחוץ.</div>
+</div>
+
+<div class="frame" id="p2">
+ <div class="cap">2 · בודק חוץ A — שני מסכי חוץ, נעילה של המספר</div>
+ <div class="top"><span class="btn scan">📷 סריקה</span><span class="btn q">? שאלה</span><span class="btn us">USDA HOLD</span><span class="who">בודק חוץ A · יוסי</span></div>
+ <div class="grid">
+  <div class="c ok"><b>1</b><span>גלאט</span></div><div class="c ok"><b>2</b><span>גלאט</span></div><div class="c tr"><b>3</b><span>טרף</span></div><div class="c ok"><b>4</b><span>כשר</span></div><div class="c ok"><b>5</b><span>גלאט</span></div>
+  <div class="c lock"><b>6</b><span>🔒 אצל B · משה</span></div><div class="c next"><b>7</b><span>ממתין</span></div><div class="c"><b>8</b><span>ממתין</span></div><div class="c dim"><b>9</b></div><div class="c dim"><b>10</b></div>
+ </div>
+ <div class="note">כשבודק פותח מספר — הוא ננעל אצלו. במסך השני הוא אפור עם שם הבודק, ואי אפשר לפתוח אותו. "הבא בתור" מדלג עליו (כאן: 7). נגמרה הפסיקה / ביטול — הנעילה משתחררת. בודק שנתקע יותר מ־10 דקות — מספר שלו אפשר לקחת (עם אזהרה), כמו בבדיקת הריאה היום.</div>
+</div>
+
+<div class="frame" id="p3">
+ <div class="cap">3 · לחיצה על "📷 סריקה"</div>
+ <div class="modal"><div style="font-size:20px;font-weight:800;color:var(--gold)">סריקת מדבקת הריאה</div>
+  <div class="cam"><div class="line"></div></div>
+  <div style="font-size:13px;color:var(--muted)">מכוונים את המצלמה לברקוד — או סורקים עם סורק ידני (נקלט לבד)</div>
+  <div style="margin-top:12px;font-size:14px">או הקלדה: <input value="12"> <span class="btn" style="border-color:var(--gold);color:var(--gold);padding:8px 14px">פתח</span></div>
+  <div style="margin-top:12px"><span class="btn" style="border-color:var(--border);color:var(--muted)">ביטול</span></div></div>
+ <div class="note">סורק ידני (USB / Bluetooth) עובד כמו מקלדת: סורקים בכל רגע — גם בלי ללחוץ על הכפתור — והמספר נפתח. בלי סורק — המצלמה של הטאבלט.</div>
+</div>
+
+<div class="frame" id="p4">
+ <div class="cap">4 · אחרי סריקה — נפתח בדיוק המספר שעל המדבקה</div>
+ <div class="banner">📷 #12 נסרק</div>
+ <div class="modal"><div style="font-size:30px;font-weight:800;color:var(--gold)">#12</div><div style="font-size:16px;margin-bottom:12px">פסיקת כשרות</div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+   <span class="btn" style="background:#0E5C2A;border-color:#1A8C3E">גלאט</span><span class="btn" style="background:#0E2A6E;border-color:#1A44A0">בית יוסף</span>
+   <span class="btn" style="background:#6A4400;border-color:#9A6600">כשר</span><span class="btn" style="background:#3A1870;border-color:#5A2AA0">MK</span>
+   <span class="btn" style="background:#6E0E0E;border-color:#A01818;grid-column:1/-1">טרף</span></div></div>
+ <div class="note">אם המספר לא יכול להיפתח כאן — הודעה ברורה במקום החלון:<br>
+  • "#12 בטיפול אצל בודק חוץ B · משה" &nbsp; • "#12 עוד לא עבר בדיקת פנים" &nbsp; • "#12 כבר נפסק: גלאט — לשנות?"</div>
+</div>
+
+<div class="frame" id="p5">
+ <div class="cap">5 · הגדרות ראש צוות ← "לא חלק" ומסכי חוץ / בדיקות פנים וחוץ</div>
+ <div style="padding:6px 14px 12px">
+  <div class="row"><div><b>סריקת ברקוד בפנים ובחוץ</b><div style="font-size:12px;color:var(--muted)">המדבקה על הריאה פותחת את המספר</div></div>
+   <div class="seg"><div>כבוי</div><div class="on">סריקה או לחיצה</div><div>סריקה בלבד</div></div></div>
+  <div class="row"><div><b>ברקוד על מדבקת הריאה ובית הכוסות</b><div style="font-size:12px;color:var(--muted)">מודפס ברגליים</div></div><div class="tg"></div></div>
+  <div class="row"><div><b>נעילת מספר בין שני מסכי חוץ</b><div style="font-size:12px;color:var(--muted)">תמיד פעיל — מספר פתוח אצל בודק אחד לא נפתח אצל השני</div></div><div style="color:var(--muted);font-size:13px">תמיד</div></div>
+ </div>
+ <div class="note">"סריקה או לחיצה" — עובדים כרגיל, וסורקים כשיש ספק. "סריקה בלבד" — המספרים בגריד לא נלחצים; פותחים רק בסריקה (חוץ מראש צוות / ביטול).</div>
+</div>
+</body></html>

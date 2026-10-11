@@ -1,0 +1,8 @@
+A1 black hole 10 s: {"locked":false,"storageBad":false,"text":null}
+A1 black hole 20 s: {"locked":true,"storageBad":false,"text":"📡 / אין חיבור לשרת המפעל"}
+A1 black hole 30 s: {"locked":true,"storageBad":false,"text":"📡 / אין חיבור לשרת המפעל"}
+A1 server answers again: {"locked":false,"storageBad":false,"text":null}
+A1 errors: none
+B1 storage full, after the press: {"locked":true,"storageBad":true,"text":"💾 / הטאבלט לא מצליח לשמור"} | server row 34: glatt
+B1 storage works again: {"locked":false,"storageBad":false,"text":null}
+B1 errors: none

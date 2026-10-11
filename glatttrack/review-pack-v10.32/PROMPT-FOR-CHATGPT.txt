@@ -1,0 +1,41 @@
+מצורפת חבילת הבדיקה העדכנית של GlattTrack (אפליקציה v10.32, שרת שלב 46).
+זה סבב שנים-עשר: התיקונים אחרי הבדיקה שלך של v10.31 (A1, F1, A2).
+קודם תקרא את README-REVIEW.md, החלק "Fixed in v10.32" (התיקונים לממצאים שלך), ואחריו "Changed in v10.31" עד "Changed in v10.26". אלה החלטות של בעל המערכת:
+- בכל מסך יש "?" (שאלה) ו-USDA HOLD — חוץ ממסך השחיטה, שבו יש רק "?" (בלי USDA).
+- מספר עם "?" מהבהב כל הזמן בכל מסך, עד שמחליטים עליו.
+- בבדיקת פנים: "?" בחלון (כרסים / בית הכוסות / ריאה) סוגר את המספר מיד. לא ממשיכים לחלון הבא. לחיצה חוזרת פותחת את החלון שבו היה ה-"?".
+- כל מסך משנה רק את הפסיקה שלו. שינוי סטטוס תמיד אפשרי, אחרי אזהרה, ונרשם (מי, מתי, מה היה).
+- משגיח הוושט רשאי לפסוק על מספר שיש עליו "?" בשחיטה. אם השחיטה תפסוק אחר כך נבלה — זה גובר.
+- USDA HOLD בלי סיבה. רק התחנה שעיכבה משחררת או פוסלת. חלק מעוכב לא מודפס.
+- סטטוס כשרות מופיע תמיד בשם שבו נכתב, בכל שפה. סטטוסי הרבנות: רבנות חלק, רבנות כשר.
+- מספר שהגיע לתחנה הבאה שייך לה: התחנה הקודמת לא יכולה לשנות את הפסיקה (שחיטה — עד שהוושט בדק; וושט — עד שהודפסו רגליים/ראש; פנים — עד פסיקת חוץ), ולא יכולה לשים עליו USDA. USDA שייך לתחנה שסימנה/הדפיסה אחרונה: וושט → רגליים → פנים → אחרי פסיקת פנים: חותמות (לא בודק החוץ). חלקים — רק החלקים שלו.
+- עיכוב מוצג רק קדימה בקו (בתחנה ששמה אותו ובתחנות שאחריה), אף פעם לא אחורה.
+- מספר עם "?" פתוח בוושט לא עבר את הוושט — לא מקבל מדבקות רגליים ולא נבדק בפנים.
+- "?" בפנים נשמר בשרת עם החלון שלו (כרסים / בית הכוסות / ריאה); כשהחלון הזה נפסק — השאלה "נענתה".
+- USDA: חצאים רק בחוץ/חותמות (אחרי בדיקת פנים); חלק מעוכב (לחי/לשון) לא נרשם בשרת כמודפס עד השחרור.
+- "לא חלק" אינו סטטוס כשרות; בסיכומים כל אחוז הוא מכלל הבהמות שיש להן תוצאה (כולל נבלה וירוי, כל אחד בנפרד).
+בדוק במיוחד:
+(00) הכללים החדשים של היום: _correction_check (next_station_done / outer_ruled), _usda_zone + hold_set (wrong_zone), הרחבת part ל-rumen/maw/lung ו-hold_resolve 'answered' לפנים. האם יש מסלול כתיבה שעוקף אותם (animal_push, carry_push, eso_change, claim)?
+(0) התיקונים של v10.32: _hold_caller_error (שער כניסת העובד ל-hold_set ו-hold_resolve, והמסך המשותף פנים+חוץ) ו-_parts_print_block (חלק מעוכב לא מודפס — בטריגר b_animals_hold_guard וב-carry_push). האם יש עוד מסלול כתיבה שמסמן חלק מעוכב כמודפס, או ששם / משחרר עיכוב בלי כניסת עובד?
+(1) העיכובים בשרת (טבלה animal_holds, הפונקציות hold_set, hold_resolve, board_flags, change_ack, והטריגרים b_animals_hold_guard ו-zzzzz_close_questions): מי יכול לשים / לשחרר עיכוב של תחנה אחרת? האם אפשר לעקוף עיכוב ולהדפיס / להחתים חלק מעוכב?
+(2) _correction_check: שינוי פסיקה מותר רק לטאבלט של אותה תחנה (או לראש צוות במצב בדיקה). האם יש מסלול שבו תחנה משנה פסיקה של תחנה אחרת?
+(3) מצב בדיקה (_test_mode_on + _request_has_manager): האם יש דרך להשתמש בו בלי מצב בדיקה פעיל או בלי ראש צוות?
+(4) הרצפים animal_holds_id_seq ו-animal_changes_id_seq — האם נשארה הרשאה ל-anon / authenticated.
+(5) באפליקציה: האם יש מקום שבו מספר עם "?" יכול לעבור הלאה (לחוץ / לחלקים / לחותמות) לפני שמחליטים עליו.
+(6) האם יש מקום באפליקציה שעדיין מתרגם שם של סטטוס כשרות, או מציג שם אחר מזה שנכתב.
+בדיקת האבטחה: 141/141 (מסד נקי מ-glatttrack-schema-full.sql, וגם בלי superuser; וגם על Supabase).
+
+Please review this pack according to README-REVIEW.md.
+
+Rules for the review:
+1. Audit the ACTIVE state in active-schema-snapshot.sql (one definition per function). Do not audit older step files or the history inside glatttrack-schema-full.sql as if it were active.
+2. Use SECURITY-MANIFEST.md and security-selftest-result.txt (141/141) to see what is already enforced and tested. Before reporting a vulnerability, check whether a self-test already covers it; if it does, say so and explain why you still think it is exploitable (with the exact function name and line from the snapshot).
+3. Separate your findings into:
+   A. Real, exploitable problems (with a concrete attack: which role, which call, which parameters, what wrong result).
+   B. Defense-in-depth improvements (not exploitable today).
+   C. Things that are already fine.
+4. For every A-finding give: the function name as it appears in the snapshot, the exact problem, and a minimal fix (SQL or JS) that keeps the existing function signatures.
+5. Check the business rules listed in README-REVIEW.md one by one against the code, and say for each: enforced on the server (where) / only in the app / not enforced.
+6. Do not propose rewriting the architecture. Do not invent tables, columns, roles or RPCs that are not in the snapshot.
+
+Answer in Hebrew, with code blocks in English.

@@ -1,0 +1,28 @@
+round ? button: true | top bar: USDA HOLD
+after ?: cell5 num-cell gt-q | 5 שאלה
+server 4..6: 3:slaughtered 4:- 5:slaughtered 6:slaughtered
+holds: 4:slaughter:question:OPEN
+cells 5,6,7,8: num-cell gt-q | 5 שאלה  ||  num-cell slaughtered | 6 נשחט  ||  num-cell next | 8
+eso cell5 num-cell gt-q | 5 שאלה בשחיטה
+server eso: 0:ok 1:ok 2:ok 3:ok 4:ok 5:- 6:-
+legs cell5 num-cell gt-q | 5 שאלה בשחיטה
+server legs: 0:true 1:true 2:true 3:true 4:true 5:false
+inner cells 4,5,6: num-cell slaughtered | 4 ממתין  ||  num-cell gt-q | 5 שאלה בשחיטה  ||  num-cell empty | 6
+sheet: #5 | שאלה פתוחה — מה הפסק? | נשחט (כשר) | נבלה | ירוי | עדיין שאלה — לסגור | ביטול ה-? (סומן בטעות)
+server 5: slaughtered | hold: ruled:slaughtered
+inner cell5 now: num-cell slaughtered | 5 ממתין
+---
+outer after ? on 2: cell2 num-cell gt-q | 2 שאלה | cell3 num-cell pending-outer | 3 ממתין
+server outer: 0:glatt 1:beit 2:glatt 3:mk 4:beit | hold 2: ruled
+parts cell1 num-cell next gt-usda-part | 1 גלאט USDA לשון
+print popup: הודפס: לחי 1 + לחי 2 · מעוכב USDA: לשון
+server parts 1: 3
+parts cells 2,3,4: num-cell next | 2 בית יוסף  ||  num-cell gt-usda | 3 USDA  ||  num-cell parts-kosher | 4 MK
+held list: מעוכבים / שאלות — חלקים | רק התחנה שסימנה משחררת, פוסלת או עונה. | #1 · USDA · לשון · 05:14 · משגיח | שחרורנפסל USDA | #3 · USDA · כל הבהמה · 05:15 · משגיח | שחרורנפסל USDA | סגור
+after release tongue popup: הודפס עכשיו: לשון (שוחרר מ-USDA) | hold: 2:whole:OPEN 0:tongue:released
+stamps 1: true R=245.5 L=- | weight pending idx: -1
+warning: שינוי סטטוס #1 — נשחט | ⚠️ כבר הודפסו לבהמה הזו 3 מדבקות חלקים והיא הוחתמה. אם תשנה — יש לאסוף ולהשמיד את המדבקות והחותמות הישנות. השינוי יירשם. | ⚠ כבר נעשה בבהמה הזו: | וושט: תקין · פנים: כשר · חוץ: גלאט · הודפסו מדבקות רגליים / ראש · הודפסו 3 מדבקות חלקים · הוחתם · נשקל | אפשר לשנות. השינוי נרשם, וכל המסכים יראו "⚠ השתנה" עד שראש הצוות מסמן "טופל".
+server 1 slaughter: nevela | changes: 0:slaughter:slaughtered>nevela:{"eso": "ok", "inner": "confirmed", "outer": "glatt", "partsAs": "glatt", "stamped": true, "weighed": true, "stampedAs": "glatt", "legsStickers": true, "partsPrinted": 3}
+slaughter cell1 now: num-cell nevela gt-usda-part gt-chg | 1 נבלה USDA חצי שמאל ⚠ השתנה
+TL card: ⏳ פתוחים עכשיו (3) | ⚠ #1 · שחיטה: נשחט ← נבלה | כבר נעשה: וושט: תקין · פנים: כשר · חוץ: גלאט · מדבקות רגליים/ראש · 3 מדבקות חלקים · הוחתם · נשקל — לאסוף מדבקות / חותמות | לפני 0 דק׳ | טופל | USDA #3 · חלקים · כל הבהמה · משגיח | לפני 1 דק׳ | USDA #1 · חותמות ושקילה · חצי שמאל · משגיח | לפני 1 דק׳
+acked: 1

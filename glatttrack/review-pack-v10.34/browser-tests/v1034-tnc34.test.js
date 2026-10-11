@@ -1,0 +1,18 @@
+const { chromium } = require('/opt/node22/lib/node_modules/playwright'); const {open}=require('./explore.js');
+const W=(p,ms)=>p.waitForTimeout(ms);
+const btns=p=>p.evaluate(()=>[...document.querySelectorAll('#decModal .dec-btns button')].map(b=>b.innerText.trim()).join(' | '));
+(async()=>{ const b=await chromium.launch({executablePath:'/opt/pw-browsers/chromium'}); const x=await open(b,'outer'), p=x.p; await W(p,1500);
+ const show=async(tag,i)=>{ await p.evaluate(i=>{ outPendingDec=i; rebuildOuterButtons(); },i); console.log(tag, await btns(p)); };
+ await show('1 screen, regular #1:',0); await show('1 screen, NC #2 (default name):',1);
+ await p.evaluate(()=>{ window._g=KS.getSettings; KS.getSettings=()=>Object.assign({},_g(),{ncStatusName:'כשר',ncStatusNameEn:'Kosher'}); });
+ await show('1 screen, NC #2 (name כשר):',1);
+ console.log('  label/sticker words:', await p.evaluate(()=>[statusDisplayName('kosher',KS.getAnimal(1)),statusEnglishName('kosher',KS.getAnimal(1))].join(' / ')));
+ await p.evaluate(()=>{ const g=_g; KS.getSettings=()=>Object.assign({},g(),{screenConfig:'1in2out',ncRouteB:true}); });
+ await p.evaluate(()=>{outInstance=0}); await show('split, screen A, regular #1:',0);
+ await p.evaluate(()=>{outInstance=1}); await show('split, screen B, NC #2:',1);
+ await p.evaluate(()=>{ const g=_g; KS.getSettings=()=>Object.assign({},g(),{screenConfig:'1in2out',ncRouteB:false}); });
+ await p.evaluate(()=>{outInstance=0}); await show('combined, screen 1, NC #2:',1);
+ await p.evaluate(()=>{ KS.getSettings=_g; outInstance=0; outPendingDec=1; rebuildOuterButtons(); document.getElementById('decModal').classList.add('open'); });
+ await p.click('#decModal [data-decide="kosher"]'); await W(p,3000);
+ console.log('ruled #2 →', await p.evaluate(()=>statusLabel(KS.getAnimal(1),'outer')));
+ await x.ctx.close(); await b.close(); })();
