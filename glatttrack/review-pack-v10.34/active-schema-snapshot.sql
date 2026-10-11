@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict 1KwjDmBWeKCCOHc14ndtloNsLM7XVT4ymaN4zaShVHGTyAlMsTKVPalY2bEMINg
+\restrict fR2aT6Dw0Kv40Ah54R7Gk4lg6VGpdaiCAXjovfScr6CtdngUBVHogL2UbAEg2Hf
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -205,7 +205,9 @@ begin
   if v_b is null and not coalesce(old.eso_checked, false) and coalesce(new.eso_checked, false) then
     v_st := 'eso'; v_b := _hold_block(v_ep, old.id, 'eso');
   end if;
-  if v_b is null and old.inner_status is null and new.inner_status is not null then
+  -- (v10.35 review: also an open check finished — in_progress → confirmed / treif — not only the first value)
+  if v_b is null and new.inner_status is not null
+     and (old.inner_status is null or (old.inner_status = 'in_progress' and new.inner_status in ('confirmed', 'treif'))) then
     v_st := 'inner'; v_b := _hold_block(v_ep, old.id, 'inner');
   end if;
   if v_b is null and old.outer_status is null and new.outer_status is not null then
@@ -227,11 +229,20 @@ begin
   if v_b is null and not coalesce(old.stamped, false) and coalesce(new.stamped, false) then
     v_st := 'stamps'; v_b := _hold_block(v_ep, old.id, 'stamps');
   end if;
-  if v_b is null and (new.weight_right is distinct from old.weight_right and new.weight_right is not null) then
+  if v_b is null and ((new.weight_right is distinct from old.weight_right and new.weight_right is not null)
+                      or (not coalesce(old.weight_right_skipped, false) and coalesce(new.weight_right_skipped, false))) then
     v_st := 'stamps'; v_b := coalesce(_hold_block(v_ep, old.id, 'stamps'), _hold_block(v_ep, old.id, 'stamps', 'right'));
   end if;
-  if v_b is null and (new.weight_left is distinct from old.weight_left and new.weight_left is not null) then
+  if v_b is null and ((new.weight_left is distinct from old.weight_left and new.weight_left is not null)
+                      or (not coalesce(old.weight_left_skipped, false) and coalesce(new.weight_left_skipped, false))) then
     v_st := 'stamps'; v_b := coalesce(_hold_block(v_ep, old.id, 'stamps'), _hold_block(v_ep, old.id, 'stamps', 'left'));
+  end if;
+  -- v10.35 review: the later weights (after separation / shipping) and their "skipped" too, under a whole-animal hold
+  if v_b is null and ((new.weight_stage2 is distinct from old.weight_stage2 and new.weight_stage2 is not null)
+                      or (new.weight_stage3 is distinct from old.weight_stage3 and new.weight_stage3 is not null)
+                      or (not coalesce(old.weight_stage2_skipped, false) and coalesce(new.weight_stage2_skipped, false))
+                      or (not coalesce(old.weight_stage3_skipped, false) and coalesce(new.weight_stage3_skipped, false))) then
+    v_st := 'stamps'; v_b := _hold_block(v_ep, old.id, 'stamps');
   end if;
   if v_b is not null then
     raise exception 'GT:HELD held: station=% hold=%', v_st, v_b using errcode = 'P0001';
@@ -780,6 +791,24 @@ $_$;
 ALTER FUNCTION public._board_epoch() OWNER TO postgres;
 
 --
+-- Name: _board_proc_unfinished_ids(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public._board_proc_unfinished_ids() RETURNS SETOF integer
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $$
+  select a.id from animals_pilot a
+   where a.slaughter is not null
+     and (exists (select 1 from unnest(_proc_stations()) st where _proc_pending(st, a, true))
+          or exists (select 1 from animal_holds h where h.board_epoch = coalesce(a.board_epoch, _board_epoch())
+                                                    and h.animal_id = a.id and h.resolved_at is null));
+$$;
+
+
+ALTER FUNCTION public._board_proc_unfinished_ids() OWNER TO postgres;
+
+--
 -- Name: _board_unfinished(); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -787,10 +816,14 @@ CREATE FUNCTION public._board_unfinished() RETURNS integer
     LANGUAGE sql STABLE SECURITY DEFINER
     SET search_path TO 'public', 'extensions', 'pg_temp'
     AS $$
-  select (select count(*)::int from animals_pilot
-           where slaughter in ('slaughtered', 'notChalak')
-             and inner_status is distinct from 'treif' and outer_status is null)
-       + (select count(*)::int from animals_pilot a where a.slaughter is null and _slaughter_q_open(a));
+  select count(*)::int from (
+    select id from animals_pilot
+     where slaughter in ('slaughtered', 'notChalak')
+       and inner_status is distinct from 'treif' and outer_status is null
+    union
+    select id from animals_pilot a where a.slaughter is null and _slaughter_q_open(a)
+    union
+    select * from _board_proc_unfinished_ids()) x;
 $$;
 
 
@@ -846,6 +879,21 @@ end $$;
 
 
 ALTER FUNCTION public._caller_device_role() OWNER TO postgres;
+
+--
+-- Name: _caller_legs_slot(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public._caller_legs_slot() RETURNS integer
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $$
+  select coalesce(d.assigned_index, 0) from devices_pilot d
+   where d.id = _current_device_id() and d.assigned_role = 'legs' and coalesce(d.device_status, 'active') <> 'retired';
+$$;
+
+
+ALTER FUNCTION public._caller_legs_slot() OWNER TO postgres;
 
 SET default_tablespace = '';
 
@@ -1289,7 +1337,8 @@ begin
   if v_dev is null then perform _note_revoked_write(); return false; end if;
   v_ok := exists(select 1 from devices_pilot
                   where id = v_dev and assigned_role is not null
-                    and assigned_role not in ('display', 'leader')       -- a counter screen only reads; a team-leader device writes only with the team leader's session
+                    and assigned_role not in ('display', 'leader',       -- a counter screen only reads; a team-leader device writes only with the team leader's session
+                                              'cooler', 'nikur', 'salting', 'shipping')   -- v10.35 review: the supervisor screens are view-only for now
                     and coalesce(device_status, 'active') <> 'retired');
   if not v_ok then perform _note_revoked_write(v_dev); end if;
   return v_ok;
@@ -1377,15 +1426,11 @@ begin
    where a.slaughter is not null or a.inner_status is not null or a.outer_status is not null
   returning id into v_board;
 
-  foreach st in array _proc_stations() loop
-    if exists (select 1 from animals_pilot a where _proc_pending(st, a, true)) then v_carry := true; exit; end if;
-  end loop;
-  -- v10.26: an open processing hold (USDA / "?") keeps the board too
-  if not v_carry and v_old_epoch is not null and exists (
-       select 1 from animal_holds h join animals_pilot a on a.id = h.animal_id and a.slaughter is not null
-        where h.board_epoch = v_old_epoch and h.resolved_at is null) then
-    v_carry := true;
-  end if;
+  -- v10.35 (owner): NO kept day for legs / parts / stamps — an animal goes to the next day only with its
+  -- final kashrut marks. The rollover waits for them (_board_unfinished); the team leader's emergency
+  -- reset (with a written reason, audited) archives the day as it is. (animals_carry stays only to finish
+  -- days kept by an older version; it is not filled any more.)
+  v_carry := false;
   if v_carry then
     insert into animals_carry          -- by column name (v10.33: columns added later sit after board_id)
     select (jsonb_populate_record(null::animals_carry,
@@ -1886,7 +1931,7 @@ CREATE FUNCTION public._hold_caller_error(p_station text) RETURNS text
     LANGUAGE plpgsql STABLE SECURITY DEFINER
     SET search_path TO 'public', 'extensions', 'pg_temp'
     AS $$
-declare v_role text := _caller_device_role();
+declare v_role text := _caller_device_role(); s jsonb;
 begin
   if v_role is not null and (_hold_station_of_role(v_role) = p_station
                              or (p_station = 'outer' and v_role = 'inner' and _gt_one_inspection())) then
@@ -1895,6 +1940,11 @@ begin
     exception when sqlstate 'GTW01' then
       return 'worker_login_required';
     end;
+    -- v10.35 review: legs slot 1 (the head screen) exists only when the plant split legs / head
+    if v_role = 'legs' and _caller_legs_slot() = 1 then
+      s := _gt_settings();
+      if not (_gt_flag(s, 'legsHeadSplit', false) and _gt_flag(s, 'legsMode', true)) then return 'wrong_screen'; end if;
+    end if;
     return null;
   end if;
   if _test_mode_on() and _request_has_manager() then return null; end if;
@@ -3775,7 +3825,9 @@ begin
   end if;
   if v_api then
     v_role := _caller_device_role();
-    if v_role = 'display' then return jsonb_build_object('ok', false, 'error', 'wrong_station'); end if;
+    if v_role in ('display', 'cooler', 'nikur', 'salting', 'shipping') then   -- v10.35 review: view-only tablets write nothing
+      return jsonb_build_object('ok', false, 'error', 'wrong_station');
+    end if;
     if v_role is null and not (_test_mode_on() and _request_has_manager()) then
       return jsonb_build_object('ok', false, 'error', 'device_not_paired');
     end if;
@@ -4409,6 +4461,9 @@ begin
      or (p_stage = 'legs' and a.legs_sorted is distinct from true)
      or (p_stage = 'stamped' and a.stamped is distinct from true) then
     v_order := _stage_order_error(case when p_stage = 'inner_start' then 'inner' else p_stage end, a, true);
+    if v_order is null and p_stage = 'legs' then        -- v10.35 review: sorting refused with a clear answer, not an exception
+      v_order := coalesce(_legs_slot_error(false, false, true), case when not coalesce(a.legs_stickers, false) then 'no_leg_stickers' end);
+    end if;
     if v_order is not null then
       v_res := jsonb_build_object('claimed', false, 'error', 'out_of_order', 'reason', v_order,
                                   'row', to_jsonb(a), 'serverNow', v_now);
@@ -5164,7 +5219,9 @@ begin
     if not (_test_mode_on() and _request_has_manager()) and not v_maker then
       declare v_role text := _caller_device_role();
       begin
-        if v_role is not null and not (v_stage = 'correction' or case v_role
+        if v_role is not null and not ((v_stage = 'correction'           -- v10.35 review: only the work stations
+                                         and v_role in ('slaughter', 'esophagus', 'legs', 'inner', 'outer', 'parts', 'stamps'))
+                                        or case v_role
              when 'slaughter' then v_stage in ('slaughter')
              when 'esophagus' then v_stage in ('esophagus')
              when 'inner'     then v_stage in ('inner') or (v_stage = 'outer' and _gt_one_inspection())
@@ -5225,6 +5282,13 @@ begin
   if h.id is null then return jsonb_build_object('ok', false, 'error', 'bad_id'); end if;
   v_actor := _hold_caller_error(h.station);                         -- v10.32: worker login + shared screen
   if v_actor is not null then return jsonb_build_object('ok', false, 'error', v_actor); end if;
+  -- v10.35 review: legs and head are two screens — only the screen (slot) that marked the hold resolves it
+  if h.station = 'legs' and _caller_legs_slot() is not null
+     and exists (select 1 from devices_pilot d where d.id = h.created_by_device and d.assigned_role = 'legs'
+                   and coalesce(d.device_status, 'active') <> 'retired'
+                   and coalesce(d.assigned_index, 0) <> _caller_legs_slot()) then
+    return jsonb_build_object('ok', false, 'error', 'wrong_screen');
+  end if;
   if h.resolved_at is not null then
     return jsonb_build_object('ok', true, 'hold', to_jsonb(h), 'already', true);
   end if;
@@ -5281,11 +5345,11 @@ begin
     perform _board_write_lock();
     v_ep := _board_epoch();
     insert into animals_pilot (id, board_epoch) values (p_id, v_ep) on conflict (id) do nothing;
-    select * into a from animals_pilot where id = p_id;
+    select * into a from animals_pilot where id = p_id for update;     -- v10.35 review: no write in between (esophagus reopen)
   else
     perform _proc_board_lock(p_board);
     if p_station not in ('legs', 'parts', 'stamps') then return jsonb_build_object('ok', false, 'error', 'bad_station'); end if;
-    select _carry_row(c) into a from animals_carry c where c.board_id = p_board and c.id = p_id;
+    select (_carry_row(c)).* into a from animals_carry c where c.board_id = p_board and c.id = p_id;   -- v10.35 review: was one composite → 22P02
     if a.id is null then return jsonb_build_object('ok', false, 'error', 'board_closed'); end if;
     v_ep := a.board_epoch;
   end if;
@@ -5314,7 +5378,9 @@ begin
      and not (coalesce(a.legs_stickers, false) or coalesce(a.head_stickers, false)
               or a.inner_status is not null or a.outer_status is not null) then
     perform set_config('gt.reset_in_progress', 'true', true);
-    update animals_pilot set eso_checked = false, eso_result = null, eso_by_device = null, updated_at = now() where id = p_id;
+    update animals_pilot set eso_checked = false, eso_result = null, eso_by_device = null, updated_at = now()
+     where id = p_id and eso_result = 'ok'
+       and not (coalesce(legs_stickers, false) or coalesce(head_stickers, false) or inner_status is not null or outer_status is not null);
     perform set_config('gt.reset_in_progress', 'false', true);
     perform _gt_event(p_id + 1, 'eso', 'reopened_question', jsonb_build_object('was', 'ok'), null, v_dev);
     select * into a from animals_pilot where id = p_id;
@@ -6385,8 +6451,11 @@ begin
   -- an emergency tool: slaughtered animals without their last ruling would leave the
   -- screens for good — stop, say which, and go on only with a written reason
   if v_unfinished > 0 then
-    select coalesce(jsonb_agg(id + 1 order by id), '[]'::jsonb) into v_numbers from animals_pilot
-     where slaughter in ('slaughtered', 'notChalak') and inner_status is distinct from 'treif' and outer_status is null;
+    select coalesce(jsonb_agg(id + 1 order by id), '[]'::jsonb) into v_numbers from (
+      select id from animals_pilot
+       where slaughter in ('slaughtered', 'notChalak') and inner_status is distinct from 'treif' and outer_status is null
+      union
+      select * from _board_proc_unfinished_ids()) x;          -- v10.35: also legs / parts / stamps not done
     if not _reason_ok(p_reason) then
       return jsonb_build_object('ok', false, 'error', 'unfinished_animals', 'unfinished', v_unfinished, 'numbers', v_numbers);
     end if;
@@ -9306,6 +9375,13 @@ REVOKE ALL ON FUNCTION public._board_epoch() FROM PUBLIC;
 
 
 --
+-- Name: FUNCTION _board_proc_unfinished_ids(); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public._board_proc_unfinished_ids() FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION _board_unfinished(); Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -9331,6 +9407,13 @@ REVOKE ALL ON FUNCTION public._call_device(p_client text) FROM PUBLIC;
 --
 
 REVOKE ALL ON FUNCTION public._caller_device_role() FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION _caller_legs_slot(); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public._caller_legs_slot() FROM PUBLIC;
 
 
 --
@@ -10996,5 +11079,5 @@ GRANT ALL ON TABLE public.system_flags TO service_role;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict 1KwjDmBWeKCCOHc14ndtloNsLM7XVT4ymaN4zaShVHGTyAlMsTKVPalY2bEMINg
+\unrestrict fR2aT6Dw0Kv40Ah54R7Gk4lg6VGpdaiCAXjovfScr6CtdngUBVHogL2UbAEg2Hf
 

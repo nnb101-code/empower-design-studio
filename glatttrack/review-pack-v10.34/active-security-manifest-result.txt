@@ -1,9 +1,9 @@
 == 1. plant state =======================================================
     key     |     value     |          updated_at           
 ------------+---------------+-------------------------------
- boardEpoch | 1791691224654 | 2026-10-11 04:00:24.653676+00
- schemaStep | 46            | 2026-10-11 04:00:25.727557+00
- testMode   | off           | 2026-10-11 04:00:25.247561+00
+ boardEpoch | 1791725512004 | 2026-10-11 13:31:52.00347+00
+ schemaStep | 46            | 2026-10-11 13:31:53.546249+00
+ testMode   | off           | 2026-10-11 13:31:52.921856+00
 (3 rows)
 
 == 2. functions (public, gt_rls) ========================================
@@ -92,10 +92,12 @@
  public | _auth_uid_safe()                                                                   | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _board_business_date()                                                             | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _board_epoch()                                                                     | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _board_proc_unfinished_ids()                                                       | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _board_unfinished()                                                                | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _board_write_lock()                                                                | function | f                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _call_device(text)                                                                 | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _caller_device_role()                                                              | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _caller_legs_slot()                                                                | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _carry_row(animals_carry)                                                          | function | f                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _cmd_get(uuid,text,text)                                                           | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _cmd_put(uuid,text,text,jsonb)                                                     | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
@@ -222,7 +224,7 @@
  public | leader_account_remove(text)                                                        | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | leader_device_recovery(text)                                                       | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | manufacturer_set_code(text,text)                                                   | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
-(213 rows)
+(215 rows)
 
 == 2b. API surface: functions the app roles can run ======================
                        callable_by_app                       | security_definer 

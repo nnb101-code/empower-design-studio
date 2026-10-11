@@ -18,10 +18,23 @@ This pack is the CURRENT state. Review these files only.
 | `test-mode-on.sql` / `test-mode-off.sql` | The owner's SQL-only test switch. |
 | `plant-server/` | Plant resilience kit (bash, runs as root on the plant servers, NOT in the database): standby server, floating address, UPS, nightly checked backup. Guide: `PLANT-RESILIENCE-HE.md`. |
 
+## Fixed after the deep code review (v10.35, server 02 + app) — 15 findings + the owner's previous-day rule
+
+- **Owner rule — previous day:** an animal goes to the next day only with ALL its final kashrut marks (ruling, legs/head, parts, stamps; no open hold). No kept day for legs / parts / stamps (work on an earlier day only for cooler / breaking / kashering — future screens). `_board_proc_unfinished_ids()` + `_board_unfinished()` (rollover waits), `reset_daily_board` numbers include them (a written reason is required, the day is archived as is), `_do_board_reset` no longer fills `animals_carry` (days kept by an older version still drain through carry_push / carry_claim / `_proc_finalize`). Findings 1, 5, 7, 8 (kept-day paths) go away; `hold_set`'s kept-board branch also fixed (`select (_carry_row(c)).*`).
+- **2** `_animals_hold_guard`: an open lung check (in_progress → confirmed / treif) is held too.
+- **3** `_animals_hold_guard`: weight_stage2 / weight_stage3 and all *_skipped flags under a hold.
+- **4** `hold_resolve`: a legs-station hold is resolved only by the slot that marked it (`_caller_legs_slot()`); `_hold_caller_error`: legs slot 1 has no hold rights when not split (`wrong_screen`).
+- **13** `hold_set`: row locked (`for update`), the esophagus reopen UPDATE repeats its conditions.
+- **11** supervisor roles write nothing: `_device_write_allowed` excludes them (push_settings / event_append), `event_append`'s 'correction' exception only for the seven work stations, `animal_push` refuses them; the app does not push settings from a supervisor tablet.
+- **14** `claim_animal_stage('legs')` answers out_of_order with the reason (wrong_screen / legs_off / no_leg_stickers).
+- **App:** 9 (`_pushAnswer` 'held' puts back every sent column), 10 ('worker_login_required' keeps the change), 12 (legs slot 1 not in use when not split; gtPlanSave refuses going back to one screen while it is paired), 15 (events: 'correction' / 'settings' stages).
+- **6** resolved by the previous-day rule (no kept day; no sorting while legs is off).
+- Self-test 145/145 (the four kept-day checks merged into two for the new rule; each new check fails on the previous version). Browser tests `v1035-tfix.test.js`, `v1035-theld.test.js`.
+
 ## Added in v10.35 (server 02 + app) — infrastructure for four supervisor screens
 
 - New device roles `cooler`, `nikur`, `salting`, `shipping`: `devices_pilot_role_ok`, `_gt_value_ok('device_role')`, `device_pair`, `worker_sessions_role_check`, `_worker_role_norm`, and the "station tablet" lists in `manager_login` / the leader-device replacement.
-- They have NO write rights: `_stage_allowed` does not know them, so `animal_push` ignores their columns, `claim_animal_stage` and `hold_set` refuse them. Self-test check (146/146).
+- They have NO write rights: `_stage_allowed` does not know them, so `animal_push` ignores their columns, `claim_animal_stage` and `hold_set` refuse them. Self-test check (145/145).
 - App: the four screens in "choose screens", pairing, worker lists, printer/scanner per screen, one shared login + read-only screen (`scSupLogin` / `scSup`) titled by the tablet's role.
 - Legs sorting only when there are legs (owner): no sorting while `legsPaused` (`legs_off`), none on the head slot (`wrong_screen`), none for a number without `legs_stickers` (`no_leg_stickers` — stage guard, `carry_push`, `carry_claim`); `_proc_pending` does not count it. Browser test `v1035-tsort.test.js`.
 - Self-test fix: it now sets aside `legsHeadSplit`, `legsPaused`, `partsPaused` at the start (it failed on a plant with the legs/head split on).
@@ -33,7 +46,7 @@ This pack is the CURRENT state. Review these files only.
   - slot 0 (legs screen): no `head_stickers` while the head screen works (split and not `legsPaused`);
   - `legs_sorted` is allowed on both (the sorting page can be open on either legs tablet);
   - refused as `out_of_order`, reason `wrong_screen`; the app drops only that number (queue goes on).
-- Self-test: new check (146/146) — slot 0 head refused, slot 0 legs ok, slot 1 legs refused, slot 1 head ok, slot 1 refused when not split; it fails when the rule is removed.
+- Self-test: new check (145/145) — slot 0 head refused, slot 0 legs ok, slot 1 legs refused, slot 1 head ok, slot 1 refused when not split; it fails when the rule is removed.
 - Browser test `browser-tests/v1034-tslot.test.js`: legs tablet pretending head → refused; the next legs number still reaches the server; slot 1 prints the head.
 - Round-14 section 2.1 (USDA), for the reviewer to verify: concurrency — the advisory lock in `hold_set` (A1); only the marking station resolves — `_hold_caller_error`; a revoked / retired device has no role (`_caller_device_role` returns null) so it cannot resolve; the check, the hold row and the event are in one function call (one transaction).
 
@@ -55,7 +68,7 @@ This pack is the CURRENT state. Review these files only.
 - **Outer lock** (app): 2 minutes for a dead tablet; a tablet back online re-takes its open number or closes it if another screen took it.
 - **Barcode scan** (option `scanInOut`) at inner / outer opens exactly the scanned number.
 - **Team leader**: settings search; the test-mode "reset day now" button only in server test mode.
-- Self-test: 146/146 (new checks for legs order, legsPaused, eso reopen, single not-chalak status). Browser tests: `browser-tests/v1034-*.test.js` with the helper `browser-tests/explore.js` (B3).
+- Self-test: 145/145 (new checks for legs order, legsPaused, eso reopen, single not-chalak status). Browser tests: `browser-tests/v1034-*.test.js` with the helper `browser-tests/explore.js` (B3).
 - Still open from the v10.34 review: B1 (half hold during a whole hold), B2 (local encryption), B5 (README wording), B6 (sync exceptions list for the team leader).
 
 ## Changed in v10.33 – v10.34 (server 02 + app) — owner's decisions after testing

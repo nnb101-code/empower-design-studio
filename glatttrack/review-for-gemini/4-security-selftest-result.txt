@@ -39,6 +39,7 @@ NOTICE:  PASS  v10.34 "not chalak" gets one status at the outer ruling: no plain
 NOTICE:  PASS  v10.34 the inner check comes after legs / head stickers (when the plant uses the legs screen); the esophagus turns its ok into a "?" until legs print; USDA belongs to the station the animal is at on the line; head stickers only after the leg stickers (not while legs is switched off)
 NOTICE:  PASS  v10.34 legs / head on two screens: the head slot never prints leg stickers, the legs slot never prints the head while the head screen works, slot 1 is refused when the screens are not split; v10.35 sorting only on the legs screen, never while legs is off, never a number without leg stickers
 NOTICE:  PASS  v10.35 supervisor screens (cooler / nikur / salting / shipping): paired, but no ruling, processing or hold rights
+NOTICE:  PASS  v10.35 review: a USDA hold stops finishing an open lung check (animal_push) and the later weights / skips; the head screen does not resolve the legs screen's hold; legs slot 1 has no hold rights when not split
 NOTICE:  PASS  pairing into a taken slot without replace: slot_taken
 NOTICE:  PASS  replacement: the old key is dead; old + new device events share one replacement_id
 NOTICE:  PASS  device_pair with p_replace still works (new device holds the slot)
@@ -100,10 +101,8 @@ NOTICE:  PASS  step 46 order: esophagus on → lungs wait for it; a nevela from 
 NOTICE:  PASS  step 46 stations: inner tablet → inner only, outer tablet → outer only; rabbinate send only after the lungs
 NOTICE:  PASS  step 46 team leader: a status an animal carries keeps its kosher mark and cannot be deleted; names / colors / unused statuses change
 NOTICE:  PASS  step 46 manufacturer: printers yes; statuses / workers / login modes / kashrut switches ignored
-NOTICE:  PASS  step 46 days: the reset empties the screens and keeps day A's unfinished processing (board, archive link, audit)
-NOTICE:  PASS  step 46 days: no skipping — today waits until day A is done for that station; each station moves on by itself
-NOTICE:  PASS  step 46 days: two kept days in order; a day done for every station goes back into its archive row
-NOTICE:  PASS  step 46 days: the team leader closes a kept day for a station only with a reason (audited); a tablet cannot
+NOTICE:  PASS  v10.35 days: an animal goes to the next day only with all its marks — the rollover waits for parts / stamps, the team leader's reset needs a written reason, nothing is kept for legs / parts / stamps
+NOTICE:  PASS  step 46 days: a day kept by an older version — only processing columns, only the right station, a close needs a reason; done → back into its archive row
 NOTICE:  PASS  step 46 rollover: never during work, never with a slaughtered animal short of its last ruling (health: rollover_waiting)
 NOTICE:  PASS  step 46 manual reset: stops while slaughtered animals lack their last ruling (numbers given); only with a written reason, audited
 NOTICE:  PASS  step 46 worker login: a code kept as plain text is not accepted (hashes only)
@@ -144,5 +143,5 @@ NOTICE:  PASS  v10.32 shared inner + outer screen: its inner tablet puts / close
 NOTICE:  PASS  v10.32 a part on USDA hold is not printed on the server: the full set (3) and that part's flag refused; the other parts recorded; after the release the part and the full set are recorded; an inner "?" answered when its window is decided; an open esophagus "?" stops the legs stickers and the lungs
 NOTICE:  PASS  ACTIVE security surface matches the expected manifest (triggers, policies, grants, definer settings)
 NOTICE:  PASS  kashrut seals: team leader sets, a printing tablet reads; a tablet can't set; bad picture / key refused; no device → refused
-NOTICE:  146 checks, 146 passed, 0 failed  (nothing was changed — all undone)
- PASSED — 146 of 146 security checks (nothing was changed)
+NOTICE:  145 checks, 145 passed, 0 failed  (nothing was changed — all undone)
+ PASSED — 145 of 145 security checks (nothing was changed)

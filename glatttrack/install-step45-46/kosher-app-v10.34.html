@@ -855,7 +855,6 @@ const LUNG_B64="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICA
       <div class="online-dot"></div>
       <div class="tb-user"><span id="supWelcome">ברוך הבא</span>: <strong id="supUser">משגיח</strong></div>
       <div class="icon-btn" onclick="goTo('scNav')">&#127968;</div>
-      <div class="icon-btn" onclick="reportProblem(supName())" title="דווח בעיה" style="color:var(--amber)">&#9888;</div>
       <div class="icon-btn" onclick="goTo('scSupLogin')" style="color:var(--red-light)">&#10005;</div>
     </div>
   </div>
@@ -3387,9 +3386,15 @@ const KS = (function(){
         // the change did NOT happen on the server: show the real, recorded ruling again
         // (the rest of what this device changed on that animal is sent again)
         rej[i]=(rej[i]||0)+1;
+        // v10.35 review: "held" can refuse processing work too (stickers / stamp / parts / weights) — none of
+        // what was sent happened, so all of it goes back to the server's value (the station does it again
+        // after the hold); the ruling locks put back the ruling columns as before
+        if(code==='held'){ _clearAnimalDirty(i); _revertToServer(i, id!=null ? d.row : null, Object.keys(sentOf(i))); }
+        else {
         _revertToServer(i, id!=null ? d.row : null, _RULING_COLS);
         const rest=_sbAnimalPayload(i, _state.animals[i]);
         if(!rest || rej[i]>1 || Object.keys(rest).some(k=>_RULING_COLS.includes(k))) _clearAnimalDirty(i);
+        }
         _sbRecordEvent('correction', 'rejected', { reason: code==='correction_not_allowed' ? 'not-allowed' : code==='eso_locked' ? 'eso-locked' : code==='moved_on' ? 'moved-on' : code.replace(/_/g,'-') }, i+1);
       });
       _showRuleNotice(gtErrText(code));
@@ -3423,6 +3428,14 @@ const KS = (function(){
       return 'again';
     }
     if(code==='command_id_conflict') return 'again';   // sent again under a new command id
+    // v10.35 review: the worker's login ran out — the change is KEPT and sent again after the login
+    // (the request wrapper asks for the login: _gtNeedWorkerLogin); never dropped
+    if(code==='worker_login_required'){
+      _pushBackoffUntil=Date.now()+15000;
+      try{ window._gtNeedWorkerLogin && window._gtNeedWorkerLogin(); }catch(e){}
+      _showRuleNotice(gtErrText(code));
+      return 'again';
+    }
     // v10.34 (review A4): the same server_error for the same number a second time → only that number is
     // dropped (server's row back, recorded, said on the screen); the first time it is tried again later
     if(id!=null && code==='server_error'){
@@ -3431,7 +3444,7 @@ const KS = (function(){
       if(prev && prev.k===k && ++prev.n>=2){
         delete _pushSame[id];
         _clearAnimalDirty(id); _revertToServer(id, d.row || null, Object.keys(sentOf(id)));
-        _sbRecordEvent('sync', 'push-dropped', { reason: 'server-error-twice' }, id+1);
+        _sbRecordEvent('correction', 'push-dropped', { reason: 'server-error-twice' }, id+1);   // (v10.35 review: 'sync' was refused)
         _showRuleNotice(L('#'+(id+1)+' — שגיאת שרת חוזרת: השינוי לא נשמר, המספר חזר לערך שבשרת.','#'+(id+1)+' — repeated server error: the change was not saved, the number shows the server\'s value again.','#'+(id+1)+' — error del servidor repetido: el cambio no se guardó, el número vuelve al valor del servidor.'));
         return 'again';
       }
@@ -3876,6 +3889,9 @@ const KS = (function(){
     // a view-only login (owner / manufacturer without repair access) changes nothing on the
     // server — its local display details (who is logged in here) are not sent at all
     if(typeof _isOwnerSession === 'function' && _isOwnerSession() && !(typeof _devToken === 'function' && _devToken() && _kioskLoadLocal && _kioskLoadLocal())){ _clearSettingsDirty(keys); return; }
+    // v10.35 review: a supervisor screen (cooler / nikur / salting / shipping) only views — nothing of it is sent
+    try{ const _kl = _kioskLoadLocal && _kioskLoadLocal();
+         if(_kl && typeof GT_SUP_SCREENS !== 'undefined' && GT_SUP_SCREENS[_kl.role] && !_managerToken){ _clearSettingsDirty(keys); return; } }catch(e){}
     // step45: the manufacturer changes the plant's settings only with a reason
     // (asked once per manufacturer login, sent with every settings push)
     const _maker = getManagerRole() === 'manufacturer';
@@ -5549,7 +5565,7 @@ function _safeImg(u){ u=String(u||''); return /^data:image\/(png|jpe?g|gif|webp|
 var _GT_ERR = {
   // step 46
   setup_code_not_configured:['בשרת לא הוגדר קוד התקנה — מי שמתקין את השרת צריך להגדיר אותו (select _set_setup_code(...)).','No setup code was set on the server — whoever installs it must set one (select _set_setup_code(...)).','No hay código de instalación en el servidor — quien lo instala debe definirlo (select _set_setup_code(...)).'],
-  unfinished_animals:['יש בהמות שנשחטו ועדיין אין להן פסיקה אחרונה — האיפוס נעצר.','Slaughtered animals have no last ruling yet — the reset stopped.','Hay animales faenados sin dictamen final — el reinicio se detuvo.'],
+  unfinished_animals:['יש בהמות שעוד לא קיבלו את כל סימני הכשרות (פסיקה / רגליים וראש / חלקים / חותמות) — האיפוס נעצר.','Some animals do not have all their kashrut marks yet (ruling / legs and head / parts / stamps) — the reset stopped.','Hay animales sin todas sus marcas kosher (dictamen / patas y cabeza / partes / sellos) — el reinicio se detuvo.'],
   out_of_order:['המספר עדיין לא הגיע לשלב הזה — קודם השלבים שלפניו (שחיטה, ושט, רגליים, פנים, חוץ). השינוי לא נרשם.','This number has not reached this stage yet — the stages before it come first (slaughter, esophagus, legs, inner, outer). The change was not recorded.','Este número aún no llegó a esta etapa — primero las etapas anteriores (faena, esófago, patas, interior, exterior). El cambio no se registró.'],
   earlier_day_open:['קודם מסיימים את יום השחיטה הקודם — אין דילוג. השינוי לא נרשם.','The earlier slaughter day is finished first — no skipping. The change was not recorded.','Primero se termina el día de faena anterior — sin saltos. El cambio no se registró.'],
   board_closed:['יום השחיטה הזה כבר נסגר בתחנה זו — השינוי לא נרשם.','This slaughter day is already closed at this station — the change was not recorded.','Este día de faena ya está cerrado en esta estación — el cambio no se registró.'],
@@ -7417,6 +7433,7 @@ function _legsFromIdx(){ const st=KS.getSettings(); const f=st.legsFromIdx;
   if(typeof f!=='number' || !(f>0)) return 0; if((st.legsFromReset||'')!==(st.lastServerResetAt||'')) return 0; return f; }
 function _legsRequired(x){ return KS.getSettings().legsPaused!==true && !!x && x.id>=_legsFromIdx(); }
 function _lgRole(){
+  if(lgInstance===1 && !_lgSplit()) return 'paused';   // v10.35 review: the head tablet when legs / head are ONE screen — not in use
   if(KS.getSettings().legsPaused===true) return (_lgSplit() && lgInstance!==1) ? 'paused' : 'head';
   return _lgSplit() ? (lgInstance===1 ? 'head' : 'legs') : 'both';
 }
@@ -8380,7 +8397,7 @@ function gtPauseToggle(k){
   if(!confirm((nowOn?L('להדליק את ','Switch on ','¿Encender '):L('לכבות זמנית את ','Switch off for now: ','¿Apagar por ahora '))+nm+'?')) return;
   KS.updateSettings(upd);
   try{ KS.addAuditLog({type: nowOn?'screen_on':'screen_paused', screen:k}); }catch(e){}
-  try{ _sbRecordEvent && _sbRecordEvent('system', nowOn?'screen_on':'screen_paused', { screen:k }); }catch(e){}
+  try{ _sbRecordEvent && _sbRecordEvent('settings', nowOn?'screen_on':'screen_paused', { screen:k }); }catch(e){}   // (v10.35 review: 'system' is the server's own stage)
   gtPauseCardRender();
 }
 // v10.34: the screen says which one it is when legs and head are split
@@ -8392,7 +8409,7 @@ function _lgTitle(){
   try{ if(el._r!==r+lgInstance){ el._r=r+lgInstance; renderScreenDeviceStatus(); } }catch(e){}
   try{ _lgSortBar(); }catch(e){}                       // v10.35: legs off / head screen → no sorting
   el.textContent = r==='head' ? L('מסך ראש','Head screen','Pantalla cabeza') + (KS.getSettings().legsPaused===true ? ' · '+L('רגליים כבוי','legs off','patas apagado') : '')
-                 : r==='legs' ? L('מסך רגליים','Legs screen','Pantalla patas') : r==='paused' ? L('מסך רגליים — כבוי','Legs screen — off','Pantalla patas — apagada') : '';
+                 : r==='legs' ? L('מסך רגליים','Legs screen','Pantalla patas') : r==='paused' ? (lgInstance===1 ? L('מסך ראש — לא בשימוש (רגליים וראש במסך אחד)','Head screen — not in use (legs and head on one screen)','Pantalla cabeza — sin uso') : L('מסך רגליים — כבוי','Legs screen — off','Pantalla patas — apagada')) : '';
 }
 function lgReprintWarn(idx){
   lgReprintIdx=idx;
@@ -12844,9 +12861,9 @@ async function ksRunProtectedDailyReset(reason){
         // the server stops; going on needs a written reason (recorded with the numbers)
         if(!rpcErr && rpcData && rpcData.error === 'unfinished_animals'){
           const nums=(rpcData.numbers||[]).join(', ');
-          const why=prompt(L('יש בהמות שנשחטו ועדיין אין להן פסיקה אחרונה: '+nums+'.\nאיפוס יוציא אותן מהמסכים לצמיתות.\nכדי לאפס בכל זאת, כתוב סיבה (נרשמת):',
-                             'Slaughtered animals without their last ruling: '+nums+'.\nA reset takes them off the screens for good.\nTo reset anyway, write a reason (recorded):',
-                             'Animales faenados sin dictamen final: '+nums+'.\nUn reinicio los saca de las pantallas para siempre.\nPara reiniciar igualmente, escriba un motivo (se registra):'), '');
+          const why=prompt(L('בהמות שעוד לא קיבלו את כל סימני הכשרות (פסיקה / רגליים וראש / חלקים / חותמות): '+nums+'.\nבהמה לא עוברת ליום הבא בלי כל הסימנים — איפוס יוציא אותן מהמסכים לצמיתות.\nכדי לאפס בכל זאת, כתוב סיבה (נרשמת):',
+                             'Animals without all their kashrut marks (ruling / legs and head / parts / stamps): '+nums+'.\nAn animal does not go to the next day without all its marks — a reset takes them off the screens for good.\nTo reset anyway, write a reason (recorded):',
+                             'Animales sin todas sus marcas kosher (dictamen / patas y cabeza / partes / sellos): '+nums+'.\nUn reinicio los saca de las pantallas para siempre.\nPara reiniciar igualmente, escriba un motivo (se registra):'), '');
           if(!why || !why.trim()){ _lastResetFailureReason = L('האיפוס בוטל — יש בהמות שלא הסתיימו: ','Reset cancelled — unfinished animals: ','Reinicio cancelado — animales sin terminar: ')+nums; return false; }
           ({ data: rpcData, error: rpcErr } = await window.sb.rpc('reset_daily_board', { p_token: KS.getManagerToken(), p_reason: why.trim() }));
         }
@@ -16509,7 +16526,7 @@ function _gtHealthCodeText(c){
     revoked_device_writes:['מכשיר מושבת / מנותק ניסה לרשום נתונים','A retired / disconnected device tried to write','Un dispositivo retirado / desconectado intentó escribir'],
     backup_unknown:['גיבוי: אין מידע (שרת ענן לבדיקות)','Backup: no information (cloud test server)','Copia: sin información (servidor de pruebas)'],
     // step 46
-    rollover_waiting:['האיפוס היומי ממתין: יש בהמה שנשחטה ועדיין אין לה פסיקה אחרונה (פנים טרף / חוץ). יש להשלים אותה, או לאפס ידנית.','The daily reset is waiting: a slaughtered animal has no last ruling yet (inner treif / outer). Finish it, or reset by hand.','El reinicio diario espera: un animal faenado aún no tiene dictamen final (interior treif / exterior). Termínelo o reinicie a mano.'],
+    rollover_waiting:['האיפוס היומי ממתין: יש בהמה שעוד לא קיבלה את כל סימני הכשרות (פסיקה, רגליים וראש, חלקים, חותמות) או שיש עליה עיכוב פתוח. בהמה עוברת ליום הבא רק עם כל הסימנים. יש להשלים אותה, או לאפס ידנית עם סיבה.','The daily reset is waiting: an animal does not have all its kashrut marks yet (ruling, legs and head, parts, stamps) or has an open hold. An animal goes to the next day only with all its marks. Finish it, or reset by hand with a reason.','El reinicio diario espera: un animal no tiene todas sus marcas kosher (dictamen, patas y cabeza, partes, sellos) o tiene una retención abierta. Termínelo o reinicie a mano con un motivo.'],
     label_mismatch:['מדבקה / חותמת שלא תואמת את הפסיקה נרשמה ב-24 השעות האחרונות — יש לבדוק','A sticker / stamp that does not match the ruling was recorded in the last 24 hours — check it','En las últimas 24 horas se registró una etiqueta / sello que no coincide con el dictamen — revíselo'],
     worker_lists_check:['רשימות העובדים הופרדו לרשימה לכל מסך. עובדים מהרשימות הישנות (בודקים / משגיחים) הועתקו לכל המסכים של הרשימה הישנה — בדוק בהגדרות ← משתמשים והסר מי שלא שייך. ההודעה תיעלם אחרי שמירה.','Worker lists are now one per screen. Workers of the old shared lists were copied to every screen of that list — check Settings → Users and remove who does not belong. This notice goes away after saving.','Las listas de trabajadores son ahora una por pantalla. Revise Ajustes → Usuarios.'],
     leader_recovery_missing:['אין קוד שחזור לראש הצוות. בלעדיו, אם המכשיר של ראש הצוות יאבד, צריך את המתקין. יוצרים קוד: הגדרות ← מערכת ← קוד שחזור.','There is no team-leader recovery code. Without it a lost team-leader device needs the installer. Make one: Settings → System → Recovery code.','No hay código de recuperación. Créelo en Ajustes → Sistema.'],
@@ -16876,6 +16893,13 @@ async function gtPlanSave(){
   // a second inner / outer slot that has a device cannot be dropped silently
   const shared = D.shared && D.screens.has('inner') && D.screens.has('outer');
   if(shared && devs.some(d => d.assigned_role==='outer')){ alert(L('במסך משותף אין טאבלט חוץ נפרד. קודם מסירים את מכשיר החוץ (למטה, "תחנות — צימוד מכשירים").','A shared screen has no separate outer tablet. First remove the outer device (below, "Stations").','Con pantalla compartida no hay tableta externa: quítela primero.')); return; }
+  // v10.35 review: legs / head back to one screen while the head tablet (legs slot 1) is still paired
+  if(!(D.legsMode && D.split) && devs.some(d => d.assigned_role==='legs' && Number(d.assigned_index||0)===1)){
+    alert(L('לטאבלט הראש (רגליים 2) עדיין מצומד מכשיר. כדי לחזור למסך אחד, קודם מסירים אותו (למטה, "תחנות — צימוד מכשירים").',
+            'The head tablet (legs 2) is still paired. To go back to one screen, first remove it (below, "Stations").',
+            'La tableta de cabeza sigue emparejada. Para volver a una pantalla, quítela primero.'));
+    return;
+  }
   const busy2 = shared ? (devs.some(d => d.assigned_role==='inner' && Number(d.assigned_index||0)===1) ? 'inner' : null)
                        : ['inner','outer'].find(r => (r==='inner'?D.ni:D.no)===1 && devs.some(d => d.assigned_role===r && Number(d.assigned_index||0)===1));
   if(busy2){ alert(L('למסך '+(busy2==='inner'?'הפנים':'החוץ')+' השני מצומד מכשיר. קודם מסירים אותו.','The second '+busy2+' screen has a device. Remove it first.','La segunda pantalla tiene un dispositivo. Quítelo primero.')); return; }

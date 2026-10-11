@@ -953,15 +953,15 @@ begin
   update settings_pilot set settings = settings || '{"legsHeadSplit":true,"legsSortEnabled":true}'::jsonb where id = 1;
   perform set_config('gt.reset_in_progress', 'false', true);
   r2 := pg_temp.api(pg_temp.dev('LEGS'), pg_temp.q_claim(889, 'legs', 'true', '', ''));           -- slot 1 = head screen
-  ok := ok and not pg_temp.claimed(r2) and not coalesce((pg_temp.ar(889)).legs_sorted, false);
+  ok := ok and not pg_temp.claimed(r2) and r2 ->> 'error' = 'out_of_order' and r2 ->> 'reason' = 'wrong_screen' and not coalesce((pg_temp.ar(889)).legs_sorted, false);
   update devices_pilot set assigned_index = 90 where id = pg_temp.devid('LEGS');
   r3 := pg_temp.api(pg_temp.dev('LEGS'), pg_temp.q_claim(890, 'legs', 'true', '', ''));           -- no leg stickers
-  ok := ok and not pg_temp.claimed(r3) and not coalesce((pg_temp.ar(890)).legs_sorted, false);
+  ok := ok and not pg_temp.claimed(r3) and r3 ->> 'reason' = 'no_leg_stickers' and not coalesce((pg_temp.ar(890)).legs_sorted, false);
   perform set_config('gt.reset_in_progress', 'true', true);
   update settings_pilot set settings = settings || '{"legsPaused":true}'::jsonb where id = 1;
   perform set_config('gt.reset_in_progress', 'false', true);
   r4 := pg_temp.api(pg_temp.dev('LEGS'), pg_temp.q_claim(889, 'legs', 'true', '', ''));           -- legs switched off
-  ok := ok and not pg_temp.claimed(r4) and not coalesce((pg_temp.ar(889)).legs_sorted, false);
+  ok := ok and not pg_temp.claimed(r4) and r4 ->> 'reason' = 'legs_off' and not coalesce((pg_temp.ar(889)).legs_sorted, false);
   perform set_config('gt.reset_in_progress', 'true', true);
   update settings_pilot set settings = settings - 'legsPaused' where id = 1;
   perform set_config('gt.reset_in_progress', 'false', true);
@@ -980,15 +980,53 @@ begin
   r  := pg_temp.api(pg_temp.dev('COOL'), pg_temp.q_push(888, '{"legs_stickers":true,"head_stickers":true,"stamped":true}'));
   r2 := pg_temp.api(pg_temp.dev('COOL'), 'select hold_set(888, ''stamps'', ''question'')');
   r3 := pg_temp.api(pg_temp.dev('COOL'), pg_temp.q_claim(888, 'inner_start', 'in_progress', '', pg_temp.devid('COOL')));
-  ok := ok and not pg_temp.ok(r2) and not pg_temp.claimed(r3)          -- (animal_push answers ok but ignores columns it may not write)
+  r4 := pg_temp.api(pg_temp.dev('COOL'), $q$select push_settings('{"printers":[],"scanners":[]}'::jsonb, 'x', null, null)$q$);
+  r5 := pg_temp.api(pg_temp.dev('COOL'), $q$select event_append('{"event_id":"gtselftest-cool-1","stage":"correction","action":"rejected","animal_no":5}'::jsonb)$q$);
+  ok := ok and r ->> 'error' = 'wrong_station' and not pg_temp.ok(r2) and not pg_temp.claimed(r3)
+           and not pg_temp.ok(r4) and not pg_temp.ok(r5)                -- (v10.35 review: no settings, no events, no row touched)
+           and (pg_temp.ar(888)).device_id is distinct from pg_temp.devid('COOL')
            and not coalesce((pg_temp.ar(888)).legs_stickers, false) and not coalesce((pg_temp.ar(888)).stamped, false)
            and (pg_temp.ar(888)).inner_status is null
            and not exists (select 1 from animal_holds where animal_id = 888 and resolved_at is null)
            and _gt_value_ok('device_role', 'shipping') and _worker_role_norm('מליחה') = 'salting';
   perform pg_temp.rec('v10.35 supervisor screens (cooler / nikur / salting / shipping): paired, but no ruling, processing or hold rights', ok,
-    concat_ws(' | ', r ->> 'error', r2 ->> 'error', r3 ->> 'error', r3 ->> 'claimed', (pg_temp.ar(888)).legs_stickers, (pg_temp.ar(888)).stamped,
+    concat_ws(' | ', r ->> 'error', r2 ->> 'error', r3 ->> 'error', r3 ->> 'claimed', r4::text, r5::text, (pg_temp.ar(888)).legs_stickers, (pg_temp.ar(888)).stamped,
               (pg_temp.ar(888)).inner_status, (select count(*) from animal_holds where animal_id = 888 and resolved_at is null),
               _gt_value_ok('device_role', 'shipping'), _worker_role_norm('מליחה')));
+  -- v10.35 review: a whole-animal USDA hold stops finishing an open lung check and the later weights;
+  -- the head screen does not resolve the legs screen's hold; legs slot 1 has no hold rights when not split
+  ok := true;
+  perform set_config('gt.reset_in_progress', 'true', true);
+  update animals_pilot set slaughter = 'slaughtered', slaughter_time = 1, eso_checked = true, eso_result = 'ok' where id in (891, 893);
+  perform set_config('gt.reset_in_progress', 'false', true);
+  perform pg_temp.prep(892, 'outer');
+  r  := pg_temp.api(pg_temp.dev('IN1'), pg_temp.q_claim(891, 'inner_start', 'in_progress', '', pg_temp.devid('IN1')));
+  r2 := pg_temp.api(pg_temp.dev('ESO1'), 'select hold_set(891, ''eso'', ''usda'', ''whole'')');
+  r3 := pg_temp.api(pg_temp.dev('IN1'), pg_temp.q_push(891, '{"inner_status":"confirmed","inner_time":9999999999999}'));
+  ok := ok and pg_temp.claimed(r) and pg_temp.ok(r2) and r3 ->> 'error' = 'held' and (pg_temp.ar(891)).inner_status = 'in_progress';
+  r  := pg_temp.api(pg_temp.dev('OUT1'), 'select hold_set(892, ''outer'', ''usda'', ''whole'')');
+  r2 := pg_temp.api(pg_temp.dev('STAMPS'), pg_temp.q_push(892, '{"weight_stage2":230.5,"weight_stage3":228,"weight_left_skipped":true}'));
+  ok := ok and pg_temp.ok(r) and r2 ->> 'error' = 'held' and (pg_temp.ar(892)).weight_stage2 is null
+           and not coalesce((pg_temp.ar(892)).weight_left_skipped, false);
+  r  := pg_temp.api(pg_temp.dev('LEGS'), 'select hold_set(893, ''legs'', ''usda'', ''whole'')');     -- marked by "the legs screen"
+  insert into devices_pilot (id, device_name, assigned_role, assigned_index, device_status)
+  values ('gtselftest_legs91', 'selftest legs screen', 'legs', 91, 'active');
+  update animal_holds set created_by_device = 'gtselftest_legs91' where id = (r #>> '{hold,id}')::bigint;
+  perform set_config('gt.reset_in_progress', 'true', true);
+  update settings_pilot set settings = settings || '{"legsHeadSplit":true,"legsMode":true}'::jsonb where id = 1;
+  perform set_config('gt.reset_in_progress', 'false', true);
+  update devices_pilot set assigned_index = 191 where assigned_role = 'legs' and assigned_index = 1 and device_status = 'active' and id <> pg_temp.devid('LEGS');
+  update devices_pilot set assigned_index = 1 where id = pg_temp.devid('LEGS');                      -- now the head screen
+  r2 := pg_temp.api(pg_temp.dev('LEGS'), format('select hold_resolve(%s, ''condemned'')', (r #>> '{hold,id}')::bigint));
+  perform set_config('gt.reset_in_progress', 'true', true);
+  update settings_pilot set settings = settings - 'legsHeadSplit' where id = 1;
+  perform set_config('gt.reset_in_progress', 'false', true);
+  r3 := pg_temp.api(pg_temp.dev('LEGS'), 'select hold_set(891, ''legs'', ''question'')');
+  update devices_pilot set assigned_index = 90 where id = pg_temp.devid('LEGS');
+  ok := ok and pg_temp.ok(r) and r2 ->> 'error' = 'wrong_screen' and r3 ->> 'error' = 'wrong_screen'
+           and exists (select 1 from animal_holds where id = (r #>> '{hold,id}')::bigint and resolved_at is null);
+  perform pg_temp.rec('v10.35 review: a USDA hold stops finishing an open lung check (animal_push) and the later weights / skips; the head screen does not resolve the legs screen''s hold; legs slot 1 has no hold rights when not split', ok,
+    concat_ws(' | ', r::text, r2::text, r3::text));
 end $$;
 $gt39$;
     v_step := 'identity chaos: old key after a replacement, fake actor / role';
@@ -1891,80 +1929,55 @@ $gt57$;
     execute $gt58$
 -- ── step 46: processing over several days, strictly in order ─────────────────
 do $$
-declare r jsonb; r2 jsonb; r3 jsonb; r4 jsonb; ok boolean; b1 bigint; b2 bigint; n0 int; arch jsonb;
+declare r jsonb; r2 jsonb; r3 jsonb; r4 jsonb; ok boolean; b1 bigint; b2 bigint; n0 int; arch jsonb; e0 bigint;
 begin
   update settings_pilot set settings = settings || '{"legsEnabled":false,"partsEnabled":true,"stampsEnabled":true,
                                                      "plantTimezone":"UTC","autoResetTime":"00:00"}'::jsonb where id = 1;
   delete from animals_carry; delete from processing_day_closed;
-  -- day A: a clean board, two animals ruled kosher, one not yet printed / stamped
+  -- v10.35 (owner): an animal goes to the next day only with all its final marks (legs / head, parts,
+  -- stamps) — nothing is kept for legs / parts / stamps; the rollover waits, the team leader needs a reason
   perform pg_temp.api('{}', format('select reset_daily_board(%L, ''selftest'')', pg_temp.v('mgr')));
   delete from animals_carry;
   perform pg_temp.prep(987, 'outer'); perform pg_temp.prep(988, 'outer');
   perform pg_temp.api(pg_temp.dev('PARTS'), pg_temp.q_push(988, '{"parts_print_count":3,"parts_printed_as":"glatt"}'));
   perform pg_temp.api(pg_temp.dev('STAMPS'), pg_temp.q_claim(988, 'stamped', 'true', '', ''));
+  insert into plant_state (key, value) values ('lastRolloverDate', ((now() at time zone 'UTC')::date - 1)::text)
+    on conflict (key) do update set value = excluded.value;
+  e0 := _board_epoch();
+  r  := pg_temp.api('{}', 'select request_daily_rollover()');
+  r2 := pg_temp.api('{}', format('select reset_daily_board(%L)', pg_temp.v('mgr')));
+  ok := r ->> 'status' = 'waiting_unfinished' and (r ->> 'unfinished')::int = 1 and _board_epoch() = e0
+        and r2 ->> 'error' = 'unfinished_animals' and r2 -> 'numbers' = '[988]'::jsonb;
   n0 := (select count(*) from daily_board_archive);
-  r := pg_temp.api('{}', format('select reset_daily_board(%L, ''end of day A'')', pg_temp.v('mgr')));
-  select board_id into b1 from animals_carry limit 1;
-  ok := pg_temp.ok(r) and b1 = (select max(id) from daily_board_archive) and (select count(*) from daily_board_archive) = n0 + 1
-        and (select count(*) from animals_carry where board_id = b1) = 2
-        and (select parts_print_count from animals_carry where board_id = b1 and id = 988) = 3
-        and (pg_temp.ar(987)).slaughter is null
-        and exists (select 1 from admin_audit where action = 'daily_reset' and detail ->> 'reason' = 'end of day A');
-  -- the screens start the new day; the parts / stamps stations get day A first
-  r  := pg_temp.api(pg_temp.dev('PARTS'), 'select processing_board()');
-  r2 := pg_temp.api(pg_temp.dev('STAMPS'), 'select processing_board()');
-  ok := ok and (r -> 'board' ->> 'id')::bigint = b1 and jsonb_array_length(r -> 'rows') = 2 and (r -> 'board' -> 'pending' ->> 'parts')::int = 1
-        and (r2 -> 'board' ->> 'id')::bigint = b1 and (r2 -> 'board' -> 'pending' ->> 'stamps')::int = 1;
-  perform pg_temp.rec('step 46 days: the reset empties the screens and keeps day A''s unfinished processing (board, archive link, audit)', ok,
-    concat_ws(' | ', r::text, left(r2::text, 80)));
+  r3 := pg_temp.api('{}', format('select reset_daily_board(%L, ''end of day A — 987 sold unstamped'')', pg_temp.v('mgr')));
+  r4 := pg_temp.api(pg_temp.dev('PARTS'), 'select processing_board()');
+  ok := ok and pg_temp.ok(r3) and _board_epoch() > e0 and not exists (select 1 from animals_carry)
+        and (select count(*) from daily_board_archive) = n0 + 1 and (pg_temp.ar(987)).slaughter is null
+        and (r4 -> 'board') = 'null'::jsonb
+        and exists (select 1 from admin_audit where action = 'daily_reset' and detail -> 'unfinishedNumbers' = '[988]'::jsonb);
+  perform pg_temp.rec('v10.35 days: an animal goes to the next day only with all its marks — the rollover waits for parts / stamps, the team leader''s reset needs a written reason, nothing is kept for legs / parts / stamps', ok,
+    concat_ws(' | ', r::text, r2::text, left(r3::text, 80), left(r4::text, 80)));
 
-  -- day B on the slaughter line; parts can't skip to it while day A is open
-  perform pg_temp.prep(989, 'outer');
-  r  := pg_temp.api(pg_temp.dev('PARTS'), pg_temp.q_push(989, '{"parts_print_count":1,"parts_printed_as":"glatt"}'));
-  r2 := pg_temp.api(pg_temp.dev('STAMPS'), pg_temp.q_claim(989, 'stamped', 'true', '', ''));
-  ok := r ->> 'error' = 'earlier_day_open' and (r ->> 'board')::bigint = b1 and r2 ->> 'error' = 'earlier_day_open'
-        and coalesce((pg_temp.ar(989)).parts_print_count, 0) = 0 and not (pg_temp.ar(989)).stamped;
-  -- work on day A: only processing columns, only the right station, rulings untouched
+  -- a day kept by an older version is still finished safely (only processing columns, only the right station)
+  perform pg_temp.prep(987, 'outer');
+  insert into daily_board_archive (business_date, reason, animals_count, board, statuses)
+  values (current_date - 1, 'selftest: kept by an older version', 1, '[]'::jsonb, '{}'::jsonb) returning id into b1;
+  insert into animals_carry
+  select (jsonb_populate_record(null::animals_carry, to_jsonb(a) || jsonb_build_object('board_id', b1, 'slaughter_day', current_date - 1))).*
+    from animals_pilot a where a.id = 987;
+  perform set_config('gt.reset_in_progress', 'true', true);
+  update animals_pilot set slaughter = null, slaughter_time = null, inner_status = null, outer_status = null where id = 987;
+  perform set_config('gt.reset_in_progress', 'false', true);
   r  := pg_temp.api(pg_temp.dev('OUT2'), format('select carry_push(%s, %L::jsonb)', b1, '{"id":987,"parts_print_count":1}'));
   r2 := pg_temp.api(pg_temp.dev('PARTS'), format('select carry_push(%s, %L::jsonb)', b1, '{"id":987,"outer_status":"treif","parts_print_count":3,"parts_printed_as":"glatt"}'));
-  ok := ok and r ->> 'error' = 'wrong_station' and pg_temp.ok(r2) and r2 -> 'ignored' ? 'outer_status'
-        and (select outer_status from animals_carry where board_id = b1 and id = 987) = 'glatt'
-        and (select parts_print_count from animals_carry where board_id = b1 and id = 987) = 3;
-  -- parts done with day A → parts moves to day B (today); stamps still on day A
-  r  := pg_temp.api(pg_temp.dev('PARTS'), 'select processing_board()');
-  r3 := pg_temp.api(pg_temp.dev('PARTS'), pg_temp.q_push(989, '{"parts_print_count":1,"parts_printed_as":"glatt"}'));
-  r4 := pg_temp.api(pg_temp.dev('STAMPS'), 'select processing_board()');
-  ok := ok and (r -> 'board') = 'null'::jsonb and pg_temp.ok(r3) and (pg_temp.ar(989)).parts_print_count = 1
-        and (r4 -> 'board' ->> 'id')::bigint = b1;
-  perform pg_temp.rec('step 46 days: no skipping — today waits until day A is done for that station; each station moves on by itself', ok,
-    concat_ws(' | ', r::text, left(r3::text, 60), left(r4::text, 80)));
-
-  -- a second kept day: stamps still must finish day A first
-  perform pg_temp.api('{}', format('select reset_daily_board(%L, ''selftest'')', pg_temp.v('mgr')));
-  select max(board_id) into b2 from animals_carry;
-  r  := pg_temp.api(pg_temp.dev('STAMPS'), format('select carry_claim(%s, 989, ''stamped'')', b2));
-  r2 := pg_temp.api(pg_temp.dev('STAMPS'), format('select carry_claim(%s, 987, ''stamped'')', b1));
-  ok := b2 > b1 and r ->> 'error' = 'earlier_day_open' and pg_temp.claimed(r2) and coalesce((r2 ->> 'boardDone')::boolean, false)
+  r3 := pg_temp.api('{}', format('select processing_day_close(%L, %s, ''stamps'')', pg_temp.v('mgr'), b1));
+  r4 := pg_temp.api(pg_temp.dev('STAMPS'), format('select carry_claim(%s, 987, ''stamped'')', b1));
+  ok := r ->> 'error' = 'wrong_station' and pg_temp.ok(r2) and r2 -> 'ignored' ? 'outer_status'
+        and r3 ->> 'error' = 'reason_required' and pg_temp.claimed(r4) and coalesce((r4 ->> 'boardDone')::boolean, false)
         and not exists (select 1 from animals_carry where board_id = b1)
-        and (select board from daily_board_archive where id = b1) @> '[{"id":987,"stamped":true,"parts_print_count":3}]'::jsonb;
-  r3 := pg_temp.api(pg_temp.dev('STAMPS'), format('select carry_claim(%s, 989, ''stamped'')', b2));
-  ok := ok and pg_temp.claimed(r3);
-  perform pg_temp.rec('step 46 days: two kept days in order; a day done for every station goes back into its archive row', ok,
-    concat_ws(' | ', r::text, left(r2::text, 80), left(r3::text, 60)));
-
-  -- the team leader can close a kept day for a station (a reason is required; audited)
-  perform pg_temp.prep(990, 'outer');
-  perform pg_temp.api('{}', format('select reset_daily_board(%L, ''selftest'')', pg_temp.v('mgr')));
-  select max(board_id) into b2 from animals_carry;
-  r  := pg_temp.api('{}', format('select processing_day_close(%L, %s, ''stamps'')', pg_temp.v('mgr'), b2));
-  r2 := pg_temp.api(pg_temp.dev('STAMPS'), format('select processing_day_close(%L, %s, ''stamps'', ''x'')', 'x', b2));
-  r3 := pg_temp.api('{}', format('select processing_day_close(%L, %s, ''stamps'', ''sold unstamped'')', pg_temp.v('mgr'), b2));
-  r4 := pg_temp.api('{}', format('select processing_status(%L)', pg_temp.v('mgr')));
-  ok := r ->> 'error' = 'reason_required' and r2 ->> 'error' = 'unauthorized' and pg_temp.ok(r3) and (r3 ->> 'pendingLeft')::int = 1
-        and exists (select 1 from admin_audit where action = 'processing_day_close' and detail ->> 'reason' = 'sold unstamped')
-        and pg_temp.ok(r4);
-  perform pg_temp.rec('step 46 days: the team leader closes a kept day for a station only with a reason (audited); a tablet cannot', ok,
-    concat_ws(' | ', r::text, r2::text, r3::text));
+        and (select board from daily_board_archive where id = b1) @> '[{"id":987,"outer_status":"glatt","stamped":true,"parts_print_count":3}]'::jsonb;
+  perform pg_temp.rec('step 46 days: a day kept by an older version — only processing columns, only the right station, a close needs a reason; done → back into its archive row', ok,
+    concat_ws(' | ', r::text, left(r2::text, 80), r3::text, left(r4::text, 80)));
   delete from animals_carry; delete from processing_day_closed;
 end $$;
 $gt58$;
@@ -2006,13 +2019,13 @@ begin
   e0 := _board_epoch();
   r  := pg_temp.api('{}', format('select reset_daily_board(%L)', pg_temp.v('mgr')));
   r2 := pg_temp.api('{}', format('select reset_daily_board(%L, ''  '')', pg_temp.v('mgr')));
-  ok := r ->> 'error' = 'unfinished_animals' and (r ->> 'unfinished')::int = 2 and r -> 'numbers' = '[994, 995]'::jsonb
+  ok := r ->> 'error' = 'unfinished_animals' and r -> 'numbers' @> '[994, 995]'::jsonb   -- (v10.35: + 996, ruled but parts / stamps not done)
         and r2 ->> 'error' = 'unfinished_animals' and _board_epoch() = e0
         and (pg_temp.ar(993)).inner_status = 'confirmed' and (pg_temp.ar(994)).slaughter = 'slaughtered';
   r  := pg_temp.api('{}', format('select reset_daily_board(%L, ''carcasses 994/995 condemned'')', pg_temp.v('mgr')));
   ok := ok and pg_temp.ok(r) and _board_epoch() > e0 and (pg_temp.ar(993)).slaughter is null
         and exists (select 1 from admin_audit where action = 'daily_reset' and detail ->> 'reason' = 'carcasses 994/995 condemned'
-                                                and detail -> 'unfinishedNumbers' = '[994, 995]'::jsonb);
+                                                and detail -> 'unfinishedNumbers' @> '[994, 995]'::jsonb);
   perform pg_temp.rec('step 46 manual reset: stops while slaughtered animals lack their last ruling (numbers given); only with a written reason, audited', ok,
     concat_ws(' | ', r::text, r2::text));
 
