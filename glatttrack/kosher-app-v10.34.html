@@ -6758,7 +6758,7 @@ function _doLoginProceed(loginScreenId){
     {const a=KS.getAnimals();let fp=-1;for(let i=0;i<a.length;i++){if(a[i].slaughter===null){fp=i;break;}}slPage=fp>=0?Math.floor(fp/PER):0;}
     slRenderGrid();slUpdateSummary();startBeep();
   }
-  else if(loginScreenId==='scLegsLogin'){goTo("scLegs");const so=KS.getSettings().legsSortEnabled;const mb=document.getElementById('lgModeBar');if(mb)mb.style.display=so?'flex':'none';lgSetMode('print');lgRenderGrid();lgUpdateSummary();}
+  else if(loginScreenId==='scLegsLogin'){goTo("scLegs");_lgSortBar();lgSetMode('print');lgRenderGrid();lgUpdateSummary();}
   else if(loginScreenId==='scInnerLogin'){goTo("scInner");inRenderGrid();inUpdateSummary();}
   else if(loginScreenId==='scOuterLogin'){goTo("scOuter");outRenderGrid();outUpdateSummary();}
   else if(loginScreenId==='scPartsLogin'){goTo("scParts");partsRenderGrid();partsUpdateSummary();setTimeout(()=>focusScan&&focusScan(),300);}
@@ -7420,6 +7420,14 @@ function _lgRole(){
   if(KS.getSettings().legsPaused===true) return (_lgSplit() && lgInstance!==1) ? 'paused' : 'head';
   return _lgSplit() ? (lgInstance===1 ? 'head' : 'legs') : 'both';
 }
+// v10.35 (owner): sorting is for the LEGS — no legs screen (switched off) or the head screen → no sorting at all,
+// and only a number that got its leg stickers is sorted
+function _lgSortOn(){ const s=KS.getSettings(); const r=_lgRole();
+  return s.legsSortEnabled===true && s.legsMode!==false && s.legsPaused!==true && (r==='both' || r==='legs'); }
+function _lgSortable(x){ return isKosherReady(x) && !!x.legsStickers; }
+function _lgSortBar(){ const mb=document.getElementById('lgModeBar'); const on=_lgSortOn();
+  if(mb) mb.style.display=on?'flex':'none';
+  if(!on && typeof lgMode!=='undefined' && lgMode==='sort' && typeof lgSetMode==='function') lgSetMode('print'); }
 function _lgArrived(x){ const r=_lgRole(); if(r==='paused') return false;
   return (r==='head' && KS.getSettings().legsMode!==false && _legsRequired(x)) ? !!x.legsStickers : passedEso(x); }
 function _lgDone(x){ return _lgRole()==='legs' ? !!x.legsStickers : !!x.headStickers; }
@@ -7495,10 +7503,8 @@ function lgLogin(){
   if(!_checkLogin('legs','scLegsLogin'))return;
   try{ _lgTitle(); }catch(e){}
   goTo("scLegs");
-  // Show mode bar if sort mode enabled in settings
-  const sortOn=KS.getSettings().legsSortEnabled;
-  const modeBar=document.getElementById('lgModeBar');
-  if(modeBar)modeBar.style.display=sortOn?'flex':'none';
+  // Show mode bar if sort mode enabled in settings (v10.35: only on a working legs screen)
+  _lgSortBar();
   lgMode='print';lgSetMode('print');
   lgManualPage=false;
   {const a=KS.getAnimals();let fp=-1;for(let i=0;i<a.length;i++){if(a[i]&&_lgNeeds(a[i])){fp=i;break;}}lgPage=fp>=0?Math.floor(fp/PER):0;}
@@ -7715,10 +7721,10 @@ function lgSortRenderGrid(){
   let firstPending=-1;
   for(let i=0;i<a.length;i++){
     const x=a[i];
-    if(isKosherReady(x)&&!x.legsSorted){firstPending=i;break;}
+    if(_lgSortable(x)&&!x.legsSorted){firstPending=i;break;}
   }
   // Auto-jump to the page of the next animal to sort, unless paging manually (same as the other screens).
-  const isSortPend=(x)=>isKosherReady(x)&&!x.legsSorted;
+  const isSortPend=(x)=>_lgSortable(x)&&!x.legsSorted;
   if(!lgSortManualPage){
     const pStart=lgSortPage*PER,pEnd=pStart+PER;let has=false;
     for(let i=pStart;i<Math.min(pEnd,a.length);i++){if(isSortPend(a[i])){has=true;break;}}
@@ -7734,6 +7740,7 @@ function lgSortRenderGrid(){
       if(x.outerStatus==="treif"||x.innerStatus==="treif")return"parts-not-kosher";
       if(x.slaughter==="nevela"||x.slaughter==="shot")return"parts-not-kosher";
       if(!isKosherReady(x))return"empty";
+      if(!x.legsStickers && !x.legsSorted)return"empty";     // v10.35: no leg stickers (legs was off) → nothing to sort
       const cls={glatt:'st-glatt',beit:'st-beit',kosher:'st-kosher',mk:'st-mk',rabChalak:'st-rabchalak'}[x.outerStatus]||'st-custom';
       if(x.legsSorted)return cls; // colored by status
       return i===firstPending?"next":cls;
@@ -7744,9 +7751,10 @@ function lgSortRenderGrid(){
       if(x.slaughter==="nevela")return t.slN||"נבלה";
       if(x.slaughter==="shot")return t.slSh||"ירוי";
       if(!isKosherReady(x))return"";
+      if(!x.legsStickers && !x.legsSorted)return L('אין רגליים','No legs','Sin patas');
       return statusDisplayName(x.outerStatus,x);
     },
-    i=>{const x=a[i];return (isKosherReady(x))?()=>lgProcessSort(String(i+1)):null;}
+    i=>{const x=a[i];return (_lgSortable(x))?()=>lgProcessSort(String(i+1)):null;}
   );
 }
 
@@ -7788,6 +7796,9 @@ function lgProcessSort(code){
       L('רגל #','Leg #','Pata #')+(idx+1)+L(' — נפסלה כטרף',' — טרף',' — טרף')
     );return;
   }
+  // v10.35: sorting only on a working legs screen, and only a number that got its leg stickers
+  if(!_lgSortOn()){ lgShowWarn(L('אין מיון','No sorting','Sin clasificación'), L('מסך הרגליים כבוי — אין רגליים למיין','The legs screen is off — no legs to sort','Pantalla de patas apagada — nada que clasificar')); return; }
+  if(!a.legsStickers && !a.legsSorted && isKosherReady(a)){ lgShowWarn(L('אין רגליים','No legs','Sin patas'), L('רגל #','Leg #','Pata #')+(idx+1)+L(' — לא הודפסו מדבקות רגליים',' — no leg stickers were printed',' — sin etiquetas de patas')); return; }
   // No outer ruling yet
   if(!isKosherReady(a)){
     lgShowWarn(
@@ -7829,6 +7840,7 @@ function lgShowWarn(title,desc){
 }
 
 function lgRenderGrid(){
+  try{ _lgTitle(); }catch(e){}                         // v10.35: the role (legs / head / off) and the sorting bar follow the settings
   const t=T[lang],a=KS.getAnimals();
   // ALL slaughtered animals must be printed in order — no skipping nevela/shot.
   const needsLg=(x)=>_lgNeeds(x);   // v10.26: also a shochet's "?" number; past a held one
@@ -8378,6 +8390,7 @@ function _lgTitle(){
   if(!el){ el=document.createElement('span'); el.id='lgRoleLbl'; el.setAttribute('data-no-i18n','');
     el.style.cssText='color:var(--gold);font-weight:800;font-size:16px;margin-inline-start:8px;'; at.parentNode.insertBefore(el, at); }
   try{ if(el._r!==r+lgInstance){ el._r=r+lgInstance; renderScreenDeviceStatus(); } }catch(e){}
+  try{ _lgSortBar(); }catch(e){}                       // v10.35: legs off / head screen → no sorting
   el.textContent = r==='head' ? L('מסך ראש','Head screen','Pantalla cabeza') + (KS.getSettings().legsPaused===true ? ' · '+L('רגליים כבוי','legs off','patas apagado') : '')
                  : r==='legs' ? L('מסך רגליים','Legs screen','Pantalla patas') : r==='paused' ? L('מסך רגליים — כבוי','Legs screen — off','Pantalla patas — apagada') : '';
 }

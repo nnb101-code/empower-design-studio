@@ -23,6 +23,7 @@ This pack is the CURRENT state. Review these files only.
 - New device roles `cooler`, `nikur`, `salting`, `shipping`: `devices_pilot_role_ok`, `_gt_value_ok('device_role')`, `device_pair`, `worker_sessions_role_check`, `_worker_role_norm`, and the "station tablet" lists in `manager_login` / the leader-device replacement.
 - They have NO write rights: `_stage_allowed` does not know them, so `animal_push` ignores their columns, `claim_animal_stage` and `hold_set` refuse them. Self-test check (146/146).
 - App: the four screens in "choose screens", pairing, worker lists, printer/scanner per screen, one shared login + read-only screen (`scSupLogin` / `scSup`) titled by the tablet's role.
+- Legs sorting only when there are legs (owner): no sorting while `legsPaused` (`legs_off`), none on the head slot (`wrong_screen`), none for a number without `legs_stickers` (`no_leg_stickers` — stage guard, `carry_push`, `carry_claim`); `_proc_pending` does not count it. Browser test `v1035-tsort.test.js`.
 - Self-test fix: it now sets aside `legsHeadSplit`, `legsPaused`, `partsPaused` at the start (it failed on a plant with the legs/head split on).
 
 ## Fixed after round 14 (server 02, still v10.34) — the legs slot vs the head slot

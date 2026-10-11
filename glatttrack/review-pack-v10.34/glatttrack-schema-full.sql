@@ -12286,8 +12286,8 @@ end $$;
 revoke execute on function _legs_required(integer) from public, anon, authenticated;
 
 -- v10.34 review (round 14): with legs and head on TWO screens the server tells the two legs slots apart.
--- Slot 1 is the head screen: only when the plant split the screens, and never the leg stickers (the
--- sorting page may be open on either legs tablet). Slot 0 is the legs screen: no head stickers while the head screen works (split, not paused).
+-- Slot 1 is the head screen: only when the plant split the screens, and never the leg stickers or the
+-- sorting (v10.35: sorting is for the legs; none at all while the legs screen is off). Slot 0 is the legs screen: no head stickers while the head screen works (split, not paused).
 -- (null = allowed; the owner / service / the team leader in test mode are not a legs slot)
 create or replace function _legs_slot_error(p_legs boolean, p_head boolean, p_sorted boolean) returns text
 language plpgsql stable security definer set search_path = public, extensions, pg_temp as $$
@@ -12295,13 +12295,15 @@ declare s jsonb; v_idx int; v_role text; v_split boolean;
 begin
   if not (coalesce(p_legs, false) or coalesce(p_head, false) or coalesce(p_sorted, false)) then return null; end if;
   if not _is_api_request() or _request_is_service_role() then return null; end if;
+  s := _gt_settings();
+  -- v10.35 (owner): sorting is for the legs — the legs screen switched off → no sorting at all (any screen)
+  if coalesce(p_sorted, false) and _gt_flag(s, 'legsPaused', false) then return 'legs_off'; end if;
   select d.assigned_role, coalesce(d.assigned_index, 0) into v_role, v_idx
     from devices_pilot d where d.id = _current_device_id() and coalesce(d.device_status, 'active') <> 'retired';
   if v_role is distinct from 'legs' then return null; end if;
-  s := _gt_settings();
   v_split := _gt_flag(s, 'legsHeadSplit', false) and _gt_flag(s, 'legsMode', true);
   if v_idx = 1 then
-    if not v_split or coalesce(p_legs, false) then return 'wrong_screen'; end if;
+    if not v_split or coalesce(p_legs, false) or coalesce(p_sorted, false) then return 'wrong_screen'; end if;   -- v10.35: no sorting on the head screen
   elsif v_split and coalesce(p_head, false) and not _gt_flag(s, 'legsPaused', false) then
     return 'wrong_screen';
   end if;
@@ -12452,7 +12454,8 @@ begin
   case p_station
     when 'legs' then
       return (not coalesce(a.head_stickers, false) and _stage_order_error('legs_stickers', a, p_today) is null)
-          or (_gt_flag(_gt_settings(), 'legsSortEnabled', false) and _kosher_ready(a) and not coalesce(a.legs_sorted, false));
+          or (_gt_flag(_gt_settings(), 'legsSortEnabled', false) and not _gt_flag(_gt_settings(), 'legsPaused', false)
+              and coalesce(a.legs_stickers, false) and _kosher_ready(a) and not coalesce(a.legs_sorted, false));   -- v10.35: no legs → nothing to sort
     when 'parts' then
       return _kosher_ready(a)
          and ((not coalesce(a.parts_scanned, false) and coalesce(a.parts_print_count, 0) < 3)
@@ -12588,6 +12591,7 @@ begin
   if not coalesce(old.legs_sorted, false) and coalesce(new.legs_sorted, false) then
     v_groups := v_groups || 'legs'::text;
     if v_err is null then v_stage := 'legs'; v_err := _stage_order_error('legs', new, true); end if;
+    if v_err is null and not coalesce(new.legs_stickers, false) then v_stage := 'legs'; v_err := 'no_leg_stickers'; end if;   -- v10.35: nothing to sort
   end if;
   if (not coalesce(old.parts_scanned, false) and coalesce(new.parts_scanned, false))
      or (not coalesce(old.tongue_sticker, false) and coalesce(new.tongue_sticker, false))
@@ -13510,6 +13514,9 @@ begin
         if v_reason is not null then
           raise exception 'GT:OUT_OF_ORDER out-of-order: stage=legs reason=%', v_reason using errcode = 'P0001';
         end if;
+        if n.legs_sorted is distinct from c.legs_sorted and not coalesce(n.legs_stickers, false) then   -- v10.35: nothing to sort
+          raise exception 'GT:OUT_OF_ORDER out-of-order: stage=legs reason=no_leg_stickers' using errcode = 'P0001';
+        end if;
         -- the order: a processing step only after the last ruling
         foreach g in array (select array_agg(distinct x) from unnest(v_groups) x) loop
           v_reason := _stage_order_error(case g when 'legs' then (case when n.legs_sorted is distinct from c.legs_sorted then 'legs' else 'legs_stickers' end)
@@ -13622,6 +13629,9 @@ begin
     return v_res;
   end if;
   v_reason := _stage_order_error(p_stage, _carry_row(c), false);
+  if v_reason is null and p_stage = 'legs' then                 -- v10.35: sorting only on the legs screen, only legs with stickers
+    v_reason := coalesce(_legs_slot_error(false, false, true), case when not coalesce(c.legs_stickers, false) then 'no_leg_stickers' end);
+  end if;
   v_station := case when p_stage = 'legs' then 'legs' else _proc_station_of_group('stamped') end;
   v_open := _proc_open_board(v_station);
   if v_reason is not null then
@@ -15861,7 +15871,8 @@ begin
   case p_station
     when 'legs' then
       v := (not coalesce(a.head_stickers, false) and _stage_order_error('legs_stickers', a, p_today) is null)
-          or (_gt_flag(_gt_settings(), 'legsSortEnabled', false) and _kosher_ready(a) and not coalesce(a.legs_sorted, false));
+          or (_gt_flag(_gt_settings(), 'legsSortEnabled', false) and not _gt_flag(_gt_settings(), 'legsPaused', false)
+              and coalesce(a.legs_stickers, false) and _kosher_ready(a) and not coalesce(a.legs_sorted, false));   -- v10.35: no legs → nothing to sort
     when 'parts' then
       v := _kosher_ready(a)
          and ((not coalesce(a.parts_scanned, false) and coalesce(a.parts_print_count, 0) < 3)

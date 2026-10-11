@@ -945,8 +945,32 @@ begin
   perform set_config('gt.reset_in_progress', 'false', true);
   r5 := pg_temp.api(pg_temp.dev('LEGS'), pg_temp.q_push(887, '{"head_stickers":true}'));
   ok := ok and r5 ->> 'error' = 'out_of_order' and not coalesce((pg_temp.ar(887)).head_stickers, false);
+  -- v10.35 (owner): sorting is for the legs — never on the head screen, never while legs is off, never a number without leg stickers
+  perform pg_temp.prep(889, 'outer'); perform pg_temp.prep(890, 'outer');
+  perform set_config('gt.reset_in_progress', 'true', true);
+  update animals_pilot set legs_stickers = true, head_stickers = true where id = 889;
+  update animals_pilot set head_stickers = true where id = 890;
+  update settings_pilot set settings = settings || '{"legsHeadSplit":true,"legsSortEnabled":true}'::jsonb where id = 1;
+  perform set_config('gt.reset_in_progress', 'false', true);
+  r2 := pg_temp.api(pg_temp.dev('LEGS'), pg_temp.q_claim(889, 'legs', 'true', '', ''));           -- slot 1 = head screen
+  ok := ok and not pg_temp.claimed(r2) and not coalesce((pg_temp.ar(889)).legs_sorted, false);
   update devices_pilot set assigned_index = 90 where id = pg_temp.devid('LEGS');
-  perform pg_temp.rec('v10.34 legs / head on two screens: the head slot never prints leg stickers, the legs slot never prints the head while the head screen works, slot 1 is refused when the screens are not split', ok,
+  r3 := pg_temp.api(pg_temp.dev('LEGS'), pg_temp.q_claim(890, 'legs', 'true', '', ''));           -- no leg stickers
+  ok := ok and not pg_temp.claimed(r3) and not coalesce((pg_temp.ar(890)).legs_sorted, false);
+  perform set_config('gt.reset_in_progress', 'true', true);
+  update settings_pilot set settings = settings || '{"legsPaused":true}'::jsonb where id = 1;
+  perform set_config('gt.reset_in_progress', 'false', true);
+  r4 := pg_temp.api(pg_temp.dev('LEGS'), pg_temp.q_claim(889, 'legs', 'true', '', ''));           -- legs switched off
+  ok := ok and not pg_temp.claimed(r4) and not coalesce((pg_temp.ar(889)).legs_sorted, false);
+  perform set_config('gt.reset_in_progress', 'true', true);
+  update settings_pilot set settings = settings - 'legsPaused' where id = 1;
+  perform set_config('gt.reset_in_progress', 'false', true);
+  r5 := pg_temp.api(pg_temp.dev('LEGS'), pg_temp.q_claim(889, 'legs', 'true', '', ''));           -- the legs screen, legs on
+  ok := ok and pg_temp.claimed(r5) and (pg_temp.ar(889)).legs_sorted;
+  perform set_config('gt.reset_in_progress', 'true', true);
+  update settings_pilot set settings = settings - 'legsHeadSplit' where id = 1;
+  perform set_config('gt.reset_in_progress', 'false', true);
+  perform pg_temp.rec('v10.34 legs / head on two screens: the head slot never prints leg stickers, the legs slot never prints the head while the head screen works, slot 1 is refused when the screens are not split; v10.35 sorting only on the legs screen, never while legs is off, never a number without leg stickers', ok,
     concat_ws(' | ', r ->> 'error', r2 ->> 'error', r3 ->> 'error', r4 ->> 'error', r5 ->> 'error'));
   -- v10.35: the four supervisor screens (cooler / nikur / salting / shipping) are paired tablets with NO write rights yet
   ok := true;
@@ -2671,6 +2695,9 @@ begin
   r4 := pg_temp.api(pg_temp.dev('STAMPS'), pg_temp.q_push(987, '{"weight_left":120.5}'));
   r5 := pg_temp.api(pg_temp.dev('STAMPS'), pg_temp.q_push(987, '{"weight_right":121.5}'));
   perform pg_temp.prep(988, 'outer');
+  perform set_config('gt.reset_in_progress', 'true', true);
+  update animals_pilot set legs_stickers = true, head_stickers = true where id = 988;      -- (v10.35: only legs with stickers are sorted)
+  perform set_config('gt.reset_in_progress', 'false', true);
   r6 := pg_temp.api(pg_temp.dev('LEGS'), format('select hold_set(%s, ''legs'', ''question'')', 988));
   ok := pg_temp.ok(r) and pg_temp.ok(r2) and pg_temp.ok(r3) and r4 ->> 'error' = 'held' and pg_temp.ok(r5)
         and (pg_temp.ar(987)).weight_right = 121.5 and (pg_temp.ar(987)).weight_left is null;
