@@ -8107,7 +8107,7 @@ function renderSticker(containerId,idx,kind,sample){
         ${heb?`<div style="font-size:${dateFS}px;color:#333;margin-top:3px;">${heb}</div>`:''}
         ${greg?`<div style="font-size:${dateFS}px;color:#333;" dir="ltr">${greg}</div>`:''}
         ${kind!=='kosher'&&slTime?`<div style="font-size:${dateFS}px;color:#000;" dir="ltr">${String(slTime.getHours()).padStart(2,'0')}:${String(slTime.getMinutes()).padStart(2,'0')}</div>`:''}
-${(kind==='kosher'||['nevela','shot','notChalak'].includes(stRaw))?`        <div style="display:inline-block;margin-top:4px;font-size:${stFS}px;font-weight:700;color:#fff;background:${st[1]};border-radius:4px;padding:${Math.round(1*scale)}px ${Math.round(8*scale)}px;line-height:1.15;"><div>${escapeHtml(st[0])}</div>${st[2]&&st[2]!==st[0]?`<div dir="ltr" style="font-size:${Math.round(stFS*0.85)}px;">${escapeHtml(st[2])}</div>`:''}</div>`:''}
+${(kind==='kosher'||['nevela','shot','notChalak'].includes(stRaw))?`        <div style="display:inline-block;margin-top:4px;font-size:${stFS}px;font-weight:700;color:#fff;background:${st[1]};border-radius:4px;padding:${Math.round(1*scale)}px ${Math.round(8*scale)}px;line-height:1.15;"><span style="white-space:nowrap;"><bdi>${escapeHtml(st[0])}</bdi>${st[2]&&st[2]!==st[0]?`-<bdi dir="ltr">${escapeHtml(st[2])}</bdi>`:''}</span></div>`:''}
       </div>
       ${opt.showQR?`<canvas id="${containerId}_qr" width="${qrPX}" height="${qrPX}" style="width:${qrPX}px;height:${qrPX}px;flex-shrink:0;background:#fff;"></canvas>`:''}
         ${_safeImg(sealImg)?`<div style="flex-basis:100%;text-align:center;line-height:0;"><img src="${_safeImg(sealImg)}" style="height:${sealH}px;width:auto;max-width:100%;object-fit:contain;"></div>`
