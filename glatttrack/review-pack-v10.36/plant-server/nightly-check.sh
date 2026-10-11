@@ -30,7 +30,7 @@ elif [ -n "${GT_API_RESTART_CMD:-}" ]; then
   if api_ok; then fix "שרת האפליקציה" "לא ענה — הופעל מחדש, עונה עכשיו"; else bad "שרת האפליקציה" "לא עונה, גם אחרי הפעלה מחדש — לקרוא למתקין"; fi
 else bad "שרת האפליקציה" "לא עונה — לקרוא למתקין"; fi
 
-# 2b. (v10.35 review) the web server in front of the API writes the tablet's address itself
+# 2b. (v10.36 review) the web server in front of the API writes the tablet's address itself
 #     (proxy_set_header X-GT-Client-IP $remote_addr;) — otherwise a tablet could send its own value
 #     and slip past the "too many wrong codes" brake. A wrong team-leader code is sent with a made-up
 #     address; the address the server recorded must NOT be the made-up one. The test attempt is removed.

@@ -1,5 +1,5 @@
 #!/bin/bash
-# GlattTrack support center — sends the alerts (v10.35). Every minute (cron / systemd timer) on any
+# GlattTrack support center — sends the alerts (v10.36). Every minute (cron / systemd timer) on any
 # machine of the manufacturer that reaches the support-center database.
 # Which channels: chosen on the support-center page (e-mail / SMS / WhatsApp, each on or off, with
 # the addresses, and from which level: red only, or also orange). Settings of the senders: notify.env

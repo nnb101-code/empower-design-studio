@@ -1,6 +1,6 @@
-מצורפת חבילת הבדיקה העדכנית של GlattTrack (אפליקציה v10.35, שרת שלב 46).
-זה סבב שבעה-עשר: חדש — בריאות המערכת ליצרן, עדכונים בטוחים, ומרכז שירות לכל המפעלים (README: "Added in v10.35"). בדוק במיוחד: support-center/central-setup.sql (מי יכול לקרוא / לכתוב, sc_report עם סוד המפעל, הרשאות עובדי השירות), plant-server/report-to-center.sh ו-update-app.sh (פקודות מרחוק — רק ארבע; הורדת עדכון עם sha256), ו-_gtUpdApply באפליקציה (האם עדכון יכול לאבד לחיצה). לפני כן, בסבב שישה-עשר: גם קודי העובדים יצאו מההגדרות לטבלה סגורה (README: "Fixed after the Gemini round") — בדוק במיוחד worker_codes / worker_code_set / worker_login / _settings_hash_worker_codes. וגם: תיקון 15 ממצאים מבדיקת קוד מעמיקה + כלל הבעלים על יום קודם (README: "Fixed after the deep code review"). לפני כן, בסבב חמישה-עשר: תיקון ממצא 1 מסבב 14 (הפרדה בין טאבלט הרגליים לטאבלט הראש בשרת), תשתית לארבעה מסכי משגיח חדשים (קולר, מנקר, מליחה, שיפינג — בלי זכויות כתיבה), וכלל מיון הרגליים.
-קודם תקרא את README-REVIEW.md, החלק "Added in v10.35" (ארבעה תפקידי משגיח חדשים — האם באמת אין להם שום זכות כתיבה?), ואחריו "Fixed after round 14", ואחריו "Changed after the v10.34 review", ואחריו "Changed in v10.33 – v10.34" ומטה.
+מצורפת חבילת הבדיקה העדכנית של GlattTrack (אפליקציה v10.36, שרת שלב 46).
+זה סבב שבעה-עשר: חדש — בריאות המערכת ליצרן, עדכונים בטוחים, ומרכז שירות לכל המפעלים (README: "Added in v10.36"). בדוק במיוחד: support-center/central-setup.sql (מי יכול לקרוא / לכתוב, sc_report עם סוד המפעל, הרשאות עובדי השירות), plant-server/report-to-center.sh ו-update-app.sh (פקודות מרחוק — רק ארבע; הורדת עדכון עם sha256), ו-_gtUpdApply באפליקציה (האם עדכון יכול לאבד לחיצה). לפני כן, בסבב שישה-עשר: גם קודי העובדים יצאו מההגדרות לטבלה סגורה (README: "Fixed after the Gemini round") — בדוק במיוחד worker_codes / worker_code_set / worker_login / _settings_hash_worker_codes. וגם: תיקון 15 ממצאים מבדיקת קוד מעמיקה + כלל הבעלים על יום קודם (README: "Fixed after the deep code review"). לפני כן, בסבב חמישה-עשר: תיקון ממצא 1 מסבב 14 (הפרדה בין טאבלט הרגליים לטאבלט הראש בשרת), תשתית לארבעה מסכי משגיח חדשים (קולר, מנקר, מליחה, שיפינג — בלי זכויות כתיבה), וכלל מיון הרגליים.
+קודם תקרא את README-REVIEW.md, החלק "Added in v10.36" (ארבעה תפקידי משגיח חדשים — האם באמת אין להם שום זכות כתיבה?), ואחריו "Fixed after round 14", ואחריו "Changed after the v10.34 review", ואחריו "Changed in v10.33 – v10.34" ומטה.
 
 הכללים של בעל המערכת (המצב הנוכחי):
 - סדר הקו: שחיטה ← וושט ← רגליים ← ראש (אם מפוצל) ← פנים ← חוץ ← חותמות / חלקים.
@@ -25,13 +25,13 @@
 (2) _stage_order_error('inner') עם head_stickers: האם יש מסלול כתיבה של פסיקת פנים לפני מדבקות ראש (claim, animal_push, carry_push, המסך המשותף)?
 (3) באפליקציה: _pushAnswer, הסדר במסך ראש מפוצל, כיבוי מסך — האם יכול להיתקע תור או לאבד שינוי תקין?
 (4) הנקודות הפתוחות B1, B2, B5, B6 מהסבב הקודם, ו-_hold_caller_error, _parts_print_block, _correction_check, מצב בדיקה.
-בדיקת האבטחה: 146/146 (מסד נקי מ-glatttrack-schema-full.sql + הרצה שנייה של 02).
+בדיקת האבטחה: 147/147 (מסד נקי מ-glatttrack-schema-full.sql + הרצה שנייה של 02).
 
 Please review this pack according to README-REVIEW.md.
 
 Rules for the review:
 1. Audit the ACTIVE state in active-schema-snapshot.sql (one definition per function). Do not audit older step files or the history inside glatttrack-schema-full.sql as if it were active.
-2. Use SECURITY-MANIFEST.md and security-selftest-result.txt (146/146) to see what is already enforced and tested. Before reporting a vulnerability, check whether a self-test already covers it; if it does, say so and explain why you still think it is exploitable (with the exact function name and line from the snapshot).
+2. Use SECURITY-MANIFEST.md and security-selftest-result.txt (147/147) to see what is already enforced and tested. Before reporting a vulnerability, check whether a self-test already covers it; if it does, say so and explain why you still think it is exploitable (with the exact function name and line from the snapshot).
 3. Separate your findings into:
    A. Real, exploitable problems (with a concrete attack: which role, which call, which parameters, what wrong result).
    B. Defense-in-depth improvements (not exploitable today).

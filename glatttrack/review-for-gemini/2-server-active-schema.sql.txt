@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict atz24IcbeyiUix75QFsvI7UPaymtihsB6MVyK2hxX8xn06gpiXpegtl7MFT7nb0
+\restrict qNcMXeXStSOsMx87bLGgbNmKL32tfWsvtUPCCLkpIxdE8Skzx2s7T2KEuFcIzBr
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -19,32 +19,51 @@ SET client_min_messages = warning;
 SET row_security = off;
 
 --
--- Name: gt_rls; Type: SCHEMA; Schema: -; Owner: postgres
+-- Name: auth; Type: SCHEMA; Schema: -; Owner: -
+--
+
+CREATE SCHEMA auth;
+
+
+--
+-- Name: extensions; Type: SCHEMA; Schema: -; Owner: -
+--
+
+CREATE SCHEMA extensions;
+
+
+--
+-- Name: gt_rls; Type: SCHEMA; Schema: -; Owner: -
 --
 
 CREATE SCHEMA gt_rls;
 
 
-ALTER SCHEMA gt_rls OWNER TO postgres;
-
 --
--- Name: public; Type: SCHEMA; Schema: -; Owner: pg_database_owner
+-- Name: pgcrypto; Type: EXTENSION; Schema: -; Owner: -
 --
 
-CREATE SCHEMA public;
-
-
-ALTER SCHEMA public OWNER TO pg_database_owner;
-
---
--- Name: SCHEMA public; Type: COMMENT; Schema: -; Owner: pg_database_owner
---
-
-COMMENT ON SCHEMA public IS 'standard public schema';
+CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA extensions;
 
 
 --
--- Name: devices_read_all(); Type: FUNCTION; Schema: gt_rls; Owner: postgres
+-- Name: EXTENSION pgcrypto; Type: COMMENT; Schema: -; Owner: -
+--
+
+COMMENT ON EXTENSION pgcrypto IS 'cryptographic functions';
+
+
+--
+-- Name: uid(); Type: FUNCTION; Schema: auth; Owner: -
+--
+
+CREATE FUNCTION auth.uid() RETURNS uuid
+    LANGUAGE sql STABLE
+    AS $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
+
+
+--
+-- Name: devices_read_all(); Type: FUNCTION; Schema: gt_rls; Owner: -
 --
 
 CREATE FUNCTION gt_rls.devices_read_all() RETURNS boolean
@@ -66,10 +85,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION gt_rls.devices_read_all() OWNER TO postgres;
-
 --
--- Name: devices_read_own_ids(); Type: FUNCTION; Schema: gt_rls; Owner: postgres
+-- Name: devices_read_own_ids(); Type: FUNCTION; Schema: gt_rls; Owner: -
 --
 
 CREATE FUNCTION gt_rls.devices_read_own_ids() RETURNS text[]
@@ -88,10 +105,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION gt_rls.devices_read_own_ids() OWNER TO postgres;
-
 --
--- Name: events_reader_ok(); Type: FUNCTION; Schema: gt_rls; Owner: postgres
+-- Name: events_reader_ok(); Type: FUNCTION; Schema: gt_rls; Owner: -
 --
 
 CREATE FUNCTION gt_rls.events_reader_ok() RETURNS boolean
@@ -108,10 +123,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION gt_rls.events_reader_ok() OWNER TO postgres;
-
 --
--- Name: _acting_device(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _acting_device(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._acting_device() RETURNS text
@@ -130,10 +143,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public._acting_device() OWNER TO postgres;
-
 --
--- Name: _admin_audit(text, text, text, jsonb); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _admin_audit(text, text, text, jsonb); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._admin_audit(p_token text, p_action text, p_target text, p_detail jsonb) RETURNS void
@@ -146,10 +157,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public._admin_audit(p_token text, p_action text, p_target text, p_detail jsonb) OWNER TO postgres;
-
 --
--- Name: _animals_close_questions(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _animals_close_questions(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._animals_close_questions() RETURNS trigger
@@ -180,10 +189,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public._animals_close_questions() OWNER TO postgres;
-
 --
--- Name: _animals_hold_guard(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _animals_hold_guard(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._animals_hold_guard() RETURNS trigger
@@ -251,10 +258,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public._animals_hold_guard() OWNER TO postgres;
-
 --
--- Name: _animals_merge(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _animals_merge(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._animals_merge() RETURNS trigger
@@ -477,10 +482,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public._animals_merge() OWNER TO postgres;
-
 --
--- Name: _animals_nc_outer_guard(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _animals_nc_outer_guard(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._animals_nc_outer_guard() RETURNS trigger
@@ -509,10 +512,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public._animals_nc_outer_guard() OWNER TO postgres;
-
 --
--- Name: _animals_nc_outer_value(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _animals_nc_outer_value(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._animals_nc_outer_value() RETURNS trigger
@@ -535,10 +536,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public._animals_nc_outer_value() OWNER TO postgres;
-
 --
--- Name: _animals_nc_plain(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _animals_nc_plain(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._animals_nc_plain() RETURNS trigger
@@ -559,10 +558,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public._animals_nc_plain() OWNER TO postgres;
-
 --
--- Name: _animals_outer_open_guard(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _animals_outer_open_guard(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._animals_outer_open_guard() RETURNS trigger
@@ -584,10 +581,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public._animals_outer_open_guard() OWNER TO postgres;
-
 --
--- Name: _animals_stage_guard(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _animals_stage_guard(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._animals_stage_guard() RETURNS trigger
@@ -698,10 +693,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public._animals_stage_guard() OWNER TO postgres;
-
 --
--- Name: _archive_keep_intake(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _archive_keep_intake(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._archive_keep_intake() RETURNS trigger
@@ -716,10 +709,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public._archive_keep_intake() OWNER TO postgres;
-
 --
--- Name: _audit_device_event(text, text, text, integer, text, text, uuid, text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _audit_device_event(text, text, text, integer, text, text, uuid, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._audit_device_event(p_device text, p_action text, p_role text, p_idx integer, p_reason text, p_other text, p_replacement_id uuid, p_actor text) RETURNS void
@@ -732,10 +723,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public._audit_device_event(p_device text, p_action text, p_role text, p_idx integer, p_reason text, p_other text, p_replacement_id uuid, p_actor text) OWNER TO postgres;
-
 --
--- Name: _auth_uid_safe(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _auth_uid_safe(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._auth_uid_safe() RETURNS uuid
@@ -755,10 +744,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public._auth_uid_safe() OWNER TO postgres;
-
 --
--- Name: _board_business_date(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _board_business_date(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._board_business_date() RETURNS date
@@ -774,10 +761,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public._board_business_date() OWNER TO postgres;
-
 --
--- Name: _board_epoch(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _board_epoch(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._board_epoch() RETURNS bigint
@@ -788,10 +773,8 @@ CREATE FUNCTION public._board_epoch() RETURNS bigint
 $_$;
 
 
-ALTER FUNCTION public._board_epoch() OWNER TO postgres;
-
 --
--- Name: _board_proc_unfinished_ids(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _board_proc_unfinished_ids(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._board_proc_unfinished_ids() RETURNS SETOF integer
@@ -806,10 +789,8 @@ CREATE FUNCTION public._board_proc_unfinished_ids() RETURNS SETOF integer
 $$;
 
 
-ALTER FUNCTION public._board_proc_unfinished_ids() OWNER TO postgres;
-
 --
--- Name: _board_unfinished(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _board_unfinished(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._board_unfinished() RETURNS integer
@@ -827,10 +808,8 @@ CREATE FUNCTION public._board_unfinished() RETURNS integer
 $$;
 
 
-ALTER FUNCTION public._board_unfinished() OWNER TO postgres;
-
 --
--- Name: _board_write_lock(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _board_write_lock(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._board_write_lock() RETURNS void
@@ -841,10 +820,8 @@ CREATE FUNCTION public._board_write_lock() RETURNS void
 $$;
 
 
-ALTER FUNCTION public._board_write_lock() OWNER TO postgres;
-
 --
--- Name: _call_device(text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _call_device(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._call_device(p_client text) RETURNS text
@@ -857,10 +834,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public._call_device(p_client text) OWNER TO postgres;
-
 --
--- Name: _caller_device_role(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _caller_device_role(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._caller_device_role() RETURNS text
@@ -878,10 +853,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public._caller_device_role() OWNER TO postgres;
-
 --
--- Name: _caller_legs_slot(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _caller_legs_slot(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._caller_legs_slot() RETURNS integer
@@ -893,14 +866,12 @@ CREATE FUNCTION public._caller_legs_slot() RETURNS integer
 $$;
 
 
-ALTER FUNCTION public._caller_legs_slot() OWNER TO postgres;
-
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
 
 --
--- Name: animals_carry; Type: TABLE; Schema: public; Owner: postgres
+-- Name: animals_carry; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.animals_carry (
@@ -966,10 +937,8 @@ CREATE TABLE public.animals_carry (
 );
 
 
-ALTER TABLE public.animals_carry OWNER TO postgres;
-
 --
--- Name: animals_pilot; Type: TABLE; Schema: public; Owner: postgres
+-- Name: animals_pilot; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.animals_pilot (
@@ -1035,10 +1004,8 @@ CREATE TABLE public.animals_pilot (
 ALTER TABLE ONLY public.animals_pilot REPLICA IDENTITY FULL;
 
 
-ALTER TABLE public.animals_pilot OWNER TO postgres;
-
 --
--- Name: _carry_row(public.animals_carry); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _carry_row(public.animals_carry); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._carry_row(c public.animals_carry) RETURNS public.animals_pilot
@@ -1049,10 +1016,8 @@ CREATE FUNCTION public._carry_row(c public.animals_carry) RETURNS public.animals
 $$;
 
 
-ALTER FUNCTION public._carry_row(c public.animals_carry) OWNER TO postgres;
-
 --
--- Name: _cmd_get(uuid, text, text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _cmd_get(uuid, text, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._cmd_get(p_cmd uuid, p_dev text, p_fn text) RETURNS jsonb
@@ -1072,10 +1037,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public._cmd_get(p_cmd uuid, p_dev text, p_fn text) OWNER TO postgres;
-
 --
--- Name: _cmd_put(uuid, text, text, jsonb); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _cmd_put(uuid, text, text, jsonb); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._cmd_put(p_cmd uuid, p_dev text, p_fn text, p_result jsonb) RETURNS void
@@ -1091,10 +1054,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public._cmd_put(p_cmd uuid, p_dev text, p_fn text, p_result jsonb) OWNER TO postgres;
-
 --
--- Name: _code_in_use(text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _code_in_use(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._code_in_use(p_code text) RETURNS boolean
@@ -1105,10 +1066,8 @@ CREATE FUNCTION public._code_in_use(p_code text) RETURNS boolean
 $$;
 
 
-ALTER FUNCTION public._code_in_use(p_code text) OWNER TO postgres;
-
 --
--- Name: _correction_braked(text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _correction_braked(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._correction_braked(p_dev text) RETURNS integer
@@ -1127,10 +1086,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public._correction_braked(p_dev text) OWNER TO postgres;
-
 --
--- Name: _correction_check(text, public.animals_pilot, text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _correction_check(text, public.animals_pilot, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._correction_check(p_stage text, a public.animals_pilot, p_dev text) RETURNS text
@@ -1166,10 +1123,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public._correction_check(p_stage text, a public.animals_pilot, p_dev text) OWNER TO postgres;
-
 --
--- Name: _credential_audit(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _credential_audit(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._credential_audit() RETURNS trigger
@@ -1190,10 +1145,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public._credential_audit() OWNER TO postgres;
-
 --
--- Name: _credential_revoked_at(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _credential_revoked_at(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._credential_revoked_at() RETURNS trigger
@@ -1207,10 +1160,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public._credential_revoked_at() OWNER TO postgres;
-
 --
--- Name: _current_device_id(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _current_device_id(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._current_device_id() RETURNS text
@@ -1227,10 +1178,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public._current_device_id() OWNER TO postgres;
-
 --
--- Name: _current_worker(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _current_worker(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._current_worker() RETURNS TABLE(name text, role text)
@@ -1262,10 +1211,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public._current_worker() OWNER TO postgres;
-
 --
--- Name: _derive_actor(text, text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _derive_actor(text, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._derive_actor(p_stage text, p_client text) RETURNS text
@@ -1300,10 +1247,8 @@ begin
 end $_$;
 
 
-ALTER FUNCTION public._derive_actor(p_stage text, p_client text) OWNER TO postgres;
-
 --
--- Name: _device_auth_required(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _device_auth_required(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._device_auth_required() RETURNS boolean
@@ -1314,10 +1259,8 @@ CREATE FUNCTION public._device_auth_required() RETURNS boolean
 $$;
 
 
-ALTER FUNCTION public._device_auth_required() OWNER TO postgres;
-
 --
--- Name: _device_write_allowed(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _device_write_allowed(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._device_write_allowed() RETURNS boolean
@@ -1345,10 +1288,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public._device_write_allowed() OWNER TO postgres;
-
 --
--- Name: _device_write_guard(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _device_write_guard(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._device_write_guard() RETURNS trigger
@@ -1365,10 +1306,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public._device_write_guard() OWNER TO postgres;
-
 --
--- Name: _devices_assignment_guard(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _devices_assignment_guard(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._devices_assignment_guard() RETURNS trigger
@@ -1402,10 +1341,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public._devices_assignment_guard() OWNER TO postgres;
-
 --
--- Name: _do_board_reset(text, date); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _do_board_reset(text, date); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._do_board_reset(p_reason text, p_business_date date) RETURNS void
@@ -1490,10 +1427,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public._do_board_reset(p_reason text, p_business_date date) OWNER TO postgres;
-
 --
--- Name: _eso_required(integer); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _eso_required(integer); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._eso_required(p_id integer) RETURNS boolean
@@ -1511,10 +1446,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public._eso_required(p_id integer) OWNER TO postgres;
-
 --
--- Name: _event_canonical(uuid, integer, text, text, jsonb, text, text, text, text, bigint); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _event_canonical(uuid, integer, text, text, jsonb, text, text, text, text, bigint); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._event_canonical(p_event_id uuid, p_animal_no integer, p_stage text, p_action text, p_payload jsonb, p_actor text, p_device_id text, p_occurred_at text, p_prev_hash text, p_chain_pos bigint) RETURNS text
@@ -1527,10 +1460,8 @@ CREATE FUNCTION public._event_canonical(p_event_id uuid, p_animal_no integer, p_
 $$;
 
 
-ALTER FUNCTION public._event_canonical(p_event_id uuid, p_animal_no integer, p_stage text, p_action text, p_payload jsonb, p_actor text, p_device_id text, p_occurred_at text, p_prev_hash text, p_chain_pos bigint) OWNER TO postgres;
-
 --
--- Name: _event_chain_recent(integer); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _event_chain_recent(integer); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._event_chain_recent(p_limit integer DEFAULT 500) RETURNS jsonb
@@ -1574,10 +1505,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public._event_chain_recent(p_limit integer) OWNER TO postgres;
-
 --
--- Name: _events_actor(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _events_actor(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._events_actor() RETURNS trigger
@@ -1619,10 +1548,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public._events_actor() OWNER TO postgres;
-
 --
--- Name: _events_append_only(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _events_append_only(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._events_append_only() RETURNS trigger
@@ -1638,10 +1565,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public._events_append_only() OWNER TO postgres;
-
 --
--- Name: _events_chain_link(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _events_chain_link(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._events_chain_link() RETURNS trigger
@@ -1666,10 +1591,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public._events_chain_link() OWNER TO postgres;
-
 --
--- Name: _events_maker_guard(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _events_maker_guard(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._events_maker_guard() RETURNS trigger
@@ -1691,10 +1614,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public._events_maker_guard() OWNER TO postgres;
-
 --
--- Name: _extend_maker_sessions(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _extend_maker_sessions(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._extend_maker_sessions() RETURNS trigger
@@ -1711,10 +1632,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public._extend_maker_sessions() OWNER TO postgres;
-
 --
--- Name: _gt_done_after(text, public.animals_pilot); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _gt_done_after(text, public.animals_pilot); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._gt_done_after(p_stage text, a public.animals_pilot) RETURNS jsonb
@@ -1735,10 +1654,8 @@ CREATE FUNCTION public._gt_done_after(p_stage text, a public.animals_pilot) RETU
 $$;
 
 
-ALTER FUNCTION public._gt_done_after(p_stage text, a public.animals_pilot) OWNER TO postgres;
-
 --
--- Name: _gt_event(integer, text, text, jsonb, text, text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _gt_event(integer, text, text, jsonb, text, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._gt_event(p_animal_no integer, p_stage text, p_action text, p_payload jsonb, p_actor text, p_device text) RETURNS void
@@ -1755,10 +1672,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public._gt_event(p_animal_no integer, p_stage text, p_action text, p_payload jsonb, p_actor text, p_device text) OWNER TO postgres;
-
 --
--- Name: _gt_flag(jsonb, text, boolean); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _gt_flag(jsonb, text, boolean); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._gt_flag(s jsonb, p_key text, p_default boolean) RETURNS boolean
@@ -1769,10 +1684,8 @@ CREATE FUNCTION public._gt_flag(s jsonb, p_key text, p_default boolean) RETURNS 
 $$;
 
 
-ALTER FUNCTION public._gt_flag(s jsonb, p_key text, p_default boolean) OWNER TO postgres;
-
 --
--- Name: _gt_legs_first(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _gt_legs_first(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._gt_legs_first() RETURNS boolean
@@ -1784,10 +1697,8 @@ CREATE FUNCTION public._gt_legs_first() RETURNS boolean
 $$;
 
 
-ALTER FUNCTION public._gt_legs_first() OWNER TO postgres;
-
 --
--- Name: _gt_note_change(text, public.animals_pilot, text, text, text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _gt_note_change(text, public.animals_pilot, text, text, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._gt_note_change(p_stage text, o public.animals_pilot, p_old text, p_new text, p_dev text) RETURNS void
@@ -1804,10 +1715,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public._gt_note_change(p_stage text, o public.animals_pilot, p_old text, p_new text, p_dev text) OWNER TO postgres;
-
 --
--- Name: _gt_one_inspection(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _gt_one_inspection(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._gt_one_inspection() RETURNS boolean
@@ -1818,10 +1727,8 @@ CREATE FUNCTION public._gt_one_inspection() RETURNS boolean
 $$;
 
 
-ALTER FUNCTION public._gt_one_inspection() OWNER TO postgres;
-
 --
--- Name: _gt_screen_used(text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _gt_screen_used(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._gt_screen_used(p_screen text) RETURNS boolean
@@ -1833,10 +1740,8 @@ CREATE FUNCTION public._gt_screen_used(p_screen text) RETURNS boolean
 $$;
 
 
-ALTER FUNCTION public._gt_screen_used(p_screen text) OWNER TO postgres;
-
 --
--- Name: _gt_settings(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _gt_settings(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._gt_settings() RETURNS jsonb
@@ -1847,10 +1752,8 @@ CREATE FUNCTION public._gt_settings() RETURNS jsonb
 $$;
 
 
-ALTER FUNCTION public._gt_settings() OWNER TO postgres;
-
 --
--- Name: _gt_standbys(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _gt_standbys(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._gt_standbys() RETURNS jsonb
@@ -1871,10 +1774,8 @@ exception when others then
 end $$;
 
 
-ALTER FUNCTION public._gt_standbys() OWNER TO postgres;
-
 --
--- Name: _gt_value_ok(text, text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _gt_value_ok(text, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._gt_value_ok(p_kind text, v text) RETURNS boolean
@@ -1893,10 +1794,8 @@ CREATE FUNCTION public._gt_value_ok(p_kind text, v text) RETURNS boolean
 $_$;
 
 
-ALTER FUNCTION public._gt_value_ok(p_kind text, v text) OWNER TO postgres;
-
 --
--- Name: _hold_block(bigint, integer, text, text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _hold_block(bigint, integer, text, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._hold_block(p_epoch bigint, p_id integer, p_station text, p_part text DEFAULT NULL::text) RETURNS text
@@ -1921,10 +1820,8 @@ CREATE FUNCTION public._hold_block(p_epoch bigint, p_id integer, p_station text,
 $$;
 
 
-ALTER FUNCTION public._hold_block(p_epoch bigint, p_id integer, p_station text, p_part text) OWNER TO postgres;
-
 --
--- Name: _hold_caller_error(text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _hold_caller_error(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._hold_caller_error(p_station text) RETURNS text
@@ -1952,10 +1849,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public._hold_caller_error(p_station text) OWNER TO postgres;
-
 --
--- Name: _hold_station_of_role(text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _hold_station_of_role(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._hold_station_of_role(p_role text) RETURNS text
@@ -1967,10 +1862,8 @@ CREATE FUNCTION public._hold_station_of_role(p_role text) RETURNS text
 $$;
 
 
-ALTER FUNCTION public._hold_station_of_role(p_role text) OWNER TO postgres;
-
 --
--- Name: _holds_open(bigint); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _holds_open(bigint); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._holds_open(p_epoch bigint) RETURNS boolean
@@ -1981,10 +1874,8 @@ CREATE FUNCTION public._holds_open(p_epoch bigint) RETURNS boolean
 $$;
 
 
-ALTER FUNCTION public._holds_open(p_epoch bigint) OWNER TO postgres;
-
 --
--- Name: _is_api_request(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _is_api_request(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._is_api_request() RETURNS boolean
@@ -1995,10 +1886,8 @@ CREATE FUNCTION public._is_api_request() RETURNS boolean
 $$;
 
 
-ALTER FUNCTION public._is_api_request() OWNER TO postgres;
-
 --
--- Name: _is_app_caller(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _is_app_caller(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._is_app_caller() RETURNS boolean
@@ -2009,10 +1898,8 @@ CREATE FUNCTION public._is_app_caller() RETURNS boolean
 $$;
 
 
-ALTER FUNCTION public._is_app_caller() OWNER TO postgres;
-
 --
--- Name: _is_leader_device(text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _is_leader_device(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._is_leader_device(p_dev text) RETURNS boolean
@@ -2025,10 +1912,8 @@ CREATE FUNCTION public._is_leader_device(p_dev text) RETURNS boolean
 $$;
 
 
-ALTER FUNCTION public._is_leader_device(p_dev text) OWNER TO postgres;
-
 --
--- Name: _is_nc(public.animals_pilot); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _is_nc(public.animals_pilot); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._is_nc(a public.animals_pilot) RETURNS boolean
@@ -2039,10 +1924,8 @@ CREATE FUNCTION public._is_nc(a public.animals_pilot) RETURNS boolean
 $$;
 
 
-ALTER FUNCTION public._is_nc(a public.animals_pilot) OWNER TO postgres;
-
 --
--- Name: _is_real_manager(text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _is_real_manager(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._is_real_manager(p_token text) RETURNS boolean
@@ -2053,10 +1936,8 @@ CREATE FUNCTION public._is_real_manager(p_token text) RETURNS boolean
 $$;
 
 
-ALTER FUNCTION public._is_real_manager(p_token text) OWNER TO postgres;
-
 --
--- Name: _jint_ok(jsonb, numeric, numeric); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _jint_ok(jsonb, numeric, numeric); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._jint_ok(v jsonb, lo numeric, hi numeric) RETURNS boolean
@@ -2072,10 +1953,8 @@ begin
 end $_$;
 
 
-ALTER FUNCTION public._jint_ok(v jsonb, lo numeric, hi numeric) OWNER TO postgres;
-
 --
--- Name: _jnum_ok(jsonb, numeric, numeric); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _jnum_ok(jsonb, numeric, numeric); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._jnum_ok(v jsonb, lo numeric, hi numeric) RETURNS boolean
@@ -2091,10 +1970,8 @@ begin
 end $_$;
 
 
-ALTER FUNCTION public._jnum_ok(v jsonb, lo numeric, hi numeric) OWNER TO postgres;
-
 --
--- Name: _jstr_ok(jsonb, integer); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _jstr_ok(jsonb, integer); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._jstr_ok(v jsonb, maxlen integer) RETURNS boolean
@@ -2105,10 +1982,8 @@ CREATE FUNCTION public._jstr_ok(v jsonb, maxlen integer) RETURNS boolean
 $$;
 
 
-ALTER FUNCTION public._jstr_ok(v jsonb, maxlen integer) OWNER TO postgres;
-
 --
--- Name: _kosher_ready(public.animals_pilot); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _kosher_ready(public.animals_pilot); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._kosher_ready(a public.animals_pilot) RETURNS boolean
@@ -2123,10 +1998,8 @@ CREATE FUNCTION public._kosher_ready(a public.animals_pilot) RETURNS boolean
 $$;
 
 
-ALTER FUNCTION public._kosher_ready(a public.animals_pilot) OWNER TO postgres;
-
 --
--- Name: _kosher_statuses(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _kosher_statuses(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._kosher_statuses() RETURNS text[]
@@ -2142,10 +2015,8 @@ CREATE FUNCTION public._kosher_statuses() RETURNS text[]
 $$;
 
 
-ALTER FUNCTION public._kosher_statuses() OWNER TO postgres;
-
 --
--- Name: _leader_devices_exist(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _leader_devices_exist(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._leader_devices_exist() RETURNS boolean
@@ -2158,10 +2029,8 @@ CREATE FUNCTION public._leader_devices_exist() RETURNS boolean
 $$;
 
 
-ALTER FUNCTION public._leader_devices_exist() OWNER TO postgres;
-
 --
--- Name: _leader_recovery_norm(text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _leader_recovery_norm(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._leader_recovery_norm(p text) RETURNS text
@@ -2172,10 +2041,8 @@ CREATE FUNCTION public._leader_recovery_norm(p text) RETURNS text
 $$;
 
 
-ALTER FUNCTION public._leader_recovery_norm(p text) OWNER TO postgres;
-
 --
--- Name: _legs_required(integer); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _legs_required(integer); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._legs_required(p_id integer) RETURNS boolean
@@ -2193,10 +2060,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public._legs_required(p_id integer) OWNER TO postgres;
-
 --
--- Name: _legs_slot_error(boolean, boolean, boolean); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _legs_slot_error(boolean, boolean, boolean); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._legs_slot_error(p_legs boolean, p_head boolean, p_sorted boolean) RETURNS text
@@ -2223,10 +2088,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public._legs_slot_error(p_legs boolean, p_head boolean, p_sorted boolean) OWNER TO postgres;
-
 --
--- Name: _log_correction_rejected(text, integer, text, text, jsonb); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _log_correction_rejected(text, integer, text, text, jsonb); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._log_correction_rejected(p_dev text, p_id integer, p_stage text, p_reason text, p_detail jsonb) RETURNS void
@@ -2241,10 +2104,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public._log_correction_rejected(p_dev text, p_id integer, p_stage text, p_reason text, p_detail jsonb) OWNER TO postgres;
-
 --
--- Name: _log_device_event(text, text, text, integer, text, text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _log_device_event(text, text, text, integer, text, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._log_device_event(p_device text, p_action text, p_role text, p_idx integer, p_reason text, p_other text) RETURNS void
@@ -2258,10 +2119,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public._log_device_event(p_device text, p_action text, p_role text, p_idx integer, p_reason text, p_other text) OWNER TO postgres;
-
 --
--- Name: _maker_session_end(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _maker_session_end(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._maker_session_end() RETURNS timestamp with time zone
@@ -2274,10 +2133,8 @@ CREATE FUNCTION public._maker_session_end() RETURNS timestamp with time zone
 $$;
 
 
-ALTER FUNCTION public._maker_session_end() OWNER TO postgres;
-
 --
--- Name: _manager_session_valid(text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _manager_session_valid(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._manager_session_valid(p_token text) RETURNS boolean
@@ -2292,10 +2149,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public._manager_session_valid(p_token text) OWNER TO postgres;
-
 --
--- Name: _manager_sessions_cleanup(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _manager_sessions_cleanup(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._manager_sessions_cleanup() RETURNS trigger
@@ -2308,10 +2163,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public._manager_sessions_cleanup() OWNER TO postgres;
-
 --
--- Name: _manufacturer_session_valid(text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _manufacturer_session_valid(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._manufacturer_session_valid(p_token text) RETURNS boolean
@@ -2322,10 +2175,8 @@ CREATE FUNCTION public._manufacturer_session_valid(p_token text) RETURNS boolean
 $$;
 
 
-ALTER FUNCTION public._manufacturer_session_valid(p_token text) OWNER TO postgres;
-
 --
--- Name: _merge_list(jsonb, jsonb); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _merge_list(jsonb, jsonb); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._merge_list(a jsonb, b jsonb) RETURNS jsonb
@@ -2342,10 +2193,8 @@ CREATE FUNCTION public._merge_list(a jsonb, b jsonb) RETURNS jsonb
 $$;
 
 
-ALTER FUNCTION public._merge_list(a jsonb, b jsonb) OWNER TO postgres;
-
 --
--- Name: _mgr_session_bound(text, uuid); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _mgr_session_bound(text, uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._mgr_session_bound(p_dev text, p_uid uuid) RETURNS boolean
@@ -2360,10 +2209,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public._mgr_session_bound(p_dev text, p_uid uuid) OWNER TO postgres;
-
 --
--- Name: _my_plant(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _my_plant(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._my_plant() RETURNS uuid
@@ -2374,10 +2221,8 @@ CREATE FUNCTION public._my_plant() RETURNS uuid
                             $$;
 
 
-ALTER FUNCTION public._my_plant() OWNER TO postgres;
-
 --
--- Name: _my_role(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _my_role(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._my_role() RETURNS text
@@ -2388,10 +2233,8 @@ CREATE FUNCTION public._my_role() RETURNS text
                               $$;
 
 
-ALTER FUNCTION public._my_role() OWNER TO postgres;
-
 --
--- Name: _nc_fixed(public.animals_pilot); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _nc_fixed(public.animals_pilot); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._nc_fixed(a public.animals_pilot) RETURNS boolean
@@ -2402,10 +2245,8 @@ CREATE FUNCTION public._nc_fixed(a public.animals_pilot) RETURNS boolean
 $$;
 
 
-ALTER FUNCTION public._nc_fixed(a public.animals_pilot) OWNER TO postgres;
-
 --
--- Name: _nc_outer_allowed(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _nc_outer_allowed(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._nc_outer_allowed() RETURNS boolean
@@ -2428,25 +2269,36 @@ begin
 end $$;
 
 
-ALTER FUNCTION public._nc_outer_allowed() OWNER TO postgres;
-
 --
--- Name: _nc_outer_value_ok(public.animals_pilot, text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _nc_outer_value_ok(public.animals_pilot, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._nc_outer_value_ok(a public.animals_pilot, v text) RETURNS boolean
-    LANGUAGE sql IMMUTABLE
+    LANGUAGE sql STABLE SECURITY DEFINER
     SET search_path TO 'public', 'extensions', 'pg_temp'
     AS $$
-  select v is null or not coalesce(_is_nc(a), false) or v in ('kosher', 'treif')
-         or (v = 'rabChalak' and not coalesce(_nc_fixed(a), false));
+  select v is null or not coalesce(_is_nc(a), false) or v = 'treif'
+         or not coalesce(_nc_fixed(a), false) or v = any(_nc_statuses());
 $$;
 
 
-ALTER FUNCTION public._nc_outer_value_ok(a public.animals_pilot, v text) OWNER TO postgres;
+--
+-- Name: _nc_statuses(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public._nc_statuses() RETURNS text[]
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $$
+  select case when jsonb_typeof(_gt_settings() -> 'ncStatuses') = 'array'
+              then coalesce((select array_agg(x #>> '{}') from jsonb_array_elements(_gt_settings() -> 'ncStatuses') x
+                              where jsonb_typeof(x) = 'string'), '{}'::text[])
+              else array['kosher'] end;
+$$;
+
 
 --
--- Name: _no_device_error(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _no_device_error(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._no_device_error() RETURNS text
@@ -2460,10 +2312,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public._no_device_error() OWNER TO postgres;
-
 --
--- Name: _note_revoked_write(text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _note_revoked_write(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._note_revoked_write(p_dev text DEFAULT NULL::text) RETURNS void
@@ -2490,10 +2340,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public._note_revoked_write(p_dev text) OWNER TO postgres;
-
 --
--- Name: _parts_print_block(bigint, integer, boolean, boolean, boolean, boolean, integer, integer); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _parts_print_block(bigint, integer, boolean, boolean, boolean, boolean, integer, integer); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._parts_print_block(p_epoch bigint, p_id integer, o_tongue boolean, n_tongue boolean, o_cheek boolean, n_cheek boolean, o_count integer, n_count integer) RETURNS text
@@ -2518,10 +2366,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public._parts_print_block(p_epoch bigint, p_id integer, o_tongue boolean, n_tongue boolean, o_cheek boolean, n_cheek boolean, o_count integer, n_count integer) OWNER TO postgres;
-
 --
--- Name: _plant_report(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _plant_report(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._plant_report() RETURNS jsonb
@@ -2541,10 +2387,8 @@ CREATE FUNCTION public._plant_report() RETURNS jsonb
 $$;
 
 
-ALTER FUNCTION public._plant_report() OWNER TO postgres;
-
 --
--- Name: _plant_state_test_mode_trg(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _plant_state_test_mode_trg(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._plant_state_test_mode_trg() RETURNS trigger
@@ -2573,10 +2417,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public._plant_state_test_mode_trg() OWNER TO postgres;
-
 --
--- Name: _printed_as_key(public.animals_pilot); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _printed_as_key(public.animals_pilot); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._printed_as_key(a public.animals_pilot) RETURNS text
@@ -2584,15 +2426,13 @@ CREATE FUNCTION public._printed_as_key(a public.animals_pilot) RETURNS text
     SET search_path TO 'public', 'extensions', 'pg_temp'
     AS $$
   select case when a.outer_status is null then null
-              when a.outer_status = 'kosher' and _is_nc(a) then 'kosherRab'   -- (v10.34: nc_plain retired)
+              -- v10.36: a "not chalak" animal carries its own status (no hidden רבנות כשר)
               else a.outer_status end;
 $$;
 
 
-ALTER FUNCTION public._printed_as_key(a public.animals_pilot) OWNER TO postgres;
-
 --
--- Name: _proc_board_json(bigint); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _proc_board_json(bigint); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._proc_board_json(p_board bigint) RETURNS jsonb
@@ -2607,10 +2447,8 @@ CREATE FUNCTION public._proc_board_json(p_board bigint) RETURNS jsonb
 $$;
 
 
-ALTER FUNCTION public._proc_board_json(p_board bigint) OWNER TO postgres;
-
 --
--- Name: _proc_board_lock(bigint); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _proc_board_lock(bigint); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._proc_board_lock(p_board bigint) RETURNS void
@@ -2621,10 +2459,8 @@ CREATE FUNCTION public._proc_board_lock(p_board bigint) RETURNS void
 $$;
 
 
-ALTER FUNCTION public._proc_board_lock(p_board bigint) OWNER TO postgres;
-
 --
--- Name: _proc_board_pending(text, bigint); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _proc_board_pending(text, bigint); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._proc_board_pending(p_station text, p_board bigint) RETURNS integer
@@ -2637,10 +2473,8 @@ CREATE FUNCTION public._proc_board_pending(p_station text, p_board bigint) RETUR
 $$;
 
 
-ALTER FUNCTION public._proc_board_pending(p_station text, p_board bigint) OWNER TO postgres;
-
 --
--- Name: _proc_caller_station(text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _proc_caller_station(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._proc_caller_station(p_station text) RETURNS text
@@ -2660,10 +2494,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public._proc_caller_station(p_station text) OWNER TO postgres;
-
 --
--- Name: _proc_finalize(bigint); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _proc_finalize(bigint); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._proc_finalize(p_board bigint DEFAULT NULL::bigint) RETURNS integer
@@ -2695,10 +2527,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public._proc_finalize(p_board bigint) OWNER TO postgres;
-
 --
--- Name: _proc_open_board(text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _proc_open_board(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._proc_open_board(p_station text) RETURNS bigint
@@ -2713,10 +2543,8 @@ CREATE FUNCTION public._proc_open_board(p_station text) RETURNS bigint
 $$;
 
 
-ALTER FUNCTION public._proc_open_board(p_station text) OWNER TO postgres;
-
 --
--- Name: _proc_pending(text, public.animals_pilot, boolean); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _proc_pending(text, public.animals_pilot, boolean); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._proc_pending(p_station text, a public.animals_pilot, p_today boolean DEFAULT false) RETURNS boolean
@@ -2747,10 +2575,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public._proc_pending(p_station text, a public.animals_pilot, p_today boolean) OWNER TO postgres;
-
 --
--- Name: _proc_station_of_group(text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _proc_station_of_group(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._proc_station_of_group(p_group text) RETURNS text
@@ -2766,10 +2592,8 @@ CREATE FUNCTION public._proc_station_of_group(p_group text) RETURNS text
 $$;
 
 
-ALTER FUNCTION public._proc_station_of_group(p_group text) OWNER TO postgres;
-
 --
--- Name: _proc_stations(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _proc_stations(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._proc_stations() RETURNS text[]
@@ -2783,10 +2607,8 @@ CREATE FUNCTION public._proc_stations() RETURNS text[]
 $$;
 
 
-ALTER FUNCTION public._proc_stations() OWNER TO postgres;
-
 --
--- Name: _push_is_correction(jsonb); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _push_is_correction(jsonb); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._push_is_correction(p_rows jsonb) RETURNS boolean
@@ -2810,10 +2632,8 @@ begin
 end $_$;
 
 
-ALTER FUNCTION public._push_is_correction(p_rows jsonb) OWNER TO postgres;
-
 --
--- Name: _raise_correction(text, text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _raise_correction(text, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._raise_correction(p_err text, p_stage text) RETURNS void
@@ -2838,10 +2658,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public._raise_correction(p_err text, p_stage text) OWNER TO postgres;
-
 --
--- Name: _rate_count(text, text, interval); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _rate_count(text, text, interval); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._rate_count(p_kind text, p_key text, p_window interval) RETURNS integer
@@ -2853,10 +2671,8 @@ CREATE FUNCTION public._rate_count(p_kind text, p_key text, p_window interval) R
 $$;
 
 
-ALTER FUNCTION public._rate_count(p_kind text, p_key text, p_window interval) OWNER TO postgres;
-
 --
--- Name: _rate_hit(text, text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _rate_hit(text, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._rate_hit(p_kind text, p_key text) RETURNS void
@@ -2869,10 +2685,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public._rate_hit(p_kind text, p_key text) OWNER TO postgres;
-
 --
--- Name: _reader_ok(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _reader_ok(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._reader_ok() RETURNS boolean
@@ -2895,10 +2709,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public._reader_ok() OWNER TO postgres;
-
 --
--- Name: _reason_ok(text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _reason_ok(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._reason_ok(p text) RETURNS boolean
@@ -2909,10 +2721,8 @@ CREATE FUNCTION public._reason_ok(p text) RETURNS boolean
 $$;
 
 
-ALTER FUNCTION public._reason_ok(p text) OWNER TO postgres;
-
 --
--- Name: _request_has_manager(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _request_has_manager(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._request_has_manager() RETURNS boolean
@@ -2927,10 +2737,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public._request_has_manager() OWNER TO postgres;
-
 --
--- Name: _request_has_manufacturer(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _request_has_manufacturer(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._request_has_manufacturer() RETURNS boolean
@@ -2945,10 +2753,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public._request_has_manufacturer() OWNER TO postgres;
-
 --
--- Name: _request_headers(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _request_headers(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._request_headers() RETURNS json
@@ -2964,10 +2770,8 @@ exception when others then return null;  -- unreadable = no key (callers fail cl
 end $$;
 
 
-ALTER FUNCTION public._request_headers() OWNER TO postgres;
-
 --
--- Name: _request_ip(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _request_ip(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._request_ip() RETURNS text
@@ -2985,10 +2789,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public._request_ip() OWNER TO postgres;
-
 --
--- Name: _request_is_service_role(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _request_is_service_role(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._request_is_service_role() RETURNS boolean
@@ -3001,10 +2803,8 @@ exception when others then return false;
 end $$;
 
 
-ALTER FUNCTION public._request_is_service_role() OWNER TO postgres;
-
 --
--- Name: _request_privileged(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _request_privileged(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._request_privileged() RETURNS boolean
@@ -3019,10 +2819,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public._request_privileged() OWNER TO postgres;
-
 --
--- Name: _seal_key_ok(text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _seal_key_ok(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._seal_key_ok(k text) RETURNS boolean
@@ -3033,10 +2831,8 @@ CREATE FUNCTION public._seal_key_ok(k text) RETURNS boolean
 $_$;
 
 
-ALTER FUNCTION public._seal_key_ok(k text) OWNER TO postgres;
-
 --
--- Name: _security_event(integer, text, jsonb, text, text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _security_event(integer, text, jsonb, text, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._security_event(p_animal_no integer, p_action text, p_payload jsonb, p_actor text, p_device text) RETURNS void
@@ -3053,10 +2849,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public._security_event(p_animal_no integer, p_action text, p_payload jsonb, p_actor text, p_device text) OWNER TO postgres;
-
 --
--- Name: _session_name(text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _session_name(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._session_name(p_token text) RETURNS text
@@ -3070,10 +2864,8 @@ CREATE FUNCTION public._session_name(p_token text) RETURNS text
 $$;
 
 
-ALTER FUNCTION public._session_name(p_token text) OWNER TO postgres;
-
 --
--- Name: _session_role(text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _session_role(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._session_role(p_token text) RETURNS text
@@ -3087,10 +2879,8 @@ CREATE FUNCTION public._session_role(p_token text) RETURNS text
 $$;
 
 
-ALTER FUNCTION public._session_role(p_token text) OWNER TO postgres;
-
 --
--- Name: _session_view_only(text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _session_view_only(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._session_view_only(p_token text) RETURNS boolean
@@ -3105,10 +2895,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public._session_view_only(p_token text) OWNER TO postgres;
-
 --
--- Name: _set_setup_code(text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _set_setup_code(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._set_setup_code(p_code text) RETURNS void
@@ -3122,10 +2910,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public._set_setup_code(p_code text) OWNER TO postgres;
-
 --
--- Name: _settings_hash_worker_codes(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _settings_hash_worker_codes(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._settings_hash_worker_codes() RETURNS trigger
@@ -3166,10 +2952,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public._settings_hash_worker_codes() OWNER TO postgres;
-
 --
--- Name: _settings_value_error(text, jsonb); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _settings_value_error(text, jsonb); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._settings_value_error(p_key text, v jsonb) RETURNS text
@@ -3288,6 +3072,14 @@ begin
     end loop;
     return null;
   end if;
+  if p_key = 'ncStatuses' then   -- v10.36: the statuses a "not chalak" animal may get at the outer ruling
+    if t = 'array' and jsonb_array_length(v) <= 50
+       and not exists (select 1 from jsonb_array_elements(v) x
+                        where jsonb_typeof(x) <> 'string' or (x #>> '{}') !~ '^[A-Za-z0-9_-]{1,60}$' or (x #>> '{}') = 'treif') then
+      return null;
+    end if;
+    return 'expected a list of status keys';
+  end if;
   if p_key in ('disabledStatuses', 'removedDefaults', 'statusOptIn') then
     if t = 'array' and jsonb_array_length(v) <= 500
        and not exists (select 1 from jsonb_array_elements(v) x where not _jstr_ok(x, 80) or jsonb_typeof(x) = 'null') then
@@ -3313,10 +3105,8 @@ begin
 end $_$;
 
 
-ALTER FUNCTION public._settings_value_error(p_key text, v jsonb) OWNER TO postgres;
-
 --
--- Name: _setup_code_norm(text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _setup_code_norm(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._setup_code_norm(p text) RETURNS text
@@ -3327,10 +3117,8 @@ CREATE FUNCTION public._setup_code_norm(p text) RETURNS text
 $$;
 
 
-ALTER FUNCTION public._setup_code_norm(p text) OWNER TO postgres;
-
 --
--- Name: _slaughter_q_open(public.animals_pilot); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _slaughter_q_open(public.animals_pilot); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._slaughter_q_open(a public.animals_pilot) RETURNS boolean
@@ -3344,10 +3132,8 @@ CREATE FUNCTION public._slaughter_q_open(a public.animals_pilot) RETURNS boolean
 $$;
 
 
-ALTER FUNCTION public._slaughter_q_open(a public.animals_pilot) OWNER TO postgres;
-
 --
--- Name: _stage_allowed(text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _stage_allowed(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._stage_allowed(p_stage text) RETURNS boolean
@@ -3383,10 +3169,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public._stage_allowed(p_stage text) OWNER TO postgres;
-
 --
--- Name: _stage_order_error(text, public.animals_pilot, boolean); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _stage_order_error(text, public.animals_pilot, boolean); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._stage_order_error(p_stage text, a public.animals_pilot, p_today boolean DEFAULT true) RETURNS text
@@ -3432,10 +3216,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public._stage_order_error(p_stage text, a public.animals_pilot, p_today boolean) OWNER TO postgres;
-
 --
--- Name: _stage_worker_role(text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _stage_worker_role(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._stage_worker_role(p_stage text) RETURNS text
@@ -3452,10 +3234,8 @@ CREATE FUNCTION public._stage_worker_role(p_stage text) RETURNS text
 $$;
 
 
-ALTER FUNCTION public._stage_worker_role(p_stage text) OWNER TO postgres;
-
 --
--- Name: _status_change_error(jsonb, jsonb); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _status_change_error(jsonb, jsonb); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._status_change_error(p_old jsonb, p_new jsonb) RETURNS text
@@ -3479,10 +3259,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public._status_change_error(p_old jsonb, p_new jsonb) OWNER TO postgres;
-
 --
--- Name: _statuses_in_use(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _statuses_in_use(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._statuses_in_use() RETURNS text[]
@@ -3497,10 +3275,8 @@ CREATE FUNCTION public._statuses_in_use() RETURNS text[]
 $$;
 
 
-ALTER FUNCTION public._statuses_in_use() OWNER TO postgres;
-
 --
--- Name: _support_access_open(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _support_access_open(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._support_access_open() RETURNS boolean
@@ -3511,10 +3287,8 @@ CREATE FUNCTION public._support_access_open() RETURNS boolean
 $$;
 
 
-ALTER FUNCTION public._support_access_open() OWNER TO postgres;
-
 --
--- Name: _system_health_data(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _system_health_data(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._system_health_data() RETURNS jsonb
@@ -3654,10 +3428,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public._system_health_data() OWNER TO postgres;
-
 --
--- Name: _test_mode_active(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _test_mode_active(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._test_mode_active() RETURNS boolean
@@ -3668,10 +3440,8 @@ CREATE FUNCTION public._test_mode_active() RETURNS boolean
 $$;
 
 
-ALTER FUNCTION public._test_mode_active() OWNER TO postgres;
-
 --
--- Name: _test_mode_autooff(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _test_mode_autooff(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._test_mode_autooff() RETURNS void
@@ -3688,10 +3458,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public._test_mode_autooff() OWNER TO postgres;
-
 --
--- Name: _test_mode_flag(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _test_mode_flag(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._test_mode_flag() RETURNS boolean
@@ -3702,10 +3470,8 @@ CREATE FUNCTION public._test_mode_flag() RETURNS boolean
 $$;
 
 
-ALTER FUNCTION public._test_mode_flag() OWNER TO postgres;
-
 --
--- Name: _test_mode_max(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _test_mode_max(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._test_mode_max() RETURNS interval
@@ -3714,10 +3480,8 @@ CREATE FUNCTION public._test_mode_max() RETURNS interval
     AS $$ select interval '8 hours' $$;
 
 
-ALTER FUNCTION public._test_mode_max() OWNER TO postgres;
-
 --
--- Name: _test_mode_on(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _test_mode_on(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._test_mode_on() RETURNS boolean
@@ -3732,10 +3496,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public._test_mode_on() OWNER TO postgres;
-
 --
--- Name: _test_mode_on_at(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _test_mode_on_at(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._test_mode_on_at() RETURNS timestamp with time zone
@@ -3746,10 +3508,8 @@ CREATE FUNCTION public._test_mode_on_at() RETURNS timestamp with time zone
 $$;
 
 
-ALTER FUNCTION public._test_mode_on_at() OWNER TO postgres;
-
 --
--- Name: _ts_or_null(text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _ts_or_null(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._ts_or_null(p text) RETURNS timestamp with time zone
@@ -3763,10 +3523,8 @@ exception when others then return null;
 end $$;
 
 
-ALTER FUNCTION public._ts_or_null(p text) OWNER TO postgres;
-
 --
--- Name: _usda_zone(public.animals_pilot); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _usda_zone(public.animals_pilot); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._usda_zone(a public.animals_pilot) RETURNS text
@@ -3799,10 +3557,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public._usda_zone(a public.animals_pilot) OWNER TO postgres;
-
 --
--- Name: _worker_code_hash(text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _worker_code_hash(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._worker_code_hash(p_code text) RETURNS text
@@ -3813,10 +3569,8 @@ CREATE FUNCTION public._worker_code_hash(p_code text) RETURNS text
 $$;
 
 
-ALTER FUNCTION public._worker_code_hash(p_code text) OWNER TO postgres;
-
 --
--- Name: _worker_code_ok(text, text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _worker_code_ok(text, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._worker_code_ok(p_hash text, p_code text) RETURNS boolean
@@ -3837,10 +3591,8 @@ begin
 end $_$;
 
 
-ALTER FUNCTION public._worker_code_ok(p_hash text, p_code text) OWNER TO postgres;
-
 --
--- Name: _worker_gate(text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _worker_gate(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._worker_gate(p_device_role text) RETURNS void
@@ -3856,10 +3608,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public._worker_gate(p_device_role text) OWNER TO postgres;
-
 --
--- Name: _worker_lists_saved(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _worker_lists_saved(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._worker_lists_saved() RETURNS trigger
@@ -3874,10 +3624,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public._worker_lists_saved() OWNER TO postgres;
-
 --
--- Name: _worker_role_norm(text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _worker_role_norm(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._worker_role_norm(p text) RETURNS text
@@ -3900,10 +3648,8 @@ CREATE FUNCTION public._worker_role_norm(p text) RETURNS text
 $$;
 
 
-ALTER FUNCTION public._worker_role_norm(p text) OWNER TO postgres;
-
 --
--- Name: _worker_sessions_revoke_on_credential(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _worker_sessions_revoke_on_credential(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._worker_sessions_revoke_on_credential() RETURNS trigger
@@ -3918,10 +3664,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public._worker_sessions_revoke_on_credential() OWNER TO postgres;
-
 --
--- Name: _worker_sessions_revoke_on_device(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: _worker_sessions_revoke_on_device(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public._worker_sessions_revoke_on_device() RETURNS trigger
@@ -3941,10 +3685,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public._worker_sessions_revoke_on_device() OWNER TO postgres;
-
 --
--- Name: animal_card(text, date, integer); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: animal_card(text, date, integer); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public.animal_card(p_token text, p_date date, p_n integer) RETURNS jsonb
@@ -3986,10 +3728,8 @@ begin
 end $_$;
 
 
-ALTER FUNCTION public.animal_card(p_token text, p_date date, p_n integer) OWNER TO postgres;
-
 --
--- Name: animal_push(jsonb, uuid); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: animal_push(jsonb, uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public.animal_push(p_rows jsonb, p_command_id uuid DEFAULT NULL::uuid) RETURNS jsonb
@@ -4108,10 +3848,8 @@ begin
 end $_$;
 
 
-ALTER FUNCTION public.animal_push(p_rows jsonb, p_command_id uuid) OWNER TO postgres;
-
 --
--- Name: animals_pilot_advance_cursor(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: animals_pilot_advance_cursor(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public.animals_pilot_advance_cursor() RETURNS trigger
@@ -4153,10 +3891,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public.animals_pilot_advance_cursor() OWNER TO postgres;
-
 --
--- Name: animals_pilot_guard_corrections(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: animals_pilot_guard_corrections(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public.animals_pilot_guard_corrections() RETURNS trigger
@@ -4232,10 +3968,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public.animals_pilot_guard_corrections() OWNER TO postgres;
-
 --
--- Name: archive_days(text, date, date); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: archive_days(text, date, date); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public.archive_days(p_token text, p_from date, p_to date) RETURNS jsonb
@@ -4285,10 +4019,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public.archive_days(p_token text, p_from date, p_to date) OWNER TO postgres;
-
 --
--- Name: board_flags(text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: board_flags(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public.board_flags(p_token text DEFAULT NULL::text) RETURNS jsonb
@@ -4322,10 +4054,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public.board_flags(p_token text) OWNER TO postgres;
-
 --
--- Name: carry_claim(bigint, integer, text, uuid); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: carry_claim(bigint, integer, text, uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public.carry_claim(p_board bigint, p_id integer, p_stage text, p_command_id uuid DEFAULT NULL::uuid) RETURNS jsonb
@@ -4384,10 +4114,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public.carry_claim(p_board bigint, p_id integer, p_stage text, p_command_id uuid) OWNER TO postgres;
-
 --
--- Name: carry_push(bigint, jsonb, uuid); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: carry_push(bigint, jsonb, uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public.carry_push(p_board bigint, p_rows jsonb, p_command_id uuid DEFAULT NULL::uuid) RETURNS jsonb
@@ -4561,10 +4289,8 @@ begin
 end $_$;
 
 
-ALTER FUNCTION public.carry_push(p_board bigint, p_rows jsonb, p_command_id uuid) OWNER TO postgres;
-
 --
--- Name: change_ack(text, bigint); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: change_ack(text, bigint); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public.change_ack(p_token text, p_id bigint) RETURNS jsonb
@@ -4585,10 +4311,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public.change_ack(p_token text, p_id bigint) OWNER TO postgres;
-
 --
--- Name: claim_animal_stage(integer, text, text, text, text, bigint); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: claim_animal_stage(integer, text, text, text, text, bigint); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public.claim_animal_stage(p_id integer, p_stage text, p_value text, p_actor text, p_device_id text, p_epoch bigint DEFAULT NULL::bigint) RETURNS jsonb
@@ -4599,10 +4323,8 @@ CREATE FUNCTION public.claim_animal_stage(p_id integer, p_stage text, p_value te
 $$;
 
 
-ALTER FUNCTION public.claim_animal_stage(p_id integer, p_stage text, p_value text, p_actor text, p_device_id text, p_epoch bigint) OWNER TO postgres;
-
 --
--- Name: claim_animal_stage(integer, text, text, text, text, bigint, uuid); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: claim_animal_stage(integer, text, text, text, text, bigint, uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public.claim_animal_stage(p_id integer, p_stage text, p_value text, p_actor text, p_device_id text, p_epoch bigint, p_command_id uuid) RETURNS jsonb
@@ -4800,10 +4522,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public.claim_animal_stage(p_id integer, p_stage text, p_value text, p_actor text, p_device_id text, p_epoch bigint, p_command_id uuid) OWNER TO postgres;
-
 --
--- Name: create_first_manager(text, text, text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: create_first_manager(text, text, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public.create_first_manager(p_name text, p_code text, p_setup_code text DEFAULT NULL::text) RETURNS jsonb
@@ -4854,10 +4574,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public.create_first_manager(p_name text, p_code text, p_setup_code text) OWNER TO postgres;
-
 --
--- Name: device_auth_set(text, boolean); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: device_auth_set(text, boolean); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public.device_auth_set(p_token text, p_on boolean) RETURNS jsonb
@@ -4877,10 +4595,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public.device_auth_set(p_token text, p_on boolean) OWNER TO postgres;
-
 --
--- Name: device_heartbeat(text, text, jsonb); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: device_heartbeat(text, text, jsonb); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public.device_heartbeat(p_device_id text, p_device_name text, p_info jsonb) RETURNS jsonb
@@ -4921,10 +4637,8 @@ begin
 end $_$;
 
 
-ALTER FUNCTION public.device_heartbeat(p_device_id text, p_device_name text, p_info jsonb) OWNER TO postgres;
-
 --
--- Name: device_manage(text, text, text, text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: device_manage(text, text, text, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public.device_manage(p_token text, p_device_id text, p_action text, p_reason text DEFAULT NULL::text) RETURNS jsonb
@@ -4976,10 +4690,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public.device_manage(p_token text, p_device_id text, p_action text, p_reason text) OWNER TO postgres;
-
 --
--- Name: device_pair(text, text, text, integer, boolean, text, text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: device_pair(text, text, text, integer, boolean, text, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public.device_pair(p_token text, p_code text, p_role text, p_index integer DEFAULT 0, p_replace boolean DEFAULT false, p_device_name text DEFAULT NULL::text, p_reason text DEFAULT NULL::text) RETURNS jsonb
@@ -5072,10 +4784,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public.device_pair(p_token text, p_code text, p_role text, p_index integer, p_replace boolean, p_device_name text, p_reason text) OWNER TO postgres;
-
 --
--- Name: device_paired_list(text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: device_paired_list(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public.device_paired_list(p_token text) RETURNS jsonb
@@ -5092,10 +4802,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public.device_paired_list(p_token text) OWNER TO postgres;
-
 --
--- Name: device_pairing_status(text, text, text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: device_pairing_status(text, text, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public.device_pairing_status(p_device_id text, p_code text, p_secret text) RETURNS jsonb
@@ -5125,10 +4833,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public.device_pairing_status(p_device_id text, p_code text, p_secret text) OWNER TO postgres;
-
 --
--- Name: device_request_pairing(text, text, text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: device_request_pairing(text, text, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public.device_request_pairing(p_device_id text, p_secret text, p_device_name text DEFAULT NULL::text) RETURNS jsonb
@@ -5186,10 +4892,8 @@ begin
 end $_$;
 
 
-ALTER FUNCTION public.device_request_pairing(p_device_id text, p_secret text, p_device_name text) OWNER TO postgres;
-
 --
--- Name: device_unpair(text, text, text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: device_unpair(text, text, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public.device_unpair(p_token text, p_device_id text, p_reason text DEFAULT NULL::text) RETURNS jsonb
@@ -5224,10 +4928,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public.device_unpair(p_token text, p_device_id text, p_reason text) OWNER TO postgres;
-
 --
--- Name: device_whoami(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: device_whoami(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public.device_whoami() RETURNS jsonb
@@ -5245,10 +4947,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public.device_whoami() OWNER TO postgres;
-
 --
--- Name: eso_change(integer, text, text, bigint); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: eso_change(integer, text, text, bigint); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public.eso_change(p_id integer, p_result text, p_device_id text, p_epoch bigint DEFAULT NULL::bigint) RETURNS jsonb
@@ -5259,10 +4959,8 @@ CREATE FUNCTION public.eso_change(p_id integer, p_result text, p_device_id text,
 $$;
 
 
-ALTER FUNCTION public.eso_change(p_id integer, p_result text, p_device_id text, p_epoch bigint) OWNER TO postgres;
-
 --
--- Name: eso_change(integer, text, text, bigint, uuid); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: eso_change(integer, text, text, bigint, uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public.eso_change(p_id integer, p_result text, p_device_id text, p_epoch bigint, p_command_id uuid) RETURNS jsonb
@@ -5372,10 +5070,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public.eso_change(p_id integer, p_result text, p_device_id text, p_epoch bigint, p_command_id uuid) OWNER TO postgres;
-
 --
--- Name: event_append(jsonb); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: event_append(jsonb); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public.event_append(p_event jsonb) RETURNS jsonb
@@ -5467,10 +5163,8 @@ begin
 end $_$;
 
 
-ALTER FUNCTION public.event_append(p_event jsonb) OWNER TO postgres;
-
 --
--- Name: hold_resolve(bigint, text, uuid); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: hold_resolve(bigint, text, uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public.hold_resolve(p_hold bigint, p_resolution text, p_command_id uuid DEFAULT NULL::uuid) RETURNS jsonb
@@ -5515,10 +5209,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public.hold_resolve(p_hold bigint, p_resolution text, p_command_id uuid) OWNER TO postgres;
-
 --
--- Name: hold_set(integer, text, text, text, bigint, uuid); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: hold_set(integer, text, text, text, bigint, uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public.hold_set(p_id integer, p_station text, p_kind text, p_part text DEFAULT 'whole'::text, p_board bigint DEFAULT NULL::bigint, p_command_id uuid DEFAULT NULL::uuid) RETURNS jsonb
@@ -5631,10 +5323,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public.hold_set(p_id integer, p_station text, p_kind text, p_part text, p_board bigint, p_command_id uuid) OWNER TO postgres;
-
 --
--- Name: leader_account_add(text, text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: leader_account_add(text, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public.leader_account_add(p_name text, p_code text) RETURNS text
@@ -5654,10 +5344,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public.leader_account_add(p_name text, p_code text) OWNER TO postgres;
-
 --
--- Name: leader_account_remove(text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: leader_account_remove(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public.leader_account_remove(p_name text) RETURNS text
@@ -5680,10 +5368,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public.leader_account_remove(p_name text) OWNER TO postgres;
-
 --
--- Name: leader_device_recovery(text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: leader_device_recovery(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public.leader_device_recovery(p_reason text DEFAULT 'team-leader device lost / broken'::text) RETURNS text
@@ -5712,10 +5398,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public.leader_device_recovery(p_reason text) OWNER TO postgres;
-
 --
--- Name: leader_device_replace(text, text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: leader_device_replace(text, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public.leader_device_replace(p_code text, p_recovery text) RETURNS jsonb
@@ -5776,10 +5460,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public.leader_device_replace(p_code text, p_recovery text) OWNER TO postgres;
-
 --
--- Name: leader_recovery_code_new(text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: leader_recovery_code_new(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public.leader_recovery_code_new(p_token text) RETURNS jsonb
@@ -5804,10 +5486,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public.leader_recovery_code_new(p_token text) OWNER TO postgres;
-
 --
--- Name: leader_recovery_status(text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: leader_recovery_status(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public.leader_recovery_status(p_token text) RETURNS jsonb
@@ -5824,10 +5504,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public.leader_recovery_status(p_token text) OWNER TO postgres;
-
 --
--- Name: lung_drawing_get(integer); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: lung_drawing_get(integer); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public.lung_drawing_get(p_id integer) RETURNS jsonb
@@ -5844,10 +5522,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public.lung_drawing_get(p_id integer) OWNER TO postgres;
-
 --
--- Name: lung_drawing_set(integer, bigint, text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: lung_drawing_set(integer, bigint, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public.lung_drawing_set(p_id integer, p_epoch bigint, p_drawing text) RETURNS jsonb
@@ -5887,10 +5563,8 @@ begin
 end $_$;
 
 
-ALTER FUNCTION public.lung_drawing_set(p_id integer, p_epoch bigint, p_drawing text) OWNER TO postgres;
-
 --
--- Name: manager_add(text, text, text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: manager_add(text, text, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public.manager_add(p_token text, p_name text, p_code text) RETURNS jsonb
@@ -5905,10 +5579,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public.manager_add(p_token text, p_name text, p_code text) OWNER TO postgres;
-
 --
--- Name: manager_add_owner(text, text, text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: manager_add_owner(text, text, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public.manager_add_owner(p_token text, p_name text, p_code text) RETURNS jsonb
@@ -5937,10 +5609,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public.manager_add_owner(p_token text, p_name text, p_code text) OWNER TO postgres;
-
 --
--- Name: manager_deactivate(text, uuid); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: manager_deactivate(text, uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public.manager_deactivate(p_token text, p_manager_id uuid) RETURNS jsonb
@@ -5967,10 +5637,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public.manager_deactivate(p_token text, p_manager_id uuid) OWNER TO postgres;
-
 --
--- Name: manager_list(text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: manager_list(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public.manager_list(p_token text) RETURNS jsonb
@@ -5988,10 +5656,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public.manager_list(p_token text) OWNER TO postgres;
-
 --
--- Name: manager_login(text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: manager_login(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public.manager_login(p_code text) RETURNS jsonb
@@ -6076,10 +5742,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public.manager_login(p_code text) OWNER TO postgres;
-
 --
--- Name: manager_logout(text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: manager_logout(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public.manager_logout(p_token text) RETURNS jsonb
@@ -6092,10 +5756,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public.manager_logout(p_token text) OWNER TO postgres;
-
 --
--- Name: manager_session_check(text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: manager_session_check(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public.manager_session_check(p_token text) RETURNS jsonb
@@ -6112,10 +5774,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public.manager_session_check(p_token text) OWNER TO postgres;
-
 --
--- Name: manufacturer_set_billing(text, boolean, numeric, text, text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: manufacturer_set_billing(text, boolean, numeric, text, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public.manufacturer_set_billing(p_token text, p_enabled boolean, p_price numeric, p_currency text, p_reason text DEFAULT NULL::text) RETURNS jsonb
@@ -6151,10 +5811,8 @@ begin
 end $_$;
 
 
-ALTER FUNCTION public.manufacturer_set_billing(p_token text, p_enabled boolean, p_price numeric, p_currency text, p_reason text) OWNER TO postgres;
-
 --
--- Name: manufacturer_set_code(text, text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: manufacturer_set_code(text, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public.manufacturer_set_code(p_name text, p_code text) RETURNS jsonb
@@ -6179,10 +5837,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public.manufacturer_set_code(p_name text, p_code text) OWNER TO postgres;
-
 --
--- Name: outer_open(integer, bigint, boolean, text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: outer_open(integer, bigint, boolean, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public.outer_open(p_id integer, p_epoch bigint, p_open boolean, p_device_id text DEFAULT NULL::text) RETURNS jsonb
@@ -6193,10 +5849,8 @@ CREATE FUNCTION public.outer_open(p_id integer, p_epoch bigint, p_open boolean, 
 $$;
 
 
-ALTER FUNCTION public.outer_open(p_id integer, p_epoch bigint, p_open boolean, p_device_id text) OWNER TO postgres;
-
 --
--- Name: outer_open(integer, bigint, boolean, text, uuid); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: outer_open(integer, bigint, boolean, text, uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public.outer_open(p_id integer, p_epoch bigint, p_open boolean, p_device_id text, p_command_id uuid) RETURNS jsonb
@@ -6252,10 +5906,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public.outer_open(p_id integer, p_epoch bigint, p_open boolean, p_device_id text, p_command_id uuid) OWNER TO postgres;
-
 --
--- Name: plant_server_status(text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: plant_server_status(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public.plant_server_status(p_token text) RETURNS jsonb
@@ -6278,10 +5930,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public.plant_server_status(p_token text) OWNER TO postgres;
-
 --
--- Name: plant_setup_needed(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: plant_setup_needed(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public.plant_setup_needed() RETURNS jsonb
@@ -6295,10 +5945,8 @@ CREATE FUNCTION public.plant_setup_needed() RETURNS jsonb
 $$;
 
 
-ALTER FUNCTION public.plant_setup_needed() OWNER TO postgres;
-
 --
--- Name: plant_status_snapshot(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: plant_status_snapshot(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public.plant_status_snapshot() RETURNS jsonb
@@ -6355,10 +6003,8 @@ begin
 end $_$;
 
 
-ALTER FUNCTION public.plant_status_snapshot() OWNER TO postgres;
-
 --
--- Name: processing_board(text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: processing_board(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public.processing_board(p_station text DEFAULT NULL::text) RETURNS jsonb
@@ -6383,10 +6029,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public.processing_board(p_station text) OWNER TO postgres;
-
 --
--- Name: processing_day_close(text, bigint, text, text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: processing_day_close(text, bigint, text, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public.processing_day_close(p_token text, p_board bigint, p_station text, p_reason text DEFAULT NULL::text) RETURNS jsonb
@@ -6422,10 +6066,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public.processing_day_close(p_token text, p_board bigint, p_station text, p_reason text) OWNER TO postgres;
-
 --
--- Name: processing_status(text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: processing_status(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public.processing_status(p_token text) RETURNS jsonb
@@ -6448,10 +6090,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public.processing_status(p_token text) OWNER TO postgres;
-
 --
--- Name: push_settings(jsonb, text, text, text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: push_settings(jsonb, text, text, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public.push_settings(p_settings jsonb, p_device_id text, p_token text DEFAULT NULL::text, p_reason text DEFAULT NULL::text) RETURNS jsonb
@@ -6535,6 +6175,15 @@ begin
       return jsonb_build_object('ok', false, 'error', 'status_in_use', 'key', v_used);
     end if;
   end if;
+  -- v10.36: a status a ruled "not chalak" animal carries stays allowed for "not chalak" until the reset
+  if incoming ? 'ncStatuses' and jsonb_typeof(incoming -> 'ncStatuses') = 'array' then
+    select a.outer_status into v_used from animals_pilot a
+     where a.outer_status is not null and a.outer_status <> 'treif' and coalesce(_nc_fixed(a), false)
+       and not (incoming -> 'ncStatuses') ? a.outer_status limit 1;
+    if v_used is not null then
+      return jsonb_build_object('ok', false, 'error', 'status_in_use', 'key', v_used, 'reason', 'nc_status_in_use');
+    end if;
+  end if;
 
   -- the values that will be written must have the shape the app uses
   for k in select jsonb_object_keys(incoming) loop
@@ -6573,10 +6222,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public.push_settings(p_settings jsonb, p_device_id text, p_token text, p_reason text) OWNER TO postgres;
-
 --
--- Name: request_daily_rollover(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: request_daily_rollover(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public.request_daily_rollover() RETURNS jsonb
@@ -6636,10 +6283,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public.request_daily_rollover() OWNER TO postgres;
-
 --
--- Name: reset_daily_board(text, text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: reset_daily_board(text, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public.reset_daily_board(p_token text, p_reason text DEFAULT NULL::text) RETURNS jsonb
@@ -6680,10 +6325,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public.reset_daily_board(p_token text, p_reason text) OWNER TO postgres;
-
 --
--- Name: seal_set(text, text, text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: seal_set(text, text, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public.seal_set(p_token text, p_key text, p_image text) RETURNS jsonb
@@ -6714,10 +6357,8 @@ begin
 end $_$;
 
 
-ALTER FUNCTION public.seal_set(p_token text, p_key text, p_image text) OWNER TO postgres;
-
 --
--- Name: seals_get(text, bigint); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: seals_get(text, bigint); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public.seals_get(p_token text DEFAULT NULL::text, p_version bigint DEFAULT NULL::bigint) RETURNS jsonb
@@ -6737,10 +6378,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public.seals_get(p_token text, p_version bigint) OWNER TO postgres;
-
 --
--- Name: security_summary(text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: security_summary(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public.security_summary(p_token text) RETURNS jsonb
@@ -6771,10 +6410,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public.security_summary(p_token text) OWNER TO postgres;
-
 --
--- Name: server_now_ms(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: server_now_ms(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public.server_now_ms() RETURNS bigint
@@ -6782,10 +6419,8 @@ CREATE FUNCTION public.server_now_ms() RETURNS bigint
     AS $$ select (extract(epoch from clock_timestamp()) * 1000)::bigint $$;
 
 
-ALTER FUNCTION public.server_now_ms() OWNER TO postgres;
-
 --
--- Name: server_schema_step(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: server_schema_step(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public.server_schema_step() RETURNS integer
@@ -6796,10 +6431,8 @@ CREATE FUNCTION public.server_schema_step() RETURNS integer
 $_$;
 
 
-ALTER FUNCTION public.server_schema_step() OWNER TO postgres;
-
 --
--- Name: server_test_mode(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: server_test_mode(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public.server_test_mode() RETURNS boolean
@@ -6810,10 +6443,8 @@ CREATE FUNCTION public.server_test_mode() RETURNS boolean
 $$;
 
 
-ALTER FUNCTION public.server_test_mode() OWNER TO postgres;
-
 --
--- Name: server_test_mode_info(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: server_test_mode_info(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public.server_test_mode_info() RETURNS jsonb
@@ -6831,10 +6462,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public.server_test_mode_info() OWNER TO postgres;
-
 --
--- Name: set_not_chalak_outer(integer, bigint, uuid); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: set_not_chalak_outer(integer, bigint, uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public.set_not_chalak_outer(p_id integer, p_epoch bigint, p_command_id uuid DEFAULT NULL::uuid) RETURNS jsonb
@@ -6882,10 +6511,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public.set_not_chalak_outer(p_id integer, p_epoch bigint, p_command_id uuid) OWNER TO postgres;
-
 --
--- Name: support_access_set(text, integer, text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: support_access_set(text, integer, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public.support_access_set(p_token text, p_hours integer, p_reason text DEFAULT NULL::text) RETURNS jsonb
@@ -6927,10 +6554,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public.support_access_set(p_token text, p_hours integer, p_reason text) OWNER TO postgres;
-
 --
--- Name: support_diagnostics(text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: support_diagnostics(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public.support_diagnostics(p_token text) RETURNS jsonb
@@ -6986,10 +6611,8 @@ begin
 end $_$;
 
 
-ALTER FUNCTION public.support_diagnostics(p_token text) OWNER TO postgres;
-
 --
--- Name: support_force_reload(text, text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: support_force_reload(text, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public.support_force_reload(p_token text, p_reason text DEFAULT NULL::text) RETURNS jsonb
@@ -7013,10 +6636,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public.support_force_reload(p_token text, p_reason text) OWNER TO postgres;
-
 --
--- Name: system_health(text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: system_health(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public.system_health(p_token text) RETURNS jsonb
@@ -7031,10 +6652,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public.system_health(p_token text) OWNER TO postgres;
-
 --
--- Name: verify_event_chain(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: verify_event_chain(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public.verify_event_chain() RETURNS jsonb
@@ -7067,10 +6686,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public.verify_event_chain() OWNER TO postgres;
-
 --
--- Name: worker_code_set(text, text, text, text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: worker_code_set(text, text, text, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public.worker_code_set(p_token text, p_role text, p_name text, p_code text) RETURNS jsonb
@@ -7110,10 +6727,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public.worker_code_set(p_token text, p_role text, p_name text, p_code text) OWNER TO postgres;
-
 --
--- Name: worker_login(text, text, text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: worker_login(text, text, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public.worker_login(p_role text, p_code text, p_name text DEFAULT NULL::text) RETURNS jsonb
@@ -7199,10 +6814,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public.worker_login(p_role text, p_code text, p_name text) OWNER TO postgres;
-
 --
--- Name: worker_logout(text); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: worker_logout(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public.worker_logout(p_token text) RETURNS jsonb
@@ -7218,10 +6831,8 @@ begin
 end $$;
 
 
-ALTER FUNCTION public.worker_logout(p_token text) OWNER TO postgres;
-
 --
--- Name: worker_session_check(); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: worker_session_check(); Type: FUNCTION; Schema: public; Owner: -
 --
 
 CREATE FUNCTION public.worker_session_check() RETURNS jsonb
@@ -7238,10 +6849,20 @@ begin
 end $$;
 
 
-ALTER FUNCTION public.worker_session_check() OWNER TO postgres;
+--
+-- Name: users; Type: TABLE; Schema: auth; Owner: -
+--
+
+CREATE TABLE auth.users (
+    id uuid DEFAULT extensions.gen_random_uuid() NOT NULL,
+    email text,
+    raw_user_meta_data jsonb,
+    created_at timestamp with time zone DEFAULT now()
+);
+
 
 --
--- Name: admin_audit; Type: TABLE; Schema: public; Owner: postgres
+-- Name: admin_audit; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.admin_audit (
@@ -7255,10 +6876,8 @@ CREATE TABLE public.admin_audit (
 );
 
 
-ALTER TABLE public.admin_audit OWNER TO postgres;
-
 --
--- Name: admin_audit_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+-- Name: admin_audit_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
 CREATE SEQUENCE public.admin_audit_id_seq
@@ -7269,17 +6888,15 @@ CREATE SEQUENCE public.admin_audit_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.admin_audit_id_seq OWNER TO postgres;
-
 --
--- Name: admin_audit_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+-- Name: admin_audit_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
 
 ALTER SEQUENCE public.admin_audit_id_seq OWNED BY public.admin_audit.id;
 
 
 --
--- Name: animal_changes; Type: TABLE; Schema: public; Owner: postgres
+-- Name: animal_changes; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.animal_changes (
@@ -7297,10 +6914,8 @@ CREATE TABLE public.animal_changes (
 );
 
 
-ALTER TABLE public.animal_changes OWNER TO postgres;
-
 --
--- Name: animal_changes_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+-- Name: animal_changes_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
 CREATE SEQUENCE public.animal_changes_id_seq
@@ -7311,17 +6926,15 @@ CREATE SEQUENCE public.animal_changes_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.animal_changes_id_seq OWNER TO postgres;
-
 --
--- Name: animal_changes_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+-- Name: animal_changes_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
 
 ALTER SEQUENCE public.animal_changes_id_seq OWNED BY public.animal_changes.id;
 
 
 --
--- Name: animal_holds; Type: TABLE; Schema: public; Owner: postgres
+-- Name: animal_holds; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.animal_holds (
@@ -7347,10 +6960,8 @@ CREATE TABLE public.animal_holds (
 );
 
 
-ALTER TABLE public.animal_holds OWNER TO postgres;
-
 --
--- Name: animal_holds_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+-- Name: animal_holds_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
 CREATE SEQUENCE public.animal_holds_id_seq
@@ -7361,17 +6972,15 @@ CREATE SEQUENCE public.animal_holds_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.animal_holds_id_seq OWNER TO postgres;
-
 --
--- Name: animal_holds_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+-- Name: animal_holds_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
 
 ALTER SEQUENCE public.animal_holds_id_seq OWNED BY public.animal_holds.id;
 
 
 --
--- Name: animals; Type: TABLE; Schema: public; Owner: postgres
+-- Name: animals; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.animals (
@@ -7408,10 +7017,8 @@ CREATE TABLE public.animals (
 );
 
 
-ALTER TABLE public.animals OWNER TO postgres;
-
 --
--- Name: audit_log; Type: TABLE; Schema: public; Owner: postgres
+-- Name: audit_log; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.audit_log (
@@ -7428,10 +7035,8 @@ CREATE TABLE public.audit_log (
 );
 
 
-ALTER TABLE public.audit_log OWNER TO postgres;
-
 --
--- Name: audit_log_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+-- Name: audit_log_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
 CREATE SEQUENCE public.audit_log_id_seq
@@ -7442,17 +7047,15 @@ CREATE SEQUENCE public.audit_log_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.audit_log_id_seq OWNER TO postgres;
-
 --
--- Name: audit_log_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+-- Name: audit_log_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
 
 ALTER SEQUENCE public.audit_log_id_seq OWNED BY public.audit_log.id;
 
 
 --
--- Name: batches; Type: TABLE; Schema: public; Owner: postgres
+-- Name: batches; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.batches (
@@ -7469,10 +7072,8 @@ CREATE TABLE public.batches (
 );
 
 
-ALTER TABLE public.batches OWNER TO postgres;
-
 --
--- Name: custom_statuses; Type: TABLE; Schema: public; Owner: postgres
+-- Name: custom_statuses; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.custom_statuses (
@@ -7488,10 +7089,8 @@ CREATE TABLE public.custom_statuses (
 );
 
 
-ALTER TABLE public.custom_statuses OWNER TO postgres;
-
 --
--- Name: daily_board_archive; Type: TABLE; Schema: public; Owner: postgres
+-- Name: daily_board_archive; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.daily_board_archive (
@@ -7506,10 +7105,8 @@ CREATE TABLE public.daily_board_archive (
 );
 
 
-ALTER TABLE public.daily_board_archive OWNER TO postgres;
-
 --
--- Name: daily_board_archive_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+-- Name: daily_board_archive_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
 ALTER TABLE public.daily_board_archive ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
@@ -7523,7 +7120,7 @@ ALTER TABLE public.daily_board_archive ALTER COLUMN id ADD GENERATED ALWAYS AS I
 
 
 --
--- Name: device_credentials; Type: TABLE; Schema: public; Owner: postgres
+-- Name: device_credentials; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.device_credentials (
@@ -7535,10 +7132,8 @@ CREATE TABLE public.device_credentials (
 );
 
 
-ALTER TABLE public.device_credentials OWNER TO postgres;
-
 --
--- Name: device_lifecycle_events; Type: TABLE; Schema: public; Owner: postgres
+-- Name: device_lifecycle_events; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.device_lifecycle_events (
@@ -7557,10 +7152,8 @@ CREATE TABLE public.device_lifecycle_events (
 ALTER TABLE ONLY public.device_lifecycle_events REPLICA IDENTITY FULL;
 
 
-ALTER TABLE public.device_lifecycle_events OWNER TO postgres;
-
 --
--- Name: device_pairing; Type: TABLE; Schema: public; Owner: postgres
+-- Name: device_pairing; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.device_pairing (
@@ -7575,10 +7168,8 @@ CREATE TABLE public.device_pairing (
 );
 
 
-ALTER TABLE public.device_pairing OWNER TO postgres;
-
 --
--- Name: device_stage_cursor; Type: TABLE; Schema: public; Owner: postgres
+-- Name: device_stage_cursor; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.device_stage_cursor (
@@ -7589,10 +7180,8 @@ CREATE TABLE public.device_stage_cursor (
 );
 
 
-ALTER TABLE public.device_stage_cursor OWNER TO postgres;
-
 --
--- Name: devices_pilot; Type: TABLE; Schema: public; Owner: postgres
+-- Name: devices_pilot; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.devices_pilot (
@@ -7620,10 +7209,8 @@ CREATE TABLE public.devices_pilot (
 ALTER TABLE ONLY public.devices_pilot REPLICA IDENTITY FULL;
 
 
-ALTER TABLE public.devices_pilot OWNER TO postgres;
-
 --
--- Name: events_chain_head; Type: TABLE; Schema: public; Owner: postgres
+-- Name: events_chain_head; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.events_chain_head (
@@ -7634,10 +7221,8 @@ CREATE TABLE public.events_chain_head (
 );
 
 
-ALTER TABLE public.events_chain_head OWNER TO postgres;
-
 --
--- Name: events_pilot; Type: TABLE; Schema: public; Owner: postgres
+-- Name: events_pilot; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.events_pilot (
@@ -7660,10 +7245,8 @@ CREATE TABLE public.events_pilot (
 ALTER TABLE ONLY public.events_pilot REPLICA IDENTITY FULL;
 
 
-ALTER TABLE public.events_pilot OWNER TO postgres;
-
 --
--- Name: events_pilot_server_seq_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+-- Name: events_pilot_server_seq_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
 ALTER TABLE public.events_pilot ALTER COLUMN server_seq ADD GENERATED ALWAYS AS IDENTITY (
@@ -7677,7 +7260,7 @@ ALTER TABLE public.events_pilot ALTER COLUMN server_seq ADD GENERATED ALWAYS AS 
 
 
 --
--- Name: kashrut_seals; Type: TABLE; Schema: public; Owner: postgres
+-- Name: kashrut_seals; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.kashrut_seals (
@@ -7688,10 +7271,8 @@ CREATE TABLE public.kashrut_seals (
 );
 
 
-ALTER TABLE public.kashrut_seals OWNER TO postgres;
-
 --
--- Name: login_attempts; Type: TABLE; Schema: public; Owner: postgres
+-- Name: login_attempts; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.login_attempts (
@@ -7702,10 +7283,8 @@ CREATE TABLE public.login_attempts (
 );
 
 
-ALTER TABLE public.login_attempts OWNER TO postgres;
-
 --
--- Name: login_attempts_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+-- Name: login_attempts_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
 CREATE SEQUENCE public.login_attempts_id_seq
@@ -7716,17 +7295,15 @@ CREATE SEQUENCE public.login_attempts_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.login_attempts_id_seq OWNER TO postgres;
-
 --
--- Name: login_attempts_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+-- Name: login_attempts_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
 
 ALTER SEQUENCE public.login_attempts_id_seq OWNED BY public.login_attempts.id;
 
 
 --
--- Name: lung_drawings; Type: TABLE; Schema: public; Owner: postgres
+-- Name: lung_drawings; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.lung_drawings (
@@ -7739,10 +7316,8 @@ CREATE TABLE public.lung_drawings (
 );
 
 
-ALTER TABLE public.lung_drawings OWNER TO postgres;
-
 --
--- Name: manager_sessions; Type: TABLE; Schema: public; Owner: postgres
+-- Name: manager_sessions; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.manager_sessions (
@@ -7755,10 +7330,8 @@ CREATE TABLE public.manager_sessions (
 );
 
 
-ALTER TABLE public.manager_sessions OWNER TO postgres;
-
 --
--- Name: outer_status_pilot; Type: TABLE; Schema: public; Owner: postgres
+-- Name: outer_status_pilot; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.outer_status_pilot (
@@ -7773,10 +7346,8 @@ CREATE TABLE public.outer_status_pilot (
 ALTER TABLE ONLY public.outer_status_pilot REPLICA IDENTITY FULL;
 
 
-ALTER TABLE public.outer_status_pilot OWNER TO postgres;
-
 --
--- Name: pairing_requests; Type: TABLE; Schema: public; Owner: postgres
+-- Name: pairing_requests; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.pairing_requests (
@@ -7785,10 +7356,8 @@ CREATE TABLE public.pairing_requests (
 );
 
 
-ALTER TABLE public.pairing_requests OWNER TO postgres;
-
 --
--- Name: plant_managers; Type: TABLE; Schema: public; Owner: postgres
+-- Name: plant_managers; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.plant_managers (
@@ -7802,10 +7371,8 @@ CREATE TABLE public.plant_managers (
 );
 
 
-ALTER TABLE public.plant_managers OWNER TO postgres;
-
 --
--- Name: plant_state; Type: TABLE; Schema: public; Owner: postgres
+-- Name: plant_state; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.plant_state (
@@ -7815,10 +7382,8 @@ CREATE TABLE public.plant_state (
 );
 
 
-ALTER TABLE public.plant_state OWNER TO postgres;
-
 --
--- Name: plants; Type: TABLE; Schema: public; Owner: postgres
+-- Name: plants; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.plants (
@@ -7834,10 +7399,8 @@ CREATE TABLE public.plants (
 );
 
 
-ALTER TABLE public.plants OWNER TO postgres;
-
 --
--- Name: problem_reports; Type: TABLE; Schema: public; Owner: postgres
+-- Name: problem_reports; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.problem_reports (
@@ -7852,10 +7415,8 @@ CREATE TABLE public.problem_reports (
 );
 
 
-ALTER TABLE public.problem_reports OWNER TO postgres;
-
 --
--- Name: processed_commands; Type: TABLE; Schema: public; Owner: postgres
+-- Name: processed_commands; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.processed_commands (
@@ -7867,10 +7428,8 @@ CREATE TABLE public.processed_commands (
 );
 
 
-ALTER TABLE public.processed_commands OWNER TO postgres;
-
 --
--- Name: processing_day_closed; Type: TABLE; Schema: public; Owner: postgres
+-- Name: processing_day_closed; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.processing_day_closed (
@@ -7884,10 +7443,8 @@ CREATE TABLE public.processing_day_closed (
 );
 
 
-ALTER TABLE public.processing_day_closed OWNER TO postgres;
-
 --
--- Name: profiles; Type: TABLE; Schema: public; Owner: postgres
+-- Name: profiles; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.profiles (
@@ -7901,10 +7458,8 @@ CREATE TABLE public.profiles (
 );
 
 
-ALTER TABLE public.profiles OWNER TO postgres;
-
 --
--- Name: rate_events; Type: TABLE; Schema: public; Owner: postgres
+-- Name: rate_events; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.rate_events (
@@ -7915,10 +7470,8 @@ CREATE TABLE public.rate_events (
 );
 
 
-ALTER TABLE public.rate_events OWNER TO postgres;
-
 --
--- Name: rate_events_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+-- Name: rate_events_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
 CREATE SEQUENCE public.rate_events_id_seq
@@ -7929,17 +7482,15 @@ CREATE SEQUENCE public.rate_events_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.rate_events_id_seq OWNER TO postgres;
-
 --
--- Name: rate_events_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+-- Name: rate_events_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
 
 ALTER SEQUENCE public.rate_events_id_seq OWNED BY public.rate_events.id;
 
 
 --
--- Name: reprint_log; Type: TABLE; Schema: public; Owner: postgres
+-- Name: reprint_log; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.reprint_log (
@@ -7953,10 +7504,8 @@ CREATE TABLE public.reprint_log (
 );
 
 
-ALTER TABLE public.reprint_log OWNER TO postgres;
-
 --
--- Name: revoked_device_writes; Type: TABLE; Schema: public; Owner: postgres
+-- Name: revoked_device_writes; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.revoked_device_writes (
@@ -7966,10 +7515,8 @@ CREATE TABLE public.revoked_device_writes (
 );
 
 
-ALTER TABLE public.revoked_device_writes OWNER TO postgres;
-
 --
--- Name: settings_pilot; Type: TABLE; Schema: public; Owner: postgres
+-- Name: settings_pilot; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.settings_pilot (
@@ -7982,10 +7529,8 @@ CREATE TABLE public.settings_pilot (
 ALTER TABLE ONLY public.settings_pilot REPLICA IDENTITY FULL;
 
 
-ALTER TABLE public.settings_pilot OWNER TO postgres;
-
 --
--- Name: source_farms; Type: TABLE; Schema: public; Owner: postgres
+-- Name: source_farms; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.source_farms (
@@ -7996,10 +7541,8 @@ CREATE TABLE public.source_farms (
 );
 
 
-ALTER TABLE public.source_farms OWNER TO postgres;
-
 --
--- Name: system_flags; Type: TABLE; Schema: public; Owner: postgres
+-- Name: system_flags; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.system_flags (
@@ -8008,10 +7551,8 @@ CREATE TABLE public.system_flags (
 );
 
 
-ALTER TABLE public.system_flags OWNER TO postgres;
-
 --
--- Name: worker_codes; Type: TABLE; Schema: public; Owner: postgres
+-- Name: worker_codes; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.worker_codes (
@@ -8022,10 +7563,8 @@ CREATE TABLE public.worker_codes (
 );
 
 
-ALTER TABLE public.worker_codes OWNER TO postgres;
-
 --
--- Name: worker_sessions; Type: TABLE; Schema: public; Owner: postgres
+-- Name: worker_sessions; Type: TABLE; Schema: public; Owner: -
 --
 
 CREATE TABLE public.worker_sessions (
@@ -8043,52 +7582,58 @@ CREATE TABLE public.worker_sessions (
 );
 
 
-ALTER TABLE public.worker_sessions OWNER TO postgres;
-
 --
--- Name: admin_audit id; Type: DEFAULT; Schema: public; Owner: postgres
+-- Name: admin_audit id; Type: DEFAULT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.admin_audit ALTER COLUMN id SET DEFAULT nextval('public.admin_audit_id_seq'::regclass);
 
 
 --
--- Name: animal_changes id; Type: DEFAULT; Schema: public; Owner: postgres
+-- Name: animal_changes id; Type: DEFAULT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.animal_changes ALTER COLUMN id SET DEFAULT nextval('public.animal_changes_id_seq'::regclass);
 
 
 --
--- Name: animal_holds id; Type: DEFAULT; Schema: public; Owner: postgres
+-- Name: animal_holds id; Type: DEFAULT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.animal_holds ALTER COLUMN id SET DEFAULT nextval('public.animal_holds_id_seq'::regclass);
 
 
 --
--- Name: audit_log id; Type: DEFAULT; Schema: public; Owner: postgres
+-- Name: audit_log id; Type: DEFAULT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.audit_log ALTER COLUMN id SET DEFAULT nextval('public.audit_log_id_seq'::regclass);
 
 
 --
--- Name: login_attempts id; Type: DEFAULT; Schema: public; Owner: postgres
+-- Name: login_attempts id; Type: DEFAULT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.login_attempts ALTER COLUMN id SET DEFAULT nextval('public.login_attempts_id_seq'::regclass);
 
 
 --
--- Name: rate_events id; Type: DEFAULT; Schema: public; Owner: postgres
+-- Name: rate_events id; Type: DEFAULT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.rate_events ALTER COLUMN id SET DEFAULT nextval('public.rate_events_id_seq'::regclass);
 
 
 --
--- Name: admin_audit admin_audit_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: users users_pkey; Type: CONSTRAINT; Schema: auth; Owner: -
+--
+
+ALTER TABLE ONLY auth.users
+    ADD CONSTRAINT users_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: admin_audit admin_audit_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.admin_audit
@@ -8096,7 +7641,7 @@ ALTER TABLE ONLY public.admin_audit
 
 
 --
--- Name: animal_changes animal_changes_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: animal_changes animal_changes_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.animal_changes
@@ -8104,7 +7649,7 @@ ALTER TABLE ONLY public.animal_changes
 
 
 --
--- Name: animal_holds animal_holds_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: animal_holds animal_holds_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.animal_holds
@@ -8112,7 +7657,7 @@ ALTER TABLE ONLY public.animal_holds
 
 
 --
--- Name: animals animals_batch_id_seq_number_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: animals animals_batch_id_seq_number_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.animals
@@ -8120,7 +7665,7 @@ ALTER TABLE ONLY public.animals
 
 
 --
--- Name: animals_carry animals_carry_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: animals_carry animals_carry_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.animals_carry
@@ -8128,7 +7673,7 @@ ALTER TABLE ONLY public.animals_carry
 
 
 --
--- Name: animals_pilot animals_pilot_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: animals_pilot animals_pilot_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.animals_pilot
@@ -8136,7 +7681,7 @@ ALTER TABLE ONLY public.animals_pilot
 
 
 --
--- Name: animals animals_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: animals animals_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.animals
@@ -8144,7 +7689,7 @@ ALTER TABLE ONLY public.animals
 
 
 --
--- Name: audit_log audit_log_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: audit_log audit_log_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.audit_log
@@ -8152,7 +7697,7 @@ ALTER TABLE ONLY public.audit_log
 
 
 --
--- Name: batches batches_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: batches batches_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.batches
@@ -8160,7 +7705,7 @@ ALTER TABLE ONLY public.batches
 
 
 --
--- Name: custom_statuses custom_statuses_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: custom_statuses custom_statuses_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.custom_statuses
@@ -8168,7 +7713,7 @@ ALTER TABLE ONLY public.custom_statuses
 
 
 --
--- Name: custom_statuses custom_statuses_plant_id_key_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: custom_statuses custom_statuses_plant_id_key_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.custom_statuses
@@ -8176,7 +7721,7 @@ ALTER TABLE ONLY public.custom_statuses
 
 
 --
--- Name: daily_board_archive daily_board_archive_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: daily_board_archive daily_board_archive_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.daily_board_archive
@@ -8184,7 +7729,7 @@ ALTER TABLE ONLY public.daily_board_archive
 
 
 --
--- Name: device_credentials device_credentials_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: device_credentials device_credentials_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.device_credentials
@@ -8192,7 +7737,7 @@ ALTER TABLE ONLY public.device_credentials
 
 
 --
--- Name: device_credentials device_credentials_token_hash_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: device_credentials device_credentials_token_hash_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.device_credentials
@@ -8200,7 +7745,7 @@ ALTER TABLE ONLY public.device_credentials
 
 
 --
--- Name: device_lifecycle_events device_lifecycle_events_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: device_lifecycle_events device_lifecycle_events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.device_lifecycle_events
@@ -8208,7 +7753,7 @@ ALTER TABLE ONLY public.device_lifecycle_events
 
 
 --
--- Name: device_pairing device_pairing_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: device_pairing device_pairing_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.device_pairing
@@ -8216,7 +7761,7 @@ ALTER TABLE ONLY public.device_pairing
 
 
 --
--- Name: device_stage_cursor device_stage_cursor_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: device_stage_cursor device_stage_cursor_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.device_stage_cursor
@@ -8224,7 +7769,7 @@ ALTER TABLE ONLY public.device_stage_cursor
 
 
 --
--- Name: devices_pilot devices_pilot_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: devices_pilot devices_pilot_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.devices_pilot
@@ -8232,7 +7777,7 @@ ALTER TABLE ONLY public.devices_pilot
 
 
 --
--- Name: devices_pilot devices_pilot_safe_id; Type: CHECK CONSTRAINT; Schema: public; Owner: postgres
+-- Name: devices_pilot devices_pilot_safe_id; Type: CHECK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE public.devices_pilot
@@ -8240,7 +7785,7 @@ ALTER TABLE public.devices_pilot
 
 
 --
--- Name: events_chain_head events_chain_head_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: events_chain_head events_chain_head_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.events_chain_head
@@ -8248,7 +7793,7 @@ ALTER TABLE ONLY public.events_chain_head
 
 
 --
--- Name: events_pilot events_pilot_event_hash_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: events_pilot events_pilot_event_hash_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.events_pilot
@@ -8256,7 +7801,7 @@ ALTER TABLE ONLY public.events_pilot
 
 
 --
--- Name: events_pilot events_pilot_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: events_pilot events_pilot_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.events_pilot
@@ -8264,7 +7809,7 @@ ALTER TABLE ONLY public.events_pilot
 
 
 --
--- Name: events_pilot events_pilot_server_seq_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: events_pilot events_pilot_server_seq_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.events_pilot
@@ -8272,7 +7817,7 @@ ALTER TABLE ONLY public.events_pilot
 
 
 --
--- Name: kashrut_seals kashrut_seals_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: kashrut_seals kashrut_seals_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.kashrut_seals
@@ -8280,7 +7825,7 @@ ALTER TABLE ONLY public.kashrut_seals
 
 
 --
--- Name: login_attempts login_attempts_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: login_attempts login_attempts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.login_attempts
@@ -8288,7 +7833,7 @@ ALTER TABLE ONLY public.login_attempts
 
 
 --
--- Name: lung_drawings lung_drawings_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: lung_drawings lung_drawings_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.lung_drawings
@@ -8296,7 +7841,7 @@ ALTER TABLE ONLY public.lung_drawings
 
 
 --
--- Name: manager_sessions manager_sessions_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: manager_sessions manager_sessions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.manager_sessions
@@ -8304,7 +7849,7 @@ ALTER TABLE ONLY public.manager_sessions
 
 
 --
--- Name: outer_status_pilot outer_status_pilot_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: outer_status_pilot outer_status_pilot_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.outer_status_pilot
@@ -8312,7 +7857,7 @@ ALTER TABLE ONLY public.outer_status_pilot
 
 
 --
--- Name: plant_managers plant_managers_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: plant_managers plant_managers_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.plant_managers
@@ -8320,7 +7865,7 @@ ALTER TABLE ONLY public.plant_managers
 
 
 --
--- Name: plant_state plant_state_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: plant_state plant_state_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.plant_state
@@ -8328,7 +7873,7 @@ ALTER TABLE ONLY public.plant_state
 
 
 --
--- Name: plants plants_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: plants plants_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.plants
@@ -8336,7 +7881,7 @@ ALTER TABLE ONLY public.plants
 
 
 --
--- Name: problem_reports problem_reports_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: problem_reports problem_reports_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.problem_reports
@@ -8344,7 +7889,7 @@ ALTER TABLE ONLY public.problem_reports
 
 
 --
--- Name: processed_commands processed_commands_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: processed_commands processed_commands_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.processed_commands
@@ -8352,7 +7897,7 @@ ALTER TABLE ONLY public.processed_commands
 
 
 --
--- Name: processing_day_closed processing_day_closed_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: processing_day_closed processing_day_closed_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.processing_day_closed
@@ -8360,7 +7905,7 @@ ALTER TABLE ONLY public.processing_day_closed
 
 
 --
--- Name: profiles profiles_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: profiles profiles_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.profiles
@@ -8368,7 +7913,7 @@ ALTER TABLE ONLY public.profiles
 
 
 --
--- Name: rate_events rate_events_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: rate_events rate_events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.rate_events
@@ -8376,7 +7921,7 @@ ALTER TABLE ONLY public.rate_events
 
 
 --
--- Name: reprint_log reprint_log_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: reprint_log reprint_log_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.reprint_log
@@ -8384,7 +7929,7 @@ ALTER TABLE ONLY public.reprint_log
 
 
 --
--- Name: revoked_device_writes revoked_device_writes_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: revoked_device_writes revoked_device_writes_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.revoked_device_writes
@@ -8392,7 +7937,7 @@ ALTER TABLE ONLY public.revoked_device_writes
 
 
 --
--- Name: settings_pilot settings_pilot_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: settings_pilot settings_pilot_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.settings_pilot
@@ -8400,7 +7945,7 @@ ALTER TABLE ONLY public.settings_pilot
 
 
 --
--- Name: source_farms source_farms_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: source_farms source_farms_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.source_farms
@@ -8408,7 +7953,7 @@ ALTER TABLE ONLY public.source_farms
 
 
 --
--- Name: system_flags system_flags_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: system_flags system_flags_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.system_flags
@@ -8416,7 +7961,7 @@ ALTER TABLE ONLY public.system_flags
 
 
 --
--- Name: worker_codes worker_codes_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: worker_codes worker_codes_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.worker_codes
@@ -8424,7 +7969,7 @@ ALTER TABLE ONLY public.worker_codes
 
 
 --
--- Name: worker_sessions worker_sessions_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+-- Name: worker_sessions worker_sessions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.worker_sessions
@@ -8432,364 +7977,364 @@ ALTER TABLE ONLY public.worker_sessions
 
 
 --
--- Name: admin_audit_at; Type: INDEX; Schema: public; Owner: postgres
+-- Name: admin_audit_at; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX admin_audit_at ON public.admin_audit USING btree (at DESC);
 
 
 --
--- Name: animal_changes_board_idx; Type: INDEX; Schema: public; Owner: postgres
+-- Name: animal_changes_board_idx; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX animal_changes_board_idx ON public.animal_changes USING btree (board_epoch, animal_id);
 
 
 --
--- Name: animal_holds_board_idx; Type: INDEX; Schema: public; Owner: postgres
+-- Name: animal_holds_board_idx; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX animal_holds_board_idx ON public.animal_holds USING btree (board_epoch, animal_id);
 
 
 --
--- Name: animal_holds_open_uq; Type: INDEX; Schema: public; Owner: postgres
+-- Name: animal_holds_open_uq; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX animal_holds_open_uq ON public.animal_holds USING btree (board_epoch, animal_id, station, kind, part) WHERE (resolved_at IS NULL);
 
 
 --
--- Name: animals_batch_id_idx; Type: INDEX; Schema: public; Owner: postgres
+-- Name: animals_batch_id_idx; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX animals_batch_id_idx ON public.animals USING btree (batch_id);
 
 
 --
--- Name: animals_carry_day_idx; Type: INDEX; Schema: public; Owner: postgres
+-- Name: animals_carry_day_idx; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX animals_carry_day_idx ON public.animals_carry USING btree (slaughter_day, board_id);
 
 
 --
--- Name: animals_plant_id_batch_id_seq_number_idx; Type: INDEX; Schema: public; Owner: postgres
+-- Name: animals_plant_id_batch_id_seq_number_idx; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX animals_plant_id_batch_id_seq_number_idx ON public.animals USING btree (plant_id, batch_id, seq_number);
 
 
 --
--- Name: audit_log_plant_id_created_at_idx; Type: INDEX; Schema: public; Owner: postgres
+-- Name: audit_log_plant_id_created_at_idx; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX audit_log_plant_id_created_at_idx ON public.audit_log USING btree (plant_id, created_at DESC);
 
 
 --
--- Name: batches_plant_id_status_idx; Type: INDEX; Schema: public; Owner: postgres
+-- Name: batches_plant_id_status_idx; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX batches_plant_id_status_idx ON public.batches USING btree (plant_id, status);
 
 
 --
--- Name: device_credentials_hash_live; Type: INDEX; Schema: public; Owner: postgres
+-- Name: device_credentials_hash_live; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX device_credentials_hash_live ON public.device_credentials USING btree (token_hash) WHERE (NOT revoked);
 
 
 --
--- Name: devices_pilot_auth_uid; Type: INDEX; Schema: public; Owner: postgres
+-- Name: devices_pilot_auth_uid; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX devices_pilot_auth_uid ON public.devices_pilot USING btree (auth_uid);
 
 
 --
--- Name: devices_pilot_one_per_slot; Type: INDEX; Schema: public; Owner: postgres
+-- Name: devices_pilot_one_per_slot; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX devices_pilot_one_per_slot ON public.devices_pilot USING btree (assigned_role, assigned_index) WHERE ((assigned_role IS NOT NULL) AND (device_status = 'active'::text));
 
 
 --
--- Name: events_pilot_chain_head_idx; Type: INDEX; Schema: public; Owner: postgres
+-- Name: events_pilot_chain_head_idx; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX events_pilot_chain_head_idx ON public.events_pilot USING btree (chain_pos DESC) WHERE server_chained;
 
 
 --
--- Name: events_pilot_chain_pos_key; Type: INDEX; Schema: public; Owner: postgres
+-- Name: events_pilot_chain_pos_key; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX events_pilot_chain_pos_key ON public.events_pilot USING btree (chain_pos) WHERE (chain_pos IS NOT NULL);
 
 
 --
--- Name: events_pilot_event_id_uq; Type: INDEX; Schema: public; Owner: postgres
+-- Name: events_pilot_event_id_uq; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX events_pilot_event_id_uq ON public.events_pilot USING btree (event_id);
 
 
 --
--- Name: idx_device_lifecycle_device; Type: INDEX; Schema: public; Owner: postgres
+-- Name: idx_device_lifecycle_device; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_device_lifecycle_device ON public.device_lifecycle_events USING btree (device_id, created_at DESC);
 
 
 --
--- Name: login_attempts_ip_at; Type: INDEX; Schema: public; Owner: postgres
+-- Name: login_attempts_ip_at; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX login_attempts_ip_at ON public.login_attempts USING btree (ip, at DESC);
 
 
 --
--- Name: manager_sessions_auth_uid; Type: INDEX; Schema: public; Owner: postgres
+-- Name: manager_sessions_auth_uid; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX manager_sessions_auth_uid ON public.manager_sessions USING btree (auth_uid);
 
 
 --
--- Name: pairing_requests_ip_at; Type: INDEX; Schema: public; Owner: postgres
+-- Name: pairing_requests_ip_at; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX pairing_requests_ip_at ON public.pairing_requests USING btree (ip, at DESC);
 
 
 --
--- Name: processed_commands_at; Type: INDEX; Schema: public; Owner: postgres
+-- Name: processed_commands_at; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX processed_commands_at ON public.processed_commands USING btree (at);
 
 
 --
--- Name: rate_events_at; Type: INDEX; Schema: public; Owner: postgres
+-- Name: rate_events_at; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX rate_events_at ON public.rate_events USING btree (at);
 
 
 --
--- Name: rate_events_kind_key_at; Type: INDEX; Schema: public; Owner: postgres
+-- Name: rate_events_kind_key_at; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX rate_events_kind_key_at ON public.rate_events USING btree (kind, key, at DESC);
 
 
 --
--- Name: worker_sessions_device; Type: INDEX; Schema: public; Owner: postgres
+-- Name: worker_sessions_device; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX worker_sessions_device ON public.worker_sessions USING btree (device_id) WHERE (NOT revoked);
 
 
 --
--- Name: events_pilot a0_events_maker_guard; Type: TRIGGER; Schema: public; Owner: postgres
+-- Name: events_pilot a0_events_maker_guard; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER a0_events_maker_guard BEFORE INSERT ON public.events_pilot FOR EACH ROW EXECUTE FUNCTION public._events_maker_guard();
 
 
 --
--- Name: events_pilot a1_events_actor; Type: TRIGGER; Schema: public; Owner: postgres
+-- Name: events_pilot a1_events_actor; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER a1_events_actor BEFORE INSERT ON public.events_pilot FOR EACH ROW EXECUTE FUNCTION public._events_actor();
 
 
 --
--- Name: animals_pilot a_animals_merge; Type: TRIGGER; Schema: public; Owner: postgres
+-- Name: animals_pilot a_animals_merge; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER a_animals_merge BEFORE UPDATE ON public.animals_pilot FOR EACH ROW EXECUTE FUNCTION public._animals_merge();
 
 
 --
--- Name: animals_pilot a_animals_merge_ins; Type: TRIGGER; Schema: public; Owner: postgres
+-- Name: animals_pilot a_animals_merge_ins; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER a_animals_merge_ins BEFORE INSERT ON public.animals_pilot FOR EACH ROW EXECUTE FUNCTION public._animals_merge();
 
 
 --
--- Name: animals_pilot a_animals_nc_plain; Type: TRIGGER; Schema: public; Owner: postgres
+-- Name: animals_pilot a_animals_nc_plain; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER a_animals_nc_plain BEFORE INSERT OR UPDATE ON public.animals_pilot FOR EACH ROW EXECUTE FUNCTION public._animals_nc_plain();
 
 
 --
--- Name: daily_board_archive a_archive_keep_intake; Type: TRIGGER; Schema: public; Owner: postgres
+-- Name: daily_board_archive a_archive_keep_intake; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER a_archive_keep_intake BEFORE INSERT ON public.daily_board_archive FOR EACH ROW EXECUTE FUNCTION public._archive_keep_intake();
 
 
 --
--- Name: events_pilot aa_events_chain_link; Type: TRIGGER; Schema: public; Owner: postgres
+-- Name: events_pilot aa_events_chain_link; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER aa_events_chain_link BEFORE INSERT ON public.events_pilot FOR EACH ROW EXECUTE FUNCTION public._events_chain_link();
 
 
 --
--- Name: events_pilot ab_events_append_only; Type: TRIGGER; Schema: public; Owner: postgres
+-- Name: events_pilot ab_events_append_only; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER ab_events_append_only BEFORE DELETE OR UPDATE ON public.events_pilot FOR EACH ROW EXECUTE FUNCTION public._events_append_only();
 
 
 --
--- Name: animals_pilot b_animals_hold_guard; Type: TRIGGER; Schema: public; Owner: postgres
+-- Name: animals_pilot b_animals_hold_guard; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER b_animals_hold_guard BEFORE UPDATE ON public.animals_pilot FOR EACH ROW EXECUTE FUNCTION public._animals_hold_guard();
 
 
 --
--- Name: animals_pilot b_animals_stage_guard; Type: TRIGGER; Schema: public; Owner: postgres
+-- Name: animals_pilot b_animals_stage_guard; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER b_animals_stage_guard BEFORE UPDATE ON public.animals_pilot FOR EACH ROW EXECUTE FUNCTION public._animals_stage_guard();
 
 
 --
--- Name: device_credentials credential_revoked_at; Type: TRIGGER; Schema: public; Owner: postgres
+-- Name: device_credentials credential_revoked_at; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER credential_revoked_at BEFORE UPDATE ON public.device_credentials FOR EACH ROW EXECUTE FUNCTION public._credential_revoked_at();
 
 
 --
--- Name: plant_state extend_maker_sessions; Type: TRIGGER; Schema: public; Owner: postgres
+-- Name: plant_state extend_maker_sessions; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER extend_maker_sessions AFTER INSERT OR UPDATE ON public.plant_state FOR EACH ROW EXECUTE FUNCTION public._extend_maker_sessions();
 
 
 --
--- Name: animals_pilot trg_animals_pilot_advance_cursor; Type: TRIGGER; Schema: public; Owner: postgres
+-- Name: animals_pilot trg_animals_pilot_advance_cursor; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER trg_animals_pilot_advance_cursor AFTER INSERT OR UPDATE ON public.animals_pilot FOR EACH ROW EXECUTE FUNCTION public.animals_pilot_advance_cursor();
 
 
 --
--- Name: animals_pilot trg_animals_pilot_guard_corrections; Type: TRIGGER; Schema: public; Owner: postgres
+-- Name: animals_pilot trg_animals_pilot_guard_corrections; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER trg_animals_pilot_guard_corrections BEFORE UPDATE ON public.animals_pilot FOR EACH ROW EXECUTE FUNCTION public.animals_pilot_guard_corrections();
 
 
 --
--- Name: device_credentials zz_credential_audit; Type: TRIGGER; Schema: public; Owner: postgres
+-- Name: device_credentials zz_credential_audit; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER zz_credential_audit AFTER UPDATE ON public.device_credentials FOR EACH ROW EXECUTE FUNCTION public._credential_audit();
 
 
 --
--- Name: animals_pilot zz_device_write_guard; Type: TRIGGER; Schema: public; Owner: postgres
+-- Name: animals_pilot zz_device_write_guard; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER zz_device_write_guard BEFORE INSERT OR DELETE OR UPDATE ON public.animals_pilot FOR EACH STATEMENT EXECUTE FUNCTION public._device_write_guard();
 
 
 --
--- Name: events_pilot zz_device_write_guard; Type: TRIGGER; Schema: public; Owner: postgres
+-- Name: events_pilot zz_device_write_guard; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER zz_device_write_guard BEFORE INSERT OR DELETE OR UPDATE ON public.events_pilot FOR EACH STATEMENT EXECUTE FUNCTION public._device_write_guard();
 
 
 --
--- Name: devices_pilot zz_devices_assignment_guard; Type: TRIGGER; Schema: public; Owner: postgres
+-- Name: devices_pilot zz_devices_assignment_guard; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER zz_devices_assignment_guard BEFORE INSERT OR DELETE OR UPDATE ON public.devices_pilot FOR EACH ROW EXECUTE FUNCTION public._devices_assignment_guard();
 
 
 --
--- Name: manager_sessions zz_manager_sessions_cleanup; Type: TRIGGER; Schema: public; Owner: postgres
+-- Name: manager_sessions zz_manager_sessions_cleanup; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER zz_manager_sessions_cleanup AFTER INSERT ON public.manager_sessions FOR EACH STATEMENT EXECUTE FUNCTION public._manager_sessions_cleanup();
 
 
 --
--- Name: settings_pilot zz_settings_hash_worker_codes; Type: TRIGGER; Schema: public; Owner: postgres
+-- Name: settings_pilot zz_settings_hash_worker_codes; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER zz_settings_hash_worker_codes BEFORE INSERT OR UPDATE ON public.settings_pilot FOR EACH ROW EXECUTE FUNCTION public._settings_hash_worker_codes();
 
 
 --
--- Name: plant_state zz_test_mode_audit; Type: TRIGGER; Schema: public; Owner: postgres
+-- Name: plant_state zz_test_mode_audit; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER zz_test_mode_audit AFTER INSERT OR UPDATE ON public.plant_state FOR EACH ROW WHEN ((new.key = 'testMode'::text)) EXECUTE FUNCTION public._plant_state_test_mode_trg();
 
 
 --
--- Name: settings_pilot zz_worker_lists_saved; Type: TRIGGER; Schema: public; Owner: postgres
+-- Name: settings_pilot zz_worker_lists_saved; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER zz_worker_lists_saved AFTER UPDATE ON public.settings_pilot FOR EACH ROW EXECUTE FUNCTION public._worker_lists_saved();
 
 
 --
--- Name: device_credentials zz_worker_sessions_revoke; Type: TRIGGER; Schema: public; Owner: postgres
+-- Name: device_credentials zz_worker_sessions_revoke; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER zz_worker_sessions_revoke AFTER UPDATE ON public.device_credentials FOR EACH ROW EXECUTE FUNCTION public._worker_sessions_revoke_on_credential();
 
 
 --
--- Name: devices_pilot zz_worker_sessions_revoke; Type: TRIGGER; Schema: public; Owner: postgres
+-- Name: devices_pilot zz_worker_sessions_revoke; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER zz_worker_sessions_revoke AFTER DELETE OR UPDATE ON public.devices_pilot FOR EACH ROW EXECUTE FUNCTION public._worker_sessions_revoke_on_device();
 
 
 --
--- Name: animals_pilot zzz_nc_outer_guard; Type: TRIGGER; Schema: public; Owner: postgres
+-- Name: animals_pilot zzz_nc_outer_guard; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER zzz_nc_outer_guard BEFORE INSERT OR UPDATE ON public.animals_pilot FOR EACH ROW EXECUTE FUNCTION public._animals_nc_outer_guard();
 
 
 --
--- Name: animals_pilot zzz_outer_open_guard; Type: TRIGGER; Schema: public; Owner: postgres
+-- Name: animals_pilot zzz_outer_open_guard; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER zzz_outer_open_guard BEFORE INSERT OR UPDATE ON public.animals_pilot FOR EACH ROW EXECUTE FUNCTION public._animals_outer_open_guard();
 
 
 --
--- Name: animals_pilot zzzz_nc_outer_value; Type: TRIGGER; Schema: public; Owner: postgres
+-- Name: animals_pilot zzzz_nc_outer_value; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER zzzz_nc_outer_value BEFORE INSERT OR UPDATE ON public.animals_pilot FOR EACH ROW EXECUTE FUNCTION public._animals_nc_outer_value();
 
 
 --
--- Name: animals_pilot zzzzz_close_questions; Type: TRIGGER; Schema: public; Owner: postgres
+-- Name: animals_pilot zzzzz_close_questions; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER zzzzz_close_questions AFTER INSERT OR UPDATE ON public.animals_pilot FOR EACH ROW EXECUTE FUNCTION public._animals_close_questions();
 
 
 --
--- Name: animals animals_batch_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+-- Name: animals animals_batch_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.animals
@@ -8797,7 +8342,7 @@ ALTER TABLE ONLY public.animals
 
 
 --
--- Name: animals animals_farm_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+-- Name: animals animals_farm_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.animals
@@ -8805,7 +8350,7 @@ ALTER TABLE ONLY public.animals
 
 
 --
--- Name: animals animals_inner_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+-- Name: animals animals_inner_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.animals
@@ -8813,7 +8358,7 @@ ALTER TABLE ONLY public.animals
 
 
 --
--- Name: animals animals_outer_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+-- Name: animals animals_outer_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.animals
@@ -8821,7 +8366,7 @@ ALTER TABLE ONLY public.animals
 
 
 --
--- Name: animals animals_plant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+-- Name: animals animals_plant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.animals
@@ -8829,7 +8374,7 @@ ALTER TABLE ONLY public.animals
 
 
 --
--- Name: animals animals_slaughtered_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+-- Name: animals animals_slaughtered_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.animals
@@ -8837,7 +8382,7 @@ ALTER TABLE ONLY public.animals
 
 
 --
--- Name: audit_log audit_log_animal_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+-- Name: audit_log audit_log_animal_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.audit_log
@@ -8845,7 +8390,7 @@ ALTER TABLE ONLY public.audit_log
 
 
 --
--- Name: audit_log audit_log_batch_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+-- Name: audit_log audit_log_batch_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.audit_log
@@ -8853,7 +8398,7 @@ ALTER TABLE ONLY public.audit_log
 
 
 --
--- Name: audit_log audit_log_plant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+-- Name: audit_log audit_log_plant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.audit_log
@@ -8861,7 +8406,7 @@ ALTER TABLE ONLY public.audit_log
 
 
 --
--- Name: audit_log audit_log_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+-- Name: audit_log audit_log_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.audit_log
@@ -8869,7 +8414,7 @@ ALTER TABLE ONLY public.audit_log
 
 
 --
--- Name: batches batches_closed_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+-- Name: batches batches_closed_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.batches
@@ -8877,7 +8422,7 @@ ALTER TABLE ONLY public.batches
 
 
 --
--- Name: batches batches_opened_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+-- Name: batches batches_opened_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.batches
@@ -8885,7 +8430,7 @@ ALTER TABLE ONLY public.batches
 
 
 --
--- Name: batches batches_plant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+-- Name: batches batches_plant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.batches
@@ -8893,7 +8438,7 @@ ALTER TABLE ONLY public.batches
 
 
 --
--- Name: custom_statuses custom_statuses_plant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+-- Name: custom_statuses custom_statuses_plant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.custom_statuses
@@ -8901,7 +8446,7 @@ ALTER TABLE ONLY public.custom_statuses
 
 
 --
--- Name: manager_sessions manager_sessions_manager_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+-- Name: manager_sessions manager_sessions_manager_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.manager_sessions
@@ -8909,7 +8454,7 @@ ALTER TABLE ONLY public.manager_sessions
 
 
 --
--- Name: problem_reports problem_reports_batch_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+-- Name: problem_reports problem_reports_batch_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.problem_reports
@@ -8917,7 +8462,7 @@ ALTER TABLE ONLY public.problem_reports
 
 
 --
--- Name: problem_reports problem_reports_plant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+-- Name: problem_reports problem_reports_plant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.problem_reports
@@ -8925,7 +8470,7 @@ ALTER TABLE ONLY public.problem_reports
 
 
 --
--- Name: problem_reports problem_reports_reported_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+-- Name: problem_reports problem_reports_reported_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.problem_reports
@@ -8933,7 +8478,7 @@ ALTER TABLE ONLY public.problem_reports
 
 
 --
--- Name: profiles profiles_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+-- Name: profiles profiles_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.profiles
@@ -8941,7 +8486,7 @@ ALTER TABLE ONLY public.profiles
 
 
 --
--- Name: profiles profiles_plant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+-- Name: profiles profiles_plant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.profiles
@@ -8949,7 +8494,7 @@ ALTER TABLE ONLY public.profiles
 
 
 --
--- Name: reprint_log reprint_log_batch_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+-- Name: reprint_log reprint_log_batch_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.reprint_log
@@ -8957,7 +8502,7 @@ ALTER TABLE ONLY public.reprint_log
 
 
 --
--- Name: reprint_log reprint_log_plant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+-- Name: reprint_log reprint_log_plant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.reprint_log
@@ -8965,7 +8510,7 @@ ALTER TABLE ONLY public.reprint_log
 
 
 --
--- Name: reprint_log reprint_log_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+-- Name: reprint_log reprint_log_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.reprint_log
@@ -8973,7 +8518,7 @@ ALTER TABLE ONLY public.reprint_log
 
 
 --
--- Name: source_farms source_farms_plant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+-- Name: source_farms source_farms_plant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.source_farms
@@ -8981,410 +8526,496 @@ ALTER TABLE ONLY public.source_farms
 
 
 --
--- Name: admin_audit; Type: ROW SECURITY; Schema: public; Owner: postgres
+-- Name: admin_audit; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
 ALTER TABLE public.admin_audit ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: animal_changes; Type: ROW SECURITY; Schema: public; Owner: postgres
+-- Name: animal_changes; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
 ALTER TABLE public.animal_changes ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: animal_holds; Type: ROW SECURITY; Schema: public; Owner: postgres
+-- Name: animal_holds; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
 ALTER TABLE public.animal_holds ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: animals; Type: ROW SECURITY; Schema: public; Owner: postgres
+-- Name: animals; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
 ALTER TABLE public.animals ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: animals_carry; Type: ROW SECURITY; Schema: public; Owner: postgres
+-- Name: animals_carry; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
 ALTER TABLE public.animals_carry ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: animals_pilot; Type: ROW SECURITY; Schema: public; Owner: postgres
+-- Name: animals_pilot; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
 ALTER TABLE public.animals_pilot ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: animals animals_select; Type: POLICY; Schema: public; Owner: postgres
+-- Name: animals animals_select; Type: POLICY; Schema: public; Owner: -
 --
 
 CREATE POLICY animals_select ON public.animals FOR SELECT USING ((plant_id = public._my_plant()));
 
 
 --
--- Name: animals animals_write; Type: POLICY; Schema: public; Owner: postgres
+-- Name: animals animals_write; Type: POLICY; Schema: public; Owner: -
 --
 
 CREATE POLICY animals_write ON public.animals USING ((plant_id = public._my_plant())) WITH CHECK ((plant_id = public._my_plant()));
 
 
 --
--- Name: audit_log audit_insert; Type: POLICY; Schema: public; Owner: postgres
+-- Name: audit_log audit_insert; Type: POLICY; Schema: public; Owner: -
 --
 
 CREATE POLICY audit_insert ON public.audit_log FOR INSERT WITH CHECK ((plant_id = public._my_plant()));
 
 
 --
--- Name: audit_log; Type: ROW SECURITY; Schema: public; Owner: postgres
+-- Name: audit_log; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
 ALTER TABLE public.audit_log ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: audit_log audit_select; Type: POLICY; Schema: public; Owner: postgres
+-- Name: audit_log audit_select; Type: POLICY; Schema: public; Owner: -
 --
 
 CREATE POLICY audit_select ON public.audit_log FOR SELECT USING ((plant_id = public._my_plant()));
 
 
 --
--- Name: batches; Type: ROW SECURITY; Schema: public; Owner: postgres
+-- Name: batches; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
 ALTER TABLE public.batches ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: batches batches_insert; Type: POLICY; Schema: public; Owner: postgres
+-- Name: batches batches_insert; Type: POLICY; Schema: public; Owner: -
 --
 
 CREATE POLICY batches_insert ON public.batches FOR INSERT WITH CHECK ((plant_id = public._my_plant()));
 
 
 --
--- Name: batches batches_select; Type: POLICY; Schema: public; Owner: postgres
+-- Name: batches batches_select; Type: POLICY; Schema: public; Owner: -
 --
 
 CREATE POLICY batches_select ON public.batches FOR SELECT USING ((plant_id = public._my_plant()));
 
 
 --
--- Name: batches batches_update; Type: POLICY; Schema: public; Owner: postgres
+-- Name: batches batches_update; Type: POLICY; Schema: public; Owner: -
 --
 
 CREATE POLICY batches_update ON public.batches FOR UPDATE USING (((plant_id = public._my_plant()) AND ((public._my_role() = 'manager'::text) OR (status = 'open'::text))));
 
 
 --
--- Name: custom_statuses; Type: ROW SECURITY; Schema: public; Owner: postgres
+-- Name: custom_statuses; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
 ALTER TABLE public.custom_statuses ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: daily_board_archive; Type: ROW SECURITY; Schema: public; Owner: postgres
+-- Name: daily_board_archive; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
 ALTER TABLE public.daily_board_archive ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: device_credentials; Type: ROW SECURITY; Schema: public; Owner: postgres
+-- Name: device_credentials; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
 ALTER TABLE public.device_credentials ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: device_lifecycle_events; Type: ROW SECURITY; Schema: public; Owner: postgres
+-- Name: device_lifecycle_events; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
 ALTER TABLE public.device_lifecycle_events ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: device_pairing; Type: ROW SECURITY; Schema: public; Owner: postgres
+-- Name: device_pairing; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
 ALTER TABLE public.device_pairing ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: device_stage_cursor; Type: ROW SECURITY; Schema: public; Owner: postgres
+-- Name: device_stage_cursor; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
 ALTER TABLE public.device_stage_cursor ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: devices_pilot; Type: ROW SECURITY; Schema: public; Owner: postgres
+-- Name: devices_pilot; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
 ALTER TABLE public.devices_pilot ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: events_chain_head; Type: ROW SECURITY; Schema: public; Owner: postgres
+-- Name: events_chain_head; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
 ALTER TABLE public.events_chain_head ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: events_pilot; Type: ROW SECURITY; Schema: public; Owner: postgres
+-- Name: events_pilot; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
 ALTER TABLE public.events_pilot ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: source_farms farms_select; Type: POLICY; Schema: public; Owner: postgres
+-- Name: source_farms farms_select; Type: POLICY; Schema: public; Owner: -
 --
 
 CREATE POLICY farms_select ON public.source_farms FOR SELECT USING ((plant_id = public._my_plant()));
 
 
 --
--- Name: source_farms farms_write; Type: POLICY; Schema: public; Owner: postgres
+-- Name: source_farms farms_write; Type: POLICY; Schema: public; Owner: -
 --
 
 CREATE POLICY farms_write ON public.source_farms USING (((plant_id = public._my_plant()) AND (public._my_role() = 'manager'::text))) WITH CHECK (((plant_id = public._my_plant()) AND (public._my_role() = 'manager'::text)));
 
 
 --
--- Name: kashrut_seals; Type: ROW SECURITY; Schema: public; Owner: postgres
+-- Name: kashrut_seals; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
 ALTER TABLE public.kashrut_seals ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: login_attempts; Type: ROW SECURITY; Schema: public; Owner: postgres
+-- Name: login_attempts; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
 ALTER TABLE public.login_attempts ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: lung_drawings; Type: ROW SECURITY; Schema: public; Owner: postgres
+-- Name: lung_drawings; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
 ALTER TABLE public.lung_drawings ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: manager_sessions; Type: ROW SECURITY; Schema: public; Owner: postgres
+-- Name: manager_sessions; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
 ALTER TABLE public.manager_sessions ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: outer_status_pilot; Type: ROW SECURITY; Schema: public; Owner: postgres
+-- Name: outer_status_pilot; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
 ALTER TABLE public.outer_status_pilot ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: pairing_requests; Type: ROW SECURITY; Schema: public; Owner: postgres
+-- Name: pairing_requests; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
 ALTER TABLE public.pairing_requests ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: plant_managers; Type: ROW SECURITY; Schema: public; Owner: postgres
+-- Name: plant_managers; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
 ALTER TABLE public.plant_managers ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: plant_state; Type: ROW SECURITY; Schema: public; Owner: postgres
+-- Name: plant_state; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
 ALTER TABLE public.plant_state ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: plants; Type: ROW SECURITY; Schema: public; Owner: postgres
+-- Name: plants; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
 ALTER TABLE public.plants ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: plants plants probe: no rows; Type: POLICY; Schema: public; Owner: postgres
+-- Name: plants plants probe: no rows; Type: POLICY; Schema: public; Owner: -
 --
 
 CREATE POLICY "plants probe: no rows" ON public.plants FOR SELECT TO anon, authenticated USING (false);
 
 
 --
--- Name: problem_reports; Type: ROW SECURITY; Schema: public; Owner: postgres
+-- Name: problem_reports; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
 ALTER TABLE public.problem_reports ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: problem_reports problems_select; Type: POLICY; Schema: public; Owner: postgres
+-- Name: problem_reports problems_select; Type: POLICY; Schema: public; Owner: -
 --
 
 CREATE POLICY problems_select ON public.problem_reports FOR SELECT USING ((plant_id = public._my_plant()));
 
 
 --
--- Name: problem_reports problems_write; Type: POLICY; Schema: public; Owner: postgres
+-- Name: problem_reports problems_write; Type: POLICY; Schema: public; Owner: -
 --
 
 CREATE POLICY problems_write ON public.problem_reports USING ((plant_id = public._my_plant())) WITH CHECK ((plant_id = public._my_plant()));
 
 
 --
--- Name: processed_commands; Type: ROW SECURITY; Schema: public; Owner: postgres
+-- Name: processed_commands; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
 ALTER TABLE public.processed_commands ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: processing_day_closed; Type: ROW SECURITY; Schema: public; Owner: postgres
+-- Name: processing_day_closed; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
 ALTER TABLE public.processing_day_closed ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: profiles; Type: ROW SECURITY; Schema: public; Owner: postgres
+-- Name: profiles; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: profiles profiles_manager_write; Type: POLICY; Schema: public; Owner: postgres
+-- Name: profiles profiles_manager_write; Type: POLICY; Schema: public; Owner: -
 --
 
 CREATE POLICY profiles_manager_write ON public.profiles FOR INSERT WITH CHECK (((public._my_role() = 'manager'::text) AND (plant_id = public._my_plant())));
 
 
 --
--- Name: profiles profiles_select; Type: POLICY; Schema: public; Owner: postgres
+-- Name: profiles profiles_select; Type: POLICY; Schema: public; Owner: -
 --
 
 CREATE POLICY profiles_select ON public.profiles FOR SELECT USING ((plant_id = public._my_plant()));
 
 
 --
--- Name: profiles profiles_update_self; Type: POLICY; Schema: public; Owner: postgres
+-- Name: profiles profiles_update_self; Type: POLICY; Schema: public; Owner: -
 --
 
 CREATE POLICY profiles_update_self ON public.profiles FOR UPDATE USING ((id = auth.uid()));
 
 
 --
--- Name: rate_events; Type: ROW SECURITY; Schema: public; Owner: postgres
+-- Name: rate_events; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
 ALTER TABLE public.rate_events ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: animals_pilot read animals_pilot; Type: POLICY; Schema: public; Owner: postgres
+-- Name: animals_pilot read animals_pilot; Type: POLICY; Schema: public; Owner: -
 --
 
 CREATE POLICY "read animals_pilot" ON public.animals_pilot FOR SELECT TO anon, authenticated USING (( SELECT public._reader_ok() AS _reader_ok));
 
 
 --
--- Name: daily_board_archive read daily_board_archive; Type: POLICY; Schema: public; Owner: postgres
+-- Name: daily_board_archive read daily_board_archive; Type: POLICY; Schema: public; Owner: -
 --
 
 CREATE POLICY "read daily_board_archive" ON public.daily_board_archive FOR SELECT TO anon, authenticated USING (( SELECT public._reader_ok() AS _reader_ok));
 
 
 --
--- Name: device_lifecycle_events read device_lifecycle_events; Type: POLICY; Schema: public; Owner: postgres
+-- Name: device_lifecycle_events read device_lifecycle_events; Type: POLICY; Schema: public; Owner: -
 --
 
 CREATE POLICY "read device_lifecycle_events" ON public.device_lifecycle_events FOR SELECT TO anon, authenticated USING (( SELECT gt_rls.events_reader_ok() AS events_reader_ok));
 
 
 --
--- Name: devices_pilot read devices_pilot; Type: POLICY; Schema: public; Owner: postgres
+-- Name: devices_pilot read devices_pilot; Type: POLICY; Schema: public; Owner: -
 --
 
 CREATE POLICY "read devices_pilot" ON public.devices_pilot FOR SELECT TO anon, authenticated USING ((( SELECT gt_rls.devices_read_all() AS devices_read_all) OR (id = ANY (( SELECT gt_rls.devices_read_own_ids() AS devices_read_own_ids)::text[]))));
 
 
 --
--- Name: events_pilot read events_pilot; Type: POLICY; Schema: public; Owner: postgres
+-- Name: events_pilot read events_pilot; Type: POLICY; Schema: public; Owner: -
 --
 
 CREATE POLICY "read events_pilot" ON public.events_pilot FOR SELECT TO anon, authenticated USING (( SELECT gt_rls.events_reader_ok() AS events_reader_ok));
 
 
 --
--- Name: settings_pilot read settings_pilot; Type: POLICY; Schema: public; Owner: postgres
+-- Name: settings_pilot read settings_pilot; Type: POLICY; Schema: public; Owner: -
 --
 
 CREATE POLICY "read settings_pilot" ON public.settings_pilot FOR SELECT TO anon, authenticated USING (( SELECT public._reader_ok() AS _reader_ok));
 
 
 --
--- Name: reprint_log reprint_insert; Type: POLICY; Schema: public; Owner: postgres
+-- Name: reprint_log reprint_insert; Type: POLICY; Schema: public; Owner: -
 --
 
 CREATE POLICY reprint_insert ON public.reprint_log FOR INSERT WITH CHECK ((plant_id = public._my_plant()));
 
 
 --
--- Name: reprint_log; Type: ROW SECURITY; Schema: public; Owner: postgres
+-- Name: reprint_log; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
 ALTER TABLE public.reprint_log ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: reprint_log reprint_select; Type: POLICY; Schema: public; Owner: postgres
+-- Name: reprint_log reprint_select; Type: POLICY; Schema: public; Owner: -
 --
 
 CREATE POLICY reprint_select ON public.reprint_log FOR SELECT USING ((plant_id = public._my_plant()));
 
 
 --
--- Name: revoked_device_writes; Type: ROW SECURITY; Schema: public; Owner: postgres
+-- Name: revoked_device_writes; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
 ALTER TABLE public.revoked_device_writes ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: settings_pilot; Type: ROW SECURITY; Schema: public; Owner: postgres
+-- Name: settings_pilot; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
 ALTER TABLE public.settings_pilot ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: source_farms; Type: ROW SECURITY; Schema: public; Owner: postgres
+-- Name: source_farms; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
 ALTER TABLE public.source_farms ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: custom_statuses statuses_select; Type: POLICY; Schema: public; Owner: postgres
+-- Name: custom_statuses statuses_select; Type: POLICY; Schema: public; Owner: -
 --
 
 CREATE POLICY statuses_select ON public.custom_statuses FOR SELECT USING ((plant_id = public._my_plant()));
 
 
 --
--- Name: custom_statuses statuses_write; Type: POLICY; Schema: public; Owner: postgres
+-- Name: custom_statuses statuses_write; Type: POLICY; Schema: public; Owner: -
 --
 
 CREATE POLICY statuses_write ON public.custom_statuses USING (((plant_id = public._my_plant()) AND (public._my_role() = 'manager'::text))) WITH CHECK (((plant_id = public._my_plant()) AND (public._my_role() = 'manager'::text)));
 
 
 --
--- Name: system_flags; Type: ROW SECURITY; Schema: public; Owner: postgres
+-- Name: system_flags; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
 ALTER TABLE public.system_flags ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: worker_codes; Type: ROW SECURITY; Schema: public; Owner: postgres
+-- Name: worker_codes; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
 ALTER TABLE public.worker_codes ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: worker_sessions; Type: ROW SECURITY; Schema: public; Owner: postgres
+-- Name: worker_sessions; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
 ALTER TABLE public.worker_sessions ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: SCHEMA gt_rls; Type: ACL; Schema: -; Owner: postgres
+-- Name: supabase_realtime; Type: PUBLICATION; Schema: -; Owner: -
+--
+
+CREATE PUBLICATION supabase_realtime WITH (publish = 'insert, update, delete, truncate');
+
+
+--
+-- Name: supabase_realtime animals; Type: PUBLICATION TABLE; Schema: public; Owner: -
+--
+
+ALTER PUBLICATION supabase_realtime ADD TABLE ONLY public.animals;
+
+
+--
+-- Name: supabase_realtime animals_pilot; Type: PUBLICATION TABLE; Schema: public; Owner: -
+--
+
+ALTER PUBLICATION supabase_realtime ADD TABLE ONLY public.animals_pilot;
+
+
+--
+-- Name: supabase_realtime audit_log; Type: PUBLICATION TABLE; Schema: public; Owner: -
+--
+
+ALTER PUBLICATION supabase_realtime ADD TABLE ONLY public.audit_log;
+
+
+--
+-- Name: supabase_realtime batches; Type: PUBLICATION TABLE; Schema: public; Owner: -
+--
+
+ALTER PUBLICATION supabase_realtime ADD TABLE ONLY public.batches;
+
+
+--
+-- Name: supabase_realtime device_lifecycle_events; Type: PUBLICATION TABLE; Schema: public; Owner: -
+--
+
+ALTER PUBLICATION supabase_realtime ADD TABLE ONLY public.device_lifecycle_events;
+
+
+--
+-- Name: supabase_realtime devices_pilot; Type: PUBLICATION TABLE; Schema: public; Owner: -
+--
+
+ALTER PUBLICATION supabase_realtime ADD TABLE ONLY public.devices_pilot;
+
+
+--
+-- Name: supabase_realtime events_pilot; Type: PUBLICATION TABLE; Schema: public; Owner: -
+--
+
+ALTER PUBLICATION supabase_realtime ADD TABLE ONLY public.events_pilot;
+
+
+--
+-- Name: supabase_realtime outer_status_pilot; Type: PUBLICATION TABLE; Schema: public; Owner: -
+--
+
+ALTER PUBLICATION supabase_realtime ADD TABLE ONLY public.outer_status_pilot;
+
+
+--
+-- Name: supabase_realtime settings_pilot; Type: PUBLICATION TABLE; Schema: public; Owner: -
+--
+
+ALTER PUBLICATION supabase_realtime ADD TABLE ONLY public.settings_pilot;
+
+
+--
+-- Name: SCHEMA auth; Type: ACL; Schema: -; Owner: -
+--
+
+GRANT USAGE ON SCHEMA auth TO anon;
+GRANT USAGE ON SCHEMA auth TO authenticated;
+
+
+--
+-- Name: SCHEMA extensions; Type: ACL; Schema: -; Owner: -
+--
+
+GRANT USAGE ON SCHEMA extensions TO anon;
+GRANT USAGE ON SCHEMA extensions TO authenticated;
+
+
+--
+-- Name: SCHEMA gt_rls; Type: ACL; Schema: -; Owner: -
 --
 
 GRANT USAGE ON SCHEMA gt_rls TO anon;
@@ -9393,7 +9024,7 @@ GRANT USAGE ON SCHEMA gt_rls TO service_role;
 
 
 --
--- Name: FUNCTION devices_read_all(); Type: ACL; Schema: gt_rls; Owner: postgres
+-- Name: FUNCTION devices_read_all(); Type: ACL; Schema: gt_rls; Owner: -
 --
 
 REVOKE ALL ON FUNCTION gt_rls.devices_read_all() FROM PUBLIC;
@@ -9403,7 +9034,7 @@ GRANT ALL ON FUNCTION gt_rls.devices_read_all() TO service_role;
 
 
 --
--- Name: FUNCTION devices_read_own_ids(); Type: ACL; Schema: gt_rls; Owner: postgres
+-- Name: FUNCTION devices_read_own_ids(); Type: ACL; Schema: gt_rls; Owner: -
 --
 
 REVOKE ALL ON FUNCTION gt_rls.devices_read_own_ids() FROM PUBLIC;
@@ -9413,7 +9044,7 @@ GRANT ALL ON FUNCTION gt_rls.devices_read_own_ids() TO service_role;
 
 
 --
--- Name: FUNCTION events_reader_ok(); Type: ACL; Schema: gt_rls; Owner: postgres
+-- Name: FUNCTION events_reader_ok(); Type: ACL; Schema: gt_rls; Owner: -
 --
 
 REVOKE ALL ON FUNCTION gt_rls.events_reader_ok() FROM PUBLIC;
@@ -9423,154 +9054,154 @@ GRANT ALL ON FUNCTION gt_rls.events_reader_ok() TO service_role;
 
 
 --
--- Name: FUNCTION _acting_device(); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _acting_device(); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._acting_device() FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _admin_audit(p_token text, p_action text, p_target text, p_detail jsonb); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _admin_audit(p_token text, p_action text, p_target text, p_detail jsonb); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._admin_audit(p_token text, p_action text, p_target text, p_detail jsonb) FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _animals_close_questions(); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _animals_close_questions(); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._animals_close_questions() FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _animals_hold_guard(); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _animals_hold_guard(); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._animals_hold_guard() FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _animals_merge(); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _animals_merge(); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._animals_merge() FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _animals_nc_outer_guard(); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _animals_nc_outer_guard(); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._animals_nc_outer_guard() FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _animals_nc_outer_value(); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _animals_nc_outer_value(); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._animals_nc_outer_value() FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _animals_nc_plain(); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _animals_nc_plain(); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._animals_nc_plain() FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _animals_outer_open_guard(); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _animals_outer_open_guard(); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._animals_outer_open_guard() FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _animals_stage_guard(); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _animals_stage_guard(); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._animals_stage_guard() FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _archive_keep_intake(); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _archive_keep_intake(); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._archive_keep_intake() FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _audit_device_event(p_device text, p_action text, p_role text, p_idx integer, p_reason text, p_other text, p_replacement_id uuid, p_actor text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _audit_device_event(p_device text, p_action text, p_role text, p_idx integer, p_reason text, p_other text, p_replacement_id uuid, p_actor text); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._audit_device_event(p_device text, p_action text, p_role text, p_idx integer, p_reason text, p_other text, p_replacement_id uuid, p_actor text) FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _auth_uid_safe(); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _auth_uid_safe(); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._auth_uid_safe() FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _board_business_date(); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _board_business_date(); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._board_business_date() FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _board_epoch(); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _board_epoch(); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._board_epoch() FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _board_proc_unfinished_ids(); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _board_proc_unfinished_ids(); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._board_proc_unfinished_ids() FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _board_unfinished(); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _board_unfinished(); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._board_unfinished() FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _board_write_lock(); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _board_write_lock(); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._board_write_lock() FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _call_device(p_client text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _call_device(p_client text); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._call_device(p_client text) FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _caller_device_role(); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _caller_device_role(); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._caller_device_role() FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _caller_legs_slot(); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _caller_legs_slot(); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._caller_legs_slot() FROM PUBLIC;
 
 
 --
--- Name: TABLE animals_pilot; Type: ACL; Schema: public; Owner: postgres
+-- Name: TABLE animals_pilot; Type: ACL; Schema: public; Owner: -
 --
 
 GRANT SELECT ON TABLE public.animals_pilot TO anon;
@@ -9579,63 +9210,63 @@ GRANT ALL ON TABLE public.animals_pilot TO service_role;
 
 
 --
--- Name: FUNCTION _carry_row(c public.animals_carry); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _carry_row(c public.animals_carry); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._carry_row(c public.animals_carry) FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _cmd_get(p_cmd uuid, p_dev text, p_fn text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _cmd_get(p_cmd uuid, p_dev text, p_fn text); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._cmd_get(p_cmd uuid, p_dev text, p_fn text) FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _cmd_put(p_cmd uuid, p_dev text, p_fn text, p_result jsonb); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _cmd_put(p_cmd uuid, p_dev text, p_fn text, p_result jsonb); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._cmd_put(p_cmd uuid, p_dev text, p_fn text, p_result jsonb) FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _code_in_use(p_code text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _code_in_use(p_code text); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._code_in_use(p_code text) FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _correction_braked(p_dev text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _correction_braked(p_dev text); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._correction_braked(p_dev text) FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _correction_check(p_stage text, a public.animals_pilot, p_dev text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _correction_check(p_stage text, a public.animals_pilot, p_dev text); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._correction_check(p_stage text, a public.animals_pilot, p_dev text) FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _credential_audit(); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _credential_audit(); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._credential_audit() FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _credential_revoked_at(); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _credential_revoked_at(); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._credential_revoked_at() FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _current_device_id(); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _current_device_id(); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._current_device_id() FROM PUBLIC;
@@ -9643,21 +9274,21 @@ GRANT ALL ON FUNCTION public._current_device_id() TO service_role;
 
 
 --
--- Name: FUNCTION _current_worker(); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _current_worker(); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._current_worker() FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _derive_actor(p_stage text, p_client text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _derive_actor(p_stage text, p_client text); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._derive_actor(p_stage text, p_client text) FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _device_auth_required(); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _device_auth_required(); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._device_auth_required() FROM PUBLIC;
@@ -9665,7 +9296,7 @@ GRANT ALL ON FUNCTION public._device_auth_required() TO service_role;
 
 
 --
--- Name: FUNCTION _device_write_allowed(); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _device_write_allowed(); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._device_write_allowed() FROM PUBLIC;
@@ -9673,7 +9304,7 @@ GRANT ALL ON FUNCTION public._device_write_allowed() TO service_role;
 
 
 --
--- Name: FUNCTION _device_write_guard(); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _device_write_guard(); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._device_write_guard() FROM PUBLIC;
@@ -9681,7 +9312,7 @@ GRANT ALL ON FUNCTION public._device_write_guard() TO service_role;
 
 
 --
--- Name: FUNCTION _devices_assignment_guard(); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _devices_assignment_guard(); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._devices_assignment_guard() FROM PUBLIC;
@@ -9689,168 +9320,168 @@ GRANT ALL ON FUNCTION public._devices_assignment_guard() TO service_role;
 
 
 --
--- Name: FUNCTION _do_board_reset(p_reason text, p_business_date date); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _do_board_reset(p_reason text, p_business_date date); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._do_board_reset(p_reason text, p_business_date date) FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _eso_required(p_id integer); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _eso_required(p_id integer); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._eso_required(p_id integer) FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _event_canonical(p_event_id uuid, p_animal_no integer, p_stage text, p_action text, p_payload jsonb, p_actor text, p_device_id text, p_occurred_at text, p_prev_hash text, p_chain_pos bigint); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _event_canonical(p_event_id uuid, p_animal_no integer, p_stage text, p_action text, p_payload jsonb, p_actor text, p_device_id text, p_occurred_at text, p_prev_hash text, p_chain_pos bigint); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._event_canonical(p_event_id uuid, p_animal_no integer, p_stage text, p_action text, p_payload jsonb, p_actor text, p_device_id text, p_occurred_at text, p_prev_hash text, p_chain_pos bigint) FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _event_chain_recent(p_limit integer); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _event_chain_recent(p_limit integer); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._event_chain_recent(p_limit integer) FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _events_actor(); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _events_actor(); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._events_actor() FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _events_append_only(); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _events_append_only(); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._events_append_only() FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _events_chain_link(); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _events_chain_link(); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._events_chain_link() FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _events_maker_guard(); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _events_maker_guard(); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._events_maker_guard() FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _extend_maker_sessions(); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _extend_maker_sessions(); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._extend_maker_sessions() FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _gt_done_after(p_stage text, a public.animals_pilot); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _gt_done_after(p_stage text, a public.animals_pilot); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._gt_done_after(p_stage text, a public.animals_pilot) FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _gt_event(p_animal_no integer, p_stage text, p_action text, p_payload jsonb, p_actor text, p_device text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _gt_event(p_animal_no integer, p_stage text, p_action text, p_payload jsonb, p_actor text, p_device text); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._gt_event(p_animal_no integer, p_stage text, p_action text, p_payload jsonb, p_actor text, p_device text) FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _gt_flag(s jsonb, p_key text, p_default boolean); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _gt_flag(s jsonb, p_key text, p_default boolean); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._gt_flag(s jsonb, p_key text, p_default boolean) FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _gt_legs_first(); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _gt_legs_first(); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._gt_legs_first() FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _gt_note_change(p_stage text, o public.animals_pilot, p_old text, p_new text, p_dev text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _gt_note_change(p_stage text, o public.animals_pilot, p_old text, p_new text, p_dev text); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._gt_note_change(p_stage text, o public.animals_pilot, p_old text, p_new text, p_dev text) FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _gt_one_inspection(); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _gt_one_inspection(); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._gt_one_inspection() FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _gt_screen_used(p_screen text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _gt_screen_used(p_screen text); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._gt_screen_used(p_screen text) FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _gt_settings(); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _gt_settings(); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._gt_settings() FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _gt_standbys(); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _gt_standbys(); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._gt_standbys() FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _gt_value_ok(p_kind text, v text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _gt_value_ok(p_kind text, v text); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._gt_value_ok(p_kind text, v text) FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _hold_block(p_epoch bigint, p_id integer, p_station text, p_part text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _hold_block(p_epoch bigint, p_id integer, p_station text, p_part text); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._hold_block(p_epoch bigint, p_id integer, p_station text, p_part text) FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _hold_caller_error(p_station text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _hold_caller_error(p_station text); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._hold_caller_error(p_station text) FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _hold_station_of_role(p_role text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _hold_station_of_role(p_role text); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._hold_station_of_role(p_role text) FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _holds_open(p_epoch bigint); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _holds_open(p_epoch bigint); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._holds_open(p_epoch bigint) FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _is_api_request(); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _is_api_request(); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._is_api_request() FROM PUBLIC;
@@ -9858,105 +9489,105 @@ GRANT ALL ON FUNCTION public._is_api_request() TO service_role;
 
 
 --
--- Name: FUNCTION _is_app_caller(); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _is_app_caller(); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._is_app_caller() FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _is_leader_device(p_dev text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _is_leader_device(p_dev text); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._is_leader_device(p_dev text) FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _is_nc(a public.animals_pilot); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _is_nc(a public.animals_pilot); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._is_nc(a public.animals_pilot) FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _is_real_manager(p_token text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _is_real_manager(p_token text); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._is_real_manager(p_token text) FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _jint_ok(v jsonb, lo numeric, hi numeric); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _jint_ok(v jsonb, lo numeric, hi numeric); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._jint_ok(v jsonb, lo numeric, hi numeric) FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _jnum_ok(v jsonb, lo numeric, hi numeric); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _jnum_ok(v jsonb, lo numeric, hi numeric); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._jnum_ok(v jsonb, lo numeric, hi numeric) FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _jstr_ok(v jsonb, maxlen integer); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _jstr_ok(v jsonb, maxlen integer); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._jstr_ok(v jsonb, maxlen integer) FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _kosher_ready(a public.animals_pilot); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _kosher_ready(a public.animals_pilot); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._kosher_ready(a public.animals_pilot) FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _kosher_statuses(); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _kosher_statuses(); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._kosher_statuses() FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _leader_devices_exist(); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _leader_devices_exist(); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._leader_devices_exist() FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _leader_recovery_norm(p text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _leader_recovery_norm(p text); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._leader_recovery_norm(p text) FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _legs_required(p_id integer); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _legs_required(p_id integer); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._legs_required(p_id integer) FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _legs_slot_error(p_legs boolean, p_head boolean, p_sorted boolean); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _legs_slot_error(p_legs boolean, p_head boolean, p_sorted boolean); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._legs_slot_error(p_legs boolean, p_head boolean, p_sorted boolean) FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _log_correction_rejected(p_dev text, p_id integer, p_stage text, p_reason text, p_detail jsonb); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _log_correction_rejected(p_dev text, p_id integer, p_stage text, p_reason text, p_detail jsonb); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._log_correction_rejected(p_dev text, p_id integer, p_stage text, p_reason text, p_detail jsonb) FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _log_device_event(p_device text, p_action text, p_role text, p_idx integer, p_reason text, p_other text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _log_device_event(p_device text, p_action text, p_role text, p_idx integer, p_reason text, p_other text); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._log_device_event(p_device text, p_action text, p_role text, p_idx integer, p_reason text, p_other text) FROM PUBLIC;
@@ -9964,14 +9595,14 @@ GRANT ALL ON FUNCTION public._log_device_event(p_device text, p_action text, p_r
 
 
 --
--- Name: FUNCTION _maker_session_end(); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _maker_session_end(); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._maker_session_end() FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _manager_session_valid(p_token text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _manager_session_valid(p_token text); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._manager_session_valid(p_token text) FROM PUBLIC;
@@ -9979,35 +9610,35 @@ GRANT ALL ON FUNCTION public._manager_session_valid(p_token text) TO service_rol
 
 
 --
--- Name: FUNCTION _manager_sessions_cleanup(); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _manager_sessions_cleanup(); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._manager_sessions_cleanup() FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _manufacturer_session_valid(p_token text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _manufacturer_session_valid(p_token text); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._manufacturer_session_valid(p_token text) FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _merge_list(a jsonb, b jsonb); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _merge_list(a jsonb, b jsonb); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._merge_list(a jsonb, b jsonb) FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _mgr_session_bound(p_dev text, p_uid uuid); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _mgr_session_bound(p_dev text, p_uid uuid); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._mgr_session_bound(p_dev text, p_uid uuid) FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _my_plant(); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _my_plant(); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._my_plant() FROM PUBLIC;
@@ -10015,7 +9646,7 @@ GRANT ALL ON FUNCTION public._my_plant() TO service_role;
 
 
 --
--- Name: FUNCTION _my_role(); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _my_role(); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._my_role() FROM PUBLIC;
@@ -10023,161 +9654,168 @@ GRANT ALL ON FUNCTION public._my_role() TO service_role;
 
 
 --
--- Name: FUNCTION _nc_fixed(a public.animals_pilot); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _nc_fixed(a public.animals_pilot); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._nc_fixed(a public.animals_pilot) FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _nc_outer_allowed(); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _nc_outer_allowed(); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._nc_outer_allowed() FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _nc_outer_value_ok(a public.animals_pilot, v text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _nc_outer_value_ok(a public.animals_pilot, v text); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._nc_outer_value_ok(a public.animals_pilot, v text) FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _no_device_error(); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _nc_statuses(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public._nc_statuses() FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION _no_device_error(); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._no_device_error() FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _note_revoked_write(p_dev text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _note_revoked_write(p_dev text); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._note_revoked_write(p_dev text) FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _parts_print_block(p_epoch bigint, p_id integer, o_tongue boolean, n_tongue boolean, o_cheek boolean, n_cheek boolean, o_count integer, n_count integer); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _parts_print_block(p_epoch bigint, p_id integer, o_tongue boolean, n_tongue boolean, o_cheek boolean, n_cheek boolean, o_count integer, n_count integer); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._parts_print_block(p_epoch bigint, p_id integer, o_tongue boolean, n_tongue boolean, o_cheek boolean, n_cheek boolean, o_count integer, n_count integer) FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _plant_report(); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _plant_report(); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._plant_report() FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _plant_state_test_mode_trg(); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _plant_state_test_mode_trg(); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._plant_state_test_mode_trg() FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _printed_as_key(a public.animals_pilot); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _printed_as_key(a public.animals_pilot); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._printed_as_key(a public.animals_pilot) FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _proc_board_json(p_board bigint); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _proc_board_json(p_board bigint); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._proc_board_json(p_board bigint) FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _proc_board_lock(p_board bigint); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _proc_board_lock(p_board bigint); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._proc_board_lock(p_board bigint) FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _proc_board_pending(p_station text, p_board bigint); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _proc_board_pending(p_station text, p_board bigint); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._proc_board_pending(p_station text, p_board bigint) FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _proc_caller_station(p_station text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _proc_caller_station(p_station text); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._proc_caller_station(p_station text) FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _proc_finalize(p_board bigint); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _proc_finalize(p_board bigint); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._proc_finalize(p_board bigint) FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _proc_open_board(p_station text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _proc_open_board(p_station text); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._proc_open_board(p_station text) FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _proc_pending(p_station text, a public.animals_pilot, p_today boolean); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _proc_pending(p_station text, a public.animals_pilot, p_today boolean); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._proc_pending(p_station text, a public.animals_pilot, p_today boolean) FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _proc_station_of_group(p_group text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _proc_station_of_group(p_group text); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._proc_station_of_group(p_group text) FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _proc_stations(); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _proc_stations(); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._proc_stations() FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _push_is_correction(p_rows jsonb); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _push_is_correction(p_rows jsonb); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._push_is_correction(p_rows jsonb) FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _raise_correction(p_err text, p_stage text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _raise_correction(p_err text, p_stage text); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._raise_correction(p_err text, p_stage text) FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _rate_count(p_kind text, p_key text, p_window interval); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _rate_count(p_kind text, p_key text, p_window interval); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._rate_count(p_kind text, p_key text, p_window interval) FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _rate_hit(p_kind text, p_key text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _rate_hit(p_kind text, p_key text); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._rate_hit(p_kind text, p_key text) FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _reader_ok(); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _reader_ok(); Type: ACL; Schema: public; Owner: -
 --
 
 GRANT ALL ON FUNCTION public._reader_ok() TO anon;
@@ -10185,14 +9823,14 @@ GRANT ALL ON FUNCTION public._reader_ok() TO authenticated;
 
 
 --
--- Name: FUNCTION _reason_ok(p text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _reason_ok(p text); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._reason_ok(p text) FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _request_has_manager(); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _request_has_manager(); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._request_has_manager() FROM PUBLIC;
@@ -10200,14 +9838,14 @@ GRANT ALL ON FUNCTION public._request_has_manager() TO service_role;
 
 
 --
--- Name: FUNCTION _request_has_manufacturer(); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _request_has_manufacturer(); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._request_has_manufacturer() FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _request_headers(); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _request_headers(); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._request_headers() FROM PUBLIC;
@@ -10215,14 +9853,14 @@ GRANT ALL ON FUNCTION public._request_headers() TO service_role;
 
 
 --
--- Name: FUNCTION _request_ip(); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _request_ip(); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._request_ip() FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _request_is_service_role(); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _request_is_service_role(); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._request_is_service_role() FROM PUBLIC;
@@ -10230,238 +9868,238 @@ GRANT ALL ON FUNCTION public._request_is_service_role() TO service_role;
 
 
 --
--- Name: FUNCTION _request_privileged(); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _request_privileged(); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._request_privileged() FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _seal_key_ok(k text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _seal_key_ok(k text); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._seal_key_ok(k text) FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _security_event(p_animal_no integer, p_action text, p_payload jsonb, p_actor text, p_device text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _security_event(p_animal_no integer, p_action text, p_payload jsonb, p_actor text, p_device text); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._security_event(p_animal_no integer, p_action text, p_payload jsonb, p_actor text, p_device text) FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _session_name(p_token text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _session_name(p_token text); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._session_name(p_token text) FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _session_role(p_token text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _session_role(p_token text); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._session_role(p_token text) FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _session_view_only(p_token text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _session_view_only(p_token text); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._session_view_only(p_token text) FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _set_setup_code(p_code text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _set_setup_code(p_code text); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._set_setup_code(p_code text) FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _settings_hash_worker_codes(); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _settings_hash_worker_codes(); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._settings_hash_worker_codes() FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _settings_value_error(p_key text, v jsonb); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _settings_value_error(p_key text, v jsonb); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._settings_value_error(p_key text, v jsonb) FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _setup_code_norm(p text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _setup_code_norm(p text); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._setup_code_norm(p text) FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _slaughter_q_open(a public.animals_pilot); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _slaughter_q_open(a public.animals_pilot); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._slaughter_q_open(a public.animals_pilot) FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _stage_allowed(p_stage text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _stage_allowed(p_stage text); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._stage_allowed(p_stage text) FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _stage_order_error(p_stage text, a public.animals_pilot, p_today boolean); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _stage_order_error(p_stage text, a public.animals_pilot, p_today boolean); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._stage_order_error(p_stage text, a public.animals_pilot, p_today boolean) FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _stage_worker_role(p_stage text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _stage_worker_role(p_stage text); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._stage_worker_role(p_stage text) FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _status_change_error(p_old jsonb, p_new jsonb); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _status_change_error(p_old jsonb, p_new jsonb); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._status_change_error(p_old jsonb, p_new jsonb) FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _statuses_in_use(); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _statuses_in_use(); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._statuses_in_use() FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _support_access_open(); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _support_access_open(); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._support_access_open() FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _system_health_data(); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _system_health_data(); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._system_health_data() FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _test_mode_active(); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _test_mode_active(); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._test_mode_active() FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _test_mode_autooff(); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _test_mode_autooff(); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._test_mode_autooff() FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _test_mode_flag(); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _test_mode_flag(); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._test_mode_flag() FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _test_mode_max(); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _test_mode_max(); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._test_mode_max() FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _test_mode_on(); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _test_mode_on(); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._test_mode_on() FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _test_mode_on_at(); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _test_mode_on_at(); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._test_mode_on_at() FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _ts_or_null(p text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _ts_or_null(p text); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._ts_or_null(p text) FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _usda_zone(a public.animals_pilot); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _usda_zone(a public.animals_pilot); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._usda_zone(a public.animals_pilot) FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _worker_code_hash(p_code text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _worker_code_hash(p_code text); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._worker_code_hash(p_code text) FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _worker_code_ok(p_hash text, p_code text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _worker_code_ok(p_hash text, p_code text); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._worker_code_ok(p_hash text, p_code text) FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _worker_gate(p_device_role text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _worker_gate(p_device_role text); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._worker_gate(p_device_role text) FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _worker_lists_saved(); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _worker_lists_saved(); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._worker_lists_saved() FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _worker_role_norm(p text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _worker_role_norm(p text); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._worker_role_norm(p text) FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _worker_sessions_revoke_on_credential(); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _worker_sessions_revoke_on_credential(); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._worker_sessions_revoke_on_credential() FROM PUBLIC;
 
 
 --
--- Name: FUNCTION _worker_sessions_revoke_on_device(); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION _worker_sessions_revoke_on_device(); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public._worker_sessions_revoke_on_device() FROM PUBLIC;
 
 
 --
--- Name: FUNCTION animal_card(p_token text, p_date date, p_n integer); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION animal_card(p_token text, p_date date, p_n integer); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public.animal_card(p_token text, p_date date, p_n integer) FROM PUBLIC;
@@ -10470,7 +10108,7 @@ GRANT ALL ON FUNCTION public.animal_card(p_token text, p_date date, p_n integer)
 
 
 --
--- Name: FUNCTION animal_push(p_rows jsonb, p_command_id uuid); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION animal_push(p_rows jsonb, p_command_id uuid); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public.animal_push(p_rows jsonb, p_command_id uuid) FROM PUBLIC;
@@ -10479,7 +10117,7 @@ GRANT ALL ON FUNCTION public.animal_push(p_rows jsonb, p_command_id uuid) TO aut
 
 
 --
--- Name: FUNCTION animals_pilot_advance_cursor(); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION animals_pilot_advance_cursor(); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public.animals_pilot_advance_cursor() FROM PUBLIC;
@@ -10487,7 +10125,7 @@ GRANT ALL ON FUNCTION public.animals_pilot_advance_cursor() TO service_role;
 
 
 --
--- Name: FUNCTION animals_pilot_guard_corrections(); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION animals_pilot_guard_corrections(); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public.animals_pilot_guard_corrections() FROM PUBLIC;
@@ -10495,7 +10133,7 @@ GRANT ALL ON FUNCTION public.animals_pilot_guard_corrections() TO service_role;
 
 
 --
--- Name: FUNCTION archive_days(p_token text, p_from date, p_to date); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION archive_days(p_token text, p_from date, p_to date); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public.archive_days(p_token text, p_from date, p_to date) FROM PUBLIC;
@@ -10504,7 +10142,7 @@ GRANT ALL ON FUNCTION public.archive_days(p_token text, p_from date, p_to date) 
 
 
 --
--- Name: FUNCTION board_flags(p_token text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION board_flags(p_token text); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public.board_flags(p_token text) FROM PUBLIC;
@@ -10513,7 +10151,7 @@ GRANT ALL ON FUNCTION public.board_flags(p_token text) TO authenticated;
 
 
 --
--- Name: FUNCTION carry_claim(p_board bigint, p_id integer, p_stage text, p_command_id uuid); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION carry_claim(p_board bigint, p_id integer, p_stage text, p_command_id uuid); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public.carry_claim(p_board bigint, p_id integer, p_stage text, p_command_id uuid) FROM PUBLIC;
@@ -10522,7 +10160,7 @@ GRANT ALL ON FUNCTION public.carry_claim(p_board bigint, p_id integer, p_stage t
 
 
 --
--- Name: FUNCTION carry_push(p_board bigint, p_rows jsonb, p_command_id uuid); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION carry_push(p_board bigint, p_rows jsonb, p_command_id uuid); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public.carry_push(p_board bigint, p_rows jsonb, p_command_id uuid) FROM PUBLIC;
@@ -10531,7 +10169,7 @@ GRANT ALL ON FUNCTION public.carry_push(p_board bigint, p_rows jsonb, p_command_
 
 
 --
--- Name: FUNCTION change_ack(p_token text, p_id bigint); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION change_ack(p_token text, p_id bigint); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public.change_ack(p_token text, p_id bigint) FROM PUBLIC;
@@ -10540,7 +10178,7 @@ GRANT ALL ON FUNCTION public.change_ack(p_token text, p_id bigint) TO authentica
 
 
 --
--- Name: FUNCTION claim_animal_stage(p_id integer, p_stage text, p_value text, p_actor text, p_device_id text, p_epoch bigint); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION claim_animal_stage(p_id integer, p_stage text, p_value text, p_actor text, p_device_id text, p_epoch bigint); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public.claim_animal_stage(p_id integer, p_stage text, p_value text, p_actor text, p_device_id text, p_epoch bigint) FROM PUBLIC;
@@ -10549,7 +10187,7 @@ GRANT ALL ON FUNCTION public.claim_animal_stage(p_id integer, p_stage text, p_va
 
 
 --
--- Name: FUNCTION claim_animal_stage(p_id integer, p_stage text, p_value text, p_actor text, p_device_id text, p_epoch bigint, p_command_id uuid); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION claim_animal_stage(p_id integer, p_stage text, p_value text, p_actor text, p_device_id text, p_epoch bigint, p_command_id uuid); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public.claim_animal_stage(p_id integer, p_stage text, p_value text, p_actor text, p_device_id text, p_epoch bigint, p_command_id uuid) FROM PUBLIC;
@@ -10558,7 +10196,7 @@ GRANT ALL ON FUNCTION public.claim_animal_stage(p_id integer, p_stage text, p_va
 
 
 --
--- Name: FUNCTION create_first_manager(p_name text, p_code text, p_setup_code text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION create_first_manager(p_name text, p_code text, p_setup_code text); Type: ACL; Schema: public; Owner: -
 --
 
 GRANT ALL ON FUNCTION public.create_first_manager(p_name text, p_code text, p_setup_code text) TO anon;
@@ -10566,7 +10204,7 @@ GRANT ALL ON FUNCTION public.create_first_manager(p_name text, p_code text, p_se
 
 
 --
--- Name: FUNCTION device_auth_set(p_token text, p_on boolean); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION device_auth_set(p_token text, p_on boolean); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public.device_auth_set(p_token text, p_on boolean) FROM PUBLIC;
@@ -10576,7 +10214,7 @@ GRANT ALL ON FUNCTION public.device_auth_set(p_token text, p_on boolean) TO auth
 
 
 --
--- Name: FUNCTION device_heartbeat(p_device_id text, p_device_name text, p_info jsonb); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION device_heartbeat(p_device_id text, p_device_name text, p_info jsonb); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public.device_heartbeat(p_device_id text, p_device_name text, p_info jsonb) FROM PUBLIC;
@@ -10585,7 +10223,7 @@ GRANT ALL ON FUNCTION public.device_heartbeat(p_device_id text, p_device_name te
 
 
 --
--- Name: FUNCTION device_manage(p_token text, p_device_id text, p_action text, p_reason text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION device_manage(p_token text, p_device_id text, p_action text, p_reason text); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public.device_manage(p_token text, p_device_id text, p_action text, p_reason text) FROM PUBLIC;
@@ -10595,7 +10233,7 @@ GRANT ALL ON FUNCTION public.device_manage(p_token text, p_device_id text, p_act
 
 
 --
--- Name: FUNCTION device_pair(p_token text, p_code text, p_role text, p_index integer, p_replace boolean, p_device_name text, p_reason text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION device_pair(p_token text, p_code text, p_role text, p_index integer, p_replace boolean, p_device_name text, p_reason text); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public.device_pair(p_token text, p_code text, p_role text, p_index integer, p_replace boolean, p_device_name text, p_reason text) FROM PUBLIC;
@@ -10605,7 +10243,7 @@ GRANT ALL ON FUNCTION public.device_pair(p_token text, p_code text, p_role text,
 
 
 --
--- Name: FUNCTION device_paired_list(p_token text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION device_paired_list(p_token text); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public.device_paired_list(p_token text) FROM PUBLIC;
@@ -10615,7 +10253,7 @@ GRANT ALL ON FUNCTION public.device_paired_list(p_token text) TO service_role;
 
 
 --
--- Name: FUNCTION device_pairing_status(p_device_id text, p_code text, p_secret text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION device_pairing_status(p_device_id text, p_code text, p_secret text); Type: ACL; Schema: public; Owner: -
 --
 
 GRANT ALL ON FUNCTION public.device_pairing_status(p_device_id text, p_code text, p_secret text) TO authenticated;
@@ -10624,7 +10262,7 @@ GRANT ALL ON FUNCTION public.device_pairing_status(p_device_id text, p_code text
 
 
 --
--- Name: FUNCTION device_request_pairing(p_device_id text, p_secret text, p_device_name text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION device_request_pairing(p_device_id text, p_secret text, p_device_name text); Type: ACL; Schema: public; Owner: -
 --
 
 GRANT ALL ON FUNCTION public.device_request_pairing(p_device_id text, p_secret text, p_device_name text) TO authenticated;
@@ -10633,7 +10271,7 @@ GRANT ALL ON FUNCTION public.device_request_pairing(p_device_id text, p_secret t
 
 
 --
--- Name: FUNCTION device_unpair(p_token text, p_device_id text, p_reason text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION device_unpair(p_token text, p_device_id text, p_reason text); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public.device_unpair(p_token text, p_device_id text, p_reason text) FROM PUBLIC;
@@ -10643,7 +10281,7 @@ GRANT ALL ON FUNCTION public.device_unpair(p_token text, p_device_id text, p_rea
 
 
 --
--- Name: FUNCTION device_whoami(); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION device_whoami(); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public.device_whoami() FROM PUBLIC;
@@ -10653,7 +10291,7 @@ GRANT ALL ON FUNCTION public.device_whoami() TO service_role;
 
 
 --
--- Name: FUNCTION eso_change(p_id integer, p_result text, p_device_id text, p_epoch bigint); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION eso_change(p_id integer, p_result text, p_device_id text, p_epoch bigint); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public.eso_change(p_id integer, p_result text, p_device_id text, p_epoch bigint) FROM PUBLIC;
@@ -10662,7 +10300,7 @@ GRANT ALL ON FUNCTION public.eso_change(p_id integer, p_result text, p_device_id
 
 
 --
--- Name: FUNCTION eso_change(p_id integer, p_result text, p_device_id text, p_epoch bigint, p_command_id uuid); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION eso_change(p_id integer, p_result text, p_device_id text, p_epoch bigint, p_command_id uuid); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public.eso_change(p_id integer, p_result text, p_device_id text, p_epoch bigint, p_command_id uuid) FROM PUBLIC;
@@ -10671,7 +10309,7 @@ GRANT ALL ON FUNCTION public.eso_change(p_id integer, p_result text, p_device_id
 
 
 --
--- Name: FUNCTION event_append(p_event jsonb); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION event_append(p_event jsonb); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public.event_append(p_event jsonb) FROM PUBLIC;
@@ -10680,7 +10318,7 @@ GRANT ALL ON FUNCTION public.event_append(p_event jsonb) TO authenticated;
 
 
 --
--- Name: FUNCTION hold_resolve(p_hold bigint, p_resolution text, p_command_id uuid); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION hold_resolve(p_hold bigint, p_resolution text, p_command_id uuid); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public.hold_resolve(p_hold bigint, p_resolution text, p_command_id uuid) FROM PUBLIC;
@@ -10689,7 +10327,7 @@ GRANT ALL ON FUNCTION public.hold_resolve(p_hold bigint, p_resolution text, p_co
 
 
 --
--- Name: FUNCTION hold_set(p_id integer, p_station text, p_kind text, p_part text, p_board bigint, p_command_id uuid); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION hold_set(p_id integer, p_station text, p_kind text, p_part text, p_board bigint, p_command_id uuid); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public.hold_set(p_id integer, p_station text, p_kind text, p_part text, p_board bigint, p_command_id uuid) FROM PUBLIC;
@@ -10698,28 +10336,28 @@ GRANT ALL ON FUNCTION public.hold_set(p_id integer, p_station text, p_kind text,
 
 
 --
--- Name: FUNCTION leader_account_add(p_name text, p_code text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION leader_account_add(p_name text, p_code text); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public.leader_account_add(p_name text, p_code text) FROM PUBLIC;
 
 
 --
--- Name: FUNCTION leader_account_remove(p_name text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION leader_account_remove(p_name text); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public.leader_account_remove(p_name text) FROM PUBLIC;
 
 
 --
--- Name: FUNCTION leader_device_recovery(p_reason text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION leader_device_recovery(p_reason text); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public.leader_device_recovery(p_reason text) FROM PUBLIC;
 
 
 --
--- Name: FUNCTION leader_device_replace(p_code text, p_recovery text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION leader_device_replace(p_code text, p_recovery text); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public.leader_device_replace(p_code text, p_recovery text) FROM PUBLIC;
@@ -10728,7 +10366,7 @@ GRANT ALL ON FUNCTION public.leader_device_replace(p_code text, p_recovery text)
 
 
 --
--- Name: FUNCTION leader_recovery_code_new(p_token text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION leader_recovery_code_new(p_token text); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public.leader_recovery_code_new(p_token text) FROM PUBLIC;
@@ -10737,7 +10375,7 @@ GRANT ALL ON FUNCTION public.leader_recovery_code_new(p_token text) TO authentic
 
 
 --
--- Name: FUNCTION leader_recovery_status(p_token text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION leader_recovery_status(p_token text); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public.leader_recovery_status(p_token text) FROM PUBLIC;
@@ -10746,7 +10384,7 @@ GRANT ALL ON FUNCTION public.leader_recovery_status(p_token text) TO authenticat
 
 
 --
--- Name: FUNCTION lung_drawing_get(p_id integer); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION lung_drawing_get(p_id integer); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public.lung_drawing_get(p_id integer) FROM PUBLIC;
@@ -10755,7 +10393,7 @@ GRANT ALL ON FUNCTION public.lung_drawing_get(p_id integer) TO authenticated;
 
 
 --
--- Name: FUNCTION lung_drawing_set(p_id integer, p_epoch bigint, p_drawing text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION lung_drawing_set(p_id integer, p_epoch bigint, p_drawing text); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public.lung_drawing_set(p_id integer, p_epoch bigint, p_drawing text) FROM PUBLIC;
@@ -10764,7 +10402,7 @@ GRANT ALL ON FUNCTION public.lung_drawing_set(p_id integer, p_epoch bigint, p_dr
 
 
 --
--- Name: FUNCTION manager_add(p_token text, p_name text, p_code text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION manager_add(p_token text, p_name text, p_code text); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public.manager_add(p_token text, p_name text, p_code text) FROM PUBLIC;
@@ -10774,7 +10412,7 @@ GRANT ALL ON FUNCTION public.manager_add(p_token text, p_name text, p_code text)
 
 
 --
--- Name: FUNCTION manager_add_owner(p_token text, p_name text, p_code text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION manager_add_owner(p_token text, p_name text, p_code text); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public.manager_add_owner(p_token text, p_name text, p_code text) FROM PUBLIC;
@@ -10783,7 +10421,7 @@ GRANT ALL ON FUNCTION public.manager_add_owner(p_token text, p_name text, p_code
 
 
 --
--- Name: FUNCTION manager_deactivate(p_token text, p_manager_id uuid); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION manager_deactivate(p_token text, p_manager_id uuid); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public.manager_deactivate(p_token text, p_manager_id uuid) FROM PUBLIC;
@@ -10793,7 +10431,7 @@ GRANT ALL ON FUNCTION public.manager_deactivate(p_token text, p_manager_id uuid)
 
 
 --
--- Name: FUNCTION manager_list(p_token text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION manager_list(p_token text); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public.manager_list(p_token text) FROM PUBLIC;
@@ -10802,7 +10440,7 @@ GRANT ALL ON FUNCTION public.manager_list(p_token text) TO authenticated;
 
 
 --
--- Name: FUNCTION manager_login(p_code text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION manager_login(p_code text); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public.manager_login(p_code text) FROM PUBLIC;
@@ -10812,7 +10450,7 @@ GRANT ALL ON FUNCTION public.manager_login(p_code text) TO service_role;
 
 
 --
--- Name: FUNCTION manager_logout(p_token text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION manager_logout(p_token text); Type: ACL; Schema: public; Owner: -
 --
 
 GRANT ALL ON FUNCTION public.manager_logout(p_token text) TO anon;
@@ -10820,7 +10458,7 @@ GRANT ALL ON FUNCTION public.manager_logout(p_token text) TO authenticated;
 
 
 --
--- Name: FUNCTION manager_session_check(p_token text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION manager_session_check(p_token text); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public.manager_session_check(p_token text) FROM PUBLIC;
@@ -10829,7 +10467,7 @@ GRANT ALL ON FUNCTION public.manager_session_check(p_token text) TO authenticate
 
 
 --
--- Name: FUNCTION manufacturer_set_billing(p_token text, p_enabled boolean, p_price numeric, p_currency text, p_reason text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION manufacturer_set_billing(p_token text, p_enabled boolean, p_price numeric, p_currency text, p_reason text); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public.manufacturer_set_billing(p_token text, p_enabled boolean, p_price numeric, p_currency text, p_reason text) FROM PUBLIC;
@@ -10838,14 +10476,14 @@ GRANT ALL ON FUNCTION public.manufacturer_set_billing(p_token text, p_enabled bo
 
 
 --
--- Name: FUNCTION manufacturer_set_code(p_name text, p_code text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION manufacturer_set_code(p_name text, p_code text); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public.manufacturer_set_code(p_name text, p_code text) FROM PUBLIC;
 
 
 --
--- Name: FUNCTION outer_open(p_id integer, p_epoch bigint, p_open boolean, p_device_id text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION outer_open(p_id integer, p_epoch bigint, p_open boolean, p_device_id text); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public.outer_open(p_id integer, p_epoch bigint, p_open boolean, p_device_id text) FROM PUBLIC;
@@ -10854,7 +10492,7 @@ GRANT ALL ON FUNCTION public.outer_open(p_id integer, p_epoch bigint, p_open boo
 
 
 --
--- Name: FUNCTION outer_open(p_id integer, p_epoch bigint, p_open boolean, p_device_id text, p_command_id uuid); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION outer_open(p_id integer, p_epoch bigint, p_open boolean, p_device_id text, p_command_id uuid); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public.outer_open(p_id integer, p_epoch bigint, p_open boolean, p_device_id text, p_command_id uuid) FROM PUBLIC;
@@ -10863,7 +10501,7 @@ GRANT ALL ON FUNCTION public.outer_open(p_id integer, p_epoch bigint, p_open boo
 
 
 --
--- Name: FUNCTION plant_server_status(p_token text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION plant_server_status(p_token text); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public.plant_server_status(p_token text) FROM PUBLIC;
@@ -10872,7 +10510,7 @@ GRANT ALL ON FUNCTION public.plant_server_status(p_token text) TO authenticated;
 
 
 --
--- Name: FUNCTION plant_setup_needed(); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION plant_setup_needed(); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public.plant_setup_needed() FROM PUBLIC;
@@ -10881,7 +10519,7 @@ GRANT ALL ON FUNCTION public.plant_setup_needed() TO authenticated;
 
 
 --
--- Name: FUNCTION plant_status_snapshot(); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION plant_status_snapshot(); Type: ACL; Schema: public; Owner: -
 --
 
 GRANT ALL ON FUNCTION public.plant_status_snapshot() TO anon;
@@ -10889,7 +10527,7 @@ GRANT ALL ON FUNCTION public.plant_status_snapshot() TO authenticated;
 
 
 --
--- Name: FUNCTION processing_board(p_station text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION processing_board(p_station text); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public.processing_board(p_station text) FROM PUBLIC;
@@ -10898,7 +10536,7 @@ GRANT ALL ON FUNCTION public.processing_board(p_station text) TO authenticated;
 
 
 --
--- Name: FUNCTION processing_day_close(p_token text, p_board bigint, p_station text, p_reason text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION processing_day_close(p_token text, p_board bigint, p_station text, p_reason text); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public.processing_day_close(p_token text, p_board bigint, p_station text, p_reason text) FROM PUBLIC;
@@ -10907,7 +10545,7 @@ GRANT ALL ON FUNCTION public.processing_day_close(p_token text, p_board bigint, 
 
 
 --
--- Name: FUNCTION processing_status(p_token text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION processing_status(p_token text); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public.processing_status(p_token text) FROM PUBLIC;
@@ -10916,7 +10554,7 @@ GRANT ALL ON FUNCTION public.processing_status(p_token text) TO authenticated;
 
 
 --
--- Name: FUNCTION push_settings(p_settings jsonb, p_device_id text, p_token text, p_reason text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION push_settings(p_settings jsonb, p_device_id text, p_token text, p_reason text); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public.push_settings(p_settings jsonb, p_device_id text, p_token text, p_reason text) FROM PUBLIC;
@@ -10926,7 +10564,7 @@ GRANT ALL ON FUNCTION public.push_settings(p_settings jsonb, p_device_id text, p
 
 
 --
--- Name: FUNCTION request_daily_rollover(); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION request_daily_rollover(); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public.request_daily_rollover() FROM PUBLIC;
@@ -10935,7 +10573,7 @@ GRANT ALL ON FUNCTION public.request_daily_rollover() TO authenticated;
 
 
 --
--- Name: FUNCTION reset_daily_board(p_token text, p_reason text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION reset_daily_board(p_token text, p_reason text); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public.reset_daily_board(p_token text, p_reason text) FROM PUBLIC;
@@ -10944,7 +10582,7 @@ GRANT ALL ON FUNCTION public.reset_daily_board(p_token text, p_reason text) TO a
 
 
 --
--- Name: FUNCTION seal_set(p_token text, p_key text, p_image text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION seal_set(p_token text, p_key text, p_image text); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public.seal_set(p_token text, p_key text, p_image text) FROM PUBLIC;
@@ -10953,7 +10591,7 @@ GRANT ALL ON FUNCTION public.seal_set(p_token text, p_key text, p_image text) TO
 
 
 --
--- Name: FUNCTION seals_get(p_token text, p_version bigint); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION seals_get(p_token text, p_version bigint); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public.seals_get(p_token text, p_version bigint) FROM PUBLIC;
@@ -10962,7 +10600,7 @@ GRANT ALL ON FUNCTION public.seals_get(p_token text, p_version bigint) TO authen
 
 
 --
--- Name: FUNCTION security_summary(p_token text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION security_summary(p_token text); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public.security_summary(p_token text) FROM PUBLIC;
@@ -10971,7 +10609,7 @@ GRANT ALL ON FUNCTION public.security_summary(p_token text) TO authenticated;
 
 
 --
--- Name: FUNCTION server_now_ms(); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION server_now_ms(); Type: ACL; Schema: public; Owner: -
 --
 
 GRANT ALL ON FUNCTION public.server_now_ms() TO anon;
@@ -10979,7 +10617,7 @@ GRANT ALL ON FUNCTION public.server_now_ms() TO authenticated;
 
 
 --
--- Name: FUNCTION server_schema_step(); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION server_schema_step(); Type: ACL; Schema: public; Owner: -
 --
 
 GRANT ALL ON FUNCTION public.server_schema_step() TO anon;
@@ -10987,7 +10625,7 @@ GRANT ALL ON FUNCTION public.server_schema_step() TO authenticated;
 
 
 --
--- Name: FUNCTION server_test_mode(); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION server_test_mode(); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public.server_test_mode() FROM PUBLIC;
@@ -10996,7 +10634,7 @@ GRANT ALL ON FUNCTION public.server_test_mode() TO authenticated;
 
 
 --
--- Name: FUNCTION server_test_mode_info(); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION server_test_mode_info(); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public.server_test_mode_info() FROM PUBLIC;
@@ -11005,7 +10643,7 @@ GRANT ALL ON FUNCTION public.server_test_mode_info() TO authenticated;
 
 
 --
--- Name: FUNCTION set_not_chalak_outer(p_id integer, p_epoch bigint, p_command_id uuid); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION set_not_chalak_outer(p_id integer, p_epoch bigint, p_command_id uuid); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public.set_not_chalak_outer(p_id integer, p_epoch bigint, p_command_id uuid) FROM PUBLIC;
@@ -11014,7 +10652,7 @@ GRANT ALL ON FUNCTION public.set_not_chalak_outer(p_id integer, p_epoch bigint, 
 
 
 --
--- Name: FUNCTION support_access_set(p_token text, p_hours integer, p_reason text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION support_access_set(p_token text, p_hours integer, p_reason text); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public.support_access_set(p_token text, p_hours integer, p_reason text) FROM PUBLIC;
@@ -11023,7 +10661,7 @@ GRANT ALL ON FUNCTION public.support_access_set(p_token text, p_hours integer, p
 
 
 --
--- Name: FUNCTION support_diagnostics(p_token text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION support_diagnostics(p_token text); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public.support_diagnostics(p_token text) FROM PUBLIC;
@@ -11032,7 +10670,7 @@ GRANT ALL ON FUNCTION public.support_diagnostics(p_token text) TO authenticated;
 
 
 --
--- Name: FUNCTION support_force_reload(p_token text, p_reason text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION support_force_reload(p_token text, p_reason text); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public.support_force_reload(p_token text, p_reason text) FROM PUBLIC;
@@ -11041,7 +10679,7 @@ GRANT ALL ON FUNCTION public.support_force_reload(p_token text, p_reason text) T
 
 
 --
--- Name: FUNCTION system_health(p_token text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION system_health(p_token text); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public.system_health(p_token text) FROM PUBLIC;
@@ -11050,7 +10688,7 @@ GRANT ALL ON FUNCTION public.system_health(p_token text) TO authenticated;
 
 
 --
--- Name: FUNCTION verify_event_chain(); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION verify_event_chain(); Type: ACL; Schema: public; Owner: -
 --
 
 GRANT ALL ON FUNCTION public.verify_event_chain() TO anon;
@@ -11058,7 +10696,7 @@ GRANT ALL ON FUNCTION public.verify_event_chain() TO authenticated;
 
 
 --
--- Name: FUNCTION worker_code_set(p_token text, p_role text, p_name text, p_code text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION worker_code_set(p_token text, p_role text, p_name text, p_code text); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public.worker_code_set(p_token text, p_role text, p_name text, p_code text) FROM PUBLIC;
@@ -11067,7 +10705,7 @@ GRANT ALL ON FUNCTION public.worker_code_set(p_token text, p_role text, p_name t
 
 
 --
--- Name: FUNCTION worker_login(p_role text, p_code text, p_name text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION worker_login(p_role text, p_code text, p_name text); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public.worker_login(p_role text, p_code text, p_name text) FROM PUBLIC;
@@ -11076,7 +10714,7 @@ GRANT ALL ON FUNCTION public.worker_login(p_role text, p_code text, p_name text)
 
 
 --
--- Name: FUNCTION worker_logout(p_token text); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION worker_logout(p_token text); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public.worker_logout(p_token text) FROM PUBLIC;
@@ -11085,7 +10723,7 @@ GRANT ALL ON FUNCTION public.worker_logout(p_token text) TO authenticated;
 
 
 --
--- Name: FUNCTION worker_session_check(); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION worker_session_check(); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public.worker_session_check() FROM PUBLIC;
@@ -11094,42 +10732,42 @@ GRANT ALL ON FUNCTION public.worker_session_check() TO authenticated;
 
 
 --
--- Name: TABLE animals; Type: ACL; Schema: public; Owner: postgres
+-- Name: TABLE animals; Type: ACL; Schema: public; Owner: -
 --
 
 GRANT ALL ON TABLE public.animals TO service_role;
 
 
 --
--- Name: TABLE audit_log; Type: ACL; Schema: public; Owner: postgres
+-- Name: TABLE audit_log; Type: ACL; Schema: public; Owner: -
 --
 
 GRANT ALL ON TABLE public.audit_log TO service_role;
 
 
 --
--- Name: SEQUENCE audit_log_id_seq; Type: ACL; Schema: public; Owner: postgres
+-- Name: SEQUENCE audit_log_id_seq; Type: ACL; Schema: public; Owner: -
 --
 
 GRANT ALL ON SEQUENCE public.audit_log_id_seq TO service_role;
 
 
 --
--- Name: TABLE batches; Type: ACL; Schema: public; Owner: postgres
+-- Name: TABLE batches; Type: ACL; Schema: public; Owner: -
 --
 
 GRANT ALL ON TABLE public.batches TO service_role;
 
 
 --
--- Name: TABLE custom_statuses; Type: ACL; Schema: public; Owner: postgres
+-- Name: TABLE custom_statuses; Type: ACL; Schema: public; Owner: -
 --
 
 GRANT ALL ON TABLE public.custom_statuses TO service_role;
 
 
 --
--- Name: TABLE daily_board_archive; Type: ACL; Schema: public; Owner: postgres
+-- Name: TABLE daily_board_archive; Type: ACL; Schema: public; Owner: -
 --
 
 GRANT SELECT ON TABLE public.daily_board_archive TO anon;
@@ -11137,14 +10775,14 @@ GRANT SELECT ON TABLE public.daily_board_archive TO authenticated;
 
 
 --
--- Name: TABLE device_credentials; Type: ACL; Schema: public; Owner: postgres
+-- Name: TABLE device_credentials; Type: ACL; Schema: public; Owner: -
 --
 
 GRANT ALL ON TABLE public.device_credentials TO service_role;
 
 
 --
--- Name: TABLE device_lifecycle_events; Type: ACL; Schema: public; Owner: postgres
+-- Name: TABLE device_lifecycle_events; Type: ACL; Schema: public; Owner: -
 --
 
 GRANT SELECT ON TABLE public.device_lifecycle_events TO anon;
@@ -11153,14 +10791,14 @@ GRANT ALL ON TABLE public.device_lifecycle_events TO service_role;
 
 
 --
--- Name: TABLE device_pairing; Type: ACL; Schema: public; Owner: postgres
+-- Name: TABLE device_pairing; Type: ACL; Schema: public; Owner: -
 --
 
 GRANT ALL ON TABLE public.device_pairing TO service_role;
 
 
 --
--- Name: TABLE devices_pilot; Type: ACL; Schema: public; Owner: postgres
+-- Name: TABLE devices_pilot; Type: ACL; Schema: public; Owner: -
 --
 
 GRANT SELECT ON TABLE public.devices_pilot TO anon;
@@ -11169,7 +10807,7 @@ GRANT ALL ON TABLE public.devices_pilot TO service_role;
 
 
 --
--- Name: TABLE events_pilot; Type: ACL; Schema: public; Owner: postgres
+-- Name: TABLE events_pilot; Type: ACL; Schema: public; Owner: -
 --
 
 GRANT SELECT ON TABLE public.events_pilot TO anon;
@@ -11178,35 +10816,35 @@ GRANT ALL ON TABLE public.events_pilot TO service_role;
 
 
 --
--- Name: SEQUENCE events_pilot_server_seq_seq; Type: ACL; Schema: public; Owner: postgres
+-- Name: SEQUENCE events_pilot_server_seq_seq; Type: ACL; Schema: public; Owner: -
 --
 
 GRANT ALL ON SEQUENCE public.events_pilot_server_seq_seq TO service_role;
 
 
 --
--- Name: TABLE manager_sessions; Type: ACL; Schema: public; Owner: postgres
+-- Name: TABLE manager_sessions; Type: ACL; Schema: public; Owner: -
 --
 
 GRANT ALL ON TABLE public.manager_sessions TO service_role;
 
 
 --
--- Name: TABLE outer_status_pilot; Type: ACL; Schema: public; Owner: postgres
+-- Name: TABLE outer_status_pilot; Type: ACL; Schema: public; Owner: -
 --
 
 GRANT ALL ON TABLE public.outer_status_pilot TO service_role;
 
 
 --
--- Name: TABLE plant_managers; Type: ACL; Schema: public; Owner: postgres
+-- Name: TABLE plant_managers; Type: ACL; Schema: public; Owner: -
 --
 
 GRANT ALL ON TABLE public.plant_managers TO service_role;
 
 
 --
--- Name: TABLE plants; Type: ACL; Schema: public; Owner: postgres
+-- Name: TABLE plants; Type: ACL; Schema: public; Owner: -
 --
 
 GRANT ALL ON TABLE public.plants TO service_role;
@@ -11215,28 +10853,28 @@ GRANT SELECT ON TABLE public.plants TO authenticated;
 
 
 --
--- Name: TABLE problem_reports; Type: ACL; Schema: public; Owner: postgres
+-- Name: TABLE problem_reports; Type: ACL; Schema: public; Owner: -
 --
 
 GRANT ALL ON TABLE public.problem_reports TO service_role;
 
 
 --
--- Name: TABLE profiles; Type: ACL; Schema: public; Owner: postgres
+-- Name: TABLE profiles; Type: ACL; Schema: public; Owner: -
 --
 
 GRANT ALL ON TABLE public.profiles TO service_role;
 
 
 --
--- Name: TABLE reprint_log; Type: ACL; Schema: public; Owner: postgres
+-- Name: TABLE reprint_log; Type: ACL; Schema: public; Owner: -
 --
 
 GRANT ALL ON TABLE public.reprint_log TO service_role;
 
 
 --
--- Name: TABLE settings_pilot; Type: ACL; Schema: public; Owner: postgres
+-- Name: TABLE settings_pilot; Type: ACL; Schema: public; Owner: -
 --
 
 GRANT SELECT ON TABLE public.settings_pilot TO anon;
@@ -11245,14 +10883,14 @@ GRANT ALL ON TABLE public.settings_pilot TO service_role;
 
 
 --
--- Name: TABLE source_farms; Type: ACL; Schema: public; Owner: postgres
+-- Name: TABLE source_farms; Type: ACL; Schema: public; Owner: -
 --
 
 GRANT ALL ON TABLE public.source_farms TO service_role;
 
 
 --
--- Name: TABLE system_flags; Type: ACL; Schema: public; Owner: postgres
+-- Name: TABLE system_flags; Type: ACL; Schema: public; Owner: -
 --
 
 GRANT ALL ON TABLE public.system_flags TO service_role;
@@ -11262,5 +10900,5 @@ GRANT ALL ON TABLE public.system_flags TO service_role;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict atz24IcbeyiUix75QFsvI7UPaymtihsB6MVyK2hxX8xn06gpiXpegtl7MFT7nb0
+\unrestrict qNcMXeXStSOsMx87bLGgbNmKL32tfWsvtUPCCLkpIxdE8Skzx2s7T2KEuFcIzBr
 

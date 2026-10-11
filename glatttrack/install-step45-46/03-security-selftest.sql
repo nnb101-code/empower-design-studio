@@ -285,6 +285,8 @@ begin
   -- (also the plant's legs / head split and its screens switched off for a while — the tests that need them set them)
   update settings_pilot set settings = settings - 'legsHeadSplit' - 'legsPaused' - 'partsPaused'
    where id = 1 and (settings ? 'legsHeadSplit' or settings ? 'legsPaused' or settings ? 'partsPaused');
+  -- (v10.36: "not chalak" gets plain כשר during the checks)
+  update settings_pilot set settings = settings || '{"ncStatuses":["kosher"]}'::jsonb where id = 1;
   perform set_config('gt.reset_in_progress', 'false', true);
   perform set_config('app.device_admin', 'on', true);
   for i in 1 .. array_length(devs, 1) loop
@@ -821,14 +823,16 @@ begin
         and r3 ->> 'error' = 'stale_board' and r4 ->> 'error' = 'bad_id';
   perform pg_temp.rec('rabbinate send by an outer station: allowed (command id replay, stale day, bad id)', ok,
     concat_ws(' | ', left(r::text, 40), left(r2::text, 60), r3::text, r4::text));
-  -- then only kosher / treif — for every kind of "not chalak" animal
-  r  := pg_temp.api(pg_temp.dev('OUT2'), pg_temp.q_claim(938, 'outer', 'glatt', '', ''));
+  -- v10.36: a shochet / maw "not chalak" only gets the plant's "not chalak" statuses (default כשר) or treif;
+  -- an animal only sent to screen B may get any status
+  r  := pg_temp.api(pg_temp.dev('OUT2'), pg_temp.q_claim(941, 'outer', 'glatt', '', ''));
   r2 := pg_temp.api(pg_temp.dev('OUT2'), pg_temp.q_claim(941, 'outer', 'rabChalak', '', ''));
   r3 := pg_temp.api(pg_temp.dev('OUT2'), pg_temp.q_claim(942, 'outer', 'beit', '', ''));
-  r4 := pg_temp.api(pg_temp.dev('OUT2'), pg_temp.q_claim(938, 'outer', 'kosher', '', ''));
-  r5 := pg_temp.api(pg_temp.dev('OUT2'), pg_temp.q_push(938, jsonb_build_object('outer_status', 'mk', 'outer_time', (pg_temp.ar(938)).outer_time + 5)));
+  r4 := pg_temp.api(pg_temp.dev('OUT2'), pg_temp.q_claim(938, 'outer', 'mk', '', ''));
+  r5 := pg_temp.api(pg_temp.dev('OUT2'), pg_temp.q_push(942, jsonb_build_object('outer_status', 'mk', 'outer_time', 5)));
   ok := r ->> 'error' = 'bad_value' and r2 ->> 'error' = 'bad_value' and r3 ->> 'error' = 'bad_value'
-        and pg_temp.claimed(r4) and r5 ->> 'error' = 'invalid_value' and (pg_temp.ar(938)).outer_status = 'kosher';
+        and pg_temp.claimed(r4) and (pg_temp.ar(938)).outer_status = 'mk'
+        and coalesce(r5 ->> 'error', '') <> '' and (pg_temp.ar(942)).outer_status is null;
   r := pg_temp.api(pg_temp.dev('OUT2'), pg_temp.q_claim(942, 'outer', 'treif', '', ''));
   ok := ok and pg_temp.claimed(r);
   -- after the ruling it can't be sent any more
@@ -836,30 +840,43 @@ begin
   perform pg_temp.api(pg_temp.dev('OUT1'), pg_temp.q_claim(940, 'outer', 'glatt', '', ''));
   r2 := pg_temp.api(pg_temp.dev('OUT1'), format('select set_not_chalak_outer(940, %s)', pg_temp.ep()));
   ok := ok and pg_temp.ok(r) and r2 ->> 'error' = 'already_ruled';
-  perform pg_temp.rec('a "not chalak" animal (slaughter / inner / outer) can only be ruled kosher or treif; ruled → can''t be sent', ok,
+  perform pg_temp.rec('v10.36 "not chalak" (slaughter / inner): only its chosen statuses or treif; sent to B: any; ruled → can''t be sent', ok,
     concat_ws(' | ', left(r::text, 40), r2 ->> 'error', r5 ->> 'error'));
   -- v10.17: an animal only SENT to the rabbinate screen may also be ruled רבנות חלק (rabChalak);
   -- one marked "not chalak" at the maw check may not; a push can't change a sent one to glatt
   r  := pg_temp.api(pg_temp.dev('OUT1'), format('select set_not_chalak_outer(943, %s)', pg_temp.ep()));
   r2 := pg_temp.api(pg_temp.dev('OUT2'), pg_temp.q_claim(943, 'outer', 'rabChalak', '', ''));
-  r4 := pg_temp.api(pg_temp.dev('OUT2'), pg_temp.q_push(943, jsonb_build_object('outer_status', 'glatt', 'outer_time', (pg_temp.ar(943)).outer_time + 5)));
   r3 := pg_temp.api(pg_temp.dev('OUT2'), pg_temp.q_claim(939, 'outer', 'rabChalak', '', ''));
   ok := pg_temp.ok(r) and pg_temp.claimed(r2) and (pg_temp.ar(943)).outer_status = 'rabChalak'
         and _kosher_ready(pg_temp.ar(943)) and pg_temp.claimed(r3)
-        and r4 ->> 'error' = 'invalid_value' and (pg_temp.ar(943)).outer_status = 'rabChalak'
+        and _nc_outer_value_ok(pg_temp.ar(943), 'glatt')
         and not _nc_outer_value_ok(pg_temp.ar(942), 'rabChalak') and not _nc_outer_value_ok(pg_temp.ar(941), 'rabChalak');
   perform pg_temp.rec('rabbinate screen: a sent animal may be ruled רבנות חלק (and is kosher-ready); a shochet / maw "not chalak" may not', ok,
-    concat_ws(' | ', left(r::text, 40), left(r2::text, 60), left(r3::text, 60), r4 ->> 'error'));
+    concat_ws(' | ', left(r::text, 40), left(r2::text, 60), left(r3::text, 60)));
   -- v10.34 (owner, review A2): ONE status for a "not chalak" animal — the v10.33 plain-kosher flag is
   -- retired: neither the claim ('kosherPlain') nor a push (outer_status + nc_plain together) can set it
   c := gen_random_uuid();
   r  := pg_temp.api(pg_temp.dev('OUT2'), pg_temp.q_claimc(941, 'outer', 'kosherPlain', c));
   ok := pg_temp.claimed(r) and (pg_temp.ar(941)).outer_status = 'kosher' and not (pg_temp.ar(941)).nc_plain
-        and _printed_as_key(pg_temp.ar(941)) = 'kosherRab';
+        and _printed_as_key(pg_temp.ar(941)) = 'kosher';
   r4 := pg_temp.api(pg_temp.dev('OUT2'), pg_temp.q_push(941, jsonb_build_object('outer_status', 'kosher', 'nc_plain', true, 'outer_time', (pg_temp.ar(941)).outer_time + 5)));
-  ok := ok and not (pg_temp.ar(941)).nc_plain and _printed_as_key(pg_temp.ar(941)) = 'kosherRab';
+  ok := ok and not (pg_temp.ar(941)).nc_plain and _printed_as_key(pg_temp.ar(941)) = 'kosher';
   perform pg_temp.rec('v10.34 "not chalak" gets one status at the outer ruling: no plain-kosher flag on any write path (claim or push)', ok,
     concat_ws(' | ', left(r::text, 60), left(r4::text, 60)));
+  -- v10.36 (owner): the plant chooses which statuses a "not chalak" animal may get (ncStatuses); one a
+  -- ruled "not chalak" animal carries stays chosen until the reset; טרף is not a choice (always allowed)
+  perform set_config('gt.reset_in_progress', 'true', true);
+  update settings_pilot set settings = jsonb_set(settings, '{customStatuses}', coalesce(settings -> 'customStatuses', '[]'::jsonb)
+           || '[{"key":"custom_nc36","he":"כשר רגיל","kosher":true}]'::jsonb) where id = 1;
+  perform set_config('gt.reset_in_progress', 'false', true);
+  r  := pg_temp.api(pg_temp.mgr(), format('select push_settings(%L::jsonb, ''x'', %L)', '{"ncStatuses":["custom_nc36"]}', pg_temp.v('mgr')));
+  r2 := pg_temp.api(pg_temp.mgr(), format('select push_settings(%L::jsonb, ''x'', %L)', '{"ncStatuses":["kosher","treif"]}', pg_temp.v('mgr')));
+  r3 := pg_temp.api(pg_temp.mgr(), format('select push_settings(%L::jsonb, ''x'', %L)', '{"ncStatuses":["kosher","custom_nc36"]}', pg_temp.v('mgr')));
+  ok := r ->> 'error' = 'status_in_use' and r ->> 'key' = 'kosher' and r2 ->> 'error' = 'bad_settings' and pg_temp.ok(r3)
+        and _nc_outer_value_ok(pg_temp.ar(942), 'custom_nc36') and _nc_outer_value_ok(pg_temp.ar(942), 'kosher')
+        and not _nc_outer_value_ok(pg_temp.ar(942), 'mk') and _nc_outer_value_ok(pg_temp.ar(942), 'treif');
+  perform pg_temp.rec('v10.36 the plant chooses the "not chalak" statuses; one in use stays; טרף always', ok,
+    concat_ws(' | ', left(r::text, 80), left(r2::text, 60), left(r3::text, 60)));
   -- v10.34 (owner): the inner inspector works after legs / head — with the legs screen in the plant's
   -- screen choice, no inner check before the stickers; without a screen choice nothing changes
   perform set_config('gt.reset_in_progress', 'true', true);

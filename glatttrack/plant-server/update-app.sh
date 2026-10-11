@@ -1,5 +1,5 @@
 #!/bin/bash
-# GlattTrack — update the plant server (v10.35, owner: no team-leader approval, never harming the work).
+# GlattTrack — update the plant server (v10.36, owner: no team-leader approval, never harming the work).
 #   update-app.sh <new-app.html> [<new-02.sql>]   install a new version
 #   update-app.sh --rollback                      back to the version before the last update
 # Order: the server first (02, then the security self-test 03 must PASS), and only then the app file

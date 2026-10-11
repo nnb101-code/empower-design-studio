@@ -1,5 +1,5 @@
 #!/bin/bash
-# GlattTrack — report to the manufacturer's support center (v10.35). Every 5 minutes (systemd timer
+# GlattTrack — report to the manufacturer's support center (v10.36). Every 5 minutes (systemd timer
 # gt-report.timer). Sends the plant's health (_plant_report: no kashrut data, no names, no codes),
 # gets back the support center's commands and the current release, and carries them out:
 #   restart_standby · reload_tablets · run_nightly_check · update_now

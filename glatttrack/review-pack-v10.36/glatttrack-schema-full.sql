@@ -12104,6 +12104,7 @@ end $$;
 
 notify pgrst, 'reload schema';
 -- ============================================================================
+-- ============================================================================
 -- GlattTrack — step 46: stage order on the server, each station its own stage,
 -- kashrut configuration locks, and processing that continues over several days
 -- ============================================================================
@@ -12339,10 +12340,23 @@ revoke execute on function _nc_fixed(animals_pilot) from public, anon, authentic
 
 -- may this outer ruling be given to this animal? A "not chalak" animal: רבנות כשר ('kosher') or
 -- treif; one that was only sent to the rabbinate screen also רבנות חלק ('rabChalak'). (v10.17)
+-- v10.36 (owner): "לא חלק" is NOT a status and has nothing to do with the rabbinate. It holds until
+-- the outer ruling; there the animal gets one of the statuses the plant chose for it in the settings
+-- (ncStatuses, any status of the list — default plain כשר) or טרף. An animal only SENT to screen B
+-- (not marked by the shochet / the maw check) may get any status.
+create or replace function _nc_statuses() returns text[]
+language sql stable security definer set search_path = public, extensions, pg_temp as $$
+  select case when jsonb_typeof(_gt_settings() -> 'ncStatuses') = 'array'
+              then coalesce((select array_agg(x #>> '{}') from jsonb_array_elements(_gt_settings() -> 'ncStatuses') x
+                              where jsonb_typeof(x) = 'string'), '{}'::text[])
+              else array['kosher'] end;
+$$;
+revoke execute on function _nc_statuses() from public, anon, authenticated;
+
 create or replace function _nc_outer_value_ok(a animals_pilot, v text) returns boolean
-language sql immutable set search_path = public, extensions, pg_temp as $$
-  select v is null or not coalesce(_is_nc(a), false) or v in ('kosher', 'treif')
-         or (v = 'rabChalak' and not coalesce(_nc_fixed(a), false));
+language sql stable security definer set search_path = public, extensions, pg_temp as $$
+  select v is null or not coalesce(_is_nc(a), false) or v = 'treif'
+         or not coalesce(_nc_fixed(a), false) or v = any(_nc_statuses());
 $$;
 revoke execute on function _nc_outer_value_ok(animals_pilot, text) from public, anon, authenticated;
 
@@ -12360,7 +12374,7 @@ revoke execute on function _kosher_ready(animals_pilot) from public, anon, authe
 create or replace function _printed_as_key(a animals_pilot) returns text
 language sql immutable set search_path = public, extensions, pg_temp as $$
   select case when a.outer_status is null then null
-              when a.outer_status = 'kosher' and _is_nc(a) then 'kosherRab'   -- (v10.34: nc_plain retired)
+              -- v10.36: a "not chalak" animal carries its own status (no hidden רבנות כשר)
               else a.outer_status end;
 $$;
 revoke execute on function _printed_as_key(animals_pilot) from public, anon, authenticated;
@@ -13152,6 +13166,15 @@ begin
     v_used := _status_change_error(cur -> 'customStatuses', incoming -> 'customStatuses');
     if v_used is not null then
       return jsonb_build_object('ok', false, 'error', 'status_in_use', 'key', v_used);
+    end if;
+  end if;
+  -- v10.36: a status a ruled "not chalak" animal carries stays allowed for "not chalak" until the reset
+  if incoming ? 'ncStatuses' and jsonb_typeof(incoming -> 'ncStatuses') = 'array' then
+    select a.outer_status into v_used from animals_pilot a
+     where a.outer_status is not null and a.outer_status <> 'treif' and coalesce(_nc_fixed(a), false)
+       and not (incoming -> 'ncStatuses') ? a.outer_status limit 1;
+    if v_used is not null then
+      return jsonb_build_object('ok', false, 'error', 'status_in_use', 'key', v_used, 'reason', 'nc_status_in_use');
     end if;
   end if;
 
@@ -14330,6 +14353,14 @@ begin
       end if;
     end loop;
     return null;
+  end if;
+  if p_key = 'ncStatuses' then   -- v10.36: the statuses a "not chalak" animal may get at the outer ruling
+    if t = 'array' and jsonb_array_length(v) <= 50
+       and not exists (select 1 from jsonb_array_elements(v) x
+                        where jsonb_typeof(x) <> 'string' or (x #>> '{}') !~ '^[A-Za-z0-9_-]{1,60}$' or (x #>> '{}') = 'treif') then
+      return null;
+    end if;
+    return 'expected a list of status keys';
   end if;
   if p_key in ('disabledStatuses', 'removedDefaults', 'statusOptIn') then
     if t = 'array' and jsonb_array_length(v) <= 500
@@ -16810,6 +16841,45 @@ language sql stable security definer set search_path = public, extensions, pg_te
 $$;
 revoke execute on function _plant_report() from public, anon, authenticated;
 
+-- ── 33. "not chalak" without a hidden רבנות כשר (v10.36) ───────────────────────
+-- One time (no ncStatuses yet): a plant that gave the old fixed "not chalak" status a name, a colour or a
+-- seal gets it as an ordinary status of its list ("custom_rab": rename / remove / seal like any other),
+-- chosen for "not chalak"; any other plant starts with plain כשר. The old fixed keys are dropped.
+do $$
+declare s jsonb := _gt_settings(); v_he text; v_en text; v_col text; v_custom boolean;
+begin
+  if s ? 'ncStatuses' then return; end if;
+  v_he  := nullif(btrim(coalesce(s ->> 'ncStatusName', '')), '');
+  v_en  := nullif(btrim(coalesce(s ->> 'ncStatusNameEn', '')), '');
+  v_col := s -> 'statusColorOverrides' ->> 'kosherRab';
+  v_custom := v_he is not null or v_col is not null or exists (select 1 from kashrut_seals where key = 'kosherRab');
+  if v_custom then
+    if not exists (select 1 from jsonb_array_elements(case when jsonb_typeof(s -> 'customStatuses') = 'array'
+                                                           then s -> 'customStatuses' else '[]'::jsonb end) x
+                    where x ->> 'key' = 'custom_rab') then
+      s := jsonb_set(s, '{customStatuses}',
+             (case when jsonb_typeof(s -> 'customStatuses') = 'array' then s -> 'customStatuses' else '[]'::jsonb end)
+             || jsonb_build_array(jsonb_build_object('key', 'custom_rab', 'he', coalesce(v_he, 'רבנות כשר'),
+                                    'en', coalesce(v_en, case when v_he is null then 'Rabbinate Kosher' else '' end),
+                                    'color', coalesce(v_col, '#C99A00'), 'kosher', true)));
+    end if;
+    insert into kashrut_seals (key, image, updated_at)
+      select 'custom_rab', image, now() from kashrut_seals where key = 'kosherRab'
+      on conflict (key) do nothing;
+    s := s || jsonb_build_object('ncStatuses', jsonb_build_array('custom_rab'));
+    perform set_config('gt.reset_in_progress', 'true', true);
+    update animals_pilot a set outer_status = 'custom_rab'
+     where a.outer_status = 'kosher' and coalesce(_nc_fixed(a), false);
+    update animals_pilot set parts_printed_as = 'custom_rab' where parts_printed_as = 'kosherRab';
+    update animals_pilot set stamped_as = 'custom_rab' where stamped_as = 'kosherRab';
+    perform set_config('gt.reset_in_progress', 'false', true);
+  else
+    s := s || jsonb_build_object('ncStatuses', jsonb_build_array('kosher'));
+  end if;
+  s := s - 'ncStatusName' - 'ncStatusNameEn';
+  update settings_pilot set settings = s, updated_at = now(), device_id = 'server' where id = 1;
+end $$;
+
 -- ── self-check ──────────────────────────────────────────────────────────────
 do $$
 declare problems text[] := '{}';
@@ -16850,8 +16920,8 @@ begin
   if pg_get_functiondef('_stage_allowed(text)'::regprocedure) !~ '_gt_one_inspection' then
     problems := problems || 'shared inner + outer screen missing in _stage_allowed'::text; end if;
   if not _nc_outer_value_ok(jsonb_populate_record(null::animals_pilot, '{"id":5,"slaughter":"slaughtered","not_chalak_outer":true}'), 'rabChalak')
-     or _nc_outer_value_ok(jsonb_populate_record(null::animals_pilot, '{"id":5,"slaughter":"notChalak"}'), 'rabChalak')
-     or _nc_outer_value_ok(jsonb_populate_record(null::animals_pilot, '{"id":5,"slaughter":"slaughtered","not_chalak_outer":true}'), 'glatt') then
+     or not _nc_outer_value_ok(jsonb_populate_record(null::animals_pilot, '{"id":5,"slaughter":"notChalak"}'), 'treif')
+     or _nc_outer_value_ok(jsonb_populate_record(null::animals_pilot, '{"id":5,"slaughter":"notChalak"}'), 'custom_zz_not_chosen') then
     problems := problems || 'rabbinate screen rulings (v10.17)'::text; end if;
   if has_table_privilege('anon', 'kashrut_seals', 'select') or has_function_privilege('anon', '_seal_key_ok(text)', 'execute') then
     problems := problems || 'kashrut seals readable directly by the app (v10.22)'::text; end if;
@@ -16862,8 +16932,8 @@ begin
      or not exists (select 1 from pg_trigger where tgrelid = 'animals_pilot'::regclass and tgname = 'zzzzz_close_questions' and tgenabled <> 'D') then
     problems := problems || 'hold triggers missing (v10.26)'::text; end if;
   if not exists (select 1 from pg_trigger where tgrelid = 'animals_pilot'::regclass and tgname = 'a_animals_nc_plain' and tgenabled <> 'D')
-     or _printed_as_key(jsonb_populate_record(null::animals_pilot, '{"id":5,"slaughter":"notChalak","outer_status":"kosher","nc_plain":true}')) <> 'kosherRab'
-     or _printed_as_key(jsonb_populate_record(null::animals_pilot, '{"id":5,"slaughter":"notChalak","outer_status":"kosher"}')) <> 'kosherRab' then
+     or _printed_as_key(jsonb_populate_record(null::animals_pilot, '{"id":5,"slaughter":"notChalak","outer_status":"kosher","nc_plain":true}')) <> 'kosher'
+     or _printed_as_key(jsonb_populate_record(null::animals_pilot, '{"id":5,"slaughter":"notChalak","outer_status":"custom_1"}')) <> 'custom_1' then
     problems := problems || '"not chalak" plain kosher at the outer ruling (v10.33)'::text; end if;
   if (select value from plant_state where key = 'schemaStep')::int < 46 then
     problems := problems || 'schemaStep not 46'::text; end if;
