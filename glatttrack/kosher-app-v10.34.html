@@ -4046,7 +4046,8 @@ const KS = (function(){
     let seen = null;
     try{ seen = localStorage.getItem('gt_reload_seen'); localStorage.setItem('gt_reload_seen', at); }catch(e){ return; }
     if(seen === null || seen === at) return;
-    setTimeout(()=>{ try{ location.reload(); }catch(e){} }, 1500);
+    // v10.35 (owner): through the safe update path — never in the middle of someone's work
+    setTimeout(()=>{ try{ if(typeof window.gtUpdateOffer==='function') window.gtUpdateOffer('reload'); else location.reload(); }catch(e){} }, 1500);
   }
 
   // The server numbers each day's board (boardEpoch, step33). A board from a
@@ -4785,7 +4786,8 @@ const KS = (function(){
     }catch(e){ return false; } },
     outerOpen, outerOpenElsewhere, setOuterNotChalak, notice: (t)=>_showRuleNotice(t),
     refetch: (i)=>_sbRefetchAnimal(i),
-    _resaveQueue: ()=>{ try{ _saveSyncQueue(_loadSyncQueue()); }catch(e){} },   // retry storing the queue (storage was full)
+    _resaveQueue: ()=>{ try{ _saveSyncQueue(_loadSyncQueue()); }catch(e){} },
+    flushNow: ()=>{ try{ _retryPendingSync(); }catch(e){} },   // v10.35: send what waits now (before an update)   // retry storing the queue (storage was full)
     pendingCount: ()=>{ try{ const q=_loadSyncQueue(); const s=new Set(q.animals); (q.ops||[]).forEach(o=>s.add(o.idx)); return s.size + Object.keys(_lungQ()).length; }catch(e){ return 0; } },
     verifyEventChain,
     rejectedEventsCount: ()=>_evRejectedLoad().length,
@@ -5155,6 +5157,83 @@ function gtSlRule(i,status){
 }
 
 // ── the buttons on every station's top bar ──
+
+// ── v10.35 (owner): updates without anyone's approval, never harming the work ──
+// A new app version on the plant server (or the manufacturer's "reload all tablets") is found by
+// itself. A tablet nobody is working on (login / home / counter screen, or no touch for 10 minutes)
+// updates at once. A tablet in use shows "update now / later"; "later" → it updates by itself after
+// 10 minutes without a touch. Before reloading, everything waiting is sent to the server; after it,
+// the tablet comes back to the same screen with the same worker.
+var _gtLastTouch = Date.now(), _gtUpd = { ver:null, offered:false, later:false, busy:false };
+['pointerdown','keydown','touchstart'].forEach(ev=>{ try{ document.addEventListener(ev, ()=>{ _gtLastTouch = Date.now(); }, {capture:true, passive:true}); }catch(e){} });
+const GT_UPD_IDLE_MS = 10*60*1000;
+function _gtUpdIdleScreen(){ const a=document.querySelector('.screen.active'); const id=a&&a.id||'';
+  return !id || /Login$|^scNav$|^scPair|^scCounter$|^scPlant$/.test(id); }
+function _gtUpdWorking(){ return !_gtUpdIdleScreen() && (Date.now()-_gtLastTouch) < GT_UPD_IDLE_MS; }
+async function _gtUpdFlush(maxMs){
+  const t0=Date.now();
+  while(Date.now()-t0 < maxMs){
+    let q=0; try{ q=KS.pendingCount(); }catch(e){}
+    if(!q) return true;
+    try{ KS.flushNow && KS.flushNow(); }catch(e){}
+    await new Promise(r=>setTimeout(r, 1000));
+  }
+  return false;
+}
+async function _gtUpdApply(){
+  if(_gtUpd.busy) return; _gtUpd.busy = true;
+  try{
+    const ok = await _gtUpdFlush(60000);
+    if(!ok){ _gtUpd.busy=false; window.gtStatusSet && window.gtStatusSet('update', L('⬆ עדכון ממתין — עוד יש פעולות שלא נשלחו לשרת','⬆ Update waiting — some actions are not sent yet','⬆ Actualización en espera'), {color:'amber', ttl:30000}); return; }
+    const a=document.querySelector('.screen.active');
+    try{ sessionStorage.setItem('gt_resume', JSON.stringify({ screen: a && a.id || '', at: Date.now() })); }catch(e){}
+    try{ document.getElementById('gtUpdModal')?.remove(); }catch(e){}
+    location.reload();
+  }catch(e){ _gtUpd.busy=false; }
+}
+function _gtUpdModal(){
+  if(document.getElementById('gtUpdModal')) return;
+  const m=document.createElement('div'); m.id='gtUpdModal'; m.setAttribute('data-no-i18n','');
+  m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:100000;display:flex;align-items:center;justify-content:center;';
+  m.innerHTML='<div style="background:var(--panel);border:2px solid var(--gold);border-radius:16px;padding:22px;width:88%;max-width:440px;text-align:center;direction:'+(lang==='he'?'rtl':'ltr')+';">'
+    +'<div style="font-size:40px;">⬆</div><div style="font-size:22px;font-weight:800;color:var(--text);margin:6px 0;">'+L('יש עדכון למערכת','A system update','Actualización del sistema')+'</div>'
+    +'<div style="font-size:15px;color:var(--muted);line-height:1.6;">'+(_gtUpd.ver?L('גרסה ','Version ','Versión ')+escapeHtml(_gtUpd.ver)+' · ':'')+L('לוקח כ-10 שניות. כל מה שנלחץ נשלח לשרת קודם — חוזרים לאותו מסך ולאותו עובד.','About 10 seconds. Everything pressed is sent first — back to the same screen and worker.','Unos 10 segundos. Todo se envía antes — vuelve a la misma pantalla.')+'</div>'
+    +'<div style="display:flex;gap:10px;margin-top:16px;"><button id="gtUpdNow" style="flex:1;padding:14px;border-radius:10px;border:none;background:var(--gold);color:#07090F;font-size:17px;font-weight:800;cursor:pointer;">'+L('עדכן עכשיו','Update now','Actualizar ya')+'</button>'
+    +'<button id="gtUpdLater" style="flex:1;padding:14px;border-radius:10px;border:1px solid var(--gold);background:transparent;color:var(--gold);font-size:17px;font-weight:800;cursor:pointer;">'+L('אחר כך','Later','Después')+'</button></div>'
+    +'<div style="font-size:12px;color:var(--muted);margin-top:10px;">'+L('"אחר כך" — העדכון ייכנס לבד כשהמסך לא בשימוש 10 דקות','"Later" — it updates by itself after 10 minutes without use','"Después" — se actualiza solo tras 10 minutos sin uso')+'</div></div>';
+  document.body.appendChild(m);
+  m.querySelector('#gtUpdNow').onclick=()=>{ _gtUpdApply(); };
+  m.querySelector('#gtUpdLater').onclick=()=>{ _gtUpd.later=true; m.remove(); };
+}
+window.gtUpdateOffer = function(ver){
+  if(ver && ver!=='reload') _gtUpd.ver = ver;
+  _gtUpd.offered = true;
+  if(!_gtUpdWorking()) { _gtUpdApply(); return; }
+  if(!_gtUpd.later) _gtUpdModal();
+};
+// a newer app on the plant server? (the page itself, read again without cache)
+async function _gtUpdCheck(){
+  try{
+    if(!/^https?:/.test(location.protocol)) return;
+    const r=await fetch(location.pathname+'?gtv='+Date.now(), {cache:'no-store'});
+    if(!r.ok) return;
+    // (the pattern must not match its own text in this file: the version starts with a letter and a digit)
+    const t=await r.text(); const m=t.match(new RegExp("var GT_APP_VERSION='([a-z][0-9][^']*)';"));
+    if(m && m[1] && typeof GT_APP_VERSION!=='undefined' && m[1]!==GT_APP_VERSION) window.gtUpdateOffer(m[1]);
+  }catch(e){}
+}
+setInterval(_gtUpdCheck, 2*60*1000);
+setInterval(()=>{ try{ if(_gtUpd.offered && !_gtUpd.busy && !_gtUpdWorking()) _gtUpdApply(); }catch(e){} }, 30*1000);
+// after the update: back to the same screen with the same worker (the worker's session is still valid)
+function _gtResumeAfterUpdate(){
+  let r=null; try{ r=JSON.parse(sessionStorage.getItem('gt_resume')||'null'); sessionStorage.removeItem('gt_resume'); }catch(e){}
+  if(!r || !r.screen || Date.now()-Number(r.at||0) > 5*60*1000) return;
+  const a=document.querySelector('.screen.active'); const cur=a&&a.id||'';
+  const loginId = /Login$/.test(r.screen) ? r.screen : r.screen+'Login';
+  if(cur!==loginId || !document.getElementById(loginId) || r.screen===loginId) return;
+  try{ _doLoginProceed(loginId); }catch(e){}
+}
+
 // v10.35: the four supervisor screens — infrastructure only (pairing, worker list, login, a read-only
 // screen). They have no write rights on the server yet; each screen's own work comes after its design.
 const GT_SUP_SCREENS={
@@ -14736,6 +14815,7 @@ function _kioskApplyAssignment(role, idx){
   else if(role==='stamps') goTo('scStampsLogin');
   else if(role==='display') goTo('scCounter');
   else if(GT_SUP_SCREENS[role]) supOpen(role);          // v10.35: the supervisor screens
+  setTimeout(()=>{ try{ _gtResumeAfterUpdate(); }catch(e){} }, 400);   // v10.35: back to work after an update
 }
 
 // Apply instantly from whatever was last known locally — before any network
