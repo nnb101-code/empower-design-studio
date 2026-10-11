@@ -12105,6 +12105,7 @@ end $$;
 notify pgrst, 'reload schema';
 -- ============================================================================
 -- ============================================================================
+-- ============================================================================
 -- GlattTrack — step 46: stage order on the server, each station its own stage,
 -- kashrut configuration locks, and processing that continues over several days
 -- ============================================================================
@@ -12319,7 +12320,7 @@ language sql stable security definer set search_path = public, extensions, pg_te
          || coalesce((select array_agg(x ->> 'key') from jsonb_array_elements(
                         case when jsonb_typeof(_gt_settings() -> 'customStatuses') = 'array'
                              then _gt_settings() -> 'customStatuses' else '[]'::jsonb end) x
-                       where jsonb_typeof(x) = 'object' and x -> 'kosher' = 'true'::jsonb
+                       where jsonb_typeof(x) = 'object'      -- v10.36 (owner): there is no "not kosher" status — only טרף
                          and coalesce(x ->> 'key', '') not in ('', 'treif')), '{}'::text[]);
 $$;
 revoke execute on function _kosher_statuses() from public, anon, authenticated;
@@ -12359,6 +12360,15 @@ language sql stable security definer set search_path = public, extensions, pg_te
          or not coalesce(_nc_fixed(a), false) or v = any(_nc_statuses());
 $$;
 revoke execute on function _nc_outer_value_ok(animals_pilot, text) from public, anon, authenticated;
+
+-- v10.36 (owner): a "not chalak" status (כשר, מגן דוד …) is not ruled at all while the plant's "not chalak"
+-- switch is off (checked when a ruling is written — an animal already ruled stays as it is)
+create or replace function _nc_group_off(v text) returns boolean
+language sql stable security definer set search_path = public, extensions, pg_temp as $$
+  select v is not null and v <> 'treif' and (_gt_settings() -> 'notChalakEnabled') is distinct from 'true'::jsonb
+         and v = any(_nc_statuses());
+$$;
+revoke execute on function _nc_group_off(text) from public, anon, authenticated;
 
 create or replace function _kosher_ready(a animals_pilot) returns boolean
 language sql stable security definer set search_path = public, extensions, pg_temp as $$
@@ -12786,7 +12796,7 @@ begin
 
   -- a "not chalak" animal: only רבנות כשר (kosher) or treif — one only SENT to the rabbinate
   -- screen may also be ruled רבנות חלק (§25)
-  if p_stage = 'outer' and a.outer_status is null and not _nc_outer_value_ok(a, p_value) then
+  if p_stage = 'outer' and a.outer_status is null and (not _nc_outer_value_ok(a, p_value) or _nc_group_off(p_value)) then
     v_res := jsonb_build_object('claimed', false, 'error', 'bad_value', 'reason', 'nc_kosher_or_treif_only',
                                 'row', to_jsonb(a), 'serverNow', v_now);
     perform _cmd_put(p_command_id, v_dev, 'claim_animal_stage', v_res);
@@ -15590,7 +15600,7 @@ begin
   end if;
   if new.outer_status is not null
      and (tg_op = 'INSERT' or new.outer_status is distinct from old.outer_status)
-     and not _nc_outer_value_ok(new, new.outer_status) then
+     and (not _nc_outer_value_ok(new, new.outer_status) or _nc_group_off(new.outer_status)) then
     raise exception 'GT:INVALID_VALUE a "not chalak" animal can only be ruled kosher or treif (nc_kosher_or_treif_only)'
       using errcode = '23514';
   end if;
@@ -16878,6 +16888,19 @@ begin
   end if;
   s := s - 'ncStatusName' - 'ncStatusNameEn';
   update settings_pilot set settings = s, updated_at = now(), device_id = 'server' where id = 1;
+end $$;
+
+-- v10.36 (owner): no "not kosher" statuses — every status of the plant's own is a kashrut status
+do $$
+declare s jsonb := _gt_settings();
+begin
+  if jsonb_typeof(s -> 'customStatuses') = 'array'
+     and exists (select 1 from jsonb_array_elements(s -> 'customStatuses') x where x -> 'kosher' is distinct from 'true'::jsonb) then
+    update settings_pilot set settings = jsonb_set(settings, '{customStatuses}',
+             (select coalesce(jsonb_agg(case when jsonb_typeof(x) = 'object' then x || '{"kosher":true}'::jsonb else x end), '[]'::jsonb)
+                from jsonb_array_elements(s -> 'customStatuses') x)),
+           updated_at = now(), device_id = 'server' where id = 1;
+  end if;
 end $$;
 
 -- ── self-check ──────────────────────────────────────────────────────────────

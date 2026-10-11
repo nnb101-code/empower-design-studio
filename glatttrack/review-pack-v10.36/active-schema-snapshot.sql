@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict qNcMXeXStSOsMx87bLGgbNmKL32tfWsvtUPCCLkpIxdE8Skzx2s7T2KEuFcIzBr
+\restrict kNVt5shWMdFHRSJqlyJrKvi2jAgFLBC5pkciTBvJsfha2t1mjjSI9Feym7xYt3N
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -528,7 +528,7 @@ begin
   end if;
   if new.outer_status is not null
      and (tg_op = 'INSERT' or new.outer_status is distinct from old.outer_status)
-     and not _nc_outer_value_ok(new, new.outer_status) then
+     and (not _nc_outer_value_ok(new, new.outer_status) or _nc_group_off(new.outer_status)) then
     raise exception 'GT:INVALID_VALUE a "not chalak" animal can only be ruled kosher or treif (nc_kosher_or_treif_only)'
       using errcode = '23514';
   end if;
@@ -2010,7 +2010,7 @@ CREATE FUNCTION public._kosher_statuses() RETURNS text[]
          || coalesce((select array_agg(x ->> 'key') from jsonb_array_elements(
                         case when jsonb_typeof(_gt_settings() -> 'customStatuses') = 'array'
                              then _gt_settings() -> 'customStatuses' else '[]'::jsonb end) x
-                       where jsonb_typeof(x) = 'object' and x -> 'kosher' = 'true'::jsonb
+                       where jsonb_typeof(x) = 'object'      -- v10.36 (owner): there is no "not kosher" status — only טרף
                          and coalesce(x ->> 'key', '') not in ('', 'treif')), '{}'::text[]);
 $$;
 
@@ -2242,6 +2242,19 @@ CREATE FUNCTION public._nc_fixed(a public.animals_pilot) RETURNS boolean
     SET search_path TO 'public', 'extensions', 'pg_temp'
     AS $$
   select a.slaughter = 'notChalak' or coalesce(a.not_chalak_inner, false);
+$$;
+
+
+--
+-- Name: _nc_group_off(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public._nc_group_off(v text) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $$
+  select v is not null and v <> 'treif' and (_gt_settings() -> 'notChalakEnabled') is distinct from 'true'::jsonb
+         and v = any(_nc_statuses());
 $$;
 
 
@@ -4419,7 +4432,7 @@ begin
 
   -- a "not chalak" animal: only רבנות כשר (kosher) or treif — one only SENT to the rabbinate
   -- screen may also be ruled רבנות חלק (§25)
-  if p_stage = 'outer' and a.outer_status is null and not _nc_outer_value_ok(a, p_value) then
+  if p_stage = 'outer' and a.outer_status is null and (not _nc_outer_value_ok(a, p_value) or _nc_group_off(p_value)) then
     v_res := jsonb_build_object('claimed', false, 'error', 'bad_value', 'reason', 'nc_kosher_or_treif_only',
                                 'row', to_jsonb(a), 'serverNow', v_now);
     perform _cmd_put(p_command_id, v_dev, 'claim_animal_stage', v_res);
@@ -9661,6 +9674,13 @@ REVOKE ALL ON FUNCTION public._nc_fixed(a public.animals_pilot) FROM PUBLIC;
 
 
 --
+-- Name: FUNCTION _nc_group_off(v text); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public._nc_group_off(v text) FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION _nc_outer_allowed(); Type: ACL; Schema: public; Owner: -
 --
 
@@ -10900,5 +10920,5 @@ GRANT ALL ON TABLE public.system_flags TO service_role;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict qNcMXeXStSOsMx87bLGgbNmKL32tfWsvtUPCCLkpIxdE8Skzx2s7T2KEuFcIzBr
+\unrestrict kNVt5shWMdFHRSJqlyJrKvi2jAgFLBC5pkciTBvJsfha2t1mjjSI9Feym7xYt3N
 

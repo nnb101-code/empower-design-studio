@@ -584,6 +584,8 @@ function _gtOuterKey(x){ return !x ? null : (_gtNCPlain(x) ? 'kosherPlain' : (x.
 // list, default כשר) or טרף. An animal only SENT to screen B (not marked by the shochet / maw check) may get any status.
 function gtNCStatuses(s){ s=s||((typeof KS!=='undefined'&&KS.getSettings)?KS.getSettings():{});
   return Array.isArray(s.ncStatuses) ? s.ncStatuses.filter(k=>typeof k==='string'&&k&&k!=='treif') : ['kosher']; }
+// is this a "not chalak" status (כשר, מגן דוד …) the plant can't rule now ("not chalak" switched off)?
+function gtNCOff(key,s){ s=s||KS.getSettings(); return key!=='treif' && s.notChalakEnabled!==true && gtNCStatuses(s).includes(key); }
 function gtNCAllowed(x,key){ return key==='treif' || !_gtNCFixed(x) || gtNCStatuses().includes(key); }
 function _gtNCFixed(x){ return !!(x && (x.slaughter==='notChalak' || x.notChalakInner===true)); }
 </script>
@@ -5659,7 +5661,7 @@ var _GT_ERR = {
   earlier_day_open:['קודם מסיימים את יום השחיטה הקודם — אין דילוג. השינוי לא נרשם.','The earlier slaughter day is finished first — no skipping. The change was not recorded.','Primero se termina el día de faena anterior — sin saltos. El cambio no se registró.'],
   board_closed:['יום השחיטה הזה כבר נסגר בתחנה זו — השינוי לא נרשם.','This slaughter day is already closed at this station — the change was not recorded.','Este día de faena ya está cerrado en esta estación — el cambio no se registró.'],
   held:['המספר מעוכב (USDA / "?") — התחנה שסימנה צריכה לשחרר. השינוי לא נרשם.','The number is held (USDA / "?") — the station that marked it must release it. The change was not recorded.','El número está retenido (USDA / "?") — la estación que lo marcó debe liberarlo. El cambio no se registró.'],
-  status_in_use:['סטטוס שכבר נפסק על בהמה בלוח פתוח: אי אפשר לשנות לו כשר/לא כשר או למחוק אותו.','A status already ruled on an animal of an open board cannot change kosher / not kosher or be deleted.','Un estado ya dictaminado en un animal de un tablero abierto no puede cambiar kosher / no kosher ni borrarse.'],
+  status_in_use:['סטטוס שכבר נפסק היום על בהמה: אי אפשר למחוק אותו או להוציא אותו מ"לא חלק" עד האיפוס היומי.','A status already ruled today on an animal: it cannot be deleted or taken out of "not chalak" until the daily reset.','Un estado ya dictaminado hoy en un animal: no se puede borrar ni sacar de "no jalak" hasta el reinicio diario.'],
   station_device:['זה טאבלט של תחנה — הוא משמש רק את התחנה שלו. בעלים ויצרן נכנסים מכל מכשיר אחר (טלפון, מחשב).','This is a station tablet — it serves only its station. The owner and the manufacturer log in from any other device (phone, computer).','Esta es una tableta de estación — solo sirve a su estación. El propietario y el fabricante entran desde cualquier otro dispositivo.'],
   server_only:['ראש צוות מוסיפים או מסירים רק בשרת (המתקין) — לא מהאפליקציה.','A team leader is added or removed only on the server (the installer) — not from the app.','Un jefe de equipo se agrega o quita solo en el servidor (el instalador).'],
   last_manager:['זה ראש הצוות האחרון — אי אפשר להסיר אותו.','This is the last team leader — it cannot be removed.','Es el último jefe de equipo — no se puede quitar.'],
@@ -9485,7 +9487,7 @@ function outUpdateSummary(){
   const mine=x=>role==='glatt'?!_gtIsNC(x):role==='kosher'?_gtIsNC(x):true;
   const keyOf=x=>x.outerStatus;
   const cnt={}; a.forEach(x=>{ if(x.outerStatus&&x.outerStatus!=='treif'&&mine(x)){ const k=keyOf(x); cnt[k]=(cnt[k]||0)+1; } });
-  let keys=getAllStatuses().filter(st=>st.key!=='treif'&&!st.removed&&!dis.includes(st.key)).map(st=>st.key);
+  let keys=getAllStatuses().filter(st=>st.key!=='treif'&&!st.removed&&!dis.includes(st.key)&&!gtNCOff(st.key,set)).map(st=>st.key);
   if(role==='kosher') keys=keys.filter(k=>gtNCStatuses(set).includes(k)).concat(gtNCStatuses(set).filter(k=>!keys.includes(k)));   // v10.36: screen B — the "not chalak" statuses
   if(role==='glatt') keys=keys.filter(k=>k!=='rabChalak');
   Object.keys(cnt).forEach(k=>{ if(!keys.includes(k)) keys.push(k); });   // a ruling under a status turned off since
@@ -11437,7 +11439,7 @@ function mgrUpdateSealUploads(){
     {key:'rabChalak',he:'רבנות חלק',en:'Rabbinate Chalak',color:'#16A085'},
   ];
   const s=KS.getSettings();
-  (s.customStatuses||[]).filter(c=>c&&c.kosher===true&&!c.removed).forEach(c=>sealTypes.push({key:c.key,he:c.he||c.key,en:c.en||'',color:c.color||'#888'}));
+  (s.customStatuses||[]).filter(c=>c&&!c.removed).forEach(c=>sealTypes.push({key:c.key,he:c.he||c.key,en:c.en||'',color:c.color||'#888'}));
   const seals=s.customSeals||{};
   // Each seal uses a unique input id - label wraps it directly (Android safe)
   let html='';
@@ -11581,20 +11583,13 @@ function mgrToggleRabChalak(el){
 // v10.36 (owner): which statuses a "not chalak" animal may get at the outer ruling (one or more; טרף always)
 function mgrRenderNcStatuses(){
   const box=document.getElementById('mgrNcStatusesBox'); if(!box) return;
-  const s=KS.getSettings();
-  if(!s.notChalakEnabled){ box.innerHTML=''; return; }
-  const chosen=gtNCStatuses(s), dis=_disabledStatusList(s), ov=s.statusColorOverrides||{};
-  const list=getAllStatuses().filter(st=>st.key!=='treif' && (!st.removed || chosen.includes(st.key)) && (!dis.includes(st.key) || chosen.includes(st.key)));
-  box.innerHTML=`<div style="font-size:13px;color:var(--text);font-weight:600;">${L('הסטטוס של בהמה "לא חלק" בפסיקת החוץ','The status of a "not chalak" animal at the outer ruling','El estado de un animal "no jalak" en el dictamen externo')}</div>
-    <div style="font-size:11px;color:var(--muted);margin-bottom:8px;">${L('בחר סטטוס אחד או יותר מרשימת סטטוסי הכשרות. טרף תמיד אפשרי. סטטוס חדש מוסיפים ברשימת הסטטוסים.','Choose one or more statuses from the kashrut statuses list. Treif is always possible. A new status is added in the statuses list.','Elija uno o más estados de la lista de estados de kashrut. Treif siempre es posible. Un estado nuevo se agrega en la lista de estados.')}</div>
-    <div style="display:flex;flex-wrap:wrap;gap:6px;">${list.map(st=>{ const on=chosen.includes(st.key), c=_safeColor(ov[st.key]||st.color,'#888');
-      return `<button data-nc-st="${escapeHtml(st.key)}" data-on="${on?1:0}" onclick="mgrToggleNcStatus(${_jsArg(st.key)})" style="display:flex;align-items:center;gap:6px;font-size:13px;padding:7px 11px;border-radius:9px;cursor:pointer;background:${on?'rgba(201,154,0,.18)':'transparent'};color:${on?'#E8EDF5':'var(--muted)'};border:2px solid ${on?'#C99A00':'var(--border)'};">
-        <span style="width:12px;height:12px;border-radius:3px;background:${c};"></span><span data-no-i18n>${escapeHtml(statusDisplayName(st.key))}</span>${on?' ✓':''}</button>`; }).join('')}</div>`;
+  const s=KS.getSettings(), names=gtNCStatuses(s).filter(k=>getAllStatuses().some(st=>st.key===k&&!st.removed)).map(k=>statusDisplayName(k));
+  box.innerHTML=`<div style="font-size:11px;color:var(--muted);">${L('סטטוסי "לא חלק" (כשר)','"Not chalak" statuses (kosher)','Estados "no jalak" (kosher)')}: <b data-no-i18n style="color:#C99A00;">${escapeHtml(names.join(' / ')||'—')}</b><br>${L('בוחרים בכפתור "חלק / לא חלק" בכל שורה ברשימת סטטוסי הכשרות.','Chosen with the "chalak / not chalak" button on each row of the kashrut statuses list.','Se elige con el botón "jalak / no jalak" en cada fila de la lista de estados.')}</div>`;
 }
 function mgrToggleNcStatus(key){
   const s=KS.getSettings(); let cur=gtNCStatuses(s).slice();
   if(cur.includes(key)){
-    if(cur.length<=1){ alert(L('צריך לפחות סטטוס אחד לבהמה "לא חלק". בחר קודם סטטוס אחר.','A "not chalak" animal needs at least one status. Choose another one first.','Un animal "no jalak" necesita al menos un estado. Elija otro primero.')); return; }
+    if(cur.length<=1 && s.notChalakEnabled===true){ alert(L('צריך לפחות סטטוס אחד לבהמה "לא חלק". בחר קודם סטטוס אחר.','A "not chalak" animal needs at least one status. Choose another one first.','Un animal "no jalak" necesita al menos un estado. Elija otro primero.')); return; }
     const used=(KS.getAnimals()||[]).map((x,i)=>(x&&x.outerStatus===key&&_gtNCFixed(x))?i+1:0).filter(Boolean);
     if(used.length){ alert(L('"'+statusDisplayName(key)+'" כבר נפסק היום על בהמה "לא חלק". אפשר להוריד אותו מהבחירה אחרי האיפוס היומי.','"'+statusDisplayName(key)+'" was already ruled today on a "not chalak" animal. It can be taken off after the daily reset.','"'+statusDisplayName(key)+'" ya se dictaminó hoy en un animal "no jalak". Se puede quitar tras el reinicio diario.')); return; }
     cur=cur.filter(k=>k!==key);
@@ -11613,12 +11608,12 @@ function mgrUpdateStatusToggles(){
   const seals=s.customSeals||{};
   let html='';
   try{ mgrRenderNcStatuses(); }catch(e){}
-  const ncSet=s.notChalakEnabled?gtNCStatuses(s):[];
+  const ncAll=gtNCStatuses(s), ncSet=ncAll;
   st_all.forEach((st)=>{
     if(st.removed)return;   // removed mid-day: kept only for display of animals already ruled with it
     const on=!disabled.includes(st.key);
     const label=st.he||st.key;
-    const ncTag=ncSet.includes(st.key)?`<span style="display:block;font-size:10px;color:#C99A00;font-weight:600;">${L('נבחר ל"לא חלק"','chosen for "not chalak"','elegido para "no jalak"')}</span>`:'';
+    const ncTag=(ncSet.includes(st.key)&&s.notChalakEnabled!==true)?`<span style="display:block;font-size:10px;color:var(--muted);font-weight:400;">${L('"לא חלק" כבוי — לא מופיע בפסיקה','"not chalak" is off — not in the rulings','"no jalak" apagado — no aparece en los dictámenes')}</span>`:'';
     const enName=(st.en && st.en!==st.he)?st.en:'';
     const color=_safeColor(overrides[st.key]||st.color,'#888');
     const seal=_safeImg(seals[st.key]);
@@ -11645,7 +11640,7 @@ function mgrUpdateStatusToggles(){
       </label>
       ${seal?`<button onclick="mgrRemoveSeal(${K})" style="font-size:11px;color:#FF6B6B;background:rgba(224,48,48,.1);border:1px solid rgba(224,48,48,.3);border-radius:5px;padding:4px 7px;cursor:pointer;">⌫</button>`:''}
       ${DEFAULT_STATUSES.some(d=>d.key===st.key)?'':`<button onclick="mgrRenameStatus(${K})" style="font-size:11px;color:var(--gold);background:rgba(212,168,67,.08);border:1px solid var(--border);border-radius:5px;padding:4px 7px;cursor:pointer;">${L('✏️ שם','✏️ Name','✏️ Nombre')}</button>`}
-      ${DEFAULT_STATUSES.some(d=>d.key===st.key)?'':`<button data-custom-kosher="${st.kosher===true?'1':'0'}" onclick="mgrToggleCustomKosher(${K})" style="font-size:11px;border-radius:5px;padding:4px 7px;cursor:pointer;background:transparent;border:1px solid ${st.kosher===true?'#28C76F':'#E03030'};color:${st.kosher===true?'#28C76F':'#FF6B6B'};">${st.kosher===true?L('כשר','Kosher','Kosher'):L('לא כשר','Not kosher','No kosher')}</button>`}
+      ${st.key==='treif'?'':`<button data-nc-st="${escapeHtml(st.key)}" data-on="${ncAll.includes(st.key)?1:0}" onclick="mgrToggleNcStatus(${K})" style="font-size:11px;border-radius:5px;padding:4px 7px;cursor:pointer;background:transparent;border:1px solid ${ncAll.includes(st.key)?'#C99A00':'#28C76F'};color:${ncAll.includes(st.key)?'#C99A00':'#28C76F'};">${ncAll.includes(st.key)?L('לא חלק','Not chalak','No jalak'):L('חלק','Chalak','Jalak')}</button>`}
       <button onclick="mgrRemoveStatus(${K})" style="font-size:12px;color:#FF6B6B;background:rgba(224,48,48,.1);border:1px solid rgba(224,48,48,.3);border-radius:5px;padding:4px 9px;cursor:pointer;">✕</button>
      </div>
     </div>`;
@@ -11745,9 +11740,9 @@ function mgrAddStatus(){
         style="width:70px;background:var(--panel2);border:1px solid var(--border);border-radius:6px;padding:5px 6px;color:var(--text);font-size:11px;font-family:monospace;">
     </div>
     <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap;">
-      <span style="font-size:12px;color:var(--muted);">${L('בהמה בסטטוס הזה:','An animal with this status is:','Un animal con este estado es:')}</span>
-      <label style="font-size:12px;color:var(--text);cursor:pointer;"><input type="radio" name="newStatusKosher" id="newStatusKosherNo" value="0" checked> ${L('לא כשר (לא יודפסו מדבקות/חותמות)','Not kosher (no stickers/stamps)','No kosher (sin etiquetas/sellos)')}</label>
-      <label style="font-size:12px;color:var(--text);cursor:pointer;"><input type="radio" name="newStatusKosher" id="newStatusKosherYes" value="1"> ${L('כשר','Kosher','Kosher')}</label>
+      <span style="font-size:12px;color:var(--muted);">${L('קבוצה:','Group:','Grupo:')}</span>
+      <label style="font-size:12px;color:var(--text);cursor:pointer;"><input type="radio" name="newStatusGroup" id="newStatusGroupChalak" value="0" checked> ${L('חלק (כמו גלאט, בית יוסף, רבנות חלק)','Chalak (like glatt, Beit Yosef, Rabbinate Chalak)','Jalak (como glatt, Beit Yosef, Rabinato Jalak)')}</label>
+      <label style="font-size:12px;color:var(--text);cursor:pointer;"><input type="radio" name="newStatusGroup" id="newStatusGroupNC" value="1"> ${L('לא חלק (כשר — למשל מגן דוד)','Not chalak (kosher — e.g. Magen David)','No jalak (kosher — p. ej. Magen David)')}</label>
     </div>
     <div style="display:flex;gap:8px;">
       <button onclick="document.getElementById('mgrAddStatusForm').remove()"
@@ -11765,9 +11760,11 @@ function mgrConfirmAddStatus(){
   const key='custom_'+Date.now();
   const s=KS.getSettings();
   const custom=s.customStatuses||[];
-  const kosher=!!document.getElementById('newStatusKosherYes')?.checked;   // default: not kosher (safer)
-  custom.push({key,he,en:en||he,es:he,color,kosher});   // he = the name as written (all screens); en = stickers
-  KS.updateSettings({customStatuses:custom});
+  // v10.36 (owner): every status is a kashrut status (no "not kosher" — only טרף); it is in the "chalak"
+  // group or in the "not chalak" group (shown in the rulings only while "not chalak" is on)
+  const nc=!!document.getElementById('newStatusGroupNC')?.checked;
+  custom.push({key,he,en:en||he,es:he,color,kosher:true});   // he = the name as written (all screens); en = stickers
+  KS.updateSettings(nc?{customStatuses:custom, ncStatuses:gtNCStatuses(s).concat([key])}:{customStatuses:custom});
   document.getElementById('mgrAddStatusForm')?.remove();
   mgrUpdateStatusToggles();
   rebuildOuterButtons();
@@ -11785,11 +11782,13 @@ function mgrRestoreStatus(key){
 function mgrRemoveStatus(key){
   const s=KS.getSettings();
   if(key==='treif'){ return; }
-  if(s.notChalakEnabled && gtNCStatuses(s).includes(key)){
-    alert(L('הסטטוס "'+statusDisplayName(key)+'" נבחר לבהמה "לא חלק". קודם הורד אותו מהבחירה בסעיף "לא חלק" (בהגדרות, למעלה), ואז אפשר לכבות או להסיר אותו.',
-            'The status "'+statusDisplayName(key)+'" is chosen for a "not chalak" animal. First take it off that choice in the "not chalak" section (settings, above), then it can be turned off or removed.',
-            'El estado "'+statusDisplayName(key)+'" está elegido para un animal "no jalak". Primero quítelo de esa elección en la sección "no jalak" (ajustes, arriba); luego se puede desactivar o quitar.')); return;
+  if(s.notChalakEnabled===true && gtNCStatuses(s).includes(key) && !_disabledStatusList(s).includes(key)
+     && gtNCStatuses(s).filter(k=>k!==key && getAllStatuses().some(st=>st.key===k&&!st.removed) && !_disabledStatusList(s).includes(k)).length===0){
+    alert(L('"'+statusDisplayName(key)+'" הוא סטטוס ה"לא חלק" היחיד. קודם הוסף או סמן סטטוס "לא חלק" אחר, או כבה את "לא חלק".',
+            '"'+statusDisplayName(key)+'" is the only "not chalak" status. First add or mark another "not chalak" status, or turn "not chalak" off.',
+            '"'+statusDisplayName(key)+'" es el único estado "no jalak". Primero agregue o marque otro, o apague "no jalak".')); return;
   }
+
   const isDefault=DEFAULT_STATUSES.some(d=>d.key===key);
   if(isDefault){
     // Mark this default status as removed for this plant
@@ -11822,23 +11821,6 @@ function mgrRenameStatus(key){
 }
 // a status already ruled today keeps its kosher meaning until the daily reset (the rulings of the day)
 function _gtStatusUsedToday(key){ try{ return (KS.getAnimals()||[]).filter(a=>a && a.outerStatus===key).map(a=>a.id+1); }catch(e){ return []; } }
-function mgrToggleCustomKosher(key){
-  const s=KS.getSettings();
-  const cur=(s.customStatuses||[]).find(st=>st.key===key); if(!cur) return;
-  { const used=_gtStatusUsedToday(key);
-    if(used.length){ alert(L('"'+statusDisplayName(key)+'" כבר נפסק היום על בהמות: '+used.slice(0,12).join(', ')+(used.length>12?'…':'')+'.\nכשר / לא כשר שלו נשאר כמו שהוא עד האיפוס היומי (כדי לא לשנות פסיקות של היום). אפשר לשנות אחרי האיפוס. שינוי שם אפשר תמיד.',
-                             '"'+statusDisplayName(key)+'" was already ruled today on animals: '+used.slice(0,12).join(', ')+'.\nIts kosher / not kosher stays until the daily reset (not to change today\'s rulings). The name can always be changed.',
-                             '"'+statusDisplayName(key)+'" ya se dictaminó hoy: '+used.slice(0,12).join(', ')+'. Su kosher / no kosher queda hasta el reinicio diario.')); return; } }
-  const to=!(cur.kosher===true);
-  const nm=statusDisplayName(key);
-  if(!confirm(to
-      ? L('לסמן את "'+nm+'" ככשר? בהמות בסטטוס הזה יקבלו מדבקות כשרות וחותמות.','Mark "'+nm+'" as kosher? Animals with this status will get kosher stickers and stamps.','¿Marcar "'+nm+'" como kosher? Los animales con este estado recibirán etiquetas y sellos kosher.')
-      : L('לסמן את "'+nm+'" כלא כשר? בהמות בסטטוס הזה לא יקבלו מדבקות כשרות וחותמות.','Mark "'+nm+'" as NOT kosher? Animals with this status will not get kosher stickers or stamps.','¿Marcar "'+nm+'" como NO kosher? Los animales con este estado no recibirán etiquetas ni sellos kosher.'))) return;
-  const custom=(s.customStatuses||[]).map(st=>st.key===key?Object.assign({},st,{kosher:to}):st);
-  KS.updateSettings({customStatuses:custom});
-  mgrUpdateStatusToggles();
-  try{ partsRenderGrid();partsUpdateSummary();stampsRenderGrid();stampsUpdateSummary(); }catch(e){}
-}
 function mgrUpdateStatusColor(key,color){
   const s=KS.getSettings();
   const custom=s.customStatuses||[];
@@ -11895,11 +11877,13 @@ function applyStatusColors(){
 function mgrToggleStatus(key){
   if(key==='treif')return;
   const s=KS.getSettings();
-  if(s.notChalakEnabled && gtNCStatuses(s).includes(key) && !_disabledStatusList(s).includes(key)){
-    alert(L('הסטטוס "'+statusDisplayName(key)+'" נבחר לבהמה "לא חלק". קודם הורד אותו מהבחירה בסעיף "לא חלק" (בהגדרות, למעלה), ואז אפשר לכבות או להסיר אותו.',
-            'The status "'+statusDisplayName(key)+'" is chosen for a "not chalak" animal. First take it off that choice in the "not chalak" section (settings, above), then it can be turned off or removed.',
-            'El estado "'+statusDisplayName(key)+'" está elegido para un animal "no jalak". Primero quítelo de esa elección en la sección "no jalak" (ajustes, arriba); luego se puede desactivar o quitar.')); return;
+  if(s.notChalakEnabled===true && gtNCStatuses(s).includes(key) && !_disabledStatusList(s).includes(key)
+     && gtNCStatuses(s).filter(k=>k!==key && getAllStatuses().some(st=>st.key===k&&!st.removed) && !_disabledStatusList(s).includes(k)).length===0){
+    alert(L('"'+statusDisplayName(key)+'" הוא סטטוס ה"לא חלק" היחיד. קודם הוסף או סמן סטטוס "לא חלק" אחר, או כבה את "לא חלק".',
+            '"'+statusDisplayName(key)+'" is the only "not chalak" status. First add or mark another "not chalak" status, or turn "not chalak" off.',
+            '"'+statusDisplayName(key)+'" es el único estado "no jalak". Primero agregue o marque otro, o apague "no jalak".')); return;
   }
+
   if(OPT_IN_STATUSES.includes(key)){
     let on=(s.statusOptIn||[]).slice();
     const dis=(s.disabledStatuses||[]).filter(d=>d!==key);
@@ -11962,6 +11946,7 @@ function rebuildOuterButtons(){
     if(disabled.includes(st.key)&&st.key!=='treif' && !(ncOnly&&gtNCStatuses().includes(st.key)) && !isCur)return'';
     // v10.34 (owner): רבנות חלק is a regular status of screen A (screen B rules only the "not chalak" status)
     if(st.removed && !isCur)return'';
+    if(gtNCOff(st.key,s) && !isCur)return'';   // v10.36: "not chalak" off → no כשר / מגן דוד … in the ruling
     const override=s.statusColorOverrides||{};
     const color=_safeColor(override[st.key]||st.color,'#888');
     const bgStyle=cssMap[st.key]||`background:${color}`;
@@ -13406,8 +13391,8 @@ let partsPrintTimer=null;
 // outer inspector — animals already ruled with it stay kosher).
 function getKosherStatuses(){
   const s=KS.getSettings();
-  // only custom statuses the manager marked "kosher" (kosher:true) are kosher
-  const custom=(s.customStatuses||[]).filter(st=>st&&st.kosher===true).map(st=>st.key).filter(k=>k&&k!=='treif');
+  // v10.36 (owner): there is no "not kosher" status (only טרף) — every own status is a kashrut status
+  const custom=(s.customStatuses||[]).filter(st=>st&&st.key).map(st=>st.key).filter(k=>k&&k!=='treif');
   return ["glatt","beit","kosher","mk","rabChalak",...custom];
 }
 // Ready for parts / stamps / legs sort: a kosher ruling AND still kosher

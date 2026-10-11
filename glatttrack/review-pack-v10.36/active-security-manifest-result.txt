@@ -1,9 +1,9 @@
 == 1. plant state =======================================================
-    key     |     value     |          updated_at           
-------------+---------------+-------------------------------
- boardEpoch | 1791755203651 | 2026-10-11 21:46:43.650902+00
- schemaStep | 46            | 2026-10-11 21:46:44.886109+00
- testMode   | off           | 2026-10-11 21:46:44.307583+00
+    key     |     value     |          updated_at          
+------------+---------------+------------------------------
+ boardEpoch | 1791758073959 | 2026-10-11 22:34:33.95904+00
+ schemaStep | 46            | 2026-10-11 22:34:35.08843+00
+ testMode   | off           | 2026-10-11 22:34:34.50378+00
 (3 rows)
 
 == 2. functions (public, gt_rls) ========================================
@@ -162,6 +162,7 @@
  public | _my_plant()                                                                        | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _my_role()                                                                         | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _nc_fixed(animals_pilot)                                                           | function | f                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _nc_group_off(text)                                                                | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _nc_outer_allowed()                                                                | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _nc_outer_value_ok(animals_pilot,text)                                             | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _nc_statuses()                                                                     | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
@@ -229,7 +230,7 @@
  public | leader_account_remove(text)                                                        | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | leader_device_recovery(text)                                                       | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | manufacturer_set_code(text,text)                                                   | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
-(220 rows)
+(221 rows)
 
 == 2b. API surface: functions the app roles can run ======================
                        callable_by_app                       | security_definer 

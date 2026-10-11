@@ -286,7 +286,7 @@ begin
   update settings_pilot set settings = settings - 'legsHeadSplit' - 'legsPaused' - 'partsPaused'
    where id = 1 and (settings ? 'legsHeadSplit' or settings ? 'legsPaused' or settings ? 'partsPaused');
   -- (v10.36: "not chalak" gets plain כשר during the checks)
-  update settings_pilot set settings = settings || '{"ncStatuses":["kosher"]}'::jsonb where id = 1;
+  update settings_pilot set settings = settings || '{"ncStatuses":["kosher"],"notChalakEnabled":true}'::jsonb where id = 1;
   perform set_config('gt.reset_in_progress', 'false', true);
   perform set_config('app.device_admin', 'on', true);
   for i in 1 .. array_length(devs, 1) loop
@@ -869,14 +869,32 @@ begin
   update settings_pilot set settings = jsonb_set(settings, '{customStatuses}', coalesce(settings -> 'customStatuses', '[]'::jsonb)
            || '[{"key":"custom_nc36","he":"כשר רגיל","kosher":true}]'::jsonb) where id = 1;
   perform set_config('gt.reset_in_progress', 'false', true);
-  r  := pg_temp.api(pg_temp.mgr(), format('select push_settings(%L::jsonb, ''x'', %L)', '{"ncStatuses":["custom_nc36"]}', pg_temp.v('mgr')));
-  r2 := pg_temp.api(pg_temp.mgr(), format('select push_settings(%L::jsonb, ''x'', %L)', '{"ncStatuses":["kosher","treif"]}', pg_temp.v('mgr')));
-  r3 := pg_temp.api(pg_temp.mgr(), format('select push_settings(%L::jsonb, ''x'', %L)', '{"ncStatuses":["kosher","custom_nc36"]}', pg_temp.v('mgr')));
+  -- (the plant's own "not chalak" rulings of today, outside the test numbers, stay in every list)
+  select coalesce(jsonb_agg(distinct a.outer_status), '[]'::jsonb) into r5 from animals_pilot a
+   where a.outer_status is not null and a.outer_status not in ('treif', 'kosher') and coalesce(_nc_fixed(a), false);
+  r  := pg_temp.api(pg_temp.mgr(), format('select push_settings(%L::jsonb, ''x'', %L)', jsonb_build_object('ncStatuses', '["custom_nc36"]'::jsonb || r5), pg_temp.v('mgr')));
+  r2 := pg_temp.api(pg_temp.mgr(), format('select push_settings(%L::jsonb, ''x'', %L)', jsonb_build_object('ncStatuses', '["kosher","treif"]'::jsonb || r5), pg_temp.v('mgr')));
+  r3 := pg_temp.api(pg_temp.mgr(), format('select push_settings(%L::jsonb, ''x'', %L)', jsonb_build_object('ncStatuses', '["kosher","custom_nc36"]'::jsonb || r5), pg_temp.v('mgr')));
   ok := r ->> 'error' = 'status_in_use' and r ->> 'key' = 'kosher' and r2 ->> 'error' = 'bad_settings' and pg_temp.ok(r3)
         and _nc_outer_value_ok(pg_temp.ar(942), 'custom_nc36') and _nc_outer_value_ok(pg_temp.ar(942), 'kosher')
         and not _nc_outer_value_ok(pg_temp.ar(942), 'mk') and _nc_outer_value_ok(pg_temp.ar(942), 'treif');
   perform pg_temp.rec('v10.36 the plant chooses the "not chalak" statuses; one in use stays; טרף always', ok,
     concat_ws(' | ', left(r::text, 80), left(r2::text, 60), left(r3::text, 60)));
+  -- v10.36 (owner): "not chalak" switched off → its statuses (כשר …) are not ruled at all; an animal ruled stays
+  perform set_config('gt.reset_in_progress', 'true', true);
+  update settings_pilot set settings = settings || '{"notChalakEnabled":false}'::jsonb where id = 1;
+  update animals_pilot set outer_status = null, outer_by = null, outer_time = null, outer_by_device = null where id = 940;
+  perform set_config('gt.reset_in_progress', 'false', true);
+  r  := pg_temp.api(pg_temp.dev('OUT1'), pg_temp.q_claim(940, 'outer', 'kosher', '', ''));
+  r2 := pg_temp.api(pg_temp.dev('OUT1'), pg_temp.q_claim(940, 'outer', 'glatt', '', ''));
+  ok := r ->> 'error' = 'bad_value' and pg_temp.claimed(r2) and (pg_temp.ar(940)).outer_status = 'glatt'
+        and _kosher_ready(pg_temp.ar(938)) is not distinct from _kosher_ready(pg_temp.ar(938))
+        and 'custom_nc36' = any(_kosher_statuses());
+  perform set_config('gt.reset_in_progress', 'true', true);
+  update settings_pilot set settings = settings || '{"notChalakEnabled":true}'::jsonb where id = 1;
+  perform set_config('gt.reset_in_progress', 'false', true);
+  perform pg_temp.rec('v10.36 "not chalak" off: no "not chalak" status is ruled; every own status is a kashrut status', ok,
+    concat_ws(' | ', left(r::text, 80), left(r2::text, 60)));
   -- v10.34 (owner): the inner inspector works after legs / head — with the legs screen in the plant's
   -- screen choice, no inner check before the stickers; without a screen choice nothing changes
   perform set_config('gt.reset_in_progress', 'true', true);
