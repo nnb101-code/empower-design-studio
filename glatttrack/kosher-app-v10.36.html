@@ -4064,7 +4064,9 @@ const KS = (function(){
     // toggling several settings locally could have an earlier echo of our
     // own first write arrive AFTER a second local change and stomp it back —
     // exactly the "toggle won't turn back on" symptom this fixes.
-    if(!force && row.device_id && row.device_id === SB_DEVICE_ID) return;
+    // v10.36: but only once this device holds the server's settings — a new tablet whose own first
+    // write (e.g. at the team leader's login) is the newest row must still load everything else
+    if(!force && _sbSettingsAppliedAt && row.device_id && row.device_id === SB_DEVICE_ID) return;
     // Ignore stale/duplicate messages from other devices too
     if(!force && _sbSettingsAppliedAt && row.updated_at && _sbSettingsAppliedAt >= row.updated_at) return;
     _sbSettingsAppliedAt = row.updated_at || new Date().toISOString();
