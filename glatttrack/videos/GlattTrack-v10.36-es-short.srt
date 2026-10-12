@@ -1,0 +1,95 @@
+1
+00:00:00,528 --> 00:00:08,096
+GlattTrack. Control kosher en el matadero, desde la faena hasta el sello. Cada animal recibe un número, y cada estación lo ve.
+
+2
+00:00:09,840 --> 00:00:17,611
+En los ajustes: estados kosher. Cada planta tiene su kashrut: Glatt, Beit Yosef, MK, kosher, o cualquier otro nombre.
+
+3
+00:00:19,859 --> 00:00:24,773
+Agregar un estado: un nombre, y un grupo. Jalak, o no jalak.
+
+4
+00:00:28,122 --> 00:00:34,081
+Un nombre para las etiquetas, en hebreo y en inglés, es opcional. Y un color, de una paleta grande.
+
+5
+00:00:42,160 --> 00:00:48,400
+La tableta de faena. El shojet pulsa un botón por animal, y el número siguiente se completa solo.
+
+6
+00:00:58,640 --> 00:01:05,027
+Animal ocho: no jalak. En el dictamen externo solo recibe un estado no jalak, o treif.
+
+7
+00:01:09,120 --> 00:01:19,371
+La tableta de patas y cabeza. Las etiquetas se imprimen justo después de la faena, antes del dictamen. También se puede dividir: una tableta para patas y otra para la cabeza.
+
+8
+00:01:19,371 --> 00:01:23,374
+El primer toque imprime las etiquetas de las patas.
+
+9
+00:01:26,186 --> 00:01:34,209
+La etiqueta de patas. Impreso: el número, la fecha hebrea y la gregoriana, y la hora. En el código QR: todo.
+
+10
+00:01:35,480 --> 00:01:40,140
+La tableta del inspector interno. Toque el siguiente animal de la fila.
+
+11
+00:01:42,121 --> 00:01:45,121
+Control de la panza: kosher.
+
+12
+00:01:46,739 --> 00:01:49,739
+Cuajar: kosher.
+
+13
+00:01:50,750 --> 00:01:54,592
+El dibujo del pulmón: se marca con el dedo.
+
+14
+00:01:59,606 --> 00:02:04,273
+Aprobar para el inspector externo. El animal sigue con su dibujo.
+
+15
+00:02:17,520 --> 00:02:23,466
+La tableta del inspector externo. Se ve el dibujo del pulmón, y el inspector dictamina.
+
+16
+00:02:26,816 --> 00:02:29,816
+Animal uno: MK.
+
+17
+00:02:32,400 --> 00:02:38,082
+Animal ocho, no jalak: solo aparecen los estados no jalak de la planta, y treif.
+
+18
+00:02:40,684 --> 00:02:43,520
+Dictaminado: Magen David.
+
+19
+00:02:44,720 --> 00:02:50,886
+Animal uno: se imprimen las dos mejillas. La lengua está retenida, así que no se imprime.
+
+20
+00:02:54,705 --> 00:03:00,732
+La etiqueta de partes: el dictamen en hebreo y en inglés, y el sello kosher de MK.
+
+21
+00:03:01,960 --> 00:03:09,939
+Los resúmenes: cada estado kosher, treif por tipo, cuajar, panza y pulmones, y nevelá y baleado, cada uno por separado.
+
+22
+00:03:11,360 --> 00:03:14,698
+Ejemplos de etiquetas, de todo tipo.
+
+23
+00:03:14,698 --> 00:03:24,163
+Arriba: patas y cabeza, antes del dictamen. Abajo: partes y sellos, con el nombre en hebreo e inglés en una línea, y los sellos kosher de la planta.
+
+24
+00:03:25,264 --> 00:03:29,956
+GlattTrack. Cada animal, cada sello kosher, en un solo lugar.

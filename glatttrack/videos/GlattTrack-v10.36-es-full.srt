@@ -1,0 +1,343 @@
+1
+00:00:00,528 --> 00:00:08,096
+GlattTrack. Control kosher en el matadero, desde la faena hasta el sello. Cada animal recibe un número, y cada estación lo ve.
+
+2
+00:00:09,160 --> 00:00:12,401
+Capítulo uno: primera instalación
+
+3
+00:00:13,528 --> 00:00:19,200
+Una pantalla vacía. Abrimos la aplicación GlattTrack en la tableta del jefe de equipo.
+
+4
+00:00:21,054 --> 00:00:28,715
+La aplicación se conecta al servidor de la planta. El servidor aún no tiene jefe de equipo: es la primera instalación.
+
+5
+00:00:30,366 --> 00:00:37,678
+Complete el nombre del jefe de equipo, un código personal y el código de instalación del servidor, que da el instalador.
+
+6
+00:00:43,897 --> 00:00:48,717
+El servidor revisa el código de instalación y aprueba la instalación.
+
+7
+00:00:54,624 --> 00:01:02,472
+Esta tableta queda registrada como el dispositivo del jefe de equipo. Se abre la página de configuración, solo esta vez.
+
+8
+00:01:04,410 --> 00:01:08,874
+Un código de recuperación. Se puede omitir y crear después.
+
+9
+00:01:11,133 --> 00:01:20,446
+Elija las pantallas que usa la planta: faena, esófago, patas y cabeza, interno, externo, partes pequeñas y sellos. Luego guarde.
+
+10
+00:01:33,884 --> 00:01:42,063
+Los trabajadores, el emparejamiento de tabletas, el propietario y las impresoras se pueden hacer ahora o después.
+
+11
+00:01:45,329 --> 00:01:53,239
+La pantalla del jefe de equipo está abierta. Una planta nueva empieza sin estados kosher: cada planta llena los suyos.
+
+12
+00:01:55,499 --> 00:01:59,258
+Capítulo dos: los estados kosher de la planta
+
+13
+00:02:02,180 --> 00:02:09,951
+En los ajustes: estados kosher. Cada planta tiene su kashrut: Glatt, Beit Yosef, MK, kosher, o cualquier otro nombre.
+
+14
+00:02:12,199 --> 00:02:17,113
+Agregar un estado: un nombre, y un grupo. Jalak, o no jalak.
+
+15
+00:02:20,462 --> 00:02:26,421
+Un nombre para las etiquetas, en hebreo y en inglés, es opcional. Y un color, de una paleta grande.
+
+16
+00:02:33,598 --> 00:02:40,595
+Junto a cada estado: jalak o no jalak, y su sello kosher. Lo que se borra, se borra por completo.
+
+17
+00:02:42,774 --> 00:02:47,985
+Tocar el nombre abre el cambio de nombre, ahí mismo. Sin borrar ni volver a agregar.
+
+18
+00:02:51,074 --> 00:02:58,311
+Una planta que acepta no jalak lo enciende. Una que no lo acepta lo apaga, y un animal no jalak se dictamina treif.
+
+19
+00:02:59,756 --> 00:03:02,756
+Capítulo tres: faena
+
+20
+00:03:07,035 --> 00:03:13,275
+La tableta de faena. El shojet pulsa un botón por animal, y el número siguiente se completa solo.
+
+21
+00:03:22,594 --> 00:03:27,434
+Una pregunta sobre el cuchillo en el animal cinco. Toque el botón de pregunta.
+
+22
+00:03:30,882 --> 00:03:39,545
+El número cinco queda marcado con un signo de pregunta y parpadea todo el tiempo, para no olvidarlo. El shojet sigue con el siguiente animal.
+
+23
+00:03:39,545 --> 00:03:42,545
+Animal seis: nevelá.
+
+24
+00:03:46,685 --> 00:03:53,072
+Animal ocho: no jalak. En el dictamen externo solo recibe un estado no jalak, o treif.
+
+25
+00:03:56,195 --> 00:04:00,626
+Llegó la respuesta. Toque el cinco y dictamine: faenado.
+
+26
+00:04:06,064 --> 00:04:13,217
+Tocar un número ya marcado abre un cambio, tras una advertencia. Solo hasta que el número llega al control de esófago.
+
+27
+00:04:33,893 --> 00:04:37,528
+Capítulo cuatro: el control de esófago
+
+28
+00:04:41,200 --> 00:04:44,232
+La tableta del control de esófago.
+
+29
+00:04:46,522 --> 00:04:51,209
+Intento de saltar al animal tres. El sistema no lo permite.
+
+30
+00:04:54,382 --> 00:04:57,790
+Toque el animal que parpadea y elija correcto.
+
+31
+00:05:33,720 --> 00:05:36,726
+Capítulo cinco: patas y cabeza
+
+32
+00:05:40,938 --> 00:05:51,189
+La tableta de patas y cabeza. Las etiquetas se imprimen justo después de la faena, antes del dictamen. También se puede dividir: una tableta para patas y otra para la cabeza.
+
+33
+00:05:51,189 --> 00:05:55,192
+El primer toque imprime las etiquetas de las patas.
+
+34
+00:05:58,004 --> 00:06:05,932
+La etiqueta de patas. Impreso: el número, la fecha hebrea y la gregoriana, y la hora. En el código QR: todo.
+
+35
+00:06:05,932 --> 00:06:09,509
+El segundo toque imprime la etiqueta de la cabeza.
+
+36
+00:06:12,175 --> 00:06:15,826
+La etiqueta de la cabeza tiene los mismos datos.
+
+37
+00:06:16,998 --> 00:06:22,003
+Cada animal en orden. Una nevelá también recibe su etiqueta con número.
+
+38
+00:06:59,184 --> 00:07:02,184
+La etiqueta de una nevelá.
+
+39
+00:07:26,292 --> 00:07:29,777
+Capítulo seis: el inspector interno
+
+40
+00:07:33,781 --> 00:07:38,441
+La tableta del inspector interno. Toque el siguiente animal de la fila.
+
+41
+00:07:40,422 --> 00:07:43,422
+Control de la panza: kosher.
+
+42
+00:07:45,040 --> 00:07:48,040
+Cuajar: kosher.
+
+43
+00:07:49,051 --> 00:07:52,893
+El dibujo del pulmón: se marca con el dedo.
+
+44
+00:07:57,907 --> 00:08:02,574
+Aprobar para el inspector externo. El animal sigue con su dibujo.
+
+45
+00:08:14,887 --> 00:08:19,776
+El animal tres es treif. El primer toque pregunta, el segundo dictamina.
+
+46
+00:08:28,583 --> 00:08:39,253
+Animal cuatro: una pregunta sobre el cuajar. Toque el botón de pregunta en esa ventana. El número se cierra enseguida con un signo de pregunta. El control no sigue a los pulmones.
+
+47
+00:08:46,193 --> 00:08:53,419
+El animal cuatro parpadea todo el tiempo, marcado: pregunta, cuajar. El inspector sigue con los siguientes animales.
+
+48
+00:08:53,419 --> 00:08:57,449
+Animales cinco y siete: kosher, y aprobar.
+
+49
+00:09:27,723 --> 00:09:34,654
+Llegó la respuesta. Toque el cuatro: se abre la ventana del cuajar, y el control sigue desde allí a los pulmones.
+
+50
+00:10:03,201 --> 00:10:06,453
+Capítulo siete: el inspector externo
+
+51
+00:10:10,260 --> 00:10:16,206
+La tableta del inspector externo. Se ve el dibujo del pulmón, y el inspector dictamina.
+
+52
+00:10:19,556 --> 00:10:22,556
+Animal uno: MK.
+
+53
+00:10:24,190 --> 00:10:29,962
+Animal dos: Beit Yosef. Cuatro: Glatt. Cinco: kosher. Siete: Glatt.
+
+54
+00:10:51,893 --> 00:10:57,575
+Animal ocho, no jalak: solo aparecen los estados no jalak de la planta, y treif.
+
+55
+00:11:00,177 --> 00:11:02,853
+Dictaminado: Magen David.
+
+56
+00:11:02,853 --> 00:11:07,673
+El dictamen está hecho. Volvemos a la tableta de patas, para clasificar.
+
+57
+00:11:15,965 --> 00:11:19,478
+Capítulo ocho: clasificación de patas
+
+58
+00:11:25,741 --> 00:11:31,147
+Clasificación de patas: escanee la etiqueta que se imprimió antes del dictamen.
+
+59
+00:11:33,870 --> 00:11:39,115
+El número se actualiza: la pantalla muestra el dictamen actual del servidor.
+
+60
+00:11:46,308 --> 00:11:49,308
+Pata tres: treif, en rojo.
+
+61
+00:11:57,242 --> 00:12:01,679
+Capítulo nueve: partes pequeñas, y retención USDA
+
+62
+00:12:05,661 --> 00:12:09,666
+La tableta de partes pequeñas: mejillas y lengua.
+
+63
+00:12:09,666 --> 00:12:14,184
+El animal tres es treif. La pantalla se niega a imprimir.
+
+64
+00:12:17,358 --> 00:12:24,447
+Retención USDA: la lengua del animal uno se cayó. Elija la lengua y toque marcar. No hace falta motivo.
+
+65
+00:12:32,676 --> 00:12:38,842
+Animal uno: se imprimen las dos mejillas. La lengua está retenida, así que no se imprime.
+
+66
+00:12:42,661 --> 00:12:48,594
+La etiqueta de partes: el dictamen en hebreo y en inglés, y el sello kosher de MK.
+
+67
+00:12:48,594 --> 00:12:53,762
+USDA la liberó. Toque liberar, y la etiqueta de la lengua se imprime ahora.
+
+68
+00:13:00,072 --> 00:13:03,072
+Animal dos: Beit Yosef.
+
+69
+00:13:06,296 --> 00:13:09,595
+Beit Yosef, con sus cuatro sellos kosher.
+
+70
+00:13:26,402 --> 00:13:29,402
+Capítulo diez: sellos y pesaje
+
+71
+00:13:33,575 --> 00:13:37,639
+La tableta de sellos y pesaje, para la canal principal.
+
+72
+00:13:37,639 --> 00:13:42,865
+Escanee la etiqueta del animal. Se imprimen cinco sellos, según el dictamen.
+
+73
+00:13:48,051 --> 00:13:52,534
+El sello del animal uno: MK, con su sello kosher.
+
+74
+00:13:52,933 --> 00:13:58,514
+Pesaje: escanee la etiqueta de peso, lado derecho y luego lado izquierdo.
+
+75
+00:14:04,419 --> 00:14:08,779
+El animal uno está sellado y pesado. Seguimos con el siguiente.
+
+76
+00:14:17,881 --> 00:14:21,087
+Capítulo once: el jefe de equipo
+
+77
+00:14:24,340 --> 00:14:29,694
+De vuelta con el jefe de equipo: la ficha del animal uno, con toda su historia.
+
+78
+00:14:31,102 --> 00:14:34,789
+Cada acción: quién, cuándo y desde qué tableta.
+
+79
+00:14:40,382 --> 00:14:48,361
+Los resúmenes: cada estado kosher, treif por tipo, cuajar, panza y pulmones, y nevelá y baleado, cada uno por separado.
+
+80
+00:14:48,879 --> 00:14:52,217
+Ejemplos de etiquetas, de todo tipo.
+
+81
+00:14:52,217 --> 00:15:01,682
+Arriba: patas y cabeza, antes del dictamen. Abajo: partes y sellos, con el nombre en hebreo e inglés en una línea, y los sellos kosher de la planta.
+
+82
+00:15:02,784 --> 00:15:05,784
+Capítulo doce: detrás de escena
+
+83
+00:15:06,806 --> 00:15:15,213
+Actualizaciones: una tableta que nadie usa se actualiza sola. Una tableta en uso pregunta, y se actualiza tras diez minutos sin uso.
+
+84
+00:15:16,320 --> 00:15:23,601
+Sin el servidor de la planta, el trabajo se detiene. Lo que se tocó antes del corte se envía solo cuando vuelve la conexión.
+
+85
+00:15:24,895 --> 00:15:34,009
+Una copia de seguridad cada noche, comprobada con una restauración completa. Y el fabricante ve todas las plantas en una pantalla, con alertas.
+
+86
+00:15:35,144 --> 00:15:39,836
+GlattTrack. Cada animal, cada sello kosher, en un solo lugar.
