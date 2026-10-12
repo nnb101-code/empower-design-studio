@@ -800,7 +800,7 @@ $gt38$;
     execute $gt39$
 -- ── the rabbinate outer screen ("not chalak") ────────────────────────────────
 do $$
-declare r jsonb; r2 jsonb; r3 jsonb; r4 jsonb; r5 jsonb; ok boolean; c uuid := gen_random_uuid();
+declare r jsonb; r2 jsonb; r3 jsonb; r4 jsonb; r5 jsonb; ok boolean; c uuid := gen_random_uuid(); b9 bigint;
 begin
   perform set_config('gt.reset_in_progress', 'true', true);
   update animals_pilot set slaughter = 'slaughtered', slaughter_time = 1, inner_status = 'confirmed', inner_time = 1 where id between 938 and 943;
@@ -898,6 +898,40 @@ begin
   perform set_config('gt.reset_in_progress', 'false', true);
   perform pg_temp.rec('v10.36 "not chalak" off: no "not chalak" status for a regular animal (a marked one keeps them); every own status is a kashrut status', ok,
     concat_ws(' | ', left(r::text, 80), left(r2::text, 60), left(r3::text, 60)));
+  -- review (round 18) A1/A2/B4/B5: the "not chalak" list holds only this plant's statuses, never glatt / beit /
+  -- rabChalak, no key twice; a key a previous day's "not chalak" animal carries stays; a ruling needs a status
+  -- the plant has and did not remove
+  select coalesce(jsonb_agg(distinct a.outer_status), '[]'::jsonb) into r5 from animals_pilot a
+   where a.outer_status is not null and a.outer_status not in ('treif', 'kosher', 'custom_nc36') and coalesce(_nc_fixed(a), false);
+  insert into daily_board_archive (business_date, reason, animals_count, board, statuses)
+  values (current_date - 1, 'selftest: a previous day', 1, '[]'::jsonb, '{}'::jsonb) returning id into b9;
+  insert into animals_carry
+  select (jsonb_populate_record(null::animals_carry, to_jsonb(a) || jsonb_build_object('board_id', b9, 'slaughter_day', current_date - 1,
+          'outer_status', 'custom_nc36', 'slaughter', 'notChalak'))).*
+    from animals_pilot a where a.id = 941;
+  r  := pg_temp.api(pg_temp.mgr(), format('select push_settings(%L::jsonb, ''x'', %L)', jsonb_build_object('ncStatuses', '["kosher"]'::jsonb || r5), pg_temp.v('mgr')));
+  r2 := pg_temp.api(pg_temp.mgr(), format('select push_settings(%L::jsonb, ''x'', %L)', jsonb_build_object('ncStatuses', '["kosher","custom_nc36","custom_nope"]'::jsonb || r5), pg_temp.v('mgr')));
+  r3 := pg_temp.api(pg_temp.mgr(), format('select push_settings(%L::jsonb, ''x'', %L)', jsonb_build_object('ncStatuses', '["kosher","custom_nc36","glatt"]'::jsonb || r5), pg_temp.v('mgr')));
+  delete from animals_carry where board_id = b9; delete from daily_board_archive where id = b9;
+  perform set_config('gt.reset_in_progress', 'true', true);
+  update animals_pilot set outer_status = null, outer_by = null, outer_time = null, outer_by_device = null where id = 940;
+  perform set_config('gt.reset_in_progress', 'false', true);
+  r4 := pg_temp.api(pg_temp.dev('OUT1'), pg_temp.q_claim(940, 'outer', 'custom_nope', '', ''));
+  perform set_config('gt.reset_in_progress', 'true', true);
+  update settings_pilot set settings = jsonb_set(settings, '{customStatuses}',
+           (select jsonb_agg(case when x ->> 'key' = 'custom_nc36' then x || '{"removed":true}'::jsonb else x end) from jsonb_array_elements(settings -> 'customStatuses') x)) where id = 1;
+  perform set_config('gt.reset_in_progress', 'false', true);
+  r5 := pg_temp.api(pg_temp.dev('OUT1'), pg_temp.q_claim(940, 'outer', 'custom_nc36', '', ''));
+  ok := r ->> 'error' = 'status_in_use' and r ->> 'key' = 'custom_nc36'
+        and r2 ->> 'error' = 'bad_settings' and r3 ->> 'error' = 'bad_settings'
+        and r4 ->> 'error' = 'bad_value' and r5 ->> 'error' = 'bad_value' and (pg_temp.ar(940)).outer_status is null
+        and _settings_value_error('ncStatuses', '["kosher","kosher"]') is not null and _settings_value_error('ncStatuses', '["beit"]') is not null;
+  perform set_config('gt.reset_in_progress', 'true', true);
+  update settings_pilot set settings = jsonb_set(settings, '{customStatuses}',
+           (select jsonb_agg(x - 'removed') from jsonb_array_elements(settings -> 'customStatuses') x)) where id = 1;
+  perform set_config('gt.reset_in_progress', 'false', true);
+  perform pg_temp.rec('review round 18: "not chalak" list — only the plant''s statuses, never glatt / beit / rabChalak; a previous day''s ruling keeps its key; a ruling needs a status the plant has and did not remove', ok,
+    concat_ws(' | ', left(r::text, 70), left(r2::text, 70), left(r3::text, 70), left(r4::text, 60), left(r5::text, 60)));
   -- v10.34 (owner): the inner inspector works after legs / head — with the legs screen in the plant's
   -- screen choice, no inner check before the stickers; without a screen choice nothing changes
   perform set_config('gt.reset_in_progress', 'true', true);
@@ -1183,7 +1217,7 @@ begin
       (array['loginModeByRole', '{"inspector":"face-id"}']), (array['users', '[{"role":"inspector"}]']),
       (array['users', '"moshe"']), (array['dailyIntake', '[{"farm":"A","type":"B","qty":5000}]']),
       (array['dailyIntake', '[3]']), (array['customStatuses', '[{"he":"x"}]']), (array['lang', '"fr"']),
-      (array['legStickerCount', 'true']), (array['headStickerCount', '5000']), (array['statusNames', '{"glatt":{"x":1}}']),
+      (array['legStickerCount', 'true']), (array['headStickerCount', '5000']), (array['statusNames', '{"glatt":{"x":1}}']), (array['statusNames', '{"custom_1":{"he":"x"}}']),
       (array['customStatuses', '[{"key":"custom_q","he":"x","stickerHe":5}]'])) x(a) loop
     -- (v10.32: the plant's own statuses are kept in the list — one in use on the board may not be removed: status_in_use)
     r := pg_temp.api(pg_temp.mgr(), format('select push_settings(%L::jsonb, ''x'', %L)',

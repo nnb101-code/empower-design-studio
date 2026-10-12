@@ -1,9 +1,9 @@
 == 1. plant state =======================================================
     key     |     value     |          updated_at           
 ------------+---------------+-------------------------------
- boardEpoch | 1791762626113 | 2026-10-11 23:50:26.112568+00
- schemaStep | 46            | 2026-10-11 23:50:27.175836+00
- testMode   | off           | 2026-10-11 23:50:26.716247+00
+ boardEpoch | 1791777499329 | 2026-10-12 03:58:19.328384+00
+ schemaStep | 46            | 2026-10-12 03:58:20.643721+00
+ testMode   | off           | 2026-10-12 03:58:19.972068+00
 (3 rows)
 
 == 2. functions (public, gt_rls) ========================================
@@ -168,6 +168,7 @@
  public | _nc_statuses()                                                                     | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _no_device_error()                                                                 | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _note_revoked_write(text)                                                          | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _outer_status_known(text)                                                          | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _parts_print_block(bigint,integer,boolean,boolean,boolean,boolean,integer,integer) | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _plant_report()                                                                    | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _plant_state_test_mode_trg()                                                       | trigger  | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
@@ -230,7 +231,7 @@
  public | leader_account_remove(text)                                                        | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | leader_device_recovery(text)                                                       | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | manufacturer_set_code(text,text)                                                   | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
-(221 rows)
+(222 rows)
 
 == 2b. API surface: functions the app roles can run ======================
                        callable_by_app                       | security_definer 

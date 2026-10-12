@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict T1mZUifcccDBGlNVhiyetRk8ugX5BSm7cFBzyAF0gIJdRhiYWhCZPrCPJrxgBl2
+\restrict PbRcBVGKjDL07TvK1zeoloGmF6ADYuwz0t2AVgYth4QS4pADBVi4uL3zddbGOmg
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -529,7 +529,8 @@ begin
   if new.outer_status is not null
      and (tg_op = 'INSERT' or new.outer_status is distinct from old.outer_status)
      and (not _nc_outer_value_ok(new, new.outer_status)
-          or (_nc_group_off(new.outer_status) and not coalesce(_is_nc(new), false))) then
+          or (_nc_group_off(new.outer_status) and not coalesce(_is_nc(new), false))
+          or not _outer_status_known(new.outer_status)) then
     raise exception 'GT:INVALID_VALUE a "not chalak" animal can only be ruled kosher or treif (nc_kosher_or_treif_only)'
       using errcode = '23514';
   end if;
@@ -2355,6 +2356,23 @@ end $$;
 
 
 --
+-- Name: _outer_status_known(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public._outer_status_known(v text) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $$
+  select v is null or v = 'treif'
+      or (v in ('glatt', 'beit', 'kosher', 'mk', 'rabChalak')
+          and not coalesce((_gt_settings() -> 'removedDefaults') ? v, false))
+      or exists (select 1 from jsonb_array_elements(case when jsonb_typeof(_gt_settings() -> 'customStatuses') = 'array'
+                                                         then _gt_settings() -> 'customStatuses' else '[]'::jsonb end) c
+                  where jsonb_typeof(c) = 'object' and c ->> 'key' = v and c -> 'removed' is distinct from 'true'::jsonb);
+$$;
+
+
+--
 -- Name: _parts_print_block(bigint, integer, boolean, boolean, boolean, boolean, integer, integer); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -3090,7 +3108,7 @@ begin
   if p_key = 'statusNames' then   -- v10.36: a built-in status renamed by the plant {key: {he, stickerHe, en}}
     if t = 'object' and (select count(*) from jsonb_object_keys(v)) <= 20
        and not exists (select 1 from jsonb_each(v) x
-                        where x.key !~ '^[A-Za-z0-9_-]{1,60}$' or jsonb_typeof(x.value) <> 'object'
+                        where x.key not in ('glatt', 'beit', 'kosher', 'mk', 'rabChalak') or jsonb_typeof(x.value) <> 'object'   -- (review B3)
                            or exists (select 1 from jsonb_each(x.value) y
                                        where y.key not in ('he', 'stickerHe', 'en') or not _jstr_ok(y.value, 80))) then
       return null;
@@ -3100,10 +3118,12 @@ begin
   if p_key = 'ncStatuses' then   -- v10.36: the statuses a "not chalak" animal may get at the outer ruling
     if t = 'array' and jsonb_array_length(v) <= 50
        and not exists (select 1 from jsonb_array_elements(v) x
-                        where jsonb_typeof(x) <> 'string' or (x #>> '{}') !~ '^[A-Za-z0-9_-]{1,60}$' or (x #>> '{}') = 'treif') then
+                        where jsonb_typeof(x) <> 'string' or (x #>> '{}') !~ '^[A-Za-z0-9_-]{1,60}$'
+                           or (x #>> '{}') in ('treif', 'glatt', 'beit', 'rabChalak'))     -- (review A1: always chalak)
+       and (select count(*) = count(distinct x #>> '{}') from jsonb_array_elements(v) x) then   -- (review B4)
       return null;
     end if;
-    return 'expected a list of status keys';
+    return 'expected a list of different "not chalak" status keys (not treif / glatt / beit / rabChalak)';
   end if;
   if p_key in ('disabledStatuses', 'removedDefaults', 'statusOptIn') then
     if t = 'array' and jsonb_array_length(v) <= 500
@@ -4445,7 +4465,8 @@ begin
   -- a "not chalak" animal: only רבנות כשר (kosher) or treif — one only SENT to the rabbinate
   -- screen may also be ruled רבנות חלק (§25)
   if p_stage = 'outer' and a.outer_status is null
-     and (not _nc_outer_value_ok(a, p_value) or (_nc_group_off(p_value) and not coalesce(_is_nc(a), false))) then
+     and (not _nc_outer_value_ok(a, p_value) or (_nc_group_off(p_value) and not coalesce(_is_nc(a), false))
+          or not _outer_status_known(p_value)) then
     v_res := jsonb_build_object('claimed', false, 'error', 'bad_value', 'reason', 'nc_kosher_or_treif_only',
                                 'row', to_jsonb(a), 'serverNow', v_now);
     perform _cmd_put(p_command_id, v_dev, 'claim_animal_stage', v_res);
@@ -6203,11 +6224,26 @@ begin
   end if;
   -- v10.36: a status a ruled "not chalak" animal carries stays allowed for "not chalak" until the reset
   if incoming ? 'ncStatuses' and jsonb_typeof(incoming -> 'ncStatuses') = 'array' then
-    select a.outer_status into v_used from animals_pilot a
-     where a.outer_status is not null and a.outer_status <> 'treif' and coalesce(_nc_fixed(a), false)
-       and not (incoming -> 'ncStatuses') ? a.outer_status limit 1;
+    select x.s into v_used from (
+      select a.outer_status as s from animals_pilot a
+       where a.outer_status is not null and a.outer_status <> 'treif' and coalesce(_nc_fixed(a), false)
+      union all                                                     -- (review A2: also a previous day's board)
+      select c.outer_status from animals_carry c
+       where c.outer_status is not null and c.outer_status <> 'treif'
+         and (c.slaughter = 'notChalak' or coalesce(c.not_chalak_inner, false))) x
+     where not (incoming -> 'ncStatuses') ? x.s limit 1;
     if v_used is not null then
       return jsonb_build_object('ok', false, 'error', 'status_in_use', 'key', v_used, 'reason', 'nc_status_in_use');
+    end if;
+    -- (review A1) every key is a status of this plant: a built-in one or one of its own statuses
+    select nk.v into v_used from jsonb_array_elements_text(incoming -> 'ncStatuses') nk(v)
+     where nk.v not in ('kosher', 'mk')
+       and not exists (select 1 from jsonb_array_elements(case when jsonb_typeof(coalesce(incoming -> 'customStatuses', cur -> 'customStatuses')) = 'array'
+                                                               then coalesce(incoming -> 'customStatuses', cur -> 'customStatuses') else '[]'::jsonb end) c
+                        where jsonb_typeof(c) = 'object' and c ->> 'key' = nk.v)
+     limit 1;
+    if v_used is not null then
+      return jsonb_build_object('ok', false, 'error', 'bad_settings', 'key', 'ncStatuses', 'reason', 'unknown status ' || v_used);
     end if;
   end if;
 
@@ -9729,6 +9765,13 @@ REVOKE ALL ON FUNCTION public._note_revoked_write(p_dev text) FROM PUBLIC;
 
 
 --
+-- Name: FUNCTION _outer_status_known(v text); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public._outer_status_known(v text) FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION _parts_print_block(p_epoch bigint, p_id integer, o_tongue boolean, n_tongue boolean, o_cheek boolean, n_cheek boolean, o_count integer, n_count integer); Type: ACL; Schema: public; Owner: -
 --
 
@@ -10933,5 +10976,5 @@ GRANT ALL ON TABLE public.system_flags TO service_role;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict T1mZUifcccDBGlNVhiyetRk8ugX5BSm7cFBzyAF0gIJdRhiYWhCZPrCPJrxgBl2
+\unrestrict PbRcBVGKjDL07TvK1zeoloGmF6ADYuwz0t2AVgYth4QS4pADBVi4uL3zddbGOmg
 

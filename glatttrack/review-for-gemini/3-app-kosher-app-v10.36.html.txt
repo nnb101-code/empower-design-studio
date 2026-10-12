@@ -583,7 +583,7 @@ function _gtOuterKey(x){ return !x ? null : (_gtNCPlain(x) ? 'kosherPlain' : (x.
 // ruling; there the animal gets one of the statuses the plant chose for it (ncStatuses: any statuses of the
 // list, default כשר) or טרף. An animal only SENT to screen B (not marked by the shochet / maw check) may get any status.
 function gtNCStatuses(s){ s=s||((typeof KS!=='undefined'&&KS.getSettings)?KS.getSettings():{});
-  return Array.isArray(s.ncStatuses) ? s.ncStatuses.filter(k=>typeof k==='string'&&k&&k!=='treif') : ['kosher']; }
+  return Array.isArray(s.ncStatuses) ? s.ncStatuses.filter((k,i,a)=>typeof k==='string'&&k&&!['treif','glatt','beit','rabChalak'].includes(k)&&a.indexOf(k)===i) : ['kosher']; }
 // is this a "not chalak" status (כשר, מגן דוד …) the plant can't rule now ("not chalak" switched off)?
 function gtNCOff(key,s){ s=s||KS.getSettings(); return key!=='treif' && s.notChalakEnabled!==true && gtNCStatuses(s).includes(key); }
 function gtNCAllowed(x,key){ return key==='treif' || !_gtNCFixed(x) || gtNCStatuses().includes(key); }
@@ -11651,7 +11651,10 @@ function mgrRenderNcStatuses(){
   const s=KS.getSettings(), names=gtNCStatuses(s).filter(k=>getAllStatuses().some(st=>st.key===k&&!st.removed)).map(k=>statusDisplayName(k));
   box.innerHTML=`<div style="font-size:11px;color:var(--muted);">${L('סטטוסי "לא חלק" (כשר)','"Not chalak" statuses (kosher)','Estados "no jalak" (kosher)')}: <b data-no-i18n style="color:#C99A00;">${escapeHtml(names.join(' / ')||'—')}</b><br>${L('בוחרים בכפתור "חלק / לא חלק" בכל שורה ברשימת סטטוסי הכשרות.','Chosen with the "chalak / not chalak" button on each row of the kashrut statuses list.','Se elige con el botón "jalak / no jalak" en cada fila de la lista de estados.')}</div>`;
 }
+// review (round 18): גלאט / בית יוסף / רבנות חלק are always "chalak" (the server refuses them in ncStatuses)
+const GT_ALWAYS_CHALAK=['glatt','beit','rabChalak'];
 function mgrToggleNcStatus(key){
+  if(GT_ALWAYS_CHALAK.includes(key)){ alert(L('"'+statusDisplayName(key)+'" הוא תמיד "חלק".','"'+statusDisplayName(key)+'" is always "chalak".','"'+statusDisplayName(key)+'" es siempre "jalak".')); return; }
   const s=KS.getSettings(); let cur=gtNCStatuses(s).slice();
   if(cur.includes(key)){
     if(cur.length<=1 && s.notChalakEnabled===true){ alert(L('צריך לפחות סטטוס אחד לבהמה "לא חלק". בחר קודם סטטוס אחר.','A "not chalak" animal needs at least one status. Choose another one first.','Un animal "no jalak" necesita al menos un estado. Elija otro primero.')); return; }
@@ -11705,7 +11708,7 @@ function mgrUpdateStatusToggles(){
       </label>
       ${seal?`<button onclick="mgrRemoveSeal(${K})" style="font-size:11px;color:#FF6B6B;background:rgba(224,48,48,.1);border:1px solid rgba(224,48,48,.3);border-radius:5px;padding:4px 7px;cursor:pointer;">⌫</button>`:''}
 
-      ${st.key==='treif'?'':`<button data-nc-st="${escapeHtml(st.key)}" data-on="${ncAll.includes(st.key)?1:0}" onclick="mgrToggleNcStatus(${K})" style="font-size:11px;border-radius:5px;padding:4px 7px;cursor:pointer;background:transparent;border:1px solid ${ncAll.includes(st.key)?'#C99A00':'#28C76F'};color:${ncAll.includes(st.key)?'#C99A00':'#28C76F'};">${ncAll.includes(st.key)?L('לא חלק','Not chalak','No jalak'):L('חלק','Chalak','Jalak')}</button>`}
+      ${st.key==='treif'?'':GT_ALWAYS_CHALAK.includes(st.key)?`<span title="${escapeHtml(L('תמיד חלק','Always chalak','Siempre jalak'))}" style="font-size:11px;border-radius:5px;padding:4px 7px;border:1px dashed #28C76F;color:#28C76F;opacity:.75;">${L('חלק 🔒','Chalak 🔒','Jalak 🔒')}</span>`:`<button data-nc-st="${escapeHtml(st.key)}" data-on="${ncAll.includes(st.key)?1:0}" onclick="mgrToggleNcStatus(${K})" style="font-size:11px;border-radius:5px;padding:4px 7px;cursor:pointer;background:transparent;border:1px solid ${ncAll.includes(st.key)?'#C99A00':'#28C76F'};color:${ncAll.includes(st.key)?'#C99A00':'#28C76F'};">${ncAll.includes(st.key)?L('לא חלק','Not chalak','No jalak'):L('חלק','Chalak','Jalak')}</button>`}
       <button onclick="mgrRemoveStatus(${K})" style="font-size:12px;color:#FF6B6B;background:rgba(224,48,48,.1);border:1px solid rgba(224,48,48,.3);border-radius:5px;padding:4px 9px;cursor:pointer;">✕</button>
      </div>
     </div>`;
