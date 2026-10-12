@@ -913,6 +913,20 @@ begin
   r  := pg_temp.api(pg_temp.mgr(), format('select push_settings(%L::jsonb, ''x'', %L)', jsonb_build_object('ncStatuses', '["kosher"]'::jsonb || r5), pg_temp.v('mgr')));
   r2 := pg_temp.api(pg_temp.mgr(), format('select push_settings(%L::jsonb, ''x'', %L)', jsonb_build_object('ncStatuses', '["kosher","custom_nc36","custom_nope"]'::jsonb || r5), pg_temp.v('mgr')));
   r3 := pg_temp.api(pg_temp.mgr(), format('select push_settings(%L::jsonb, ''x'', %L)', jsonb_build_object('ncStatuses', '["kosher","custom_nc36","kosher"]'::jsonb || r5), pg_temp.v('mgr')));
+  -- round 19: a built-in status in use can't go into removedDefaults (A1); "removed" on an own status in use = a
+  -- delete (A2); a previous day's printed / stamped key counts as in use (A3); an own status key is custom_… (B4)
+  update animals_carry set parts_printed_as = 'custom_pp19' where board_id = b9;
+  ok := 'custom_pp19' = any(_statuses_in_use());
+  r4 := pg_temp.api(pg_temp.mgr(), format('select push_settings(%L::jsonb, ''x'', %L)', '{"removedDefaults":["mk"]}', pg_temp.v('mgr')));
+  r5 := pg_temp.api(pg_temp.mgr(), format('select push_settings(%L::jsonb, ''x'', %L)', jsonb_build_object('customStatuses',
+          (select jsonb_agg(case when x ->> 'key' = 'custom_nc36' then x || '{"removed":true}'::jsonb else x end) from settings_pilot, jsonb_array_elements(settings -> 'customStatuses') x where id = 1)),
+          pg_temp.v('mgr')));
+  ok := ok and (pg_temp.ar(938)).outer_status = 'mk' and r4 ->> 'error' = 'status_in_use' and r4 ->> 'key' = 'mk'
+        and r5 ->> 'error' = 'status_in_use' and r5 ->> 'key' = 'custom_nc36'
+        and _settings_value_error('customStatuses', '[{"key":"glatt","he":"x"}]') is not null
+        and _settings_value_error('customStatuses', '[{"key":"custom_ok","he":"x"}]') is null;
+  perform pg_temp.rec('round 19: a status in use can''t be deleted — a built-in one (removedDefaults), "removed" on an own one, a previous day''s printed / stamped key; an own status key is custom_…', ok,
+    concat_ws(' | ', left(r4::text, 70), left(r5::text, 70)));
   delete from animals_carry where board_id = b9; delete from daily_board_archive where id = b9;
   perform set_config('gt.reset_in_progress', 'true', true);
   update animals_pilot set outer_status = null, outer_by = null, outer_time = null, outer_by_device = null where id = 940;

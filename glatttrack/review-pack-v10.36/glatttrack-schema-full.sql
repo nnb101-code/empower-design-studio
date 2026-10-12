@@ -12111,6 +12111,7 @@ notify pgrst, 'reload schema';
 -- ============================================================================
 -- ============================================================================
 -- ============================================================================
+-- ============================================================================
 -- GlattTrack — step 46: stage order on the server, each station its own stage,
 -- kashrut configuration locks, and processing that continues over several days
 -- ============================================================================
@@ -13084,7 +13085,9 @@ language sql stable security definer set search_path = public, extensions, pg_te
     select outer_status as s from animals_pilot where outer_status is not null
     union all select parts_printed_as from animals_pilot where parts_printed_as is not null
     union all select stamped_as from animals_pilot where stamped_as is not null
-    union all select outer_status from animals_carry where outer_status is not null) x;
+    union all select outer_status from animals_carry where outer_status is not null
+    union all select parts_printed_as from animals_carry where parts_printed_as is not null   -- (round 19 A3)
+    union all select stamped_as from animals_carry where stamped_as is not null) x;
 $$;
 revoke execute on function _statuses_in_use() from public, anon, authenticated;
 
@@ -13099,7 +13102,8 @@ begin
     continue when o is null;                                   -- a built-in status: not defined here
     select x into n from jsonb_array_elements(case when jsonb_typeof(p_new) = 'array' then p_new else '[]'::jsonb end) x
      where jsonb_typeof(x) = 'object' and x ->> 'key' = k limit 1;
-    if n is null or (coalesce(o -> 'kosher', 'false'::jsonb) = 'true'::jsonb) is distinct from (coalesce(n -> 'kosher', 'false'::jsonb) = 'true'::jsonb) then
+    if n is null or (coalesce(o -> 'kosher', 'false'::jsonb) = 'true'::jsonb) is distinct from (coalesce(n -> 'kosher', 'false'::jsonb) = 'true'::jsonb)
+       or (coalesce(n -> 'removed' = 'true'::jsonb, false) and not coalesce(o -> 'removed' = 'true'::jsonb, false)) then   -- (round 19 A2)
       return k;
     end if;
     o := null; n := null;
@@ -13196,6 +13200,16 @@ begin
   -- step 46: a status an animal on an open board carries keeps its kosher mark
   if incoming ? 'customStatuses' then
     v_used := _status_change_error(cur -> 'customStatuses', incoming -> 'customStatuses');
+    if v_used is not null then
+      return jsonb_build_object('ok', false, 'error', 'status_in_use', 'key', v_used);
+    end if;
+  end if;
+  -- (round 19 A1) a built-in status an animal carries today can't be deleted either (removedDefaults) until the reset
+  if incoming ? 'removedDefaults' and jsonb_typeof(incoming -> 'removedDefaults') = 'array' then
+    select u into v_used from unnest(_statuses_in_use()) u
+     where (incoming -> 'removedDefaults') ? u
+       and not coalesce((cur -> 'removedDefaults') ? u, false)
+     limit 1;
     if v_used is not null then
       return jsonb_build_object('ok', false, 'error', 'status_in_use', 'key', v_used);
     end if;
@@ -14391,7 +14405,7 @@ begin
     end if;
     for e in select value from jsonb_array_elements(v) loop
       if jsonb_typeof(e) <> 'object'
-         or jsonb_typeof(e -> 'key') is distinct from 'string' or (e ->> 'key') !~ '^[A-Za-z0-9_-]{1,60}$'
+         or jsonb_typeof(e -> 'key') is distinct from 'string' or (e ->> 'key') !~ '^custom_[A-Za-z0-9_-]{1,40}$'   -- (round 19 B4)
          or (e ? 'he' and not _jstr_ok(e -> 'he', 80)) or (e ? 'en' and not _jstr_ok(e -> 'en', 80))
          or (e ? 'es' and not _jstr_ok(e -> 'es', 80)) or (e ? 'color' and not _jstr_ok(e -> 'color', 40))
          or (e ? 'stickerHe' and not _jstr_ok(e -> 'stickerHe', 80))          -- v10.36: the name on the stickers
@@ -16935,7 +16949,8 @@ begin
     update animals_carry c set outer_status = 'custom_rab'
      where c.outer_status = 'kosher' and (c.slaughter = 'notChalak' or coalesce(c.not_chalak_inner, false));
     perform set_config('gt.reset_in_progress', 'false', true);
-  elsif not (s ? 'customStatuses') and not exists (select 1 from animals_pilot where outer_status is not null)
+  elsif (not (s ? 'customStatuses') or s -> 'customStatuses' = '[]'::jsonb)          -- (round 19 B2)
+        and not exists (select 1 from animals_pilot where outer_status is not null)
         and not exists (select 1 from daily_board_archive) then
     -- (owner) a new plant: no statuses yet (only טרף) — the plant fills in its own kashrut statuses and groups
     s := s || jsonb_build_object('ncStatuses', '[]'::jsonb,

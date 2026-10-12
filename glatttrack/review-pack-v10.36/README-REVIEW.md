@@ -18,6 +18,19 @@ This pack is the CURRENT state. Review these files only.
 | `test-mode-on.sql` / `test-mode-off.sql` | The owner's SQL-only test switch. |
 | `plant-server/` | Plant resilience kit (bash, runs as root on the plant servers, NOT in the database): standby server, floating address, UPS, nightly checked backup. Guide: `PLANT-RESILIENCE-HE.md`. |
 
+## Fixed after round 19 (server 02 + app)
+
+- **A1.** A built-in status an animal carries today can't be put into `removedDefaults` (`push_settings` → `status_in_use`).
+- **A2.** `removed:true` on an own status in use counts as a delete (`_status_change_error`).
+- **A3.** `_statuses_in_use()` also reads `parts_printed_as` / `stamped_as` of `animals_carry`.
+- **B2.** A new plant is also recognised with `customStatuses: []`.
+- **B4.** An own status key must match `^custom_…`.
+- **Not changed, and why:**
+  - B1: `custom_rab` is only ever created by the one-time migration.
+  - B5 / F: the app removes a deleted key from `ncStatuses` in the same write; a server rule would clash with a key still in use until the reset.
+- **App.** On `status_in_use` the app restores `removedDefaults` / `statusNames` / colours too.
+- **Self-test: 150/150** (new check "round 19 …").
+
 ## Owner's rule (after round 18) — every plant fills in its own statuses; delete = gone
 
 **Chalak / not chalak.**
@@ -34,7 +47,7 @@ This pack is the CURRENT state. Review these files only.
 - One still carried by an animal is refused until the daily reset (`_status_change_error` / `status_in_use`).
 - 02 deletes the old `removed:true` statuses that no animal carries.
 
-Self-test: 149/149.
+Self-test: 150/150.
 
 ## Fixed after our own deep review of the kashrut statuses (v10.36, server 02 + app)
 
@@ -47,7 +60,7 @@ Self-test: 149/149.
    - Fix: the off rule (`_nc_group_off`) now applies only to a regular animal (`not _is_nc(a)`), in `claim_animal_stage` and in `_animals_nc_outer_value`. The app (outer buttons) matches, and the self-test covers it.
 4. **App: the auto-scroll after a tap.** It now reacts only to a part that really opened (new nodes, or `display:none` / closed → open, using `attributeOldValue`).
 
-Self-test: 149/149.
+Self-test: 150/150.
 
 ## Changed in v10.36 (owner, server 02 + app) — kashrut statuses: chalak / not chalak, no "not kosher"
 
@@ -75,7 +88,7 @@ Self-test: 149/149.
   - Only "טרף" / "נבלה" on the work screens; "ירוי" only on the slaughter screen.
   - The summaries split treif by kind (maw / rumen / lungs).
 - **App only.** A tap repaints the scrolling area and brings a newly opened part into view (the team leader's screen). Settings refreshes keep an open form.
-- **Self-test: 149/149.**
+- **Self-test: 150/150.**
 
 ## Added in v10.36 (owner) — system health for the manufacturer, safe updates, the support center
 
@@ -83,13 +96,13 @@ Self-test: 149/149.
 - **Safe updates (app):** the tablet re-reads its own page every 2 min (`_gtUpdCheck`, a pattern that cannot match its own source); not in use (login / home / counter screen or 10 min without a touch) → `_gtUpdApply` at once; in use → "update now / later", "later" → by itself after 10 min idle. `_gtUpdApply` waits until the queue is empty (`KS.pendingCount`, `KS.flushNow`), stores the screen in sessionStorage, reloads; `_gtResumeAfterUpdate` goes back to the same screen (the worker session is kept). The manufacturer's force-reload goes through the same path.
 - **Plant server:** `plant-server/update-app.sh` (02 + the self-test 03 must pass before the app file is swapped; `--rollback`). `plant-server/report-to-center.sh` (every 5 min) sends `_plant_report()` (health + app version + working + tablets; no kashrut data, no names, no codes) to the support center, runs its commands (restart_standby / reload_tablets / update_now / run_nightly_check — only these), installs a release (https download, sha256 check; a release with a server part only when nobody works).
 - **Support center** (`support-center/`, the manufacturer's OWN database): `central-setup.sql` (plants + bcrypt secret, status, alerts, commands, release, staff sessions; every table closed to anon / authenticated, RPCs only), `central-selftest.sql` (14/14), `index.html` (all plants, plant page, settings), `notify.sh` (e-mail / SMS / WhatsApp, each channel on/off, min level).
-- Self-test 149/149 (system_health for the manufacturer). Browser tests: `v1035-thealth`, `v1035-tupdate*`, `support-center/browser-test-support-center.js`.
+- Self-test 150/150 (system_health for the manufacturer). Browser tests: `v1035-thealth`, `v1035-tupdate*`, `support-center/browser-test-support-center.js`.
 
 ## Fixed after the Gemini round (v10.36) — worker codes out of the readable settings
 
 - **Confirmed:** every paired tablet could read users[].codeHash in settings_pilot (unsalted sha256 of a 4–6 digit code — reversed in under a second). Now: table `worker_codes` (no grant to anon / authenticated, RLS on), bcrypt with salt; settings keep `{name, role, hasCode}`. `_settings_hash_worker_codes` moves any `code` / `codeHash` that reaches the settings into worker_codes (old hashes as `sha:<hash>`, accepted by `_worker_code_ok` and turned into bcrypt at the first good login). `worker_code_set(p_token, p_role, p_name, p_code)` — team leader only, `code_taken` when another worker of that screen has the code. `worker_login` looks codes up only in worker_codes.
 - **X-GT-Client-IP:** `_request_ip` trusts it (after cf-connecting-ip). The plant's nginx must set it from `$remote_addr`; the nightly check (`plant-server/nightly-check.sh` §2b) now proves it every night (a wrong team-leader code with a made-up address; the recorded address must not be the made-up one).
-- Self-test 149/149 (codes not in settings; worker_codes not readable; code_taken; team leader only). Browser test `v1035-tworkercodes.test.js`.
+- Self-test 150/150 (codes not in settings; worker_codes not readable; code_taken; team leader only). Browser test `v1035-tworkercodes.test.js`.
 - Gemini statements that do not match the code (not changed): "legs sorting allowed on both slots" (slot 1 is refused), "unfinished animals go to animals_carry" (not any more), "QuotaExceeded locks the screen" (no such code).
 
 ## Fixed after the deep code review (v10.36, server 02 + app) — 15 findings + the owner's previous-day rule
@@ -103,12 +116,12 @@ Self-test: 149/149.
 - **14** `claim_animal_stage('legs')` answers out_of_order with the reason (wrong_screen / legs_off / no_leg_stickers).
 - **App:** 9 (`_pushAnswer` 'held' puts back every sent column), 10 ('worker_login_required' keeps the change), 12 (legs slot 1 not in use when not split; gtPlanSave refuses going back to one screen while it is paired), 15 (events: 'correction' / 'settings' stages).
 - **6** resolved by the previous-day rule (no kept day; no sorting while legs is off).
-- Self-test 149/149 (the four kept-day checks merged into two for the new rule; each new check fails on the previous version). Browser tests `v1035-tfix.test.js`, `v1035-theld.test.js`.
+- Self-test 150/150 (the four kept-day checks merged into two for the new rule; each new check fails on the previous version). Browser tests `v1035-tfix.test.js`, `v1035-theld.test.js`.
 
 ## Added in v10.36 (server 02 + app) — infrastructure for four supervisor screens
 
 - New device roles `cooler`, `nikur`, `salting`, `shipping`: `devices_pilot_role_ok`, `_gt_value_ok('device_role')`, `device_pair`, `worker_sessions_role_check`, `_worker_role_norm`, and the "station tablet" lists in `manager_login` / the leader-device replacement.
-- They have NO write rights: `_stage_allowed` does not know them, so `animal_push` ignores their columns, `claim_animal_stage` and `hold_set` refuse them. Self-test check (149/149).
+- They have NO write rights: `_stage_allowed` does not know them, so `animal_push` ignores their columns, `claim_animal_stage` and `hold_set` refuse them. Self-test check (150/150).
 - App: the four screens in "choose screens", pairing, worker lists, printer/scanner per screen, one shared login + read-only screen (`scSupLogin` / `scSup`) titled by the tablet's role.
 - Legs sorting only when there are legs (owner): no sorting while `legsPaused` (`legs_off`), none on the head slot (`wrong_screen`), none for a number without `legs_stickers` (`no_leg_stickers` — stage guard, `carry_push`, `carry_claim`); `_proc_pending` does not count it. Browser test `v1035-tsort.test.js`.
 - Self-test fix: it now sets aside `legsHeadSplit`, `legsPaused`, `partsPaused` at the start (it failed on a plant with the legs/head split on).
@@ -120,7 +133,7 @@ Self-test: 149/149.
   - slot 0 (legs screen): no `head_stickers` while the head screen works (split and not `legsPaused`);
   - `legs_sorted` is allowed on both (the sorting page can be open on either legs tablet);
   - refused as `out_of_order`, reason `wrong_screen`; the app drops only that number (queue goes on).
-- Self-test: new check (149/149) — slot 0 head refused, slot 0 legs ok, slot 1 legs refused, slot 1 head ok, slot 1 refused when not split; it fails when the rule is removed.
+- Self-test: new check (150/150) — slot 0 head refused, slot 0 legs ok, slot 1 legs refused, slot 1 head ok, slot 1 refused when not split; it fails when the rule is removed.
 - Browser test `browser-tests/v1034-tslot.test.js`: legs tablet pretending head → refused; the next legs number still reaches the server; slot 1 prints the head.
 - Round-14 section 2.1 (USDA), for the reviewer to verify: concurrency — the advisory lock in `hold_set` (A1); only the marking station resolves — `_hold_caller_error`; a revoked / retired device has no role (`_caller_device_role` returns null) so it cannot resolve; the check, the hold row and the event are in one function call (one transaction).
 
@@ -142,7 +155,7 @@ Self-test: 149/149.
 - **Outer lock** (app): 2 minutes for a dead tablet; a tablet back online re-takes its open number or closes it if another screen took it.
 - **Barcode scan** (option `scanInOut`) at inner / outer opens exactly the scanned number.
 - **Team leader**: settings search; the test-mode "reset day now" button only in server test mode.
-- Self-test: 149/149 (new checks for legs order, legsPaused, eso reopen, single not-chalak status). Browser tests: `browser-tests/v1034-*.test.js` with the helper `browser-tests/explore.js` (B3).
+- Self-test: 150/150 (new checks for legs order, legsPaused, eso reopen, single not-chalak status). Browser tests: `browser-tests/v1034-*.test.js` with the helper `browser-tests/explore.js` (B3).
 - Still open from the v10.34 review: B1 (half hold during a whole hold), B2 (local encryption), B5 (README wording), B6 (sync exceptions list for the team leader).
 
 ## Changed in v10.33 – v10.34 (server 02 + app) — owner's decisions after testing

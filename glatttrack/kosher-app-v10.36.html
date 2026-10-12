@@ -4000,7 +4000,7 @@ const KS = (function(){
       }
       if(data && data.ok === false && data.error === 'status_in_use'){
         // v10.35: a status ruled today keeps its kosher meaning — say so clearly and show the server's statuses again
-        const _sk = ['customStatuses','ncStatuses'].filter(k=>keys.includes(k));
+        const _sk = ['customStatuses','ncStatuses','removedDefaults','statusNames','statusColorOverrides'].filter(k=>keys.includes(k));
         _clearSettingsDirty(_sk);
         _sk.forEach(k=>_sbRestoreSettingKey(k));
         const others = keys.filter(k=>!_sk.includes(k)); if(others.length){ _markSettingsDirty(); setTimeout(()=>_sbPushSettings(), 50); }

@@ -27,13 +27,13 @@
 (2) _stage_order_error('inner') עם head_stickers: האם יש מסלול כתיבה של פסיקת פנים לפני מדבקות ראש (claim, animal_push, carry_push, המסך המשותף)?
 (3) באפליקציה: _pushAnswer, הסדר במסך ראש מפוצל, כיבוי מסך — האם יכול להיתקע תור או לאבד שינוי תקין?
 (4) הנקודות הפתוחות B1, B2, B5, B6 מהסבב הקודם, ו-_hold_caller_error, _parts_print_block, _correction_check, מצב בדיקה.
-בדיקת האבטחה: 149/149 (מסד נקי מ-glatttrack-schema-full.sql + הרצה שנייה של 02).
+בדיקת האבטחה: 150/150 (מסד נקי מ-glatttrack-schema-full.sql + הרצה שנייה של 02).
 
 Please review this pack according to README-REVIEW.md.
 
 Rules for the review:
 1. Audit the ACTIVE state in active-schema-snapshot.sql (one definition per function). Do not audit older step files or the history inside glatttrack-schema-full.sql as if it were active.
-2. Use SECURITY-MANIFEST.md and security-selftest-result.txt (149/149) to see what is already enforced and tested. Before reporting a vulnerability, check whether a self-test already covers it; if it does, say so and explain why you still think it is exploitable (with the exact function name and line from the snapshot).
+2. Use SECURITY-MANIFEST.md and security-selftest-result.txt (150/150) to see what is already enforced and tested. Before reporting a vulnerability, check whether a self-test already covers it; if it does, say so and explain why you still think it is exploitable (with the exact function name and line from the snapshot).
 3. Separate your findings into:
    A. Real, exploitable problems (with a concrete attack: which role, which call, which parameters, what wrong result).
    B. Defense-in-depth improvements (not exploitable today).
