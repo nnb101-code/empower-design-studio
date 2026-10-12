@@ -20,9 +20,9 @@ Object.assign(C, {
   i10: ['מסך ראש הצוות פתוח. מפעל חדש מתחיל בלי סטטוסי כשרות: כל מפעל ממלא את שלו.',
         'The team leader screen is open. A new plant starts with no kashrut statuses: every plant fills in its own.',
         'La pantalla del jefe de equipo está abierta. Una planta nueva empieza sin estados kosher: cada planta llena los suyos.'],
-  ss1: ['בהגדרות, סטטוסי כשרות. כל מפעל והכשרות שלו: גלאט, בית יוסף, MK, כשר, או כל שם אחר.',
-        'In the settings: kashrut statuses. Every plant has its own kashrut: Glatt, Beit Yosef, MK, kosher, or any other name.',
-        'En los ajustes: estados kosher. Cada planta tiene su kashrut: Glatt, Beit Yosef, MK, kosher, o cualquier otro nombre.'],
+  ss1: ['בהגדרות, סטטוסי כשרות. כל מפעל והכשרות שלו: גלאט, בית יוסף, כשר, או כל שם אחר.',
+        'In the settings: kashrut statuses. Every plant has its own kashrut: Glatt, Beit Yosef, kosher, or any other name.',
+        'En los ajustes: estados kosher. Cada planta tiene su kashrut: Glatt, Beit Yosef, kosher, o cualquier otro nombre.'],
   ss2: ['מוסיפים סטטוס: שם, ובוחרים קבוצה. חלק, או לא חלק.',
         'Add a status: a name, and a group. Chalak, or not chalak.',
         'Agregar un estado: un nombre, y un grupo. Jalak, o no jalak.'],
@@ -47,7 +47,7 @@ Object.assign(C, {
   o5: ['בהמה 8, לא חלק: מופיעים רק סטטוסי הלא חלק של המפעל, וטרף.',
        'Animal eight, not chalak: only the plant\'s not chalak statuses appear, and treif.',
        'Animal ocho, no jalak: solo aparecen los estados no jalak de la planta, y treif.'],
-  o6: ['נפסק: מגן דוד.', 'Ruled: Magen David.', 'Dictaminado: Magen David.'],
+  o6: ['נפסק: כשר.', 'Ruled: kosher.', 'Dictaminado: kosher.'],
   t5: ['הסיכומים: כל סטטוס כשרות, טרף לפי סוג, בית הכוסות, כרסים וריאות, ונבלה וירוי, כל אחד בנפרד.',
        'The summaries: every kashrut status, treif by kind, maw, rumen and lungs, and nevela and shot, each on its own.',
        'Los resúmenes: cada estado kosher, treif por tipo, cuajar, panza y pulmones, y nevelá y baleado, cada uno por separado.'],
@@ -63,5 +63,13 @@ Object.assign(C, {
   b3: ['כל לילה גיבוי, שנבדק בשחזור מלא. והיצרן רואה את כל המפעלים במסך אחד, עם התראות.',
        'A backup every night, checked by a full restore. And the maker sees every plant on one screen, with alerts.',
        'Una copia de seguridad cada noche, comprobada con una restauración completa. Y el fabricante ve todas las plantas en una pantalla, con alertas.'],
+});
+// neutral film: no kashrut body's name — glatt, Beit Yosef, kosher and treif only
+Object.assign(C, {
+  o2: ['בהמה 1 — גלאט', 'Animal one: Glatt.', 'Animal uno: Glatt.'],
+  o3: ['בהמה 2 — בית יוסף, 4 — גלאט, 5 — כשר, 7 — בית יוסף', 'Animal two: Beit Yosef. Four: Glatt. Five: kosher. Seven: Beit Yosef.', 'Animal dos: Beit Yosef. Cuatro: Glatt. Cinco: kosher. Siete: Beit Yosef.'],
+  k_parts1: ['מדבקת חלקים: הפסיקה בעברית ובאנגלית, וסימן הכשרות', 'The parts sticker: the ruling in Hebrew and English, and the kashrut mark.', 'La etiqueta de partes: el dictamen en hebreo y en inglés, y el sello kosher.'],
+  k_parts2: ['בית יוסף — עם סימן הכשרות שלו', 'Beit Yosef, with its kashrut mark.', 'Beit Yosef, con su sello kosher.'],
+  k_stamp: ['החותמת של בהמה 1 — גלאט, עם סימן הכשרות', 'The stamp of animal one: Glatt, with its kashrut mark.', 'El sello del animal uno: Glatt, con su sello kosher.'],
 });
 module.exports = C;
