@@ -1,4 +1,4 @@
-# GlattTrack — review pack (app v10.34, server schema step 46)
+# GlattTrack — review pack (app v10.36, server schema step 46)
 
 This pack is the CURRENT state. Review these files only.
 
@@ -9,14 +9,26 @@ This pack is the CURRENT state. Review these files only.
 | `active-schema-snapshot.sql` | **Audit this first.** `pg_dump --schema-only` (public + gt_rls) of a clean database built from `glatttrack-schema-full.sql`. Exactly one ACTIVE definition of each function, trigger, RLS policy and grant. |
 | `setup-supabase-step46-order-and-processing-days.sql` | The new migration (run after step 45). |
 | `STEP46-CHANGES.md` | What step 46 / app v10.6 changed (Hebrew). |
-| `security-selftest.sql` + `security-selftest-result.txt` | Release gate: **144 / 144**. One statement (one DO block) whose changes are all undone inside it (see v10.15 below). |
+| `security-selftest.sql` + `security-selftest-result.txt` | Release gate: **150 / 150**. One statement (one DO block) whose changes are all undone inside it (see v10.15 below). |
 | `SECURITY-MANIFEST.md` | Permission map (step 45 observed table) + a step-46 section. |
 | `active-security-manifest.sql` + `-result.txt` | Prints the active security surface. |
-| `kosher-app-v10.34.html` | The app (UI, offline store, sync client). `GT_MIN_SCHEMA = 46`. |
+| `kosher-app-v10.36.html` | The app (UI, offline store, sync client). `GT_MIN_SCHEMA = 46`. |
 | `setup-supabase-step44/45/46-*.sql` | The last three migrations. |
 | `glatttrack-schema-full.sql` | Full install script (base + steps 1–46, history included; last definition wins). |
 | `test-mode-on.sql` / `test-mode-off.sql` | The owner's SQL-only test switch. |
 | `plant-server/` | Plant resilience kit (bash, runs as root on the plant servers, NOT in the database): standby server, floating address, UPS, nightly checked backup. Guide: `PLANT-RESILIENCE-HE.md`. |
+
+## Fixed while recording the v10.36 videos (app only, after the improvement round)
+
+1. **A new tablet could keep the default statuses for good.**
+   - **What happened:** at the team leader's login, a fresh tablet writes one setting. That write became the newest `settings_pilot` row, with `device_id` = this tablet. `_applyRemoteSettings` skips "my own echo" by `device_id`, so it skipped every snapshot. The safety-net poll then saw `updated_at` unchanged and never fetched again.
+   - **The result:** the tablet showed the built-in statuses (MK, Beit Yosef…) instead of the plant's own, until another device changed a setting.
+   - **The fix:** the own-echo skip applies only after the tablet has applied the server's settings once (`_sbSettingsAppliedAt` set).
+   - **Tested:** a new team leader tablet gets the plant's `removedDefaults` / `customStatuses` at once.
+2. **Summaries in English / Spanish** showed the Hebrew words for glatt and treif (table rows, header line, tiles). They now follow the language.
+3. **A status key that no longer exists** (an old day, a deleted custom status) shows as "Deleted status" instead of the raw `custom_…` key.
+
+No server change: 02 and 03 are the same as in the improvement round. Self-test: 150/150.
 
 ## Improvement round (after round 19) — measured, then fixed
 
