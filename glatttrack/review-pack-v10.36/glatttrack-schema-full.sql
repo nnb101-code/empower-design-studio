@@ -12112,6 +12112,7 @@ notify pgrst, 'reload schema';
 -- ============================================================================
 -- ============================================================================
 -- ============================================================================
+-- ============================================================================
 -- GlattTrack — step 46: stage order on the server, each station its own stage,
 -- kashrut configuration locks, and processing that continues over several days
 -- ============================================================================
@@ -13079,6 +13080,15 @@ begin
 end $$;
 
 -- ── 3. kashrut configuration: manufacturer technical only; statuses in use locked ──
+-- (improvement round) the newest n items of a list (a log)
+create or replace function _list_tail(v jsonb, n int) returns jsonb
+language sql immutable set search_path = public, extensions, pg_temp as $$
+  select case when jsonb_typeof(v) <> 'array' or jsonb_array_length(v) <= n then v
+              else (select coalesce(jsonb_agg(x order by o), '[]'::jsonb)
+                      from jsonb_array_elements(v) with ordinality t(x, o) where o > jsonb_array_length(v) - n) end;
+$$;
+revoke execute on function _list_tail(jsonb, int) from public, anon, authenticated;
+
 create or replace function _statuses_in_use() returns text[]
 language sql stable security definer set search_path = public, extensions, pg_temp as $$
   select coalesce(array_agg(distinct s), '{}'::text[]) from (
@@ -13239,6 +13249,12 @@ begin
     end if;
   end if;
 
+  -- (improvement round) the logs keep only their newest 2000 lines — a log that grew to the 5000 limit made
+  -- every settings push of a tablet fail (the reprints stopped being written, and what was sent with them)
+  foreach k in array array['reprintLog', 'problemReports', 'errorLog'] loop
+    if jsonb_typeof(incoming -> k) = 'array' then incoming := jsonb_set(incoming, array[k], _list_tail(incoming -> k, 2000)); end if;
+  end loop;
+
   -- the values that will be written must have the shape the app uses
   for k in select jsonb_object_keys(incoming) loop
     if length(k) > 80 then
@@ -13255,7 +13271,7 @@ begin
 
   foreach k in array list_keys loop
     if (not is_manager or is_maker) and incoming ? k then
-      incoming := jsonb_set(incoming, array[k], _merge_list(cur -> k, incoming -> k));
+      incoming := jsonb_set(incoming, array[k], _list_tail(_merge_list(cur -> k, incoming -> k), 2000));
     end if;
   end loop;
 
@@ -16993,6 +17009,14 @@ begin
     update settings_pilot set settings = jsonb_set(settings, '{customStatuses}', v), updated_at = now(), device_id = 'server' where id = 1;
   end if;
 end $$;
+
+-- (improvement round) a plant's logs that already grew long: only the newest 2000 lines stay
+update settings_pilot set settings = settings
+         || jsonb_build_object('reprintLog', _list_tail(settings -> 'reprintLog', 2000))
+         || jsonb_build_object('problemReports', _list_tail(settings -> 'problemReports', 2000)),
+       updated_at = now(), device_id = 'server'
+ where id = 1 and (coalesce(jsonb_array_length(case when jsonb_typeof(settings -> 'reprintLog') = 'array' then settings -> 'reprintLog' end), 0) > 2000
+                or coalesce(jsonb_array_length(case when jsonb_typeof(settings -> 'problemReports') = 'array' then settings -> 'problemReports' end), 0) > 2000);
 
 -- a plant's "not chalak" list: no key twice, never טרף
 do $$

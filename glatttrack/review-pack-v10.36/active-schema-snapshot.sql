@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict x2h5ukbvnnuVmbHLKdKWeeqAVER5PL2knva5X4w2jbcfcykXiot3x7Og4EQmR97
+\restrict EsWHA1ZwYL991col7IcX2t1cZBzp2ZxA2qMMvmrk6qfkfkiv8gKHHLckOrIxefQ
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -2088,6 +2088,20 @@ begin
   end if;
   return null;
 end $$;
+
+
+--
+-- Name: _list_tail(jsonb, integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public._list_tail(v jsonb, n integer) RETURNS jsonb
+    LANGUAGE sql IMMUTABLE
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $$
+  select case when jsonb_typeof(v) <> 'array' or jsonb_array_length(v) <= n then v
+              else (select coalesce(jsonb_agg(x order by o), '[]'::jsonb)
+                      from jsonb_array_elements(v) with ordinality t(x, o) where o > jsonb_array_length(v) - n) end;
+$$;
 
 
 --
@@ -6260,6 +6274,12 @@ begin
     end if;
   end if;
 
+  -- (improvement round) the logs keep only their newest 2000 lines — a log that grew to the 5000 limit made
+  -- every settings push of a tablet fail (the reprints stopped being written, and what was sent with them)
+  foreach k in array array['reprintLog', 'problemReports', 'errorLog'] loop
+    if jsonb_typeof(incoming -> k) = 'array' then incoming := jsonb_set(incoming, array[k], _list_tail(incoming -> k, 2000)); end if;
+  end loop;
+
   -- the values that will be written must have the shape the app uses
   for k in select jsonb_object_keys(incoming) loop
     if length(k) > 80 then
@@ -6276,7 +6296,7 @@ begin
 
   foreach k in array list_keys loop
     if (not is_manager or is_maker) and incoming ? k then
-      incoming := jsonb_set(incoming, array[k], _merge_list(cur -> k, incoming -> k));
+      incoming := jsonb_set(incoming, array[k], _list_tail(_merge_list(cur -> k, incoming -> k), 2000));
     end if;
   end loop;
 
@@ -9655,6 +9675,13 @@ REVOKE ALL ON FUNCTION public._legs_slot_error(p_legs boolean, p_head boolean, p
 
 
 --
+-- Name: FUNCTION _list_tail(v jsonb, n integer); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public._list_tail(v jsonb, n integer) FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION _log_correction_rejected(p_dev text, p_id integer, p_stage text, p_reason text, p_detail jsonb); Type: ACL; Schema: public; Owner: -
 --
 
@@ -10989,5 +11016,5 @@ GRANT ALL ON TABLE public.system_flags TO service_role;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict x2h5ukbvnnuVmbHLKdKWeeqAVER5PL2knva5X4w2jbcfcykXiot3x7Og4EQmR97
+\unrestrict EsWHA1ZwYL991col7IcX2t1cZBzp2ZxA2qMMvmrk6qfkfkiv8gKHHLckOrIxefQ
 

@@ -18,6 +18,27 @@ This pack is the CURRENT state. Review these files only.
 | `test-mode-on.sql` / `test-mode-off.sql` | The owner's SQL-only test switch. |
 | `plant-server/` | Plant resilience kit (bash, runs as root on the plant servers, NOT in the database): standby server, floating address, UPS, nightly checked backup. Guide: `PLANT-RESILIENCE-HE.md`. |
 
+## Improvement round (after round 19) — measured, then fixed
+
+**Measured (local test server, a tablet at 4× slower CPU):**
+- **Tablet:** load 2.2 s; 6 MB heap; an idle tablet sends 30 requests/min.
+- **Rulings:** 200 `claim_animal_stage` while 3 more tablets worked: p50 27 ms, p95 43 ms.
+- **Animals query:** under 1 ms.
+- **Cleanup:** `processed_commands` 3-day cleanup and `login_attempts` cleanup work.
+- **Backup:** the nightly backup restores fully and checks the event chain.
+
+**Fixed:**
+1. **`reprintLog` / `problemReports` / `errorLog` grew forever.** At 5000 lines every settings push of a tablet failed (`bad_settings`), including what was sent with it.
+   - Server: `_list_tail` keeps the newest 2000, both on push and after `_merge_list`, plus a one-time trim in 02.
+   - App: trims too.
+   - Self-test covers it.
+2. **The 20-second safety-net poll** now asks only `settings_pilot.updated_at` and downloads the settings only when they changed: 4.7 KB/min → 0.15 KB/min per tablet.
+3. **The 20-second animals poll** first asks `id, updated_at` of the window and downloads only the rows the tablet doesn't have. After a change of many rows at once (the daily reset), a tablet no longer downloads the whole board every 20 s: measured 618 KB/min → 37 KB/min per tablet. A change made elsewhere still arrives within 25 s (tested).
+
+**Not tested here:** real printers, scanners and printer failures. These need the plant's own hardware.
+
+Self-test: 150/150.
+
 ## Fixed after round 19 (server 02 + app)
 
 - **A1.** A built-in status an animal carries today can't be put into `removedDefaults` (`push_settings` → `status_in_use`).

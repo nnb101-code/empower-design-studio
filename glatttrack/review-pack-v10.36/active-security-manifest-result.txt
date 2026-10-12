@@ -1,9 +1,9 @@
 == 1. plant state =======================================================
     key     |     value     |          updated_at           
 ------------+---------------+-------------------------------
- boardEpoch | 1791779683567 | 2026-10-12 04:34:43.566738+00
- schemaStep | 46            | 2026-10-12 04:34:45.135771+00
- testMode   | off           | 2026-10-12 04:34:44.316224+00
+ boardEpoch | 1791780876633 | 2026-10-12 04:54:36.632827+00
+ schemaStep | 46            | 2026-10-12 04:54:37.842174+00
+ testMode   | off           | 2026-10-12 04:54:37.297044+00
 (3 rows)
 
 == 2. functions (public, gt_rls) ========================================
@@ -151,6 +151,7 @@
  public | _leader_recovery_norm(text)                                                        | function | f                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _legs_required(integer)                                                            | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _legs_slot_error(boolean,boolean,boolean)                                          | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _list_tail(jsonb,integer)                                                          | function | f                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _log_correction_rejected(text,integer,text,text,jsonb)                             | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _log_device_event(text,text,text,integer,text,text)                                | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _maker_session_end()                                                               | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
@@ -231,7 +232,7 @@
  public | leader_account_remove(text)                                                        | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | leader_device_recovery(text)                                                       | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | manufacturer_set_code(text,text)                                                   | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
-(222 rows)
+(223 rows)
 
 == 2b. API surface: functions the app roles can run ======================
                        callable_by_app                       | security_definer 

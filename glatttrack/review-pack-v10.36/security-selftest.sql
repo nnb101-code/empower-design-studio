@@ -925,7 +925,16 @@ begin
         and r5 ->> 'error' = 'status_in_use' and r5 ->> 'key' = 'custom_nc36'
         and _settings_value_error('customStatuses', '[{"key":"glatt","he":"x"}]') is not null
         and _settings_value_error('customStatuses', '[{"key":"custom_ok","he":"x"}]') is null;
-  perform pg_temp.rec('round 19: a status in use can''t be deleted — a built-in one (removedDefaults), "removed" on an own one, a previous day''s printed / stamped key; an own status key is custom_…', ok,
+  -- improvement round: a long reprint log never blocks a tablet's settings (only the newest 2000 lines stay)
+  perform set_config('gt.reset_in_progress', 'true', true);
+  update settings_pilot set settings = settings || jsonb_build_object('reprintLog',
+           (select jsonb_agg(jsonb_build_object('screen', 'x', 'idx', i)) from generate_series(1, 4999) i)) where id = 1;
+  perform set_config('gt.reset_in_progress', 'false', true);
+  r4 := pg_temp.api(pg_temp.dev('PARTS'), format('select push_settings(%L::jsonb, ''x'')',
+          jsonb_build_object('reprintLog', (select settings -> 'reprintLog' from settings_pilot where id = 1) || '[{"screen":"x","idx":5000},{"screen":"x","idx":5001}]'::jsonb)));
+  ok := ok and pg_temp.ok(r4) and jsonb_array_length((select settings -> 'reprintLog' from settings_pilot where id = 1)) = 2000
+        and (select settings -> 'reprintLog' -> -1 ->> 'idx' from settings_pilot where id = 1) = '5001';
+  perform pg_temp.rec('round 19: a status in use can''t be deleted — a built-in one (removedDefaults), "removed" on an own one, a previous day''s printed / stamped key; an own status key is custom_…; a long reprint log keeps its newest 2000 lines and never blocks a tablet', ok,
     concat_ws(' | ', left(r4::text, 70), left(r5::text, 70)));
   delete from animals_carry where board_id = b9; delete from daily_board_archive where id = b9;
   perform set_config('gt.reset_in_progress', 'true', true);

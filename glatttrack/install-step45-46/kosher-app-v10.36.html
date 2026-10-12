@@ -3747,11 +3747,13 @@ const KS = (function(){
   // updates local state, localStorage, and this device's OWN other tabs (via
   // BroadcastChannel). Merges field-by-field per SB_FIELD_MAP's rules above.
   let _sbMaxUpdatedAt = null, _sbMaxUpdatedAtMs = 0;   // newest server change seen (for the safety-net poll)
+  const _sbRowSeenAt = {};   // (improvement round) the server's updated_at of each row this tablet already has
   // own: the row is the server's answer to this device's own write (step40) —
   // it is then the authority for every field this device hasn't changed since.
   function _applyRemoteAnimal(row, force, batch, own){
     if(!row || row.id === undefined || row.id === null) return;
     if(row.updated_at){
+      if(row.id != null) _sbRowSeenAt[row.id] = row.updated_at;
       const ms = Date.parse(row.updated_at);
       if(!isNaN(ms) && ms > _sbMaxUpdatedAtMs){ _sbMaxUpdatedAtMs = ms; _sbMaxUpdatedAt = row.updated_at; }
     }
@@ -4182,14 +4184,21 @@ const KS = (function(){
     try{ KS_AUTO_BACKUP.create('server-reset').then(apply, apply); }catch(e){ apply(); }
   }
 
+  // (improvement round) the 20-second look asks only "when did the settings change?" and downloads them
+  // only when they did — not the whole settings every time
+  let _sbSettingsSeenAt = null;
   function _sbFetchSettingsSnapshot(force){
     if(!window.sb) return Promise.resolve();
-    return window.sb.from('settings_pilot').select('*').eq('id', 1).maybeSingle().then(({data,error})=>{
+    const full = () => window.sb.from('settings_pilot').select('*').eq('id', 1).maybeSingle().then(({data,error})=>{
       if(error){
         console.warn('[KS←Supabase] settings snapshot fetch failed:', error.message); if(!_isNetErr(error)) gtLogError('sync.settingsSnapshot', error);
         return;
       }
-      if(data) _applyRemoteSettings(data, !!force);
+      if(data){ _sbSettingsSeenAt = data.updated_at || null; _applyRemoteSettings(data, !!force); }
+    });
+    if(force || !_sbSettingsSeenAt) return full().catch(e=>console.warn('[KS←Supabase] settings snapshot fetch failed:', e.message));
+    return window.sb.from('settings_pilot').select('updated_at').eq('id', 1).maybeSingle().then(({data,error})=>{
+      if(error || !data || data.updated_at !== _sbSettingsSeenAt) return full();
     }).catch(e=>console.warn('[KS←Supabase] settings snapshot fetch failed:', e.message));
   }
 
@@ -4217,10 +4226,20 @@ const KS = (function(){
       // the server stamps updated_at itself (step40); look 10 s back so a row
       // committed a moment late is never missed (applying a row twice is harmless)
       const since = new Date(_sbMaxUpdatedAtMs - 10000).toISOString();
-      window.sb.from('animals_pilot').select('*').gte('updated_at', since).order('updated_at').limit(TOTAL).then(({data,error})=>{
+      // (improvement round) first only "which rows changed, and when" (small); then the full rows of just the
+      // ones this tablet doesn't have yet — after a change of many rows at once (the daily reset) a tablet no
+      // longer downloads the whole board again every 20 s
+      window.sb.from('animals_pilot').select('id,updated_at').gte('updated_at', since).limit(TOTAL).then(({data,error})=>{
         if(error || !data || !data.length) return;
-        let any=false; data.forEach(r=>{ if(_applyRemoteAnimal(r,false,true)) any=true; });
-        if(any){ _save(); _broadcast(); _notify(); }
+        const ids = data.filter(r=>r && _sbRowSeenAt[r.id] !== r.updated_at).map(r=>r.id);
+        if(!ids.length) return;
+        for(let i=0;i<ids.length;i+=200){
+          window.sb.from('animals_pilot').select('*').in('id', ids.slice(i,i+200)).then(({data:rows,error:e2})=>{
+            if(e2 || !rows || !rows.length) return;
+            let any=false; rows.sort((a,b)=>String(a.updated_at).localeCompare(String(b.updated_at))).forEach(r=>{ if(_applyRemoteAnimal(r,false,true)) any=true; });
+            if(any){ _save(); _broadcast(); _notify(); }
+          }).catch(()=>{});
+        }
       }).catch(()=>{});
     }, 20000);
     setInterval(_syncServerClock, 10*60*1000);
@@ -8558,7 +8577,7 @@ function lgDoReprint(step){
   // Log reprint
   const logs=KS.getSettings().reprintLog||[];
   logs.push({idx:lgReprintIdx+1,step,screen:(step==="legs"?"רגלים":"ראש"),time:new Date().toLocaleTimeString("he-IL")});
-  KS.updateSettings({reprintLog:logs});
+  KS.updateSettings({reprintLog:logs.slice(-2000)});   // (improvement round) only the newest 2000 lines
   showPrintPopup(lgReprintIdx,step,true);
   lgReprintIdx=-1;
 }
@@ -13783,7 +13802,7 @@ function partsDoReprint(){
   const s=KS.getSettings();
   const logs=s.reprintLog||[];
   logs.push({screen:"חלקים",idx:partsReprintIdx+1,sticker:cnt+"/3",time:new Date().toLocaleTimeString("he-IL")});
-  KS.updateSettings({reprintLog:logs});
+  KS.updateSettings({reprintLog:logs.slice(-2000)});   // (improvement round) only the newest 2000 lines
   showPartsPrint(partsReprintIdx,a.outerStatus,true,cnt);
   try{ const _h=_partsHeldNow(partsReprintIdx); if(_h.length) _ppBreak(['cheek1','cheek2'].filter(p=>!_h.includes(p)).length, _h.includes('tongue')?0:1); }catch(e){}   // v10.32: a held part is not reprinted
   partsReprintIdx=-1;
@@ -14790,7 +14809,7 @@ function stampsDoReprint(){
   const s=KS.getSettings();
   const logs=s.reprintLog||[];
   logs.push({screen:"חותמות",idx:stampsRpIdx+1,time:new Date().toLocaleTimeString("he-IL")});
-  KS.updateSettings({reprintLog:logs});
+  KS.updateSettings({reprintLog:logs.slice(-2000)});   // (improvement round) only the newest 2000 lines
   stampsShowPrint(stampsRpIdx,a.outerStatus,true);
   stampsRpIdx=-1;
   setTimeout(()=>stampsFocusScan(),1500);
