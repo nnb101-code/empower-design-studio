@@ -286,7 +286,8 @@ begin
   update settings_pilot set settings = settings - 'legsHeadSplit' - 'legsPaused' - 'partsPaused'
    where id = 1 and (settings ? 'legsHeadSplit' or settings ? 'legsPaused' or settings ? 'partsPaused');
   -- (v10.36: "not chalak" gets plain כשר during the checks)
-  update settings_pilot set settings = settings || '{"ncStatuses":["kosher"],"notChalakEnabled":true}'::jsonb where id = 1;
+  update settings_pilot set settings = (settings - 'removedDefaults') || '{"ncStatuses":["kosher"],"notChalakEnabled":true}'::jsonb where id = 1;
+  -- (a new plant starts with no statuses: the checks use the built-in ones for a while — all undone at the end)
   perform set_config('gt.reset_in_progress', 'false', true);
   perform set_config('app.device_admin', 'on', true);
   for i in 1 .. array_length(devs, 1) loop
