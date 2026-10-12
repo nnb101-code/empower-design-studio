@@ -18,22 +18,21 @@ This pack is the CURRENT state. Review these files only.
 | `test-mode-on.sql` / `test-mode-off.sql` | The owner's SQL-only test switch. |
 | `plant-server/` | Plant resilience kit (bash, runs as root on the plant servers, NOT in the database): standby server, floating address, UPS, nightly checked backup. Guide: `PLANT-RESILIENCE-HE.md`. |
 
-## Owner's definition (after round 18) — chalak / not chalak
+## Owner's rule (after round 18) — every plant fills in its own statuses; delete = gone
 
-**Chalak** means the lung is smooth. Every kashrut names its own levels of chalak (גלאט, בית יוסף, MK, רבנות חלק, שייש …), and a plant may take one or two levels.
+**Chalak / not chalak.**
+- Chalak means the lung is smooth. Every kashrut has its own levels and names.
+- Not chalak means kosher, but the lung is not smooth.
+- A plant that takes "not chalak" turns it on. A plant that does not take it turns it off, and such an animal is ruled treif.
 
-**Not chalak** means kosher, but the lung is not smooth. It may be called כשר, רבנות כשר or any other name.
+**No status is fixed in a group.** Each plant decides for every status, built-in or its own, whether it is chalak or not chalak (`ncStatuses`: any existing status, no key twice, never treif).
 
-**A plant that takes not chalak** turns it on:
-- a "not chalak" button appears at slaughter and at the maw check;
-- the not-chalak statuses appear in the ruling.
+**A new plant starts with no statuses** (only treif): the one-time migration sets `removedDefaults` = all five built-ins and `ncStatuses` = []. An existing plant keeps what it has.
 
-**A plant that does not take it** turns it off. An animal that is not chalak is then ruled treif, although it is halachically kosher.
-
-**Fixed groups:**
-- glatt / beit / **mk** / rabChalak are always chalak (server: `ncStatuses` validation, cleanup DO).
-- **kosher** is always not chalak (`_nc_statuses()` always contains it).
-- A plant's own status: the plant chooses.
+**Delete = gone.**
+- A status the team leader deletes is removed from `customStatuses` (a built-in goes into `removedDefaults`). There is no "removed — bring back" list.
+- One still carried by an animal is refused until the daily reset (`_status_change_error` / `status_in_use`).
+- 02 deletes the old `removed:true` statuses that no animal carries.
 
 Self-test: 149/149.
 

@@ -875,9 +875,7 @@ begin
   r  := pg_temp.api(pg_temp.mgr(), format('select push_settings(%L::jsonb, ''x'', %L)', jsonb_build_object('ncStatuses', '["custom_nc36"]'::jsonb || r5), pg_temp.v('mgr')));
   r2 := pg_temp.api(pg_temp.mgr(), format('select push_settings(%L::jsonb, ''x'', %L)', jsonb_build_object('ncStatuses', '["kosher","treif"]'::jsonb || r5), pg_temp.v('mgr')));
   r3 := pg_temp.api(pg_temp.mgr(), format('select push_settings(%L::jsonb, ''x'', %L)', jsonb_build_object('ncStatuses', '["kosher","custom_nc36"]'::jsonb || r5), pg_temp.v('mgr')));
-  -- (owner, after round 18) כשר is always "not chalak": a list without it keeps it; MK is always chalak
-  ok := pg_temp.ok(r) and 'kosher' = any(_nc_statuses()) and r2 ->> 'error' = 'bad_settings' and pg_temp.ok(r3)
-        and _settings_value_error('ncStatuses', '["mk"]') is not null
+  ok := r ->> 'error' = 'status_in_use' and r ->> 'key' = 'kosher' and r2 ->> 'error' = 'bad_settings' and pg_temp.ok(r3)
         and _nc_outer_value_ok(pg_temp.ar(942), 'custom_nc36') and _nc_outer_value_ok(pg_temp.ar(942), 'kosher')
         and not _nc_outer_value_ok(pg_temp.ar(942), 'mk') and _nc_outer_value_ok(pg_temp.ar(942), 'treif');
   perform pg_temp.rec('v10.36 the plant chooses the "not chalak" statuses; one in use stays; טרף always', ok,
@@ -913,7 +911,7 @@ begin
     from animals_pilot a where a.id = 941;
   r  := pg_temp.api(pg_temp.mgr(), format('select push_settings(%L::jsonb, ''x'', %L)', jsonb_build_object('ncStatuses', '["kosher"]'::jsonb || r5), pg_temp.v('mgr')));
   r2 := pg_temp.api(pg_temp.mgr(), format('select push_settings(%L::jsonb, ''x'', %L)', jsonb_build_object('ncStatuses', '["kosher","custom_nc36","custom_nope"]'::jsonb || r5), pg_temp.v('mgr')));
-  r3 := pg_temp.api(pg_temp.mgr(), format('select push_settings(%L::jsonb, ''x'', %L)', jsonb_build_object('ncStatuses', '["kosher","custom_nc36","glatt"]'::jsonb || r5), pg_temp.v('mgr')));
+  r3 := pg_temp.api(pg_temp.mgr(), format('select push_settings(%L::jsonb, ''x'', %L)', jsonb_build_object('ncStatuses', '["kosher","custom_nc36","kosher"]'::jsonb || r5), pg_temp.v('mgr')));
   delete from animals_carry where board_id = b9; delete from daily_board_archive where id = b9;
   perform set_config('gt.reset_in_progress', 'true', true);
   update animals_pilot set outer_status = null, outer_by = null, outer_time = null, outer_by_device = null where id = 940;
@@ -927,12 +925,12 @@ begin
   ok := r ->> 'error' = 'status_in_use' and r ->> 'key' = 'custom_nc36'
         and r2 ->> 'error' = 'bad_settings' and r3 ->> 'error' = 'bad_settings'
         and r4 ->> 'error' = 'bad_value' and r5 ->> 'error' = 'bad_value' and (pg_temp.ar(940)).outer_status is null
-        and _settings_value_error('ncStatuses', '["kosher","kosher"]') is not null and _settings_value_error('ncStatuses', '["beit"]') is not null;
+        and _settings_value_error('ncStatuses', '["kosher","kosher"]') is not null and _settings_value_error('ncStatuses', '["beit","mk"]') is null;
   perform set_config('gt.reset_in_progress', 'true', true);
   update settings_pilot set settings = jsonb_set(settings, '{customStatuses}',
            (select jsonb_agg(x - 'removed') from jsonb_array_elements(settings -> 'customStatuses') x)) where id = 1;
   perform set_config('gt.reset_in_progress', 'false', true);
-  perform pg_temp.rec('review round 18: "not chalak" list — only the plant''s statuses, never glatt / beit / rabChalak; a previous day''s ruling keeps its key; a ruling needs a status the plant has and did not remove', ok,
+  perform pg_temp.rec('review round 18: "not chalak" list — only the plant''s statuses, no key twice (any status may be in it — the plant decides); a previous day''s ruling keeps its key; a ruling needs a status the plant has and did not remove', ok,
     concat_ws(' | ', left(r::text, 70), left(r2::text, 70), left(r3::text, 70), left(r4::text, 60), left(r5::text, 60)));
   -- v10.34 (owner): the inner inspector works after legs / head — with the legs screen in the plant's
   -- screen choice, no inner check before the stickers; without a screen choice nothing changes
