@@ -875,7 +875,9 @@ begin
   r  := pg_temp.api(pg_temp.mgr(), format('select push_settings(%L::jsonb, ''x'', %L)', jsonb_build_object('ncStatuses', '["custom_nc36"]'::jsonb || r5), pg_temp.v('mgr')));
   r2 := pg_temp.api(pg_temp.mgr(), format('select push_settings(%L::jsonb, ''x'', %L)', jsonb_build_object('ncStatuses', '["kosher","treif"]'::jsonb || r5), pg_temp.v('mgr')));
   r3 := pg_temp.api(pg_temp.mgr(), format('select push_settings(%L::jsonb, ''x'', %L)', jsonb_build_object('ncStatuses', '["kosher","custom_nc36"]'::jsonb || r5), pg_temp.v('mgr')));
-  ok := r ->> 'error' = 'status_in_use' and r ->> 'key' = 'kosher' and r2 ->> 'error' = 'bad_settings' and pg_temp.ok(r3)
+  -- (owner, after round 18) כשר is always "not chalak": a list without it keeps it; MK is always chalak
+  ok := pg_temp.ok(r) and 'kosher' = any(_nc_statuses()) and r2 ->> 'error' = 'bad_settings' and pg_temp.ok(r3)
+        and _settings_value_error('ncStatuses', '["mk"]') is not null
         and _nc_outer_value_ok(pg_temp.ar(942), 'custom_nc36') and _nc_outer_value_ok(pg_temp.ar(942), 'kosher')
         and not _nc_outer_value_ok(pg_temp.ar(942), 'mk') and _nc_outer_value_ok(pg_temp.ar(942), 'treif');
   perform pg_temp.rec('v10.36 the plant chooses the "not chalak" statuses; one in use stays; טרף always', ok,

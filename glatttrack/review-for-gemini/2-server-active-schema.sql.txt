@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict PbRcBVGKjDL07TvK1zeoloGmF6ADYuwz0t2AVgYth4QS4pADBVi4uL3zddbGOmg
+\restrict r2MrOcx689vBqCph4sBIF5rKsn0ooolbPBa4Hmdpx8CANMvSdTc0vbThAItD0Jf
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -2305,10 +2305,11 @@ CREATE FUNCTION public._nc_statuses() RETURNS text[]
     LANGUAGE sql STABLE SECURITY DEFINER
     SET search_path TO 'public', 'extensions', 'pg_temp'
     AS $$
-  select case when jsonb_typeof(_gt_settings() -> 'ncStatuses') = 'array'
+  select array['kosher'] || case when jsonb_typeof(_gt_settings() -> 'ncStatuses') = 'array'
               then coalesce((select array_agg(x #>> '{}') from jsonb_array_elements(_gt_settings() -> 'ncStatuses') x
-                              where jsonb_typeof(x) = 'string'), '{}'::text[])
-              else array['kosher'] end;
+                              where jsonb_typeof(x) = 'string' and (x #>> '{}') not in ('kosher', 'glatt', 'beit', 'mk', 'rabChalak', 'treif')),
+                            '{}'::text[])
+              else '{}'::text[] end;
 $$;
 
 
@@ -3119,11 +3120,11 @@ begin
     if t = 'array' and jsonb_array_length(v) <= 50
        and not exists (select 1 from jsonb_array_elements(v) x
                         where jsonb_typeof(x) <> 'string' or (x #>> '{}') !~ '^[A-Za-z0-9_-]{1,60}$'
-                           or (x #>> '{}') in ('treif', 'glatt', 'beit', 'rabChalak'))     -- (review A1: always chalak)
+                           or (x #>> '{}') in ('treif', 'glatt', 'beit', 'mk', 'rabChalak'))     -- (always chalak)
        and (select count(*) = count(distinct x #>> '{}') from jsonb_array_elements(v) x) then   -- (review B4)
       return null;
     end if;
-    return 'expected a list of different "not chalak" status keys (not treif / glatt / beit / rabChalak)';
+    return 'expected a list of different "not chalak" status keys (not treif / glatt / beit / mk / rabChalak)';
   end if;
   if p_key in ('disabledStatuses', 'removedDefaults', 'statusOptIn') then
     if t = 'array' and jsonb_array_length(v) <= 500
@@ -6231,13 +6232,13 @@ begin
       select c.outer_status from animals_carry c
        where c.outer_status is not null and c.outer_status <> 'treif'
          and (c.slaughter = 'notChalak' or coalesce(c.not_chalak_inner, false))) x
-     where not (incoming -> 'ncStatuses') ? x.s limit 1;
+     where not (incoming -> 'ncStatuses') ? x.s and x.s <> 'kosher' limit 1;   -- (כשר is always "not chalak")
     if v_used is not null then
       return jsonb_build_object('ok', false, 'error', 'status_in_use', 'key', v_used, 'reason', 'nc_status_in_use');
     end if;
     -- (review A1) every key is a status of this plant: a built-in one or one of its own statuses
     select nk.v into v_used from jsonb_array_elements_text(incoming -> 'ncStatuses') nk(v)
-     where nk.v not in ('kosher', 'mk')
+     where nk.v <> 'kosher'
        and not exists (select 1 from jsonb_array_elements(case when jsonb_typeof(coalesce(incoming -> 'customStatuses', cur -> 'customStatuses')) = 'array'
                                                                then coalesce(incoming -> 'customStatuses', cur -> 'customStatuses') else '[]'::jsonb end) c
                         where jsonb_typeof(c) = 'object' and c ->> 'key' = nk.v)
@@ -10976,5 +10977,5 @@ GRANT ALL ON TABLE public.system_flags TO service_role;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict PbRcBVGKjDL07TvK1zeoloGmF6ADYuwz0t2AVgYth4QS4pADBVi4uL3zddbGOmg
+\unrestrict r2MrOcx689vBqCph4sBIF5rKsn0ooolbPBa4Hmdpx8CANMvSdTc0vbThAItD0Jf
 

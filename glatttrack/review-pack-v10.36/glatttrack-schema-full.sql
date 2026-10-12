@@ -12109,6 +12109,7 @@ notify pgrst, 'reload schema';
 -- ============================================================================
 -- ============================================================================
 -- ============================================================================
+-- ============================================================================
 -- GlattTrack — step 46: stage order on the server, each station its own stage,
 -- kashrut configuration locks, and processing that continues over several days
 -- ============================================================================
@@ -12348,12 +12349,16 @@ revoke execute on function _nc_fixed(animals_pilot) from public, anon, authentic
 -- the outer ruling; there the animal gets one of the statuses the plant chose for it in the settings
 -- (ncStatuses, any status of the list — default plain כשר) or טרף. An animal only SENT to screen B
 -- (not marked by the shochet / the maw check) may get any status.
+-- (owner, after round 18) חלק = the lung is smooth; every kashrut names its levels of chalak (גלאט, בית יוסף, MK,
+-- רבנות חלק, שייש …). לא חלק = kosher but the lung is not smooth (כשר, רבנות כשר, any name). So the built-ins
+-- are fixed: glatt / beit / mk / rabChalak always chalak, kosher always "not chalak"; a plant's own status — its choice.
 create or replace function _nc_statuses() returns text[]
 language sql stable security definer set search_path = public, extensions, pg_temp as $$
-  select case when jsonb_typeof(_gt_settings() -> 'ncStatuses') = 'array'
+  select array['kosher'] || case when jsonb_typeof(_gt_settings() -> 'ncStatuses') = 'array'
               then coalesce((select array_agg(x #>> '{}') from jsonb_array_elements(_gt_settings() -> 'ncStatuses') x
-                              where jsonb_typeof(x) = 'string'), '{}'::text[])
-              else array['kosher'] end;
+                              where jsonb_typeof(x) = 'string' and (x #>> '{}') not in ('kosher', 'glatt', 'beit', 'mk', 'rabChalak', 'treif')),
+                            '{}'::text[])
+              else '{}'::text[] end;
 $$;
 revoke execute on function _nc_statuses() from public, anon, authenticated;
 
@@ -13205,13 +13210,13 @@ begin
       select c.outer_status from animals_carry c
        where c.outer_status is not null and c.outer_status <> 'treif'
          and (c.slaughter = 'notChalak' or coalesce(c.not_chalak_inner, false))) x
-     where not (incoming -> 'ncStatuses') ? x.s limit 1;
+     where not (incoming -> 'ncStatuses') ? x.s and x.s <> 'kosher' limit 1;   -- (כשר is always "not chalak")
     if v_used is not null then
       return jsonb_build_object('ok', false, 'error', 'status_in_use', 'key', v_used, 'reason', 'nc_status_in_use');
     end if;
     -- (review A1) every key is a status of this plant: a built-in one or one of its own statuses
     select nk.v into v_used from jsonb_array_elements_text(incoming -> 'ncStatuses') nk(v)
-     where nk.v not in ('kosher', 'mk')
+     where nk.v <> 'kosher'
        and not exists (select 1 from jsonb_array_elements(case when jsonb_typeof(coalesce(incoming -> 'customStatuses', cur -> 'customStatuses')) = 'array'
                                                                then coalesce(incoming -> 'customStatuses', cur -> 'customStatuses') else '[]'::jsonb end) c
                         where jsonb_typeof(c) = 'object' and c ->> 'key' = nk.v)
@@ -14412,11 +14417,11 @@ begin
     if t = 'array' and jsonb_array_length(v) <= 50
        and not exists (select 1 from jsonb_array_elements(v) x
                         where jsonb_typeof(x) <> 'string' or (x #>> '{}') !~ '^[A-Za-z0-9_-]{1,60}$'
-                           or (x #>> '{}') in ('treif', 'glatt', 'beit', 'rabChalak'))     -- (review A1: always chalak)
+                           or (x #>> '{}') in ('treif', 'glatt', 'beit', 'mk', 'rabChalak'))     -- (always chalak)
        and (select count(*) = count(distinct x #>> '{}') from jsonb_array_elements(v) x) then   -- (review B4)
       return null;
     end if;
-    return 'expected a list of different "not chalak" status keys (not treif / glatt / beit / rabChalak)';
+    return 'expected a list of different "not chalak" status keys (not treif / glatt / beit / mk / rabChalak)';
   end if;
   if p_key in ('disabledStatuses', 'removedDefaults', 'statusOptIn') then
     if t = 'array' and jsonb_array_length(v) <= 500
@@ -16955,14 +16960,14 @@ begin
   perform set_config('gt.reset_in_progress', 'false', true);
 end $$;
 
--- (review A1) גלאט / בית יוסף / רבנות חלק are always "chalak": out of a plant's "not chalak" list, duplicates dropped
+-- גלאט / בית יוסף / MK / רבנות חלק are always "chalak": out of a plant's "not chalak" list, duplicates dropped
 do $$
 declare s jsonb := _gt_settings(); v jsonb;
 begin
   if jsonb_typeof(s -> 'ncStatuses') <> 'array' then return; end if;
   select coalesce(jsonb_agg(k order by o), '[]'::jsonb) into v from (
     select k, min(o) o from jsonb_array_elements_text(s -> 'ncStatuses') with ordinality as t(k, o)
-     where k not in ('treif', 'glatt', 'beit', 'rabChalak') group by k) z;
+     where k not in ('treif', 'glatt', 'beit', 'mk', 'rabChalak') group by k) z;
   if v is distinct from s -> 'ncStatuses' then
     if jsonb_array_length(v) = 0 then v := '["kosher"]'::jsonb; end if;
     update settings_pilot set settings = jsonb_set(settings, '{ncStatuses}', v), updated_at = now(), device_id = 'server' where id = 1;
