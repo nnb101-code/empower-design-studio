@@ -1155,7 +1155,8 @@ begin
     return jsonb_build_object('ok', false, 'error', 'bad_settings', 'key', '*', 'reason', 'too_large');
   end if;
   -- v10.38: once the plant has a products list, the head / legs sticker counts follow it (never typed by hand)
-  if (incoming ? 'products' or incoming ? 'headStickerCount' or incoming ? 'legStickerCount')
+  if (incoming ? 'products' or incoming ? 'headStickerCount' or incoming ? 'legStickerCount'
+      or incoming ? 'stampsCount' or incoming ? 'partsStickerCount')
      and jsonb_typeof(coalesce(incoming -> 'products', cur -> 'products')) = 'array' then
     incoming := incoming || _products_counts(coalesce(incoming -> 'products', cur -> 'products'));
   end if;
@@ -2218,7 +2219,7 @@ begin
   for x in select * from jsonb_array_elements(v) loop
     if jsonb_typeof(x) <> 'object' then return 'a product must be an object'; end if;
     for k in select jsonb_object_keys(x) loop
-      if k not in ('id', 'he', 'en', 'es', 'on', 'pre', 'n', 'post', 'avg', 'notGlatt', 'builtin') then
+      if k not in ('id', 'he', 'en', 'es', 'on', 'pre', 'n', 'post', 'm', 'nikur', 'avg', 'notGlatt', 'builtin') then
         return 'unknown field ' || left(k, 40);
       end if;
     end loop;
@@ -2236,6 +2237,9 @@ begin
     if coalesce(x ->> 'pre', '') not in ('head', 'legs', 'none') then return 'product ' || v_id || ': pre must be head / legs / none'; end if;
     if not _jint_ok(x -> 'n', 0, 20) then return 'product ' || v_id || ': stickers 0..20'; end if;
     if coalesce(x ->> 'post', '') not in ('parts', 'stamps', 'legs', 'none') then return 'product ' || v_id || ': post must be parts / stamps / legs / none'; end if;
+    -- (v10.38 stage 2) m = the kosher stickers its area prints; nikur = the nikur screen it goes to
+    if x ? 'm' and not _jint_ok(x -> 'm', 0, 20) then return 'product ' || v_id || ': stickers 0..20'; end if;
+    if x ? 'nikur' and coalesce(x ->> 'nikur', '') not in ('big', 'small', 'none') then return 'product ' || v_id || ': nikur must be big / small / none'; end if;
     if x ? 'avg' and jsonb_typeof(x -> 'avg') <> 'null' and not _jnum_ok(x -> 'avg', 0, 1000) then return 'product ' || v_id || ': average weight 0..1000 kg'; end if;
     if x ? 'notGlatt' and jsonb_typeof(x -> 'notGlatt') <> 'boolean' then return 'product ' || v_id || ': notGlatt must be true / false'; end if;
     if x ? 'builtin' and jsonb_typeof(x -> 'builtin') <> 'boolean' then return 'product ' || v_id || ': builtin must be true / false'; end if;
@@ -2260,10 +2264,36 @@ create or replace function _products_counts(v jsonb) returns jsonb
 language sql immutable set search_path = public, extensions, pg_temp as $$
   select jsonb_build_object(
     'headStickerCount', coalesce(sum((x ->> 'n')::int) filter (where (x ->> 'on')::boolean and x ->> 'pre' = 'head'), 0),
-    'legStickerCount',  coalesce(sum((x ->> 'n')::int) filter (where (x ->> 'on')::boolean and x ->> 'pre' = 'legs'), 0))
+    'legStickerCount',  coalesce(sum((x ->> 'n')::int) filter (where (x ->> 'on')::boolean and x ->> 'pre' = 'legs'), 0),
+    -- (stage 2) the kosher stickers of the stamps and the small-parts screens (the legs are sorted, not printed)
+    'stampsCount',       coalesce(sum(coalesce((x ->> 'm')::int, 0)) filter (where (x ->> 'on')::boolean and x ->> 'post' = 'stamps'), 0),
+    'partsStickerCount', coalesce(sum(coalesce((x ->> 'm')::int, 0)) filter (where (x ->> 'on')::boolean and x ->> 'post' = 'parts' and x ->> 'id' <> 'legs'), 0))
   from jsonb_array_elements(case when jsonb_typeof(v) = 'array' then v else '[]'::jsonb end) x;
 $$;
 revoke execute on function _products_counts(jsonb) from public, anon, authenticated;
+
+-- (stage 2) where the legs are sorted: the legs screen, or with the small parts
+create or replace function _legs_sort_station() returns text
+language sql stable security definer set search_path = public, extensions, pg_temp as $$
+  select case when exists (select 1 from jsonb_array_elements(case when jsonb_typeof(_gt_settings() -> 'products') = 'array'
+                                                                   then _gt_settings() -> 'products' else '[]'::jsonb end) x
+                            where x ->> 'id' = 'legs' and x ->> 'post' = 'parts') then 'parts' else 'legs' end;
+$$;
+revoke execute on function _legs_sort_station() from public, anon, authenticated;
+-- the legs of this animal still wait to be sorted (sorting on, legs not switched off, stickers printed, kosher)
+create or replace function _legs_sort_pending(a animals_pilot) returns boolean
+language sql stable security definer set search_path = public, extensions, pg_temp as $$
+  select _gt_flag(_gt_settings(), 'legsSortEnabled', false) and not _gt_flag(_gt_settings(), 'legsPaused', false)
+         and coalesce(a.legs_stickers, false) and _kosher_ready(a) and not coalesce(a.legs_sorted, false);
+$$;
+revoke execute on function _legs_sort_pending(animals_pilot) from public, anon, authenticated;
+-- (stage 2) how many kosher stickers make the small-parts set of one animal (no list yet: 3 — 2 cheeks + tongue)
+create or replace function _parts_expected() returns integer
+language sql stable security definer set search_path = public, extensions, pg_temp as $$
+  select case when jsonb_typeof(_gt_settings() -> 'products') = 'array'
+              then coalesce((_products_counts(_gt_settings() -> 'products') ->> 'partsStickerCount')::int, 0) else 3 end;
+$$;
+revoke execute on function _parts_expected() from public, anon, authenticated;
 
 -- ── 13. statuses: no two with the same key ────────────────────────────────────
 CREATE OR REPLACE FUNCTION public._settings_value_error(p_key text, v jsonb) RETURNS text
@@ -2285,11 +2315,11 @@ begin
     return 'unknown time zone';
   end if;
   -- whole numbers in sane ranges
-  if p_key in ('beepSeconds', 'legStickerCount', 'headStickerCount', 'partsStickerCount', 'numInspectors', 'inspectorMode', 'maxAnimals',
+  if p_key in ('beepSeconds', 'legStickerCount', 'headStickerCount', 'partsStickerCount', 'stampsCount', 'numInspectors', 'inspectorMode', 'maxAnimals',
                'dailyTarget', 'archiveDays', 'esoFromIdx') then
     if _jint_ok(v, case p_key when 'numInspectors' then 1 when 'inspectorMode' then 1 when 'maxAnimals' then 1
                               when 'archiveDays' then 1 when 'beepSeconds' then 1 else 0 end,
-                   case p_key when 'beepSeconds' then 3600 when 'legStickerCount' then 999 when 'headStickerCount' then 999 when 'partsStickerCount' then 999
+                   case p_key when 'beepSeconds' then 3600 when 'legStickerCount' then 999 when 'headStickerCount' then 999 when 'partsStickerCount' then 999 when 'stampsCount' then 999
                               when 'numInspectors' then 20 when 'inspectorMode' then 10 when 'maxAnimals' then 1000
                               when 'dailyTarget' then 100000 when 'archiveDays' then 3650 when 'esoFromIdx' then 1000 end) then
       return null;
@@ -5356,6 +5386,1315 @@ begin
                             'leaderDevice', _is_leader_device(_current_device_id()),
                             'registerLeaderDevice', v_manager.role = 'manager' and not _leader_devices_exist());
 end $function$;
+
+-- ── §35 v10.38 stage 2: the legs sorted where the plant sorts them; the small-parts set from the list ──
+-- (the functions below are the active ones, with only the lines marked v10.38 changed)
+-- • the legs: sorting (legs_sorted) has its own stage, 'legs_sort' — only the sorting station of the plant
+--   (_legs_sort_station: the legs screen, or with the small parts) may sort; the legs / head stickers stay
+--   with the legs screen. A USDA hold / "?" of the sorting station stops the sorting.
+-- • the small parts: the set is the plant's own (_parts_expected); a plant with no small parts has none pending.
+CREATE OR REPLACE FUNCTION public._stage_allowed(p_stage text)
+ RETURNS boolean
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public', 'extensions', 'pg_temp'
+AS $function$
+declare v_role text; v_ok boolean := false; v_dev text;
+begin
+  if _request_privileged() then return true; end if;
+  v_role := _caller_device_role();
+  if v_role is not null then
+    perform _worker_gate(v_role);                    -- v10.16 (review A1): a code screen needs its worker's login
+    v_ok := case p_stage
+      when 'slaughter' then v_role in ('slaughter')
+      when 'eso'       then v_role in ('esophagus','slaughter')
+      when 'inner'     then v_role in ('inner')              -- step 46: inner tablet → inner only
+      when 'outer'     then v_role in ('outer')              -- step 46: outer tablet → outer only
+                             or (v_role = 'inner' and _gt_one_inspection())   -- one shared screen (the plant's choice)
+      when 'legs'      then v_role in ('legs')
+      when 'legs_sort' then v_role = _legs_sort_station()   -- v10.38: the legs are sorted on the legs screen or with the small parts
+      when 'stamped'   then v_role in ('stamps','parts')
+      when 'parts'     then v_role in ('parts')
+      when 'weights'   then v_role in ('stamps')        -- the scale is on the stamps screen
+      else false end;
+  end if;
+  if v_ok then return true; end if;
+  -- the team leader has NO ruling rights — except in test mode (SQL-only switch, 8 hours)
+  if _test_mode_on() and _request_has_manager() then return true; end if;
+  if v_role is null then                             -- a revoked / retired key: counted for the health screen
+    v_dev := _current_device_id();
+    if v_dev is null then perform _note_revoked_write(); else perform _note_revoked_write(v_dev); end if;
+  end if;
+  return false;
+end $function$;
+
+CREATE OR REPLACE FUNCTION public._animals_merge()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'extensions', 'pg_temp'
+AS $function$
+declare
+  v_epoch bigint := _board_epoch();
+  v_api   boolean := _is_api_request() and not _request_is_service_role();
+  v_dev   text;
+  v_priv  boolean;
+  v_now   bigint := (extract(epoch from clock_timestamp()) * 1000)::bigint;
+  v_cap   bigint;
+  v_eso   boolean := coalesce(current_setting('gt.eso_ruling', true), '') = 'true';
+  v_claim boolean := coalesce(current_setting('gt.claim', true), '') = 'true';
+  v_admin boolean := coalesce(current_setting('app.device_admin', true), '') = 'on';
+  v_eso_upsert boolean := false;
+begin
+  if current_setting('gt.reset_in_progress', true) = 'true' then
+    return new;
+  end if;
+  v_dev := case when v_api then _acting_device() else _current_device_id() end;
+
+  if v_epoch is not null and _is_api_request() and (new.board_epoch is null or new.board_epoch < v_epoch) then
+    raise exception 'GT:STALE_BOARD stale-board: this device still has the previous day''s board' using errcode = 'P0001';
+  end if;
+
+  new.updated_at := clock_timestamp();
+  if v_api and not v_admin then new.device_id := v_dev; end if;          -- the server's identity, never the tablet's word
+
+  if tg_op = 'INSERT' then
+    new.board_epoch := coalesce(v_epoch, new.board_epoch);
+    if _is_api_request() and not exists (select 1 from animals_pilot x where x.id = new.id) then
+      new.slaughter := null; new.slaughtered_by := null; new.slaughter_time := null; new.slaughter_by_device := null;
+      new.inner_status := null; new.inner_by := null; new.inner_time := null; new.inner_by_device := null;
+      new.outer_status := null; new.outer_by := null; new.outer_time := null; new.outer_by_device := null;
+      new.maw := null; new.rumen := null; new.not_chalak_inner := false;
+      new.legs_stickers := false; new.head_stickers := false; new.legs_sorted := false;
+      new.parts_scanned := false; new.tongue_sticker := false; new.cheek_sticker := false;
+      new.parts_print_count := 0; new.parts_printed_as := null;
+      new.stamped := false; new.stamped_as := null;
+      new.weight_right := null; new.weight_left := null; new.weight_stage2 := null; new.weight_stage3 := null;
+      new.weight_right_skipped := false; new.weight_left_skipped := false;
+      new.weight_stage2_skipped := false; new.weight_stage3_skipped := false;
+      new.eso_checked := false; new.eso_result := null; new.eso_prev_slaughter := null; new.eso_by_device := null;
+    end if;
+    return new;
+  end if;
+  new.board_epoch := coalesce(v_epoch, new.board_epoch, old.board_epoch);
+  v_priv := _request_privileged();
+
+  if _is_api_request() then
+    v_cap := v_now + 60000;
+    if new.slaughter_time is distinct from old.slaughter_time and new.slaughter_time > v_cap then new.slaughter_time := v_cap; end if;
+    if new.inner_time     is distinct from old.inner_time     and new.inner_time     > v_cap then new.inner_time     := v_cap; end if;
+    if new.outer_time     is distinct from old.outer_time     and new.outer_time     > v_cap then new.outer_time     := v_cap; end if;
+  end if;
+
+  -- esophagus: only through the ruling itself — except a "nevela" sent by an
+  -- esophagus tablet that was offline, which is applied whole
+  if not v_eso then
+    if new.eso_result = 'nevela' and old.eso_result is distinct from 'nevela' and _stage_allowed('eso')
+       and (v_dev is not null or not v_api) then
+      v_eso_upsert := true;
+      new.eso_checked := true;
+      new.eso_by_device := coalesce(v_dev, old.eso_by_device);
+      -- v10.37: the esophagus result before this was NOT nevela, so a nevela on the slaughter column is the
+      -- shochet's own ruling — keep it (it used to be stored as 'slaughtered', and a later esophagus "OK"
+      -- turned the shochet's nevela into "slaughtered")
+      new.eso_prev_slaughter := old.slaughter;
+      new.slaughter := 'nevela';
+      new.slaughtered_by := old.slaughtered_by;
+      new.slaughter_time := greatest(v_now, coalesce(old.slaughter_time, 0) + 1);
+      new.slaughter_by_device := coalesce(v_dev, old.slaughter_by_device);
+      perform set_config('gt.eso_upsert_row', new.id::text, true);
+    else
+      new.eso_result := old.eso_result;
+      new.eso_checked := old.eso_checked;
+      new.eso_prev_slaughter := old.eso_prev_slaughter;
+      new.eso_by_device := old.eso_by_device;
+    end if;
+  end if;
+
+  if not (v_eso or v_eso_upsert) and old.slaughter_time is not null
+     and (new.slaughter_time is null or new.slaughter_time < old.slaughter_time) then
+    new.slaughter := old.slaughter; new.slaughter_time := old.slaughter_time;
+    new.slaughtered_by := old.slaughtered_by; new.slaughter_by_device := old.slaughter_by_device;
+  end if;
+  if old.inner_time is not null and (new.inner_time is null or new.inner_time < old.inner_time) then
+    new.inner_status := old.inner_status; new.inner_time := old.inner_time;
+    new.inner_by := old.inner_by; new.inner_by_device := old.inner_by_device;
+    new.not_chalak_inner := old.not_chalak_inner;
+  end if;
+  if old.outer_time is not null and (new.outer_time is null or new.outer_time < old.outer_time) then
+    new.outer_status := old.outer_status; new.outer_time := old.outer_time;
+    new.outer_by := old.outer_by; new.outer_by_device := old.outer_by_device;
+  end if;
+  if new.slaughter is null and old.slaughter is not null
+     and (not v_priv or new.slaughter_time is null) then
+    new.slaughter := old.slaughter; new.slaughter_time := old.slaughter_time;
+    new.slaughtered_by := old.slaughtered_by; new.slaughter_by_device := old.slaughter_by_device;
+  end if;
+  if new.outer_status is null and old.outer_status is not null and new.outer_time is null then new.outer_status := old.outer_status; end if;
+
+  if new.inner_status is null and old.inner_status is not null then
+    if old.inner_status in ('confirmed', 'treif')
+       or (old.inner_status = 'in_progress' and not v_priv and old.inner_by_device is distinct from v_dev) then
+      new.inner_status := old.inner_status; new.inner_time := old.inner_time;
+      new.inner_by := old.inner_by; new.inner_by_device := old.inner_by_device;
+      new.not_chalak_inner := old.not_chalak_inner;
+    end if;
+  end if;
+
+  -- an open lung check belongs to the tablet holding it (10-minute takeover
+  -- aside): another tablet's write — e.g. the one that lost the check after a
+  -- takeover — can't replace it. The refusal is recorded.
+  if v_api and not v_claim and not v_admin
+     and old.inner_status = 'in_progress' and old.inner_by_device is distinct from v_dev
+     and coalesce(old.inner_time, 0) >= v_now - 600000
+     and ((new.inner_status, new.inner_time, new.inner_by, new.inner_by_device, coalesce(new.not_chalak_inner, false))
+          is distinct from (old.inner_status, old.inner_time, old.inner_by, old.inner_by_device, coalesce(old.not_chalak_inner, false))
+          or coalesce(new.maw, old.maw) is distinct from old.maw
+          or coalesce(new.rumen, old.rumen) is distinct from old.rumen) then
+    perform _security_event(new.id + 1, 'inner_takeover_rejected',
+      jsonb_build_object('holder', old.inner_by_device, 'tried', new.inner_status, 'via', 'push'), null, coalesce(v_dev, 'unknown'));
+    new.inner_status := old.inner_status; new.inner_time := old.inner_time;
+    new.inner_by := old.inner_by; new.inner_by_device := old.inner_by_device;
+    new.not_chalak_inner := old.not_chalak_inner;
+    new.maw := old.maw; new.rumen := old.rumen;
+  end if;
+
+  if not (v_eso or v_eso_upsert)
+     and (new.slaughter, new.slaughter_time, new.slaughtered_by, new.slaughter_by_device)
+         is distinct from (old.slaughter, old.slaughter_time, old.slaughtered_by, old.slaughter_by_device)
+     and not _stage_allowed('slaughter') then
+    new.slaughter := old.slaughter; new.slaughter_time := old.slaughter_time;
+    new.slaughtered_by := old.slaughtered_by; new.slaughter_by_device := old.slaughter_by_device;
+  end if;
+  if (new.inner_status, new.inner_time, new.inner_by, new.inner_by_device, coalesce(new.not_chalak_inner, false))
+     is distinct from (old.inner_status, old.inner_time, old.inner_by, old.inner_by_device, coalesce(old.not_chalak_inner, false))
+     and not _stage_allowed('inner') then
+    new.inner_status := old.inner_status; new.inner_time := old.inner_time;
+    new.inner_by := old.inner_by; new.inner_by_device := old.inner_by_device;
+    new.not_chalak_inner := old.not_chalak_inner;
+  end if;
+  if (new.outer_status, new.outer_time, new.outer_by, new.outer_by_device)
+     is distinct from (old.outer_status, old.outer_time, old.outer_by, old.outer_by_device)
+     and not _stage_allowed('outer') then
+    new.outer_status := old.outer_status; new.outer_time := old.outer_time;
+    new.outer_by := old.outer_by; new.outer_by_device := old.outer_by_device;
+  end if;
+
+  -- which device made a ruling: always the server's identity of the caller
+  if v_api and not v_admin then
+    if (new.slaughter, new.slaughter_time) is distinct from (old.slaughter, old.slaughter_time) then new.slaughter_by_device := v_dev;
+    else new.slaughter_by_device := old.slaughter_by_device; end if;
+    if (new.inner_status, new.inner_time) is distinct from (old.inner_status, old.inner_time) then new.inner_by_device := v_dev;
+    else new.inner_by_device := old.inner_by_device; end if;
+    if (new.outer_status, new.outer_time) is distinct from (old.outer_status, old.outer_time) then new.outer_by_device := v_dev;
+    else new.outer_by_device := old.outer_by_device; end if;
+  end if;
+
+  if v_api and not v_claim then
+    if not (v_eso or v_eso_upsert) and new.slaughter is not null
+       and (new.slaughter, new.slaughter_time, new.slaughtered_by) is distinct from (old.slaughter, old.slaughter_time, old.slaughtered_by) then
+      new.slaughtered_by := _derive_actor('slaughter', case when new.slaughtered_by is distinct from old.slaughtered_by then new.slaughtered_by end);
+    end if;
+    if new.inner_status is not null
+       and (new.inner_status, new.inner_time, new.inner_by) is distinct from (old.inner_status, old.inner_time, old.inner_by) then
+      new.inner_by := _derive_actor('inner', case when new.inner_by is distinct from old.inner_by then new.inner_by end);
+    end if;
+    if new.outer_status is not null
+       and (new.outer_status, new.outer_time, new.outer_by) is distinct from (old.outer_status, old.outer_time, old.outer_by) then
+      new.outer_by := _derive_actor('outer', case when new.outer_by is distinct from old.outer_by then new.outer_by end);
+    end if;
+  end if;
+
+  if not _stage_allowed('inner') then
+    new.maw := old.maw; new.rumen := old.rumen;
+  end if;
+  if not _stage_allowed('legs') then
+    new.legs_stickers := old.legs_stickers; new.head_stickers := old.head_stickers;
+  end if;
+  if not _stage_allowed('legs_sort') then                -- v10.38: the sorting station of the plant (legs / small parts)
+    new.legs_sorted := old.legs_sorted;
+  end if;
+  if not _stage_allowed('stamped') then
+    new.stamped := old.stamped; new.stamped_as := old.stamped_as;
+  end if;
+  if not _stage_allowed('parts') then
+    new.parts_scanned := old.parts_scanned; new.tongue_sticker := old.tongue_sticker; new.cheek_sticker := old.cheek_sticker;
+    new.parts_print_count := old.parts_print_count; new.parts_printed_as := old.parts_printed_as;
+  end if;
+  if not _stage_allowed('weights') then
+    new.weight_right := old.weight_right; new.weight_left := old.weight_left;
+    new.weight_stage2 := old.weight_stage2; new.weight_stage3 := old.weight_stage3;
+    new.weight_right_skipped := old.weight_right_skipped; new.weight_left_skipped := old.weight_left_skipped;
+    new.weight_stage2_skipped := old.weight_stage2_skipped; new.weight_stage3_skipped := old.weight_stage3_skipped;
+  end if;
+
+  new.legs_stickers         := coalesce(old.legs_stickers, false)         or coalesce(new.legs_stickers, false);
+  new.head_stickers         := coalesce(old.head_stickers, false)         or coalesce(new.head_stickers, false);
+  new.parts_scanned         := coalesce(old.parts_scanned, false)         or coalesce(new.parts_scanned, false);
+  new.tongue_sticker        := coalesce(old.tongue_sticker, false)        or coalesce(new.tongue_sticker, false);
+  new.cheek_sticker         := coalesce(old.cheek_sticker, false)         or coalesce(new.cheek_sticker, false);
+  new.stamped               := coalesce(old.stamped, false)               or coalesce(new.stamped, false);
+  new.weight_right_skipped  := coalesce(old.weight_right_skipped, false)  or coalesce(new.weight_right_skipped, false);
+  new.weight_left_skipped   := coalesce(old.weight_left_skipped, false)   or coalesce(new.weight_left_skipped, false);
+  new.weight_stage2_skipped := coalesce(old.weight_stage2_skipped, false) or coalesce(new.weight_stage2_skipped, false);
+  new.weight_stage3_skipped := coalesce(old.weight_stage3_skipped, false) or coalesce(new.weight_stage3_skipped, false);
+  new.eso_checked           := coalesce(old.eso_checked, false)           or coalesce(new.eso_checked, false);
+  new.legs_sorted           := coalesce(old.legs_sorted, false)           or coalesce(new.legs_sorted, false);
+  new.not_chalak_inner      := coalesce(new.not_chalak_inner, false);
+
+  new.maw           := coalesce(new.maw, old.maw);
+  new.rumen         := coalesce(new.rumen, old.rumen);
+  new.weight_right  := coalesce(new.weight_right, old.weight_right);
+  new.weight_left   := coalesce(new.weight_left, old.weight_left);
+  new.weight_stage2 := coalesce(new.weight_stage2, old.weight_stage2);
+  new.weight_stage3 := coalesce(new.weight_stage3, old.weight_stage3);
+  new.eso_result    := coalesce(new.eso_result, old.eso_result);
+
+  new.parts_print_count := greatest(coalesce(old.parts_print_count, 0), coalesce(new.parts_print_count, 0));
+  return new;
+end $function$;
+
+CREATE OR REPLACE FUNCTION public.carry_push(p_board bigint, p_rows jsonb, p_command_id uuid DEFAULT NULL::uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'extensions', 'pg_temp'
+AS $function$
+declare
+  v_rows jsonb; r jsonb; v_dev text; v_res jsonb; v_out jsonb := '[]'::jsonb; v_ignored text[] := '{}';
+  c animals_carry%rowtype; n animals_carry%rowtype; a animals_pilot; k text; g text; v_open bigint;
+  v_cur int; v_err text; v_reason text; v_groups text[]; v_key text; v_state text; v_msg text;
+  legs_cols constant text[] := array['legs_stickers', 'head_stickers', 'legs_sorted'];
+  parts_cols constant text[] := array['parts_scanned', 'tongue_sticker', 'cheek_sticker', 'parts_print_count', 'parts_printed_as'];
+  stamp_cols constant text[] := array['stamped', 'stamped_as'];
+  weight_cols constant text[] := array['weight_right', 'weight_left', 'weight_stage2', 'weight_stage3',
+                                       'weight_right_skipped', 'weight_left_skipped', 'weight_stage2_skipped', 'weight_stage3_skipped'];
+begin
+  if jsonb_typeof(p_rows) = 'object' then v_rows := jsonb_build_array(p_rows);
+  elsif jsonb_typeof(p_rows) = 'array' then v_rows := p_rows;
+  else return jsonb_build_object('ok', false, 'error', 'bad_rows');
+  end if;
+  if jsonb_array_length(v_rows) = 0 or jsonb_array_length(v_rows) > 50 then
+    return jsonb_build_object('ok', false, 'error', 'bad_rows');
+  end if;
+  v_dev := _call_device(null);
+  if v_dev is null then return jsonb_build_object('ok', false, 'error', _no_device_error()); end if;
+  if _is_api_request() and not _request_is_service_role()
+     and not (_caller_device_role() in ('legs', 'parts', 'stamps') or (_test_mode_on() and _request_has_manager())) then
+    return jsonb_build_object('ok', false, 'error', 'wrong_station');
+  end if;
+  v_res := _cmd_get(p_command_id, v_dev, 'carry_push');
+  if v_res is not null then return v_res; end if;
+  perform _proc_board_lock(p_board);              -- not while this board is being closed / archived
+  if not exists (select 1 from animals_carry where board_id = p_board) then
+    v_res := jsonb_build_object('ok', false, 'error', 'board_closed', 'board', p_board);
+    perform _cmd_put(p_command_id, v_dev, 'carry_push', v_res);
+    return v_res;
+  end if;
+
+  begin
+    for r in select value from jsonb_array_elements(v_rows) loop
+      v_cur := null; v_groups := '{}';
+      if jsonb_typeof(r) <> 'object' or coalesce(r ->> 'id', '') !~ '^\d{1,3}$' then
+        raise exception 'GT:BAD_ID bad row id' using errcode = '22023';
+      end if;
+      v_cur := (r ->> 'id')::int;
+      select * into c from animals_carry where board_id = p_board and id = v_cur for update;
+      if c.id is null then raise exception 'GT:BAD_ID no such animal on this board' using errcode = '22023'; end if;
+      n := c;
+      for k in select key from jsonb_object_keys(r) key where key <> 'id' loop
+        if k = 'legs_sorted' and _stage_allowed('legs_sort') then v_groups := v_groups || 'legs_sort'::text;   -- v10.38
+        elsif k = 'legs_sorted' then
+          if not (k = any(v_ignored)) then v_ignored := v_ignored || k; end if;
+          continue;
+        elsif k = any(legs_cols) and _stage_allowed('legs') then v_groups := v_groups || 'legs'::text;
+        elsif k = any(parts_cols) and _stage_allowed('parts') then v_groups := v_groups || 'parts'::text;
+        elsif k = any(stamp_cols) and _stage_allowed('stamped') then v_groups := v_groups || 'stamped'::text;
+        elsif k = any(weight_cols) and _stage_allowed('weights') then v_groups := v_groups || 'weights'::text;
+        else
+          if not (k = any(v_ignored)) then v_ignored := v_ignored || k; end if;
+          continue;
+        end if;
+        -- once true stays true; a print count only grows; a weight is never cleared
+        case k
+          when 'legs_stickers' then n.legs_stickers := coalesce(c.legs_stickers, false) or coalesce((r ->> k)::boolean, false);
+          when 'head_stickers' then n.head_stickers := coalesce(c.head_stickers, false) or coalesce((r ->> k)::boolean, false);
+          when 'legs_sorted'   then n.legs_sorted   := coalesce(c.legs_sorted, false)   or coalesce((r ->> k)::boolean, false);
+          when 'parts_scanned' then n.parts_scanned := coalesce(c.parts_scanned, false) or coalesce((r ->> k)::boolean, false);
+          when 'tongue_sticker' then n.tongue_sticker := coalesce(c.tongue_sticker, false) or coalesce((r ->> k)::boolean, false);
+          when 'cheek_sticker' then n.cheek_sticker := coalesce(c.cheek_sticker, false) or coalesce((r ->> k)::boolean, false);
+          when 'parts_print_count' then n.parts_print_count := greatest(coalesce(c.parts_print_count, 0), coalesce((r ->> k)::int, 0));
+          when 'parts_printed_as' then n.parts_printed_as := coalesce(r ->> k, c.parts_printed_as);
+          when 'stamped'       then n.stamped       := coalesce(c.stamped, false)       or coalesce((r ->> k)::boolean, false);
+          when 'stamped_as'    then n.stamped_as    := coalesce(r ->> k, c.stamped_as);
+          when 'weight_right'  then n.weight_right  := coalesce((r ->> k)::numeric, c.weight_right);
+          when 'weight_left'   then n.weight_left   := coalesce((r ->> k)::numeric, c.weight_left);
+          when 'weight_stage2' then n.weight_stage2 := coalesce((r ->> k)::numeric, c.weight_stage2);
+          when 'weight_stage3' then n.weight_stage3 := coalesce((r ->> k)::numeric, c.weight_stage3);
+          when 'weight_right_skipped'  then n.weight_right_skipped  := coalesce(c.weight_right_skipped, false)  or coalesce((r ->> k)::boolean, false);
+          when 'weight_left_skipped'   then n.weight_left_skipped   := coalesce(c.weight_left_skipped, false)   or coalesce((r ->> k)::boolean, false);
+          when 'weight_stage2_skipped' then n.weight_stage2_skipped := coalesce(c.weight_stage2_skipped, false) or coalesce((r ->> k)::boolean, false);
+          when 'weight_stage3_skipped' then n.weight_stage3_skipped := coalesce(c.weight_stage3_skipped, false) or coalesce((r ->> k)::boolean, false);
+        end case;
+      end loop;
+      if to_jsonb(n) is distinct from to_jsonb(c) then
+        a := _carry_row(n);
+        v_reason := _legs_slot_error(n.legs_stickers is distinct from c.legs_stickers, n.head_stickers is distinct from c.head_stickers,
+                                     n.legs_sorted is distinct from c.legs_sorted);      -- v10.34 review: legs slot vs head slot
+        if v_reason is not null then
+          raise exception 'GT:OUT_OF_ORDER out-of-order: stage=legs reason=%', v_reason using errcode = 'P0001';
+        end if;
+        if n.legs_sorted is distinct from c.legs_sorted and not coalesce(n.legs_stickers, false) then   -- v10.35: nothing to sort
+          raise exception 'GT:OUT_OF_ORDER out-of-order: stage=legs reason=no_leg_stickers' using errcode = 'P0001';
+        end if;
+        -- the order: a processing step only after the last ruling
+        foreach g in array (select array_agg(distinct x) from unnest(v_groups) x) loop
+          v_reason := _stage_order_error(case g when 'legs' then 'legs_stickers' when 'legs_sort' then 'legs'
+                                                else g end, a, false);
+          if v_reason is not null then
+            raise exception 'GT:OUT_OF_ORDER out-of-order: stage=% reason=%', g, v_reason using errcode = 'P0001';
+          end if;
+          -- v10.26: a USDA hold / an open "?" stops the station (a held half is not weighed)
+          v_reason := _hold_block(c.board_epoch, v_cur, _proc_station_of_group(g));
+          if v_reason is null and g = 'parts' then                    -- v10.32: a held part is not printed
+            v_reason := _parts_print_block(c.board_epoch, v_cur, c.tongue_sticker, n.tongue_sticker, c.cheek_sticker,
+                                           n.cheek_sticker, c.parts_print_count, n.parts_print_count);
+          end if;
+          if v_reason is null and g = 'weights' and n.weight_right is distinct from c.weight_right and n.weight_right is not null then
+            v_reason := _hold_block(c.board_epoch, v_cur, 'stamps', 'right');
+          end if;
+          if v_reason is null and g = 'weights' and n.weight_left is distinct from c.weight_left and n.weight_left is not null then
+            v_reason := _hold_block(c.board_epoch, v_cur, 'stamps', 'left');
+          end if;
+          if v_reason is not null then
+            raise exception 'GT:HELD held: station=% hold=%', _proc_station_of_group(g), v_reason using errcode = 'P0001';
+          end if;
+          -- no skipping: this board must be the station's current one
+          v_open := _proc_open_board(_proc_station_of_group(g));
+          if v_open is distinct from p_board then
+            if v_open is null or (select slaughter_day from animals_carry where board_id = v_open limit 1)
+                                 > (select slaughter_day from animals_carry where board_id = p_board limit 1) then
+              raise exception 'GT:BOARD_CLOSED board-closed: station=% board=%', _proc_station_of_group(g), p_board using errcode = 'P0001';
+            end if;
+            raise exception 'GT:EARLIER_DAY_OPEN earlier-day-open: station=% board=% day=%', _proc_station_of_group(g), v_open,
+              (select slaughter_day from animals_carry where board_id = v_open limit 1) using errcode = 'P0001';
+          end if;
+        end loop;
+        n.updated_at := clock_timestamp();
+        n.device_id := v_dev;
+        update animals_carry set
+          legs_stickers = n.legs_stickers, head_stickers = n.head_stickers, legs_sorted = n.legs_sorted,
+          parts_scanned = n.parts_scanned, tongue_sticker = n.tongue_sticker, cheek_sticker = n.cheek_sticker,
+          parts_print_count = n.parts_print_count, parts_printed_as = n.parts_printed_as,
+          stamped = n.stamped, stamped_as = n.stamped_as,
+          weight_right = n.weight_right, weight_left = n.weight_left, weight_stage2 = n.weight_stage2, weight_stage3 = n.weight_stage3,
+          weight_right_skipped = n.weight_right_skipped, weight_left_skipped = n.weight_left_skipped,
+          weight_stage2_skipped = n.weight_stage2_skipped, weight_stage3_skipped = n.weight_stage3_skipped,
+          updated_at = n.updated_at, device_id = n.device_id
+         where board_id = p_board and id = v_cur;
+        v_key := _printed_as_key(a);
+        if n.parts_printed_as is distinct from c.parts_printed_as and n.parts_printed_as is distinct from v_key then
+          perform _security_event(v_cur + 1, 'label_mismatch', jsonb_build_object('what', 'parts', 'printed', n.parts_printed_as,
+                                  'ruling', v_key, 'board', p_board), null, v_dev);
+        end if;
+        if n.stamped_as is distinct from c.stamped_as and n.stamped_as is distinct from v_key then
+          perform _security_event(v_cur + 1, 'label_mismatch', jsonb_build_object('what', 'stamp', 'printed', n.stamped_as,
+                                  'ruling', v_key, 'board', p_board), null, v_dev);
+        end if;
+      end if;
+      v_out := v_out || jsonb_build_array(to_jsonb(n));
+    end loop;
+  exception when others then
+    get stacked diagnostics v_state = returned_sqlstate, v_msg = message_text;
+    v_err := case
+      when v_msg ~ 'GT:[A-Z_]+' then lower(substring(v_msg from 'GT:([A-Z_]+)'))
+      when v_state in ('23514', '22P02', '22003', '22007', '22008', '22023', '23502', '22001') then 'invalid_value'
+      else 'server_error' end;
+  end;
+
+  if v_err is not null then
+    v_res := jsonb_build_object('ok', false, 'error', v_err, 'board', p_board)
+             || case when v_cur is not null then jsonb_build_object('id', v_cur,
+                     'row', (select to_jsonb(x) from animals_carry x where x.board_id = p_board and x.id = v_cur)) else '{}'::jsonb end
+             || case when v_err = 'out_of_order' then jsonb_build_object('reason', substring(v_msg from 'reason=([a-z_]+)')) else '{}'::jsonb end
+             || case when v_err = 'held' then jsonb_build_object('reason', substring(v_msg from 'hold=([a-z_]+)')) else '{}'::jsonb end
+             || case when v_err = 'earlier_day_open' then jsonb_build_object('open_board', substring(v_msg from 'board=(\d+)')::bigint,
+                                                                             'day', substring(v_msg from 'day=([0-9-]+)')) else '{}'::jsonb end
+             || case when v_err = 'server_error' then jsonb_build_object('message', left(v_msg, 200)) else '{}'::jsonb end;
+  else
+    v_res := jsonb_build_object('ok', true, 'rows', v_out, 'board', p_board)
+             || case when array_length(v_ignored, 1) > 0 then jsonb_build_object('ignored', to_jsonb(v_ignored)) else '{}'::jsonb end;
+    if _proc_finalize(p_board) > 0 then v_res := v_res || jsonb_build_object('boardDone', true); end if;
+  end if;
+  perform _cmd_put(p_command_id, v_dev, 'carry_push', v_res);
+  return v_res;
+end $function$;
+
+CREATE OR REPLACE FUNCTION public.claim_animal_stage(p_id integer, p_stage text, p_value text, p_actor text, p_device_id text, p_epoch bigint, p_command_id uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'extensions', 'pg_temp'
+AS $function$
+declare
+  v_rows integer := 0;
+  v_now bigint := (extract(epoch from clock_timestamp()) * 1000)::bigint;
+  v_dev text;
+  v_epoch bigint := _board_epoch();
+  v_stage text := case when p_stage = 'inner_start' then 'inner' when p_stage = 'legs' then 'legs_sort' else p_stage end;   -- v10.38: sorting → its station
+  v_actor text;
+  v_res jsonb;
+  v_dup boolean := false;
+  v_order text; v_open bigint;
+  v_plain boolean := false;
+  a animals_pilot%rowtype;
+begin
+  if p_id is null or p_id < 0 or p_id > 999 then
+    return jsonb_build_object('claimed', false, 'error', 'bad_id');
+  end if;
+  if p_stage is null or p_stage not in ('slaughter', 'inner_start', 'inner', 'outer', 'eso', 'legs', 'stamped') then
+    return jsonb_build_object('claimed', false, 'error', 'bad_stage');
+  end if;
+  perform _board_write_lock();                      -- never in the middle of a daily reset
+  v_epoch := _board_epoch();
+  if (p_stage = 'slaughter' and (p_value is null or not _gt_value_ok('slaughter', p_value)))
+     or (p_stage = 'inner' and coalesce(p_value, '') not in ('confirmed', 'treif'))
+     or (p_stage = 'outer' and (p_value is null or (p_value <> 'kosherPlain' and not _gt_value_ok('outer', p_value))))
+     or (p_stage = 'eso' and coalesce(p_value, '') not in ('ok', 'nevela')) then
+    return jsonb_build_object('claimed', false, 'error', 'bad_value');
+  end if;
+  -- v10.33: 'kosherPlain' = plain כשר for a "not chalak" animal (outer_status 'kosher' + nc_plain)
+  v_plain := (p_stage = 'outer' and p_value = 'kosherPlain');
+  if v_plain then p_value := 'kosher'; end if;
+  if v_epoch is not null and (p_epoch is null or p_epoch < v_epoch) then
+    return jsonb_build_object('claimed', false, 'error', 'stale_board', 'boardEpoch', v_epoch);
+  end if;
+  v_dev := _call_device(p_device_id);
+  if v_dev is null then
+    return jsonb_build_object('claimed', false, 'error', _no_device_error());
+  end if;
+  if not _stage_allowed(v_stage) then
+    return jsonb_build_object('claimed', false, 'error', 'wrong_station');
+  end if;
+  v_res := _cmd_get(p_command_id, v_dev, 'claim_animal_stage');
+  if v_res is not null then return v_res; end if;
+
+  v_actor := _derive_actor(p_stage, p_actor);                 -- every stage: the server's name for the worker
+
+  insert into animals_pilot (id, board_epoch) values (p_id, v_epoch) on conflict (id) do nothing;
+  select * into a from animals_pilot where id = p_id for update;
+
+  -- step 46: a number reaches a station only after the stages before it.
+  -- (Checked only while the stage is still open — a retry of a claim this
+  -- device already won is answered below as a duplicate.)
+  if (p_stage = 'eso' and a.eso_checked is distinct from true)
+     or (p_stage in ('inner_start', 'inner') and (a.inner_status is null or a.inner_status = 'in_progress'))
+     or (p_stage = 'outer' and a.outer_status is null)
+     or (p_stage = 'legs' and a.legs_sorted is distinct from true)
+     or (p_stage = 'stamped' and a.stamped is distinct from true) then
+    v_order := _stage_order_error(case when p_stage = 'inner_start' then 'inner' else p_stage end, a, true);
+    if v_order is null and p_stage = 'legs' then        -- v10.35 review: sorting refused with a clear answer, not an exception
+      v_order := coalesce(_legs_slot_error(false, false, true), case when not coalesce(a.legs_stickers, false) then 'no_leg_stickers' end);
+    end if;
+    if v_order is not null then
+      v_res := jsonb_build_object('claimed', false, 'error', 'out_of_order', 'reason', v_order,
+                                  'row', to_jsonb(a), 'serverNow', v_now);
+      perform _cmd_put(p_command_id, v_dev, 'claim_animal_stage', v_res);
+      return v_res;
+    end if;
+    -- v10.26: a USDA hold / the station's open "?" (a ruling of the station's own "?" goes ahead)
+    v_order := _hold_block(coalesce(a.board_epoch, v_epoch), p_id,
+                           case p_stage when 'inner_start' then 'inner' when 'stamped' then _proc_station_of_group('stamped') when 'legs' then _legs_sort_station() else p_stage end);
+    if v_order is not null then
+      v_res := jsonb_build_object('claimed', false, 'error', 'held', 'reason', v_order, 'row', to_jsonb(a), 'serverNow', v_now);
+      perform _cmd_put(p_command_id, v_dev, 'claim_animal_stage', v_res);
+      return v_res;
+    end if;
+    if p_stage in ('legs', 'stamped') then
+      v_open := _proc_open_board(case when p_stage = 'legs' then _legs_sort_station() else _proc_station_of_group('stamped') end);
+      if v_open is not null then
+        v_res := jsonb_build_object('claimed', false, 'error', 'earlier_day_open', 'board', v_open,
+                                    'day', (select slaughter_day from animals_carry where board_id = v_open limit 1),
+                                    'row', to_jsonb(a), 'serverNow', v_now);
+        perform _cmd_put(p_command_id, v_dev, 'claim_animal_stage', v_res);
+        return v_res;
+      end if;
+    end if;
+  end if;
+
+  -- a "not chalak" animal: only רבנות כשר (kosher) or treif — one only SENT to the rabbinate
+  -- screen may also be ruled רבנות חלק (§25)
+  if p_stage = 'outer' and a.outer_status is null
+     and (not _nc_outer_value_ok(a, p_value) or (_nc_group_off(p_value) and not coalesce(_is_nc(a), false))
+          or not _outer_status_known(p_value)) then
+    v_res := jsonb_build_object('claimed', false, 'error', 'bad_value', 'reason', 'nc_kosher_or_treif_only',
+                                'row', to_jsonb(a), 'serverNow', v_now);
+    perform _cmd_put(p_command_id, v_dev, 'claim_animal_stage', v_res);
+    return v_res;
+  end if;
+
+  if p_stage = 'slaughter' and a.slaughter is null and _hold_block(coalesce(a.board_epoch, v_epoch), p_id, 'slaughter') is not null then
+    v_res := jsonb_build_object('claimed', false, 'error', 'held', 'reason', _hold_block(coalesce(a.board_epoch, v_epoch), p_id, 'slaughter'),
+                                'row', to_jsonb(a), 'serverNow', v_now);
+    perform _cmd_put(p_command_id, v_dev, 'claim_animal_stage', v_res);
+    return v_res;
+  end if;
+
+  perform set_config('gt.claim', 'true', true);
+  if p_stage = 'slaughter' then
+    update animals_pilot
+       set slaughter = p_value, slaughtered_by = v_actor, slaughter_by_device = v_dev, device_id = v_dev,
+           slaughter_time = greatest(v_now, coalesce(slaughter_time, 0) + 1), updated_at = now()
+     where id = p_id and slaughter is null
+       and coalesce(board_epoch, 0) <= coalesce(v_epoch, 0);
+    get diagnostics v_rows = row_count;
+  elsif p_stage = 'inner_start' then
+    update animals_pilot
+       set inner_status = 'in_progress', inner_by = v_actor, inner_by_device = v_dev, device_id = v_dev,
+           inner_time = greatest(v_now, coalesce(inner_time, 0) + 1), updated_at = now()
+     where id = p_id and (inner_status is null
+                          or (inner_status = 'in_progress'
+                              and (inner_by_device is null or inner_by_device = v_dev
+                                   or inner_time < v_now - 600000)))   -- a check left open 10+ min can be taken over
+       and coalesce(board_epoch, 0) <= coalesce(v_epoch, 0);
+    get diagnostics v_rows = row_count;
+  elsif p_stage = 'inner' then
+    update animals_pilot
+       set inner_status = p_value, inner_by = v_actor, inner_by_device = v_dev, device_id = v_dev,
+           inner_time = greatest(v_now, coalesce(inner_time, 0) + 1), updated_at = now()
+     where id = p_id
+       and (inner_status is null
+            or (inner_status = 'in_progress' and (inner_by_device is null or inner_by_device = v_dev
+                                                  or inner_time < v_now - 600000)))
+       and coalesce(board_epoch, 0) <= coalesce(v_epoch, 0);
+    get diagnostics v_rows = row_count;
+  elsif p_stage = 'outer' then
+    update animals_pilot
+       set outer_status = p_value, outer_by = v_actor, outer_by_device = v_dev, device_id = v_dev,
+           nc_plain = v_plain,
+           outer_time = greatest(v_now, coalesce(outer_time, 0) + 1), updated_at = now()
+     where id = p_id and outer_status is null
+       and coalesce(board_epoch, 0) <= coalesce(v_epoch, 0);
+    get diagnostics v_rows = row_count;
+  elsif p_stage = 'eso' then
+    perform set_config('gt.eso_ruling', 'true', true);
+    update animals_pilot
+       set eso_checked = true,
+           eso_result = p_value,
+           eso_by_device = v_dev,
+           eso_prev_slaughter = case when p_value = 'nevela' then slaughter else eso_prev_slaughter end,
+           slaughter = case when p_value = 'nevela' then 'nevela' else slaughter end,
+           slaughter_time = case when p_value = 'nevela' then greatest(v_now, coalesce(slaughter_time, 0) + 1) else slaughter_time end,
+           slaughter_by_device = case when p_value = 'nevela' then v_dev else slaughter_by_device end,
+           device_id = v_dev,
+           updated_at = now()
+     where id = p_id and (eso_checked is distinct from true)
+       and coalesce(board_epoch, 0) <= coalesce(v_epoch, 0);
+    get diagnostics v_rows = row_count;
+    perform set_config('gt.eso_ruling', '', true);
+  elsif p_stage = 'legs' then
+    update animals_pilot set legs_sorted = true, device_id = v_dev, updated_at = now()
+     where id = p_id and (legs_sorted is distinct from true)
+       and coalesce(board_epoch, 0) <= coalesce(v_epoch, 0);
+    get diagnostics v_rows = row_count;
+  elsif p_stage = 'stamped' then
+    update animals_pilot set stamped = true, device_id = v_dev, updated_at = now()
+     where id = p_id and (stamped is distinct from true)
+       and coalesce(board_epoch, 0) <= coalesce(v_epoch, 0);
+    get diagnostics v_rows = row_count;
+  end if;
+  perform set_config('gt.claim', '', true);
+
+  select * into a from animals_pilot where id = p_id;
+  if v_rows = 0 then
+    -- a retry of a claim this device already won (same value) is not a conflict
+    v_dup := coalesce(case p_stage
+      when 'slaughter' then a.slaughter = p_value and a.slaughter_by_device = v_dev
+      when 'inner'     then a.inner_status = p_value and a.inner_by_device = v_dev
+      when 'outer'     then a.outer_status = p_value and a.outer_by_device = v_dev
+                            and coalesce(a.nc_plain, false) = (v_plain and _is_nc(a))
+      when 'eso'       then coalesce(a.eso_checked, false) and a.eso_result = p_value and a.eso_by_device = v_dev
+      else false end, false);
+    if not v_dup and p_stage in ('inner_start', 'inner') and a.inner_status = 'in_progress'
+       and a.inner_by_device is distinct from v_dev then
+      -- the lung check is held by another tablet (e.g. it took it over): refused and recorded
+      perform _security_event(p_id + 1, 'inner_takeover_rejected',
+        jsonb_build_object('holder', a.inner_by_device, 'tried', coalesce(p_value, p_stage), 'via', 'claim'), v_actor, v_dev);
+    end if;
+  end if;
+  v_res := jsonb_build_object('claimed', v_rows = 1 or v_dup, 'row', to_jsonb(a), 'serverNow', v_now)
+           || case when v_dup then jsonb_build_object('duplicate', true) else '{}'::jsonb end;
+  perform _cmd_put(p_command_id, v_dev, 'claim_animal_stage', v_res);
+  return v_res;
+end $function$;
+
+CREATE OR REPLACE FUNCTION public.carry_claim(p_board bigint, p_id integer, p_stage text, p_command_id uuid DEFAULT NULL::uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'extensions', 'pg_temp'
+AS $function$
+declare v_dev text; v_res jsonb; v_rows int := 0; c animals_carry%rowtype; v_reason text; v_open bigint; v_station text;
+        v_now bigint := (extract(epoch from clock_timestamp()) * 1000)::bigint;
+begin
+  if p_stage is null or p_stage not in ('legs', 'stamped') then
+    return jsonb_build_object('claimed', false, 'error', 'bad_stage');
+  end if;
+  v_dev := _call_device(null);
+  if v_dev is null then return jsonb_build_object('claimed', false, 'error', _no_device_error()); end if;
+  if not _stage_allowed(case when p_stage = 'legs' then 'legs_sort' else p_stage end) then return jsonb_build_object('claimed', false, 'error', 'wrong_station'); end if;   -- v10.38
+  v_res := _cmd_get(p_command_id, v_dev, 'carry_claim');
+  if v_res is not null then return v_res; end if;
+  perform _proc_board_lock(p_board);              -- not while this board is being closed / archived
+  select * into c from animals_carry where board_id = p_board and id = p_id for update;
+  if c.id is null then
+    v_res := jsonb_build_object('claimed', false, 'error', 'board_closed', 'board', p_board);
+    perform _cmd_put(p_command_id, v_dev, 'carry_claim', v_res);
+    return v_res;
+  end if;
+  if (p_stage = 'legs' and coalesce(c.legs_sorted, false)) or (p_stage = 'stamped' and coalesce(c.stamped, false)) then
+    v_res := jsonb_build_object('claimed', false, 'row', to_jsonb(c), 'board', p_board, 'serverNow', v_now);
+    perform _cmd_put(p_command_id, v_dev, 'carry_claim', v_res);
+    return v_res;
+  end if;
+  v_reason := _stage_order_error(p_stage, _carry_row(c), false);
+  if v_reason is null and p_stage = 'legs' then                 -- v10.35: sorting only on the legs screen, only legs with stickers
+    v_reason := coalesce(_legs_slot_error(false, false, true), case when not coalesce(c.legs_stickers, false) then 'no_leg_stickers' end);
+  end if;
+  v_station := case when p_stage = 'legs' then _legs_sort_station() else _proc_station_of_group('stamped') end;
+  v_open := _proc_open_board(v_station);
+  if v_reason is not null then
+    v_res := jsonb_build_object('claimed', false, 'error', 'out_of_order', 'reason', v_reason, 'row', to_jsonb(c), 'board', p_board);
+  elsif _hold_block(c.board_epoch, p_id, v_station) is not null then          -- v10.26: USDA hold / open "?"
+    v_res := jsonb_build_object('claimed', false, 'error', 'held', 'reason', _hold_block(c.board_epoch, p_id, v_station),
+                                'row', to_jsonb(c), 'board', p_board);
+  elsif v_open is distinct from p_board then
+    v_res := jsonb_build_object('claimed', false, 'error', case when v_open is null then 'board_closed' else 'earlier_day_open' end,
+                                'board', p_board, 'open_board', v_open, 'row', to_jsonb(c));
+  else
+    update animals_carry set legs_sorted = case when p_stage = 'legs' then true else legs_sorted end,
+                             stamped = case when p_stage = 'stamped' then true else stamped end,
+                             device_id = v_dev, updated_at = clock_timestamp()
+     where board_id = p_board and id = p_id;
+    get diagnostics v_rows = row_count;
+    select * into c from animals_carry where board_id = p_board and id = p_id;
+    v_res := jsonb_build_object('claimed', v_rows = 1, 'row', to_jsonb(c), 'board', p_board, 'serverNow', v_now);
+    if _proc_finalize(p_board) > 0 then v_res := v_res || jsonb_build_object('boardDone', true); end if;
+  end if;
+  perform _cmd_put(p_command_id, v_dev, 'carry_claim', v_res);
+  return v_res;
+end $function$;
+
+CREATE OR REPLACE FUNCTION public._animals_stage_guard()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'extensions', 'pg_temp'
+AS $function$
+declare v_err text; v_stage text; g text; v_open bigint; v_day date; v_key text;
+        v_groups text[] := '{}';
+begin
+  if current_setting('gt.reset_in_progress', true) = 'true' then return new; end if;
+  if not _is_api_request() or _request_is_service_role()
+     or coalesce(current_setting('app.device_admin', true), '') = 'on' then
+    return new;
+  end if;
+  if tg_op = 'INSERT' then return new; end if;        -- a new row carries no rulings (see _animals_merge)
+
+  -- first rulings: the earlier stages must be there
+  if not coalesce(old.eso_checked, false) and coalesce(new.eso_checked, false) then
+    v_stage := 'eso';
+    v_err := _stage_order_error('eso', old, true);     -- v10.26: also a number with the shochet's open "?"
+    if v_err is null and (new.inner_status is not null or new.outer_status is not null) then v_err := 'later_stage_started'; end if;
+  end if;
+  -- (a value that is not valid at all is left to the table's own checks: invalid_value)
+  -- (v10.34 review A3: also the open check → its final ruling, so a check opened before the rule
+  --  cannot be finished past it)
+  if v_err is null and new.inner_status is not null and _gt_value_ok('inner', new.inner_status)
+     and (old.inner_status is null or (old.inner_status = 'in_progress' and new.inner_status in ('confirmed', 'treif'))) then
+    v_stage := 'inner'; v_err := _stage_order_error('inner', new, true);
+  end if;
+  if v_err is null and old.outer_status is null and new.outer_status is not null and _gt_value_ok('outer', new.outer_status) then
+    v_stage := 'outer'; v_err := _stage_order_error('outer', new, true);
+  end if;
+  if v_err is null and not coalesce(old.not_chalak_outer, false) and coalesce(new.not_chalak_outer, false) then
+    v_stage := 'outer'; v_err := _stage_order_error('outer', new, true);       -- sent to the rabbinate screen by the outer inspector
+  end if;
+  if v_err is null and ((not coalesce(old.head_stickers, false) and coalesce(new.head_stickers, false))
+                        or (not coalesce(old.legs_stickers, false) and coalesce(new.legs_stickers, false))) then
+    v_stage := 'legs_stickers'; v_err := _stage_order_error('legs_stickers', new, true); v_groups := v_groups || 'legs'::text;
+  end if;
+  if v_err is null then                                 -- v10.34 review: the legs slot vs the head slot
+    v_err := _legs_slot_error(not coalesce(old.legs_stickers, false) and coalesce(new.legs_stickers, false),
+                              not coalesce(old.head_stickers, false) and coalesce(new.head_stickers, false),
+                              not coalesce(old.legs_sorted, false) and coalesce(new.legs_sorted, false));
+    if v_err is not null then v_stage := 'legs_stickers'; end if;
+  end if;
+  -- v10.34 (owner): with legs + head, the head stickers come after the leg stickers (legs → head → inner)
+  if v_err is null and not coalesce(old.head_stickers, false) and coalesce(new.head_stickers, false)
+     and _gt_flag(_gt_settings(), 'legsMode', true) and _gt_legs_first() and not coalesce(new.legs_stickers, false)
+     and _legs_required(new.id) then
+    v_stage := 'legs_stickers'; v_err := 'legs_not_done';
+  end if;
+  if not coalesce(old.legs_sorted, false) and coalesce(new.legs_sorted, false) then
+    v_groups := v_groups || 'legs_sort'::text;            -- v10.38: its own group (the sorting station)
+    if v_err is null then v_stage := 'legs'; v_err := _stage_order_error('legs', new, true); end if;
+    if v_err is null and not coalesce(new.legs_stickers, false) then v_stage := 'legs'; v_err := 'no_leg_stickers'; end if;   -- v10.35: nothing to sort
+  end if;
+  if (not coalesce(old.parts_scanned, false) and coalesce(new.parts_scanned, false))
+     or (not coalesce(old.tongue_sticker, false) and coalesce(new.tongue_sticker, false))
+     or (not coalesce(old.cheek_sticker, false) and coalesce(new.cheek_sticker, false))
+     or coalesce(new.parts_print_count, 0) > coalesce(old.parts_print_count, 0)
+     or new.parts_printed_as is distinct from old.parts_printed_as then
+    v_groups := v_groups || 'parts'::text;
+    if v_err is null and _gt_value_ok('printed', new.parts_printed_as) then v_stage := 'parts'; v_err := _stage_order_error('parts', new, true); end if;
+  end if;
+  if (not coalesce(old.stamped, false) and coalesce(new.stamped, false))
+     or new.stamped_as is distinct from old.stamped_as then
+    v_groups := v_groups || 'stamped'::text;
+    if v_err is null then v_stage := 'stamped'; v_err := _stage_order_error('stamped', new, true); end if;
+  end if;
+  if (new.weight_right, new.weight_left, new.weight_stage2, new.weight_stage3) is distinct from
+     (old.weight_right, old.weight_left, old.weight_stage2, old.weight_stage3)
+     or (not coalesce(old.weight_right_skipped, false) and coalesce(new.weight_right_skipped, false))
+     or (not coalesce(old.weight_left_skipped, false) and coalesce(new.weight_left_skipped, false))
+     or (not coalesce(old.weight_stage2_skipped, false) and coalesce(new.weight_stage2_skipped, false))
+     or (not coalesce(old.weight_stage3_skipped, false) and coalesce(new.weight_stage3_skipped, false)) then
+    v_groups := v_groups || 'weights'::text;
+    if v_err is null and coalesce(new.weight_right  > 0 and new.weight_right  < 2000, true)
+                     and coalesce(new.weight_left   > 0 and new.weight_left   < 2000, true)
+                     and coalesce(new.weight_stage2 > 0 and new.weight_stage2 < 2000, true)
+                     and coalesce(new.weight_stage3 > 0 and new.weight_stage3 < 2000, true) then v_stage := 'weights'; v_err := _stage_order_error('weights', new, true); end if;
+  end if;
+  if v_err is not null then
+    raise exception 'GT:OUT_OF_ORDER out-of-order: stage=% reason=%', v_stage, v_err using errcode = 'P0001';
+  end if;
+
+  -- processing: no skipping — an older slaughter day first
+  foreach g in array v_groups loop
+    v_open := _proc_open_board(_proc_station_of_group(g));
+    if v_open is not null then
+      select slaughter_day into v_day from animals_carry where board_id = v_open limit 1;
+      raise exception 'GT:EARLIER_DAY_OPEN earlier-day-open: station=% board=% day=%', _proc_station_of_group(g), v_open, v_day
+        using errcode = 'P0001';
+    end if;
+  end loop;
+
+  -- a sticker / stamp that does not say the ruling: kept (it was printed), but recorded
+  v_key := _printed_as_key(new);
+  if new.parts_printed_as is distinct from old.parts_printed_as and new.parts_printed_as is not null
+     and new.parts_printed_as is distinct from v_key then
+    perform _security_event(new.id + 1, 'label_mismatch',
+      jsonb_build_object('what', 'parts', 'printed', new.parts_printed_as, 'ruling', v_key), null, coalesce(_acting_device(), 'unknown'));
+  end if;
+  if new.stamped_as is distinct from old.stamped_as and new.stamped_as is not null and new.stamped_as is distinct from v_key then
+    perform _security_event(new.id + 1, 'label_mismatch',
+      jsonb_build_object('what', 'stamp', 'printed', new.stamped_as, 'ruling', v_key), null, coalesce(_acting_device(), 'unknown'));
+  end if;
+  return new;
+end $function$;
+
+CREATE OR REPLACE FUNCTION public._proc_station_of_group(p_group text)
+ RETURNS text
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public', 'extensions', 'pg_temp'
+AS $function$
+  select case p_group
+           when 'legs' then 'legs'
+           when 'legs_sort' then _legs_sort_station()
+           when 'parts' then 'parts'
+           when 'weights' then 'stamps'
+           when 'stamped' then case when _caller_device_role() = 'parts' then 'parts' else 'stamps' end
+         end;
+$function$;
+
+CREATE OR REPLACE FUNCTION public._proc_pending(p_station text, a animals_pilot, p_today boolean DEFAULT false)
+ RETURNS boolean
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public', 'extensions', 'pg_temp'
+AS $function$
+declare v boolean;
+begin
+  if a.slaughter is null then return false; end if;
+  case p_station
+    when 'legs' then
+      v := (not coalesce(a.head_stickers, false) and _stage_order_error('legs_stickers', a, p_today) is null)
+          or (_legs_sort_station() = 'legs' and _legs_sort_pending(a));
+    when 'parts' then
+      v := (_parts_expected() > 0 and _kosher_ready(a)        -- v10.38: the plant's small parts (none → nothing to print)
+            and ((not coalesce(a.parts_scanned, false) and coalesce(a.parts_print_count, 0) < _parts_expected())
+                 or (a.parts_printed_as is not null and a.parts_printed_as is distinct from _printed_as_key(a))))
+           or (_legs_sort_station() = 'parts' and _legs_sort_pending(a));
+    when 'stamps' then
+      v := _kosher_ready(a)
+         and (not coalesce(a.stamped, false)
+              or (a.stamped_as is not null and a.stamped_as is distinct from _printed_as_key(a)));
+    else
+      return false;
+  end case;
+  if v and _hold_block(coalesce(a.board_epoch, _board_epoch()), a.id, p_station) is not null then return false; end if;
+  return v;
+end $function$;
+
+CREATE OR REPLACE FUNCTION public._parts_print_block(p_epoch bigint, p_id integer, o_tongue boolean, n_tongue boolean, o_cheek boolean, n_cheek boolean, o_count integer, n_count integer)
+ RETURNS text
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public', 'extensions', 'pg_temp'
+AS $function$
+declare v text;
+begin
+  if not coalesce(o_tongue, false) and coalesce(n_tongue, false) then
+    v := _hold_block(p_epoch, p_id, 'parts', 'tongue'); if v is not null then return v; end if;
+  end if;
+  if not coalesce(o_cheek, false) and coalesce(n_cheek, false) then
+    v := coalesce(_hold_block(p_epoch, p_id, 'parts', 'cheek1'), _hold_block(p_epoch, p_id, 'parts', 'cheek2'));
+    if v is not null then return v; end if;
+  end if;
+  if coalesce(n_count, 0) > coalesce(o_count, 0) and coalesce(n_count, 0) >= least(3, greatest(_parts_expected(), 1)) then   -- v10.38: the whole set
+    v := coalesce(_hold_block(p_epoch, p_id, 'parts', 'tongue'), _hold_block(p_epoch, p_id, 'parts', 'cheek1'),
+                  _hold_block(p_epoch, p_id, 'parts', 'cheek2'));
+    if v is not null then return v; end if;
+  end if;
+  return null;
+end $function$;
+
+CREATE OR REPLACE FUNCTION public._animals_hold_guard()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'extensions', 'pg_temp'
+AS $function$
+declare v_ep bigint := coalesce(old.board_epoch, _board_epoch()); v_b text; v_st text;
+begin
+  if current_setting('gt.reset_in_progress', true) = 'true' then return new; end if;
+  if not _is_api_request() or _request_is_service_role()
+     or coalesce(current_setting('app.device_admin', true), '') = 'on' then
+    return new;
+  end if;
+  if tg_op = 'INSERT' then return new; end if;
+  -- first rulings (a change of a ruling is not stopped: it does not touch the meat)
+  if old.slaughter is null and new.slaughter is not null and new.eso_result is distinct from 'nevela' then
+    v_st := 'slaughter'; v_b := _hold_block(v_ep, old.id, 'slaughter');
+  end if;
+  if v_b is null and not coalesce(old.eso_checked, false) and coalesce(new.eso_checked, false) then
+    v_st := 'eso'; v_b := _hold_block(v_ep, old.id, 'eso');
+  end if;
+  -- (v10.35 review: also an open check finished — in_progress → confirmed / treif — not only the first value)
+  if v_b is null and new.inner_status is not null
+     and (old.inner_status is null or (old.inner_status = 'in_progress' and new.inner_status in ('confirmed', 'treif'))) then
+    v_st := 'inner'; v_b := _hold_block(v_ep, old.id, 'inner');
+  end if;
+  if v_b is null and old.outer_status is null and new.outer_status is not null then
+    v_st := 'outer'; v_b := _hold_block(v_ep, old.id, 'outer');
+  end if;
+  if v_b is null and ((not coalesce(old.head_stickers, false) and coalesce(new.head_stickers, false))
+                      or (not coalesce(old.legs_stickers, false) and coalesce(new.legs_stickers, false))) then
+    v_st := 'legs'; v_b := _hold_block(v_ep, old.id, 'legs');
+  end if;
+  if v_b is null and not coalesce(old.legs_sorted, false) and coalesce(new.legs_sorted, false) then   -- v10.38: the sorting station
+    v_st := _legs_sort_station(); v_b := _hold_block(v_ep, old.id, v_st);
+  end if;
+  if v_b is null and (coalesce(new.parts_print_count, 0) > coalesce(old.parts_print_count, 0)
+                      or (not coalesce(old.parts_scanned, false) and coalesce(new.parts_scanned, false))) then
+    v_st := 'parts'; v_b := _hold_block(v_ep, old.id, 'parts');
+  end if;
+  if v_b is null then                                                  -- v10.32: a held part is not printed
+    v_st := 'parts'; v_b := _parts_print_block(v_ep, old.id, old.tongue_sticker, new.tongue_sticker, old.cheek_sticker,
+                                               new.cheek_sticker, old.parts_print_count, new.parts_print_count);
+  end if;
+  if v_b is null and not coalesce(old.stamped, false) and coalesce(new.stamped, false) then
+    v_st := 'stamps'; v_b := _hold_block(v_ep, old.id, 'stamps');
+  end if;
+  if v_b is null and ((new.weight_right is distinct from old.weight_right and new.weight_right is not null)
+                      or (not coalesce(old.weight_right_skipped, false) and coalesce(new.weight_right_skipped, false))) then
+    v_st := 'stamps'; v_b := coalesce(_hold_block(v_ep, old.id, 'stamps'), _hold_block(v_ep, old.id, 'stamps', 'right'));
+  end if;
+  if v_b is null and ((new.weight_left is distinct from old.weight_left and new.weight_left is not null)
+                      or (not coalesce(old.weight_left_skipped, false) and coalesce(new.weight_left_skipped, false))) then
+    v_st := 'stamps'; v_b := coalesce(_hold_block(v_ep, old.id, 'stamps'), _hold_block(v_ep, old.id, 'stamps', 'left'));
+  end if;
+  -- v10.35 review: the later weights (after separation / shipping) and their "skipped" too, under a whole-animal hold
+  if v_b is null and ((new.weight_stage2 is distinct from old.weight_stage2 and new.weight_stage2 is not null)
+                      or (new.weight_stage3 is distinct from old.weight_stage3 and new.weight_stage3 is not null)
+                      or (not coalesce(old.weight_stage2_skipped, false) and coalesce(new.weight_stage2_skipped, false))
+                      or (not coalesce(old.weight_stage3_skipped, false) and coalesce(new.weight_stage3_skipped, false))) then
+    v_st := 'stamps'; v_b := _hold_block(v_ep, old.id, 'stamps');
+  end if;
+  if v_b is not null then
+    raise exception 'GT:HELD held: station=% hold=%', v_st, v_b using errcode = 'P0001';
+  end if;
+  return new;
+end $function$;
+
+-- ── §36 v10.38: the two nikur screens — every piece is scanned before the nikur ─────────
+-- (the owner) the nikur takes every kosher piece (every kashrut status, chalak and not chalak), never a treif
+-- piece, a nevela, a held one or one with no ruling. The large parts go to the nikur (slot 0), the small
+-- parts to the small-parts nikur (slot 1) — each part's nikur is in the plant's list (products.nikur).
+-- Every scanned piece is recorded once (piece_scans) and goes on to kashering.
+create table if not exists piece_scans (
+  id bigserial primary key,
+  board_epoch bigint not null,
+  animal_id integer not null check (animal_id between 0 and 999),
+  product text not null check (product ~ '^[a-z][a-z0-9_]{0,40}$'),
+  piece integer not null default 1 check (piece between 1 and 20),
+  screen text not null check (screen in ('big', 'small')),
+  device_id text,
+  worker text,
+  at timestamptz not null default now(),
+  unique (board_epoch, animal_id, product, piece));
+create index if not exists piece_scans_epoch on piece_scans (board_epoch, screen);
+alter table piece_scans enable row level security;          -- no policy: only through nikur_scan / nikur_board
+revoke all on piece_scans from public, anon, authenticated;
+revoke all on sequence piece_scans_id_seq from public, anon, authenticated;
+
+CREATE OR REPLACE FUNCTION public.device_pair(p_token text, p_code text, p_role text, p_index integer DEFAULT 0, p_replace boolean DEFAULT false, p_device_name text DEFAULT NULL::text, p_reason text DEFAULT NULL::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'extensions', 'pg_temp'
+AS $function$
+declare r device_pairing%rowtype; v_idx int; v_tok text; v_old record; v_repl uuid; v_actor text; v_why text;
+begin
+  if not _is_real_manager(p_token) then
+    return jsonb_build_object('ok', false, 'error', 'unauthorized');
+  end if;
+  if p_role not in ('slaughter','esophagus','legs','inner','outer','parts','stamps','display','leader','cooler','nikur','salting','shipping') then
+    return jsonb_build_object('ok', false, 'error', 'bad_role');
+  end if;
+  v_idx := case when p_role in ('inner','outer','display','leader','legs','nikur') then coalesce(p_index, 0) else 0 end;   -- v10.38: nikur slot 1 = the small-parts nikur   -- v10.34: legs slot 1 = the head screen
+  if (p_role in ('display', 'leader') and v_idx not between 0 and 3) or (p_role not in ('display', 'leader') and v_idx not in (0, 1)) then
+    return jsonb_build_object('ok', false, 'error', 'bad_slot');
+  end if;
+  if coalesce(p_replace, false) and not _reason_ok(p_reason) then        -- replacing a working device: why?
+    return jsonb_build_object('ok', false, 'error', 'reason_required');
+  end if;
+  v_why := left(trim(p_reason), 160);
+
+  perform pg_advisory_xact_lock(hashtext('device_slot:' || p_role || ':' || v_idx));
+
+  select * into r from device_pairing
+   where code = trim(p_code) and paired_at is null and expires_at > now()
+   for update;
+  if r.code is null then return jsonb_build_object('ok', false, 'error', 'code_invalid'); end if;
+
+  v_actor := coalesce(_session_name(p_token), 'manager');
+  perform set_config('gt.audit_actor', v_actor, true);
+  perform set_config('app.device_admin', 'on', true);
+
+  for v_old in select id, device_name from devices_pilot
+                where assigned_role = p_role and coalesce(assigned_index, 0) = v_idx
+                  and id <> r.device_id and coalesce(device_status, 'active') <> 'retired'
+  loop
+    if not p_replace then
+      perform set_config('app.device_admin', '', true);
+      perform set_config('gt.audit_actor', '', true);
+      return jsonb_build_object('ok', false, 'error', 'slot_taken',
+                                'device_name', coalesce(v_old.device_name, v_old.id));
+    end if;
+    -- one replacement id on the old and the new device's events
+    if v_repl is null then v_repl := gen_random_uuid(); end if;
+    perform set_config('gt.replacement_id', v_repl::text, true);
+    perform set_config('gt.audit_reason', 'replaced by pairing: ' || v_why, true);
+    update devices_pilot set assigned_role = null, assigned_index = null, paired_at = null, updated_at = now()
+     where id = v_old.id;
+    update device_credentials set revoked = true where device_id = v_old.id;   -- audited as KEY_REVOKED
+    perform _audit_device_event(v_old.id, 'UNASSIGNED', p_role, v_idx, 'replaced by pairing: ' || v_why, r.device_id, v_repl, v_actor);
+  end loop;
+
+  v_tok := encode(gen_random_bytes(24), 'hex');
+
+  insert into devices_pilot (id, device_name, assigned_role, assigned_index, device_status, paired_at, last_seen, updated_at)
+  values (r.device_id, coalesce(nullif(left(trim(p_device_name), 60), ''), r.device_name), p_role, v_idx, 'active', now(), now(), now())
+  on conflict (id) do update set
+    device_name    = coalesce(nullif(left(trim(p_device_name), 60), ''), devices_pilot.device_name),
+    assigned_role  = excluded.assigned_role,
+    assigned_index = excluded.assigned_index,
+    device_status  = 'active',
+    retired_at = null, retired_by = null, retired_reason = null,
+    paired_at = now(), updated_at = now();
+
+  insert into device_credentials (device_id, token_hash, created_at, revoked)
+  values (r.device_id, encode(digest(v_tok, 'sha256'), 'hex'), now(), false)
+  on conflict (device_id) do update set token_hash = excluded.token_hash, created_at = now(), revoked = false;
+
+  update device_pairing set paired_at = now(), token_plain = v_tok where code = r.code;
+  -- step 46: the first team-leader device of a plant — the session that pairs it (made
+  -- before any team-leader device existed, so bound to no device) moves onto that device
+  if p_role = 'leader' then
+    update manager_sessions set device_id = r.device_id
+     where token = p_token and device_id is null and expires_at > now();
+    insert into plant_state (key, value) values ('leaderDevicesRequired', '1')
+      on conflict (key) do update set value = '1', updated_at = now();
+  end if;
+
+  perform set_config('app.device_admin', '', true);
+  perform _audit_device_event(r.device_id, 'ASSIGNED', p_role, v_idx,
+                              case when v_repl is not null then 'paired with code (replacement): ' || v_why else 'paired with code' end,
+                              null, v_repl, v_actor);
+  perform set_config('gt.replacement_id', '', true);
+  perform set_config('gt.audit_reason', '', true);
+  perform set_config('gt.audit_actor', '', true);
+  return jsonb_build_object('ok', true, 'device_id', r.device_id)
+         || case when v_repl is not null then jsonb_build_object('replacement_id', v_repl) else '{}'::jsonb end;
+end $function$;
+
+CREATE OR REPLACE FUNCTION public.hold_set(p_id integer, p_station text, p_kind text, p_part text DEFAULT 'whole'::text, p_board bigint DEFAULT NULL::bigint, p_command_id uuid DEFAULT NULL::uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'extensions', 'pg_temp'
+AS $function$
+declare v_dev text; v_role text; v_ep bigint; v_res jsonb; a animals_pilot; v_id bigint; v_part text := coalesce(nullif(p_part, ''), 'whole');
+        v_actor text; v_order text;
+begin
+  if p_id is null or p_id < 0 or p_id > 999 then return jsonb_build_object('ok', false, 'error', 'bad_id'); end if;
+  if p_kind is null or p_kind not in ('question', 'usda') then return jsonb_build_object('ok', false, 'error', 'bad_value'); end if;
+  if p_station is null or p_station not in ('slaughter', 'eso', 'inner', 'outer', 'legs', 'parts', 'stamps', 'nikur') then
+    return jsonb_build_object('ok', false, 'error', 'bad_station');
+  end if;
+  if p_station = 'nikur' and (p_kind <> 'usda' or v_part <> 'whole') then    -- v10.38: the nikur puts a whole-animal USDA hold only
+    return jsonb_build_object('ok', false, 'error', 'bad_value');
+  end if;
+  if (p_kind = 'question' and not (v_part = 'whole'
+                                   or (p_station = 'inner' and v_part in ('rumen', 'maw', 'lung'))))   -- v10.32: the window of an inner "?"
+     or (p_kind = 'usda' and not (v_part = 'whole'
+                                  or (p_station = 'parts' and v_part in ('cheek1', 'cheek2', 'tongue'))
+                                  or (p_station in ('outer', 'stamps') and v_part in ('right', 'left')))) then   -- v10.32: halves only after the inner check
+    return jsonb_build_object('ok', false, 'error', 'bad_value');
+  end if;
+  v_dev := _call_device(null);
+  if v_dev is null then return jsonb_build_object('ok', false, 'error', _no_device_error()); end if;
+  v_role := _hold_caller_error(p_station);                          -- v10.32: worker login + shared screen
+  if v_role is not null then return jsonb_build_object('ok', false, 'error', v_role); end if;
+  v_res := _cmd_get(p_command_id, v_dev, 'hold_set');
+  if v_res is not null then return v_res; end if;
+  if p_board is null then
+    perform _board_write_lock();
+    v_ep := _board_epoch();
+    insert into animals_pilot (id, board_epoch) values (p_id, v_ep) on conflict (id) do nothing;
+    select * into a from animals_pilot where id = p_id for update;     -- v10.35 review: no write in between (esophagus reopen)
+  else
+    perform _proc_board_lock(p_board);
+    if p_station not in ('legs', 'parts', 'stamps') then return jsonb_build_object('ok', false, 'error', 'bad_station'); end if;
+    select (_carry_row(c)).* into a from animals_carry c where c.board_id = p_board and c.id = p_id;   -- v10.35 review: was one composite → 22P02
+    if a.id is null then return jsonb_build_object('ok', false, 'error', 'board_closed'); end if;
+    v_ep := a.board_epoch;
+  end if;
+  if v_ep is null then return jsonb_build_object('ok', false, 'error', 'stale_board'); end if;
+  -- v10.34 (owner): every station (not slaughter) may put a USDA hold on any number; the hold shows the
+  -- station that put it, and only that station releases or condemns it. One open whole-animal USDA hold
+  -- per number: another station is told where it is held.
+  if p_kind = 'usda' and p_station = 'slaughter' then
+    return jsonb_build_object('ok', false, 'error', 'bad_station');
+  end if;
+  if p_kind = 'usda' and v_part = 'whole' then
+    -- (v10.34 review A1: two stations at the same moment — one waits for the other)
+    perform pg_advisory_xact_lock(hashtext('glatttrack_usda_whole'), hashtext(v_ep::text || ':' || p_id::text));
+    select station into v_order from animal_holds
+     where board_epoch = v_ep and animal_id = p_id and kind = 'usda' and part = 'whole' and resolved_at is null
+       and station <> p_station limit 1;
+    if v_order is not null then
+      return jsonb_build_object('ok', false, 'error', 'usda_held_elsewhere', 'station', v_order);
+    end if;
+  end if;
+  -- v10.34 (owner): the esophagus may turn its own "ok" into a "?" while the number has not reached the
+  -- next station (no legs / head stickers, no inner / outer ruling): the check is opened again and the
+  -- number waits for the "?" like any other (nevela: change it to ok first)
+  if p_kind = 'question' and p_station = 'eso' and p_board is null and coalesce(a.eso_checked, false)
+     and a.eso_result = 'ok' and _cmd_get(p_command_id, v_dev, 'hold_set') is null
+     and not (coalesce(a.legs_stickers, false) or coalesce(a.head_stickers, false)
+              or a.inner_status is not null or a.outer_status is not null) then
+    perform set_config('gt.reset_in_progress', 'true', true);
+    update animals_pilot set eso_checked = false, eso_result = null, eso_by_device = null, updated_at = now()
+     where id = p_id and eso_result = 'ok'
+       and not (coalesce(legs_stickers, false) or coalesce(head_stickers, false) or inner_status is not null or outer_status is not null);
+    perform set_config('gt.reset_in_progress', 'false', true);
+    perform _gt_event(p_id + 1, 'eso', 'reopened_question', jsonb_build_object('was', 'ok'), null, v_dev);
+    select * into a from animals_pilot where id = p_id;
+  end if;
+  -- a question only while the station has not ruled the number
+  if p_kind = 'question' and ((p_station = 'slaughter' and a.slaughter is not null)
+                              or (p_station = 'eso' and coalesce(a.eso_checked, false))
+                              or (p_station = 'inner' and a.inner_status in ('confirmed', 'treif'))
+                              or (p_station = 'outer' and a.outer_status is not null)) then
+    v_res := jsonb_build_object('ok', false, 'error', 'already_ruled', 'row', to_jsonb(a));
+    perform _cmd_put(p_command_id, v_dev, 'hold_set', v_res);
+    return v_res;
+  end if;
+  v_actor := _derive_actor(case p_station when 'eso' then 'eso' when 'stamps' then 'stamped' else p_station end, null);
+  -- v10.32: an inner "?" is kept with the window it was asked in (rumen / maw / lung), so every inner
+  -- tablet shows it and opens that window. One open inner "?" per number: asked again in another
+  -- window, the open one moves to that window.
+  if p_kind = 'question' and p_station = 'inner' then
+    update animal_holds set part = v_part
+     where board_epoch = v_ep and animal_id = p_id and station = 'inner' and kind = 'question' and resolved_at is null
+       and part <> v_part
+    returning id into v_id;
+    if v_id is not null then
+      perform _gt_event(p_id + 1, p_station, 'hold_moved', jsonb_build_object('kind', p_kind, 'part', v_part, 'hold', v_id), v_actor, v_dev);
+      v_res := jsonb_build_object('ok', true, 'hold', (select to_jsonb(h) from animal_holds h where h.id = v_id));
+      perform _cmd_put(p_command_id, v_dev, 'hold_set', v_res);
+      return v_res;
+    end if;
+  end if;
+  insert into animal_holds (board_epoch, animal_id, station, kind, part, created_by, created_by_device)
+  values (v_ep, p_id, p_station, p_kind, v_part, v_actor, v_dev)
+  on conflict (board_epoch, animal_id, station, kind, part) where resolved_at is null do nothing
+  returning id into v_id;
+  if v_id is null then
+    select id into v_id from animal_holds where board_epoch = v_ep and animal_id = p_id and station = p_station
+       and kind = p_kind and part = v_part and resolved_at is null;
+  else
+    perform _gt_event(p_id + 1, p_station, 'hold_set', jsonb_build_object('kind', p_kind, 'part', v_part, 'hold', v_id, 'board', p_board), v_actor, v_dev);
+  end if;
+  v_res := jsonb_build_object('ok', true, 'hold', (select to_jsonb(h) from animal_holds h where h.id = v_id));
+  perform _cmd_put(p_command_id, v_dev, 'hold_set', v_res);
+  return v_res;
+end $function$;
+
+CREATE OR REPLACE FUNCTION public._hold_station_of_role(p_role text)
+ RETURNS text
+ LANGUAGE sql
+ IMMUTABLE
+ SET search_path TO 'public', 'extensions', 'pg_temp'
+AS $function$
+  select case p_role when 'slaughter' then 'slaughter' when 'esophagus' then 'eso' when 'inner' then 'inner'
+                     when 'outer' then 'outer' when 'legs' then 'legs' when 'parts' then 'parts' when 'stamps' then 'stamps'
+                     when 'nikur' then 'nikur' end;   -- v10.38
+$function$;
+
+CREATE OR REPLACE FUNCTION public._device_write_allowed()
+ RETURNS boolean
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public', 'extensions', 'pg_temp'
+AS $function$
+declare v_dev text; v_ok boolean;
+begin
+  if not _is_api_request() then return true; end if;                    -- SQL editor / server jobs
+  if _request_is_service_role() then return true; end if;                -- server-side code with the service key
+  if coalesce(current_setting('app.device_admin', true), '') = 'on' then return true; end if;
+  -- step 46 (5th review): an owner / view-only manufacturer session writes nothing, also not
+  -- through the station device it is on
+  if _session_view_only(_request_headers() ->> 'x-manager-token') then perform _note_revoked_write(_current_device_id()); return false; end if;
+  if _request_has_manager() then return true; end if;                    -- team leader (events / settings only; rulings: _stage_allowed)
+  v_dev := _current_device_id();
+  if v_dev is null then perform _note_revoked_write(); return false; end if;
+  v_ok := exists(select 1 from devices_pilot
+                  where id = v_dev and assigned_role is not null
+                    and assigned_role not in ('display', 'leader',       -- a counter screen only reads; a team-leader device writes only with the team leader's session
+                                              'cooler', 'salting', 'shipping')   -- v10.35 review: the supervisor screens are view-only for now
+                                                                                  -- (v10.38: the nikur writes its scans and its USDA holds)
+                    and coalesce(device_status, 'active') <> 'retired');
+  if not v_ok then perform _note_revoked_write(v_dev); end if;
+  return v_ok;
+end $function$;
+
+-- a USDA hold may now come from the nikur
+alter table animal_holds drop constraint if exists animal_holds_station_check;
+alter table animal_holds add constraint animal_holds_station_check
+  check (station = any (array['slaughter', 'eso', 'inner', 'outer', 'legs', 'parts', 'stamps', 'nikur']));
+
+-- why this piece may not go into the nikur (null = it may)
+create or replace function _nikur_refusal(a animals_pilot, x jsonb, p_ep bigint) returns text
+language plpgsql stable security definer set search_path = public, extensions, pg_temp as $$
+begin
+  if a.id is null or a.slaughter is null then return 'not_slaughtered'; end if;
+  if a.slaughter in ('nevela', 'shot') then return 'nevela'; end if;
+  if a.inner_status = 'treif' or a.outer_status = 'treif' then return 'treif'; end if;
+  if not _kosher_ready(a) then return 'no_ruling'; end if;
+  if exists (select 1 from animal_holds h where h.board_epoch = p_ep and h.animal_id = a.id
+               and ((h.kind = 'usda' and (h.resolved_at is null or h.resolution = 'condemned'))
+                    or (h.kind = 'question' and h.resolved_at is null))) then
+    return 'held';
+  end if;
+  if coalesce((x ->> 'notGlatt')::boolean, false) and a.outer_status = 'glatt' then return 'not_glatt'; end if;
+  -- the piece got its kosher sticker in its area (the scanned sticker was really printed)
+  if x ->> 'post' = 'stamps' and not coalesce(a.stamped, false) then return 'not_printed'; end if;
+  if x ->> 'post' = 'parts' and not coalesce(a.parts_scanned, false) then return 'not_printed'; end if;
+  return null;
+end $$;
+revoke execute on function _nikur_refusal(animals_pilot, jsonb, bigint) from public, anon, authenticated;
+
+create or replace function nikur_scan(p_id integer, p_product text, p_piece integer, p_epoch bigint, p_command_id uuid default null) returns jsonb
+language plpgsql security definer set search_path = public, extensions, pg_temp as $$
+declare v_dev text; v_res jsonb; v_err text; v_ep bigint; x jsonb; v_screen text; v_m int; a animals_pilot;
+        v_actor text; v_new bigint; v_piece int := coalesce(p_piece, 1);
+begin
+  if p_id is null or p_id < 0 or p_id > 999 then return jsonb_build_object('ok', false, 'error', 'bad_id'); end if;
+  if p_product is null or p_product !~ '^[a-z][a-z0-9_]{0,40}$' or v_piece not between 1 and 20 then
+    return jsonb_build_object('ok', false, 'error', 'bad_value');
+  end if;
+  v_dev := _call_device(null);
+  if v_dev is null then return jsonb_build_object('ok', false, 'error', _no_device_error()); end if;
+  v_err := _hold_caller_error('nikur');                  -- only a nikur tablet (its worker logged in)
+  if v_err is not null then return jsonb_build_object('ok', false, 'error', v_err); end if;
+  v_res := _cmd_get(p_command_id, v_dev, 'nikur_scan');
+  if v_res is not null then return v_res; end if;
+  perform _board_write_lock();
+  v_ep := _board_epoch();
+  if v_ep is not null and (p_epoch is null or p_epoch < v_ep) then
+    return jsonb_build_object('ok', false, 'error', 'stale_board', 'boardEpoch', v_ep);
+  end if;
+  select e into x from jsonb_array_elements(case when jsonb_typeof(_gt_settings() -> 'products') = 'array'
+                                                 then _gt_settings() -> 'products' else '[]'::jsonb end) e
+   where e ->> 'id' = p_product and coalesce((e ->> 'on')::boolean, false) limit 1;
+  if x is null then return jsonb_build_object('ok', false, 'error', 'unknown_part'); end if;
+  select case when coalesce(assigned_index, 0) % 2 = 1 then 'small' else 'big' end into v_screen
+    from devices_pilot where id = v_dev and assigned_role = 'nikur';
+  v_screen := coalesce(v_screen, case when coalesce(x ->> 'nikur', 'none') = 'small' then 'small' else 'big' end);   -- (test mode: the team leader)
+  if coalesce(x ->> 'nikur', 'none') <> v_screen then
+    return jsonb_build_object('ok', false, 'error', 'wrong_screen', 'nikur', x ->> 'nikur');
+  end if;
+  v_m := greatest(coalesce((x ->> 'm')::int, 0), 1);
+  if v_piece > v_m then return jsonb_build_object('ok', false, 'error', 'bad_value'); end if;
+  select * into a from animals_pilot where id = p_id;
+  v_actor := _derive_actor('nikur', null);
+  v_err := _nikur_refusal(a, x, v_ep);
+  if v_err is not null then
+    perform _gt_event(p_id + 1, 'nikur', 'piece_refused', jsonb_build_object('part', p_product, 'piece', v_piece, 'reason', v_err), v_actor, v_dev);
+    v_res := jsonb_build_object('ok', false, 'error', 'refused', 'reason', v_err, 'status', a.outer_status, 'slaughter', a.slaughter);
+    perform _cmd_put(p_command_id, v_dev, 'nikur_scan', v_res);
+    return v_res;
+  end if;
+  insert into piece_scans (board_epoch, animal_id, product, piece, screen, device_id, worker)
+  values (v_ep, p_id, p_product, v_piece, v_screen, v_dev, v_actor)
+  on conflict (board_epoch, animal_id, product, piece) do nothing
+  returning id into v_new;
+  if v_new is not null then
+    perform _gt_event(p_id + 1, 'nikur', 'piece_in', jsonb_build_object('part', p_product, 'piece', v_piece, 'screen', v_screen), v_actor, v_dev);
+  end if;
+  v_res := jsonb_build_object('ok', true, 'duplicate', v_new is null, 'status', a.outer_status,
+                              'today', (select count(*) from piece_scans where board_epoch = v_ep and screen = v_screen));
+  perform _cmd_put(p_command_id, v_dev, 'nikur_scan', v_res);
+  return v_res;
+end $$;
+revoke execute on function nikur_scan(integer, text, integer, bigint, uuid) from public;
+grant execute on function nikur_scan(integer, text, integer, bigint, uuid) to anon, authenticated;
+
+-- the pieces scanned today: a nikur tablet sees its own screen's, the team leader / owner all
+create or replace function nikur_board() returns jsonb
+language plpgsql stable security definer set search_path = public, extensions, pg_temp as $$
+declare v_dev text; v_screen text; v_ep bigint := _board_epoch(); v_tok text := _request_headers() ->> 'x-manager-token';
+begin
+  if v_tok is not null and _manager_session_valid(v_tok) and coalesce(_session_role(v_tok), '') <> 'manufacturer' then
+    v_screen := null;
+  else
+    v_dev := _current_device_id();
+    select case when coalesce(assigned_index, 0) % 2 = 1 then 'small' else 'big' end into v_screen
+      from devices_pilot where id = v_dev and assigned_role = 'nikur' and coalesce(device_status, 'active') <> 'retired';
+    if v_screen is null then return jsonb_build_object('ok', false, 'error', 'wrong_station'); end if;
+  end if;
+  return jsonb_build_object('ok', true, 'boardEpoch', v_ep, 'screen', v_screen,
+    'pieces', coalesce((select jsonb_agg(jsonb_build_object('n', s.animal_id + 1, 'p', s.product, 'i', s.piece, 's', s.screen,
+                                                            'at', s.at, 'by', s.worker) order by s.at)
+                          from piece_scans s where s.board_epoch = v_ep and (v_screen is null or s.screen = v_screen)), '[]'::jsonb));
+end $$;
+revoke execute on function nikur_board() from public;
+grant execute on function nikur_board() to anon, authenticated;
 
 -- ── self-check ──────────────────────────────────────────────────────────────
 do $$

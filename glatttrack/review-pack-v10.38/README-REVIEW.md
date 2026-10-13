@@ -9,7 +9,7 @@ This pack is the CURRENT state. Review these files only.
 | `active-schema-snapshot.sql` | **Audit this first.** `pg_dump --schema-only` (public + gt_rls) of a clean database built from `glatttrack-schema-full.sql`. Exactly one ACTIVE definition of each function, trigger, RLS policy and grant. |
 | `setup-supabase-step46-order-and-processing-days.sql` | The new migration (run after step 45). |
 | `STEP46-CHANGES.md` | What step 46 / app v10.6 changed (Hebrew). |
-| `security-selftest.sql` + `security-selftest-result.txt` | Release gate: **154 / 154**. One statement (one DO block) whose changes are all undone inside it (see v10.15 below). |
+| `security-selftest.sql` + `security-selftest-result.txt` | Release gate: **156 / 156**. One statement (one DO block) whose changes are all undone inside it (see v10.15 below). |
 | `SECURITY-MANIFEST.md` | Permission map (step 45 observed table) + a step-46 section. |
 | `active-security-manifest.sql` + `-result.txt` | Prints the active security surface. |
 | `kosher-app-v10.38.html` | The app (UI, offline store, sync client). `GT_MIN_SCHEMA = 46`. |
@@ -17,6 +17,31 @@ This pack is the CURRENT state. Review these files only.
 | `glatttrack-schema-full.sql` | Full install script (base + steps 1–46, history included; last definition wins). |
 | `test-mode-on.sql` / `test-mode-off.sql` | The owner's SQL-only test switch. |
 | `plant-server/` | Plant resilience kit (bash, runs as root on the plant servers, NOT in the database): standby server, floating address, UPS, nightly checked backup. Guide: `PLANT-RESILIENCE-HE.md`. |
+
+## Added in v10.38 (server 02 + app) — stage 2 of the cuts list, and the two nikur screens
+
+**The owner's rules:** a kosher sticker, a sorting, a stamp — always after the ruling. Every cut is on / off, in the area the plant chose. Every kosher piece goes into the nikur (every kashrut status, chalak and not chalak); never a treif, nevela, held or unruled one.
+
+**Stage 2 — the areas follow the list (02 §35):**
+- Every cut has its kosher stickers in its area (`m`, 0..20) and its nikur screen (`nikur`: big / small / none).
+- `push_settings` derives `stampsCount` and `partsStickerCount` too.
+- **The small parts:** the set is the plant's own (`_parts_expected`). With no small parts, nothing is pending there.
+- **The legs:** sorted on the legs screen or with the small parts (`products.legs.post`).
+  - Sorting has its own stage, `legs_sort`, in `_stage_allowed`. Only the plant's sorting station sorts (`_legs_sort_station`), on every path: `_animals_merge`, `claim_animal_stage`, `carry_push`, `carry_claim`.
+  - Its USDA hold / "?" is the sorting station's (`_animals_hold_guard`).
+  - The legs / head number stickers stay with the legs screen.
+- **App:** the stamps and small-parts print windows list every part of the plant's set. A kosher sticker carries its part (`P:` / `I:` in the QR, for the nikur scan).
+
+**The nikur (02 §36):**
+- `piece_scans`: RLS on, no policy, no grants — only through the RPCs.
+- `nikur_scan(p_id, p_product, p_piece, p_epoch, p_command_id)`:
+  - Only a nikur tablet: slot 0 = large parts, slot 1 = small parts (`device_pair` allows nikur slot 1). The part must be on, and on that screen.
+  - Refused with an event (`_nikur_refusal`): treif, nevela / shot, no kosher ruling, an open USDA / "?" or a condemned one, Inside Skirt of a glatt animal, a piece whose kosher sticker was not printed.
+  - A piece is recorded once.
+- `nikur_board()`: a nikur tablet sees its screen's pieces; the team leader / owner see all.
+- **USDA at the nikur:** a whole-animal USDA hold only (`hold_set` station `nikur`, `_hold_station_of_role`, `animal_holds_station_check`). Only the nikur releases it.
+- `_device_write_allowed`: the nikur tablet may write now (its scans and holds). Cooler / salting / shipping stay view-only.
+- Self-test: 156/156 (new checks "v10.38 stage 2" and "v10.38 nikur").
 
 ## Added in v10.38 (server 02 + app) — the plant's inner & outer cuts list ("products", stage 1)
 
@@ -42,7 +67,6 @@ Defaults: tongue 1 + cheeks 2 + sides 2 + lung 1 + hook 1 = 7 head stickers (as 
 
 **App:** Settings → "Inner & outer cuts" (חלקי פנים וחוץ) replaces the old "small parts — average weight" card (its weights carry over); the legs / head counts are shown, not typed.
 
-**Not yet (stage 2):** the small-parts and stamps screens still work as before (tongue + 2 cheeks; 5 stamps). They will follow the list next, with the leg sorting at the small parts.
 
 ## Changed in v10.37 (server 02 + app) — after a code review
 

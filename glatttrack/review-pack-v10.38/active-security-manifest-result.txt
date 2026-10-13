@@ -1,9 +1,9 @@
 == 1. plant state =======================================================
     key     |     value     |          updated_at           
 ------------+---------------+-------------------------------
- boardEpoch | 1791882432415 | 2026-10-13 09:07:12.414953+00
- schemaStep | 46            | 2026-10-13 09:07:13.662192+00
- testMode   | off           | 2026-10-13 09:07:13.057456+00
+ boardEpoch | 1791889985372 | 2026-10-13 11:13:05.371996+00
+ schemaStep | 46            | 2026-10-13 11:13:06.689629+00
+ testMode   | off           | 2026-10-13 11:13:06.034843+00
 (3 rows)
 
 == 2. functions (public, gt_rls) ========================================
@@ -50,6 +50,8 @@
  public | manager_logout(text)                                                               | function | t                | public, extensions, pg_temp | postgres | t    | t             | t           | f
  public | manager_session_check(text)                                                        | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
  public | manufacturer_set_billing(text,boolean,numeric,text,text)                           | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
+ public | nikur_board()                                                                      | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
+ public | nikur_scan(integer,text,integer,bigint,uuid)                                       | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
  public | outer_open(integer,bigint,boolean,text)                                            | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
  public | outer_open(integer,bigint,boolean,text,uuid)                                       | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
  public | plant_server_status(text)                                                          | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
@@ -151,6 +153,8 @@
  public | _leader_recovery_norm(text)                                                        | function | f                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _legs_required(integer)                                                            | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _legs_slot_error(boolean,boolean,boolean)                                          | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _legs_sort_pending(animals_pilot)                                                  | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _legs_sort_station()                                                               | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _list_tail(jsonb,integer)                                                          | function | f                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _log_correction_rejected(text,integer,text,text,jsonb)                             | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _log_device_event(text,text,text,integer,text,text)                                | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
@@ -167,9 +171,11 @@
  public | _nc_outer_allowed()                                                                | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _nc_outer_value_ok(animals_pilot,text)                                             | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _nc_statuses()                                                                     | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _nikur_refusal(animals_pilot,jsonb,bigint)                                         | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _no_device_error()                                                                 | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _note_revoked_write(text)                                                          | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _outer_status_known(text)                                                          | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _parts_expected()                                                                  | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _parts_print_block(bigint,integer,boolean,boolean,boolean,boolean,integer,integer) | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _plant_report()                                                                    | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _plant_state_test_mode_trg()                                                       | trigger  | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
@@ -234,7 +240,7 @@
  public | leader_account_remove(text)                                                        | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | leader_device_recovery(text)                                                       | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | manufacturer_set_code(text,text)                                                   | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
-(225 rows)
+(231 rows)
 
 == 2b. API surface: functions the app roles can run ======================
                        callable_by_app                       | security_definer 
@@ -280,6 +286,8 @@
  manager_logout(text)                                        | t
  manager_session_check(text)                                 | t
  manufacturer_set_billing(text,boolean,numeric,text,text)    | t
+ nikur_board()                                               | t
+ nikur_scan(integer,text,integer,bigint,uuid)                | t
  outer_open(integer,bigint,boolean,text)                     | t
  outer_open(integer,bigint,boolean,text,uuid)                | t
  plant_server_status(text)                                   | t
@@ -308,7 +316,7 @@
  worker_login(text,text,text)                                | t
  worker_logout(text)                                         | t
  worker_session_check()                                      | t
-(69 rows)
+(71 rows)
 
 == 3. triggers on the key tables ========================================
         table        |               trigger               |               function                |                 fires                 |  state  | security_definer 
@@ -369,6 +377,7 @@
  manager_sessions        | t      | f          |        0
  outer_status_pilot      | t      | f          |        0
  pairing_requests        | t      | f          |        0
+ piece_scans             | t      | f          |        0
  plant_managers          | t      | f          |        0
  plant_state             | t      | f          |        0
  plants                  | t      | f          |        1
@@ -384,7 +393,7 @@
  system_flags            | t      | f          |        0
  worker_codes            | t      | f          |        0
  worker_sessions         | t      | f          |        0
-(38 rows)
+(39 rows)
 
           table          |            policy            |  cmd   | permissive |        roles         |                                                                    using_expr                                                                     |                          check_expr                           
 -------------------------+------------------------------+--------+------------+----------------------+---------------------------------------------------------------------------------------------------------------------------------------------------+---------------------------------------------------------------
@@ -443,8 +452,9 @@
  daily_board_archive_id_seq  | f          | f
  events_pilot_server_seq_seq | f          | f
  login_attempts_id_seq       | f          | f
+ piece_scans_id_seq          | f          | f
  rate_events_id_seq          | f          | f
-(8 rows)
+(9 rows)
 
 == 6. schema rights =====================================================
    schema   | anon_usage | anon_create | authenticated_create 

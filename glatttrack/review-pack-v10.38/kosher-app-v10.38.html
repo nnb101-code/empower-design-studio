@@ -941,6 +941,11 @@ const LUNG_B64="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICA
     <div class="sum-total"><span id="tPartsTot">סה״כ</span>: <strong id="partsCTot">0</strong></div>
   </div>
 
+  <!-- v10.38: the legs are sorted here when the plant sorts them with the small parts -->
+  <div id="partsModeBar" style="display:none;padding:6px 10px 0;gap:8px;flex-shrink:0;">
+    <button id="partsModePrint" onclick="partsSetMode('print')" style="flex:1;padding:9px;border-radius:8px;border:none;background:var(--gold);color:#07090F;font-size:13px;font-weight:700;cursor:pointer;">🖨️ הדפסה</button>
+    <button id="partsModeSort" onclick="partsSetMode('sort')" style="flex:1;padding:9px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:13px;font-weight:700;cursor:pointer;">📷 מיון רגליים</button>
+  </div>
   <!-- SCAN AREA -->
   <div style="padding:10px 10px 4px;flex-shrink:0;">
     <!-- Status chips: printer + scanner (filled by renderScreenDeviceStatus) -->
@@ -957,7 +962,7 @@ const LUNG_B64="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICA
     <div onclick="focusScan()" style="background:var(--panel2);border:2px dashed var(--border2);border-radius:12px;padding:12px 16px;display:flex;align-items:center;gap:12px;cursor:pointer;transition:border-color .2s;" id="scanArea">
       <div>
         <div style="font-size:14px;font-weight:600;color:var(--text)" id="tScanPrompt" data-t="scanPrompt">סרוק ברקוד או לחץ על מספר</div>
-        <div style="font-size:11px;color:var(--muted)" id="tScanSub">סריקה אחת = 3 מדבקות (2 לחיים + לשון)</div>
+        <div style="font-size:11px;color:var(--muted)" id="tScanSub" data-no-i18n>סריקה אחת = 3 מדבקות (2 לחיים + לשון)</div>
       </div>
       <div style="margin-left:auto;width:10px;height:10px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);animation:pulse 1s infinite;" id="scanDot"></div>
     </div>
@@ -978,7 +983,7 @@ const LUNG_B64="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICA
   <div class="topbar"><div class="globe-btn" onclick="cycleLang()" style="cursor:pointer;-webkit-tap-highlight-color:rgba(255,255,255,.2);">&#127760;<span class="glang" id="gl12">עב</span></div><div class="tb-mid"><span class="heb" id="stampsLHeb"></span><span id="stampsLT"></span></div><div class="icon-btn" onclick="goTo('scNav')">&#127968;</div></div>
   <div class="login-wrap"><div class="login-card">
     <div class="login-title" id="tStampsTitle">משגיח חותמות</div>
-    <div class="login-sub" data-t="stampsSubTitle">סריקת QR ← 5 מדבקות כשרות</div>
+    <div class="login-sub" data-t="stampsSubTitle">סריקת QR ← מדבקות כשרות</div>
     <button class="login-btn" onclick="stampsLogin()" data-t="loginBtn">כניסה למערכת</button>
     <div class="divider"></div>
     <div class="sys-info"><div class="sys-dot"></div><span data-t="sys">מחובר לרשת</span></div>
@@ -1029,7 +1034,7 @@ const LUNG_B64="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICA
     <div onclick="stampsFocusScan()" style="background:var(--panel2);border:2px dashed var(--border2,#2A3D5C);border-radius:12px;padding:12px 16px;display:flex;align-items:center;gap:12px;cursor:pointer;transition:border-color .2s;" id="stampsScanArea">
       <div>
         <div style="font-size:14px;font-weight:600;color:var(--text)" id="tStampsScanPrompt" data-t="stampsScanPromptTxt">סרוק QR של הבהמה</div>
-        <div style="font-size:11px;color:var(--muted)">סריקה אחת = 5 מדבקות כשרות</div>
+        <div style="font-size:11px;color:var(--muted)" id="stampsScanSub">סריקה אחת = מדבקות כשרות לכל החלקים</div>
       </div>
       <div style="margin-left:auto;width:10px;height:10px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);animation:pulse 1s infinite;"></div>
     </div>
@@ -1752,7 +1757,7 @@ const LUNG_B64="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICA
         <!-- v10.38 (owner): what is taken from the animal — one list: on/off, where, how many stickers, weight -->
         <div class="mgr-sec">חלקי פנים וחוץ</div>
         <div class="mgr-card" id="mgrProductsCard">
-          <div style="font-size:11px;color:var(--muted);line-height:1.6;margin-bottom:8px;">לכל חלק: פעיל או לא, מדבקת מספר לפני הפסיקה (ממסך הראש או הרגליים), האזור שמטפל בו אחרי הפסיקה, ומשקל ממוצע לבהמה. מדבקה עם סטטוס ומיון — תמיד אחרי הפסיקה. מספר המדבקות במסך הראש והרגליים מחושב לבד מהרשימה.</div>
+          <div style="font-size:11px;color:var(--muted);line-height:1.6;margin-bottom:8px;">לכל חלק: פעיל, מדבקות מספר (ראש / רגליים), האזור שמטפל בו ומדבקות הכשרות שלו, הניקור, ומשקל ממוצע. מספר המדבקות בכל מסך מחושב לבד מהרשימה.</div>
           <div id="mgrProductsTotals" style="font-size:13px;font-weight:700;color:var(--gold);margin-bottom:6px;"></div>
           <div id="mgrProductsList"></div>
           <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;">
@@ -2780,7 +2785,7 @@ const KS = (function(){
     { local:'esoResult',     col:'eso_result',      presence:true, followsSlaughterTime:true, owner:['esophagus','slaughter'] },
     { local:'esoPrevSlaughter', col:'eso_prev_slaughter', serverWins:true, noPush:true },
     { local:'esoByDevice',   col:'eso_by_device',   serverWins:true, noPush:true },
-    { local:'legsSorted',    col:'legs_sorted',     bool:true, owner:['legs'] },
+    { local:'legsSorted',    col:'legs_sorted',     bool:true, owner:['legs','parts'] },   // v10.38: sorted with the small parts too
     { local:'stamped',       col:'stamped',         bool:true, owner:['stamps','parts'] },
     { local:'stampedAs',     col:'stamped_as',      serverWins:true, owner:['stamps','parts'] },
     { local:'notChalakInner', col:'not_chalak_inner', serverWins:true, sendWith:'innerStatus', owner:['inner','outer'] },
@@ -4956,7 +4961,8 @@ window.addEventListener('gt-day-reset', ()=>{ _gtFlags={holds:[],changes:[],epoc
 function _gtFlagsCacheSave(){ try{ localStorage.setItem(_GT_FLAGS_KEY, JSON.stringify({holds:_gtFlags.holds.filter(h=>!h.local),changes:_gtFlags.changes,epoch:_gtFlags.epoch,at:Date.now()})); }catch(e){} }
 var _gtFlagsBusy=false, _gtNext={};
 const GT_ST_NAME={slaughter:['שחיטה','Slaughter','Faena'],eso:['וושט','Esophagus','Esófago'],legs:['רגליים וראש','Legs & head','Patas y cabeza'],
-  inner:['פנים','Inner','Interno'],outer:['חוץ','Outer','Externo'],parts:['חלקים','Parts','Partes'],stamps:['חותמות ושקילה','Stamps & weighing','Sellos y pesaje']};
+  inner:['פנים','Inner','Interno'],outer:['חוץ','Outer','Externo'],parts:['חלקים','Parts','Partes'],stamps:['חותמות ושקילה','Stamps & weighing','Sellos y pesaje'],
+  nikur:['ניקור','Nikur','Nikur']};
 const GT_PART_NAME={whole:['כל הבהמה','Whole animal','Animal entero'],right:['חצי ימין','Right half','Mitad derecha'],left:['חצי שמאל','Left half','Mitad izquierda'],
   cheek1:['לחי 1','Cheek 1','Mejilla 1'],cheek2:['לחי 2','Cheek 2','Mejilla 2'],tongue:['לשון','Tongue','Lengua']};
 function _gtL(a){ return L(a[0],a[1],a[2]); }
@@ -5243,7 +5249,7 @@ function gtAfterRelease(h){
   KS.notice(L('#'+(h.animal_id+1)+' שוחרר — חוזר לתור, ראשון.','#'+(h.animal_id+1)+' released — back in line, first.','#'+(h.animal_id+1)+' liberado — vuelve a la fila, primero.'));
   if(h.station==='parts' && ['cheek1','cheek2','tongue'].includes(h.part)){
     const a=KS.getAnimal(h.animal_id);
-    if(a && ((a.partsPrintCount||0)>=3 || a.partsScanned)){
+    if(a && ((a.partsPrintCount||0)>=gtPartsExpected() || a.partsScanned)){
       try{ showPartsPrint(h.animal_id, a.outerStatus, false, {cheek1:1,cheek2:2,tongue:3}[h.part]);
            _ppBreak(h.part==='tongue'?0:1, h.part==='tongue'?1:0);
            const sn=document.getElementById('ppPartsInfo'); if(sn){ sn.textContent=L('הודפס עכשיו: ','Printed now: ','Impreso ahora: ')+_gtL(GT_PART_NAME[h.part])+L(' (שוחרר מ-USDA)',' (released from USDA)',' (liberado de USDA)'); sn.style.color='#9BE7B0'; sn.style.fontWeight='800'; } }catch(e){}
@@ -5391,7 +5397,8 @@ function supTitles(){
   const t=c.icon+' '+L(c.t[0],c.t[1],c.t[2]);
   const set=(id,v)=>{const e=document.getElementById(id); if(e) e.textContent=v;};
   set('supLTitle', t); set('supTitle', t);
-  set('supLSub', L('המסך בהכנה — כניסה ותצוגה בלבד','Screen in preparation — login and view only','Pantalla en preparación — solo acceso y vista'));
+  set('supLSub', supRole==='nikur' ? L('סריקת כל חתיכה לפני הניקור','Scan every piece before the nikur','Escanear cada pieza antes del nikur')
+                                   : L('המסך בהכנה — כניסה ותצוגה בלבד','Screen in preparation — login and view only','Pantalla en preparación — solo acceso y vista'));
   set('supWelcome', L('ברוך הבא','Welcome','Bienvenido'));
 }
 function supOpen(role){ if(GT_SUP_SCREENS[role]) supRole=role; supTitles(); goTo('scSupLogin'); }
@@ -5400,11 +5407,112 @@ function supEnter(){
   supTitles();
   let nm=null; try{ nm=(JSON.parse(localStorage.getItem('gt_active_users')||'{}'))[supRole]||null; }catch(e){}
   const c=GT_SUP_SCREENS[supRole]; const u=document.getElementById('supUser'); if(u) u.textContent=nm||(c?L(c.w[0],c.w[1],c.w[2]):'');
-  goTo('scSup'); supRender();
+  goTo('scSup'); supRender(); if(supRole==='nikur') nkLoad();
 }
+// ── v10.38 (owner): THE NIKUR — every piece is scanned before the nikur ──
+// slot 0 = the nikur (large parts), slot 1 = the small-parts nikur. Every kosher piece goes in (every kashrut
+// status, chalak and not chalak); a treif / nevela / held / unruled piece is refused by the server.
+function _nkScreen(){ let i=0; try{ i=parseInt(localStorage.getItem('ks_kiosk_index')||'0',10)||0; }catch(e){} return (i%2===1)?'small':'big'; }
+let _nkBoard={pieces:[],at:0}, _nkLast=null;
+function _nkTitle(){ return _nkScreen()==='small'?L('ניקור חלקים קטנים','Small-parts nikur','Nikur de partes pequeñas'):L('ניקור','Nikur','Nikur'); }
+// the pieces of one animal this screen takes (its parts, their stickers printed)
+function _nkExpected(a){
+  if(!a||!isKosherReady(a)) return [];
+  const out=[], scr=_nkScreen();
+  gtProducts().forEach(p=>{ if(!p.on||p.nikur!==scr) return;
+    if(p.notGlatt && a.outerStatus==='glatt') return;
+    if(p.post==='stamps' && !a.stamped) return; if(p.post==='parts' && !a.partsScanned) return;
+    const m=Math.max(1,parseInt(p.m)||0); for(let i=1;i<=m;i++) out.push({pid:p.id,i}); });
+  return out;
+}
+function nikurRender(el){
+  if(!document.getElementById('nkScan')){
+    el.innerHTML=`<input type="text" id="nkScan" inputmode="none" style="position:absolute;opacity:0;width:1px;height:1px;top:0;left:0;pointer-events:none;" onkeydown="nkKey(event)">
+      <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+        <div id="nkTitle" style="flex:1;font-size:20px;font-weight:900;color:var(--gold);"></div>
+        <button class="gt-tbb gt-tbu" onclick="gtUsdaStart('nikur')">USDA HOLD</button>
+        <button class="gt-tbb" id="nkHeldBtn" onclick="gtHeldList('nikur')" style="display:none;border-color:#B39DFF;color:#B39DFF;"></button>
+      </div>
+      <div onclick="nkFocus()" id="nkScanArea" style="background:var(--panel2);border:2px dashed var(--border2);border-radius:12px;padding:14px 16px;display:flex;align-items:center;gap:12px;cursor:pointer;margin-bottom:10px;">
+        <div><div style="font-size:15px;font-weight:700;color:var(--text)" id="nkPrompt"></div><div style="font-size:11px;color:var(--muted)" id="nkSub"></div></div>
+        <div style="margin-inline-start:auto;width:10px;height:10px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);animation:pulse 1s infinite;"></div>
+      </div>
+      <div id="nkResult" style="display:none;border-radius:14px;padding:16px;text-align:center;margin-bottom:10px;"></div>
+      <div id="nkPick" style="display:none;margin-bottom:10px;"></div>
+      <div id="nkTiles" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;"></div>
+      <div id="nkMissing" style="background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:12px;"></div>`;
+    setTimeout(nkFocus,200);
+  }
+  const set=(id,v)=>{ const e=document.getElementById(id); if(e) e.textContent=v; };
+  set('nkTitle','🔪 '+_nkTitle());
+  set('nkPrompt',L('סורקים כל חתיכה לפני הניקור','Scan every piece before the nikur','Escanee cada pieza antes del nikur'));
+  set('nkSub',L('חתיכה כשרה נרשמת ועוברת להכשרה. טרף, נבלה, מעוכב או בלי פסיקה — לא נכנס.','A kosher piece is recorded and goes on to kashering. Treif, nevela, held or not ruled — does not go in.','Una pieza kosher se registra y pasa al kashering. Treif, nevelá, retenida o sin dictamen — no entra.'));
+  const held=(_gtFlags.holds||[]).filter(h=>h.station==='nikur'&&_gtOnBoard(h)&&!h.local&&(h.open||h.resolution==='condemned')).length;
+  { const b=document.getElementById('nkHeldBtn'); if(b){ b.style.display=held?'':'none'; b.textContent=L('מעוכבים ','Held ','Retenidos ')+'('+held+')'; } }
+  // what went in today, and the animals still missing pieces here
+  const got={}; (_nkBoard.pieces||[]).forEach(x=>{ got[(x.n-1)+':'+x.p+':'+x.i]=1; });
+  const A=KS.getAnimals()||[]; let full=0; const miss=[];
+  A.forEach(a=>{ const ex=_nkExpected(a); if(!ex.length) return; const left=ex.filter(q=>!got[a.id+':'+q.pid+':'+q.i]);
+    if(!left.length) full++; else miss.push({n:a.id+1, left}); });
+  const tile=(v,l,c)=>`<div style="flex:1;min-width:110px;background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:10px;text-align:center;"><div style="font-size:28px;font-weight:800;color:${c};">${v}</div><div style="font-size:12px;color:var(--muted);">${escapeHtml(l)}</div></div>`;
+  { const t=document.getElementById('nkTiles'); if(t) t.innerHTML=tile((_nkBoard.pieces||[]).length,L('חתיכות נכנסו היום','Pieces in today','Piezas hoy'),'var(--glatt)')
+      +tile(full,L('בהמות שלמות','Animals complete','Animales completos'),'var(--text)')+tile(miss.length,L('בהמות עם חתיכות חסרות','Animals missing pieces','Animales con piezas pendientes'),'var(--amber)'); }
+  { const m=document.getElementById('nkMissing'); if(m){
+      const nm=pid=>gtProductName(gtProducts().find(p=>p.id===pid))||pid;
+      const rows=miss.slice(0,30).map(r=>{ const g={}; r.left.forEach(q=>{ (g[q.pid]=g[q.pid]||[]).push(q.i); });
+        return `<div style="display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;"><b>#${r.n}</b><span style="color:var(--muted);text-align:end;">${escapeHtml(Object.keys(g).map(k=>nm(k)+(g[k].length>1||gtProducts().find(p=>p.id===k&&(p.m||0)>1)?' '+g[k].join(','):'')).join(' · '))}</span></div>`; }).join('');
+      m.innerHTML=`<div style="font-size:13px;font-weight:700;color:var(--gold);margin-bottom:6px;">${escapeHtml(L('עוד לא נכנסו לניקור','Not in the nikur yet','Aún no en el nikur'))}</div>`
+        +(rows||`<div class="gt-muted">${escapeHtml(L('הכל נכנס.','Everything is in.','Todo está dentro.'))}</div>`)+(miss.length>30?`<div class="gt-muted">+${miss.length-30}</div>`:''); } }
+}
+function nkFocus(){ const i=document.getElementById('nkScan'); if(i) i.focus(); }
+function nkKey(e){ if(e.key==='Enter'||e.keyCode===13){ const v=e.target.value.trim(); e.target.value=''; if(v) nkScan(v); } }
+async function nkLoad(){
+  if(!window.sb) return;
+  try{ const r=await window.sb.rpc('nikur_board'); if(r&&r.data&&r.data.ok){ _nkBoard={pieces:r.data.pieces||[],at:Date.now()}; } }catch(e){}
+  const s=document.querySelector('.screen.active'); if(s&&s.id==='scSup'&&supRole==='nikur') supRender();
+}
+function _nkShow(kind,big,sub){
+  const r=document.getElementById('nkResult'); if(!r) return;
+  const c={ok:['rgba(40,199,111,.15)','var(--green)'],dup:['rgba(255,176,32,.12)','#FFB020'],no:['rgba(224,48,48,.18)','var(--red)']}[kind];
+  r.style.display='block'; r.style.background=c[0]; r.style.border='3px solid '+c[1];
+  r.innerHTML=`<div style="font-size:30px;font-weight:900;color:${c[1]};font-family:'Frank Ruhl Libre',serif;">${escapeHtml(big)}</div><div style="font-size:15px;color:var(--text);margin-top:4px;">${escapeHtml(sub||'')}</div>`;
+  clearTimeout(_nkShow.t); _nkShow.t=setTimeout(()=>{ r.style.display='none'; },kind==='no'?6000:3500);
+  if(kind==='no'){ try{ playBeep('nevela'); }catch(e){} }
+}
+const GT_NK_REASON={treif:['טרף — לא להכניס!','Treif — do not take in!','Treif — ¡no ingresar!'],nevela:['נבלה — לא להכניס!','Nevela — do not take in!','Nevelá — ¡no ingresar!'],
+  no_ruling:['אין פסיקה כשרה — לא להכניס!','No kosher ruling — do not take in!','Sin dictamen kosher — ¡no ingresar!'],held:['מעוכב (USDA / שאלה) — לא להכניס!','Held (USDA / question) — do not take in!','Retenido (USDA / pregunta) — ¡no ingresar!'],
+  not_glatt:['לא נלקח מבהמה גלאט','Not taken from a glatt animal','No se toma de un animal glatt'],not_printed:['לא הודפסה מדבקה כשרה לחתיכה','No kosher sticker was printed for this piece','No se imprimió etiqueta kosher para esta pieza'],
+  not_slaughtered:['לא נשחט','Not slaughtered','No faenado']};
+async function nkScan(code, pid, piece){
+  const pick=document.getElementById('nkPick'); if(pick) pick.style.display='none';
+  const n=_gtCodeNum(code), idx=isNaN(n)?-1:n-1;
+  if(idx<0||idx>999){ _nkShow('no',L('ברקוד לא מזוהה','Barcode not recognized','Código no reconocido'),'#'+code); return; }
+  if(!pid){ const mP=/\|P:([a-z0-9_]+)/.exec(code), mI=/\|I:(\d+)/.exec(code); if(mP){ pid=mP[1]; piece=mI?parseInt(mI[1],10):1; } }
+  if(!pid){   // a number sticker without a part (e.g. the liver's head sticker): the parts of this screen with no kosher sticker
+    const c=gtProducts().filter(p=>p.on&&p.nikur===_nkScreen()&&!(parseInt(p.m)>0));
+    if(c.length===1){ pid=c[0].id; piece=1; }
+    else if(c.length>1 && pick){ pick.style.display='block';
+      pick.innerHTML=`<div style="font-size:13px;color:var(--muted);margin-bottom:6px;">#${idx+1} — ${escapeHtml(L('איזה חלק?','Which part?','¿Qué parte?'))}</div><div class="gt-row">`+c.map(p=>`<button class="gt-sb" onclick="nkScan(${_jsArg(code)},${_jsArg(p.id)},1)">${escapeHtml(gtProductName(p))}</button>`).join('')+'</div>'; return; }
+    else { _nkShow('no',L('סרקו את מדבקת החלק','Scan the part\'s sticker','Escanee la etiqueta de la pieza'),L('על המדבקה הזו אין שם חלק','This sticker carries no part','Esta etiqueta no lleva parte')); return; }
+  }
+  const prod=gtProducts().find(p=>p.id===pid), pname=gtProductName(prod)||pid, m=prod?Math.max(1,parseInt(prod.m)||0):1;
+  if(!window.sb){ _nkShow('no',L('אין חיבור לשרת','No server connection','Sin conexión'),L('לא נרשם — סורקים שוב כשהחיבור חוזר','Not recorded — scan again when the connection is back','No registrado — escanee de nuevo al volver la conexión')); return; }
+  let r=null; try{ r=await _withTimeout(window.sb.rpc('nikur_scan',{p_id:idx,p_product:pid,p_piece:piece||1,p_epoch:KS.getBoardEpoch?KS.getBoardEpoch():null,p_command_id:_gtUuid()}),10000); }catch(e){ r={error:e}; }
+  const d=r&&r.data;
+  const what='#'+(idx+1)+' · '+pname+(m>1?' '+(piece||1)+'/'+m:'');
+  if(d&&d.ok){ _nkShow(d.duplicate?'dup':'ok', d.duplicate?L('כבר נסרק','Already scanned','Ya escaneado'):L('✓ נכנס לניקור','✓ Into the nikur','✓ Al nikur'), what+(d.status?' · '+(_gtStatusInfo(d.status).name||d.status):'')); }
+  else if(d&&d.error==='refused'){ const t=GT_NK_REASON[d.reason]||[d.reason,d.reason,d.reason]; _nkShow('no',L('⛔ ','⛔ ','⛔ ')+L(t[0],t[1],t[2]),what); }
+  else if(d&&d.error==='wrong_screen'){ _nkShow('no',L('לא בניקור הזה','Not this nikur','No en este nikur'),what+' — '+(d.nikur==='small'?L('לניקור חלקים קטנים','to the small-parts nikur','al nikur de partes pequeñas'):L('לניקור','to the nikur','al nikur'))); }
+  else if(d&&d.error==='worker_login_required'){ _gtHoldNeedsLogin(); }
+  else { _nkShow('no',L('לא נרשם','Not recorded','No registrado'),gtErrText((d&&d.error)||(r&&r.error)||'network')); }
+  nkLoad(); setTimeout(nkFocus,100);
+}
+setInterval(()=>{ const s=document.querySelector('.screen.active'); if(s&&s.id==='scSup'&&supRole==='nikur') nkLoad(); },8000);
 // read-only: what reached this part of the line today (after the outer ruling)
 function supRender(){
   const el=document.getElementById('supBody'); if(!el) return;
+  if(supRole==='nikur'){ nikurRender(el); return; }
+  { const ni=document.getElementById('nkScan'); if(ni) el.innerHTML=''; }
   const a=KS.getAnimals()||[];
   const slaughtered=a.filter(x=>x.slaughter==='slaughtered').length;
   const ruled=a.filter(x=>x.outerStatus);
@@ -5913,7 +6021,8 @@ Object.assign(I18N_DOM,{"🧪 איפוס יום עכשיו — רק במצב ב�
 Object.assign(I18N_DOM,{"שינוי — בבחירת מסכים ←": ["Change — in Choosing screens →", "Cambiar — en Elegir pantallas →"]});
 Object.assign(I18N_DOM,{"\"לא חלק\" ומסכי חוץ": ["\"Non-Chalak\" and outer screens", "\"No Jalak\" y pantallas externas"]});
 Object.assign(I18N_DOM,{"סטטוס רגיל לבהמה חלקה — למשל במפעל שכולו תחת הרבנות (רבנות חלק / רבנות כשר). לא לבהמה \"לא חלק\".": ["A regular status for a chalak animal — e.g. in a plant fully under the rabbinate (רבנות חלק / רבנות כשר). Not for a \"Non-Chalak\" animal.", "Un estado normal para un animal jalak — p. ej. en una planta totalmente bajo el rabinato (רבנות חלק / רבנות כשר). No para un animal \"No Jalak\"."]});
-Object.assign(I18N_DOM,{"חלקי פנים וחוץ":["Inner & outer cuts","Cortes internos y externos"],"לכל חלק: פעיל או לא, מדבקת מספר לפני הפסיקה (ממסך הראש או הרגליים), האזור שמטפל בו אחרי הפסיקה, ומשקל ממוצע לבהמה. מדבקה עם סטטוס ומיון — תמיד אחרי הפסיקה. מספר המדבקות במסך הראש והרגליים מחושב לבד מהרשימה.":["For each cut: on or off, a number sticker before the ruling (from the head or the legs screen), the area that handles it after the ruling, and an average weight per animal. A sticker with a status, and sorting — always after the ruling. The number of stickers on the head and legs screens is worked out from the list.","Para cada corte: activo o no, una etiqueta de número antes del dictamen (desde la pantalla de cabeza o de patas), el área que lo maneja después del dictamen y un peso medio por animal. Una etiqueta con estado, y la clasificación — siempre después del dictamen. La cantidad de etiquetas en las pantallas de cabeza y patas se calcula a partir de la lista."],"שם חלק חדש":["New cut name","Nombre del corte nuevo"],"English (רשות)":["English (optional)","Inglés (opcional)"],"מדבקות רגליים / ראש":["Legs / head stickers","Etiquetas de patas / cabeza"]});
+Object.assign(I18N_DOM,{"חלקי פנים וחוץ":["Inner & outer cuts","Cortes internos y externos"],"לכל חלק: פעיל, מדבקות מספר (ראש / רגליים), האזור שמטפל בו ומדבקות הכשרות שלו, הניקור, ומשקל ממוצע. מספר המדבקות בכל מסך מחושב לבד מהרשימה.":["For each cut: on or off, number stickers (head / legs), the area that handles it and its kosher stickers, the nikur, and an average weight. The number of stickers on every screen is worked out from the list.","Para cada corte: activo o no, etiquetas de número (cabeza / patas), el área que lo maneja y sus etiquetas kosher, el nikur y un peso medio. La cantidad de etiquetas en cada pantalla se calcula a partir de la lista."],"שם חלק חדש":["New cut name","Nombre del corte nuevo"],"English (רשות)":["English (optional)","Inglés (opcional)"],"מדבקות רגליים / ראש":["Legs / head stickers","Etiquetas de patas / cabeza"]});
+Object.assign(I18N_DOM,{"📷 מיון רגליים":["📷 Leg sorting","📷 Clasificar patas"],"סריקה אחת = מדבקות כשרות לכל החלקים":["One scan = kosher stickers for every part","Un escaneo = etiquetas kosher para cada parte"]});
 // v10.30: known pieces of a longer text that holds a name (e.g. "🟢 ראש צוות — <name> (המכשיר הזה)")
 const I18N_PARTS=[['ראש צוות — ',['Team leader — ','Jefe de equipo — ']],['(המכשיר הזה)',['(this device)','(este dispositivo)']],
                   ['"סגור" — רק כשמה שנשאר לא יעובד בתחנה הזו.',['"Close" — only when what is left will not be processed at this station.','"Cerrar" — solo cuando lo que queda no se procesará en esta estación.']],
@@ -5997,7 +6106,7 @@ async function ATalert(text){ alert(lang==='he' ? text : await _atFetch(text, la
 async function ATconfirm(text){ return confirm(lang==='he' ? text : await _atFetch(text, lang)); }
 
 const T={
-  he:{brand:"מערכת שחיטה כשרה",online:"מחובר לרשת",sync:"סנכרון פעיל",mgmt:"ניהול",work:"מסכי עבודה",mgr:"מסך ראש צוות",mgrD:"שליטה מלאה, הגדרות, סיכומים, הרשאות",sl:"שחיטה",slD:"נשחט / נבלה / ירוי",lg:"רגלים / ראש",lgD:"מדבקות ראשוניות",inner:"בודק פנים",innerD:"בדיקת ריאות",outer:"בודק חוץ",outerD:"פסיקת כשרות",parts:"חלקים קטנים",soon:"בקרוב",ready:"מוכן",syncInfo:"BroadcastChannel — עדכון בזמן אמת",reset:"איפוס יום",slS:"נשחט",slN:"נבלה",slSh:"ירוי",slTot:"סה״כ",lgWaiting:"ממתינים",lgDone:"טופלו",lgNev:"נבלה",lgTot:"סה״כ",inWaiting:"ממתינים",inDone:"לבודק חוץ",inTreif:"טרף",inTot:"סה״כ",outPend:"ממתינים",outTr:"טרף",mawSub:"בדיקת בית הכוסות",rumenLabel:"בדיקת כרסים (ד.א.)",mawK:"כשר",mawT:"טרף",lungSub:"סמן מה הרגשת",flip:"הפוך",lTreif:"טרף",lConfirm:"אישור לבודק חוץ",decSub:"פסוק סטטוס כשרות סופי",dGlatt:"גלאט",dBeit:"בית יוסף",dKosher:"כשר",dMk:"MK",dTreif:"טרף",nsTitle:"אי אפשר לדלג!",nsDesc:"חייבים ללכת לפי הסדר.",wTitle:"שינוי סטטוס",wCancel:"ביטול",tap:"לחץ לעריכה",stSlaughtered:"נשחט",stDone:"בוצע",stTreif:"טרף",stPending:"ממתין",stGlatt:"גלאט",stBeit:"ב״י",stKosher:"כשר",stMk:"MK",stNev:"נבלה",welcome:"ברוך הבא",    mgrFuncSlaughter:"שחיטה",    mgrFuncLegs:"רגלים",    mgrFuncInspection:"בדיקות",    mgrFuncParts:"חלקים",    mgrFuncStamps:"חותמות",    mgrFuncCooler:"קולר",    mgrBeepLabel:"ציפצוף שחיטה",    mgrBeepSec:"שניות",    mgrLegsMode:"מצב הדפסה:",    mgrLegsStickers:"מדבקות רגלים:",    mgrHeadStickers:"מדבקות ראש:",    mgrPartsStickers:"מדבקות לבהמה:",    mgrPartsDefault:"ברירת מחדל: 3 (2 לחיים + 1 לשון)",    mgrStampsStickers:"מדבקות לבהמה:",    mgrFloatLabel:"חלונות צפים",    mgrLungLabel:"בדיקת ריאות",    mgrMawLabel:"בדיקת בית הכוסות",    mgrRumenLabel:"בדיקת כרסים",    mgrRumenSub:"אמריקה הדרומית",    mgrLoginMode:"מצב כניסה:",    mgrNoLogin:"ללא",    mgrNameOnly:"שם בלבד",    mgrCodeOnly:"קוד בלבד",    mgrNameCode:"שם + קוד",    mgrAddUser:"+ הוסף משתמש",    mgrSecLicense:"רישוי",    mgrLicStatus:"סטטוס",    mgrLicExpiry:"תפוגה",    mgrDailyTarget:"יעד יומי",    mgrAnimalType:"סוג בהמה:",    mgrCattle:"בקר",    mgrSheep:"כבשים",    mgrMixed:"מעורב",    mgrSecFarmsTitle:"משקים",    mgrAddFarm:"+ הוסף משק",    mgrSecStickers:"הגדרות מדבקות",    mgrStickerSize:"גודל מדבקה (mm):",    mgrSealTitle:"סימני כשרות למדבקות:",    mgrSecLungImg:"תמונת ריאה לבדיקה",    mgrLungDesc:"מוצגת לבודקים — ניתן להחליף",    mgrLungReset:"↩ חזור לברירת מחדל",    mgrSecStatuses:"סטטוסי כשרות",    mgrStatusNote:"הסרת סטטוס תסיר אותו מכל המסכים",    mgrResetBtn:"איפוס יום",    mgrResetTitle:"איפוס",    mgrSecKosher:"סיכום כשרות",    mgrSecPct:"אחוזים",    mgrSecWorkers:"שוחטים",    mgrSecInspectors:"בודקים / משגיחים",    mgrSecFarmSum:"כמות לפי משק",    mgrSecAnimal:"סיכום לפי סוג בהמה",    mgrSecPie:"תרשים כשרות",    mgrSecBar:"שחיטה לפי שעה",    mgrSecTrend:"מגמה שבועית",    mgrSubReprint:"הדפסות חוזרות",    mgrSubErrors:"שגיאות",    mgrSubAi:"AI עוזר",    mgrAiTitle:"עוזר AI",    mgrAiBtn:"AI — נתח ותקן בעיות",    mgrAiSend:"שלח",    mgrClearLog:"נקה",    mgrSecLive:"ניטור חי",    mgrSecProgress:"התקדמות יומית",    mgrSecSearch:"חיפוש בהמה",    mgrSearchBtn:"חפש",    mgrSecProblems:"דיווח בעיה",    mgrScreensTitle:"מסכי השגחה",    mgrTabMonitor:"ניטור",    mgrTabSettings:"הגדרות",    mgrTabSummaries:"סיכומים",    mgrTabReports:"דוחות",    mgrTabLog:"יומן",    mgrSubScreens:"מסכים",    mgrSubFunctions:"פונקציות",    mgrSubUsers:"משתמשים",    mgrSubSystem:"מערכת",    mgrSubKosher:"כשרות",    mgrSubWorkers:"עובדים",    mgrSubFarms:"משקים",    mgrSubAnimals:"סוגי בהמה",    mgrSubPie:"עוגה",    mgrSubHourly:"שעתי",    mgrSubTrend:"מגמה",    mgrSecDaily:"קבלת בהמות יומית",    lgTitle:"משגיח רגלים / ראש",    loginBtn:"כניסה למערכת",    sys:"מחובר לרשת",    slTitle:"מסך שחיטה",    partsSubTitle:"לשון ולחיים — סריקה",    scanPrompt:"סרוק ברקוד או לחץ על מספר",    stampsScanPromptTxt:"סרוק QR של הבהמה",    stampsSubTitle:"QR ← 5 מדבקות כשרות",    partsD:"לשון ולחיים",    stampsTitle:"חותמות",    stampsD:"5 מדבקות לבהמה",    esoTitle:"בדיקת וושט",    esoDesc:"משגיח — פסילת נבלה",
+  he:{brand:"מערכת שחיטה כשרה",online:"מחובר לרשת",sync:"סנכרון פעיל",mgmt:"ניהול",work:"מסכי עבודה",mgr:"מסך ראש צוות",mgrD:"שליטה מלאה, הגדרות, סיכומים, הרשאות",sl:"שחיטה",slD:"נשחט / נבלה / ירוי",lg:"רגלים / ראש",lgD:"מדבקות ראשוניות",inner:"בודק פנים",innerD:"בדיקת ריאות",outer:"בודק חוץ",outerD:"פסיקת כשרות",parts:"חלקים קטנים",soon:"בקרוב",ready:"מוכן",syncInfo:"BroadcastChannel — עדכון בזמן אמת",reset:"איפוס יום",slS:"נשחט",slN:"נבלה",slSh:"ירוי",slTot:"סה״כ",lgWaiting:"ממתינים",lgDone:"טופלו",lgNev:"נבלה",lgTot:"סה״כ",inWaiting:"ממתינים",inDone:"לבודק חוץ",inTreif:"טרף",inTot:"סה״כ",outPend:"ממתינים",outTr:"טרף",mawSub:"בדיקת בית הכוסות",rumenLabel:"בדיקת כרסים (ד.א.)",mawK:"כשר",mawT:"טרף",lungSub:"סמן מה הרגשת",flip:"הפוך",lTreif:"טרף",lConfirm:"אישור לבודק חוץ",decSub:"פסוק סטטוס כשרות סופי",dGlatt:"גלאט",dBeit:"בית יוסף",dKosher:"כשר",dMk:"MK",dTreif:"טרף",nsTitle:"אי אפשר לדלג!",nsDesc:"חייבים ללכת לפי הסדר.",wTitle:"שינוי סטטוס",wCancel:"ביטול",tap:"לחץ לעריכה",stSlaughtered:"נשחט",stDone:"בוצע",stTreif:"טרף",stPending:"ממתין",stGlatt:"גלאט",stBeit:"ב״י",stKosher:"כשר",stMk:"MK",stNev:"נבלה",welcome:"ברוך הבא",    mgrFuncSlaughter:"שחיטה",    mgrFuncLegs:"רגלים",    mgrFuncInspection:"בדיקות",    mgrFuncParts:"חלקים",    mgrFuncStamps:"חותמות",    mgrFuncCooler:"קולר",    mgrBeepLabel:"ציפצוף שחיטה",    mgrBeepSec:"שניות",    mgrLegsMode:"מצב הדפסה:",    mgrLegsStickers:"מדבקות רגלים:",    mgrHeadStickers:"מדבקות ראש:",    mgrPartsStickers:"מדבקות לבהמה:",    mgrPartsDefault:"ברירת מחדל: 3 (2 לחיים + 1 לשון)",    mgrStampsStickers:"מדבקות לבהמה:",    mgrFloatLabel:"חלונות צפים",    mgrLungLabel:"בדיקת ריאות",    mgrMawLabel:"בדיקת בית הכוסות",    mgrRumenLabel:"בדיקת כרסים",    mgrRumenSub:"אמריקה הדרומית",    mgrLoginMode:"מצב כניסה:",    mgrNoLogin:"ללא",    mgrNameOnly:"שם בלבד",    mgrCodeOnly:"קוד בלבד",    mgrNameCode:"שם + קוד",    mgrAddUser:"+ הוסף משתמש",    mgrSecLicense:"רישוי",    mgrLicStatus:"סטטוס",    mgrLicExpiry:"תפוגה",    mgrDailyTarget:"יעד יומי",    mgrAnimalType:"סוג בהמה:",    mgrCattle:"בקר",    mgrSheep:"כבשים",    mgrMixed:"מעורב",    mgrSecFarmsTitle:"משקים",    mgrAddFarm:"+ הוסף משק",    mgrSecStickers:"הגדרות מדבקות",    mgrStickerSize:"גודל מדבקה (mm):",    mgrSealTitle:"סימני כשרות למדבקות:",    mgrSecLungImg:"תמונת ריאה לבדיקה",    mgrLungDesc:"מוצגת לבודקים — ניתן להחליף",    mgrLungReset:"↩ חזור לברירת מחדל",    mgrSecStatuses:"סטטוסי כשרות",    mgrStatusNote:"הסרת סטטוס תסיר אותו מכל המסכים",    mgrResetBtn:"איפוס יום",    mgrResetTitle:"איפוס",    mgrSecKosher:"סיכום כשרות",    mgrSecPct:"אחוזים",    mgrSecWorkers:"שוחטים",    mgrSecInspectors:"בודקים / משגיחים",    mgrSecFarmSum:"כמות לפי משק",    mgrSecAnimal:"סיכום לפי סוג בהמה",    mgrSecPie:"תרשים כשרות",    mgrSecBar:"שחיטה לפי שעה",    mgrSecTrend:"מגמה שבועית",    mgrSubReprint:"הדפסות חוזרות",    mgrSubErrors:"שגיאות",    mgrSubAi:"AI עוזר",    mgrAiTitle:"עוזר AI",    mgrAiBtn:"AI — נתח ותקן בעיות",    mgrAiSend:"שלח",    mgrClearLog:"נקה",    mgrSecLive:"ניטור חי",    mgrSecProgress:"התקדמות יומית",    mgrSecSearch:"חיפוש בהמה",    mgrSearchBtn:"חפש",    mgrSecProblems:"דיווח בעיה",    mgrScreensTitle:"מסכי השגחה",    mgrTabMonitor:"ניטור",    mgrTabSettings:"הגדרות",    mgrTabSummaries:"סיכומים",    mgrTabReports:"דוחות",    mgrTabLog:"יומן",    mgrSubScreens:"מסכים",    mgrSubFunctions:"פונקציות",    mgrSubUsers:"משתמשים",    mgrSubSystem:"מערכת",    mgrSubKosher:"כשרות",    mgrSubWorkers:"עובדים",    mgrSubFarms:"משקים",    mgrSubAnimals:"סוגי בהמה",    mgrSubPie:"עוגה",    mgrSubHourly:"שעתי",    mgrSubTrend:"מגמה",    mgrSecDaily:"קבלת בהמות יומית",    lgTitle:"משגיח רגלים / ראש",    loginBtn:"כניסה למערכת",    sys:"מחובר לרשת",    slTitle:"מסך שחיטה",    partsSubTitle:"לשון ולחיים — סריקה",    scanPrompt:"סרוק ברקוד או לחץ על מספר",    stampsScanPromptTxt:"סרוק QR של הבהמה",    stampsSubTitle:"סריקת QR ← מדבקות כשרות",    partsD:"לשון ולחיים",    stampsTitle:"חותמות",    stampsD:"חותמות ומדבקות כשרות",    esoTitle:"בדיקת וושט",    esoDesc:"משגיח — פסילת נבלה",
         perDay:"יום",    perWeek:"שבוע",    perMonth:"חודש",    perYear:"שנה",    defineUsers:"הגדר משתמשים בהגדרות",    noWorkers:"אין עובדים מוגדרים",
         slaughtered:"נשחט",
     nevela:"נבלה",
@@ -6079,10 +6188,10 @@ const T={
     mgrSecInspectors:"בודקים / משגיחים",mgrSecFarmSum:"כמות לפי משק",mgrSecAnimal:"לפי סוג בהמה",
     mgrSecPie:"תרשים כשרות",mgrSecBar:"שחיטה לפי שעה",mgrSecTrend:"מגמה שבועית",
     mgrAiTitle:"עוזר AI",
-    loginBtn:"כניסה למערכת",partsSubTitle:"לשון ולחיים — סריקה",stampsSubTitle:"QR ← 5 מדבקות",
+    loginBtn:"כניסה למערכת",partsSubTitle:"לשון ולחיים — סריקה",stampsSubTitle:"QR ← מדבקות כשרות",
     scanPrompt:"סרוק ברקוד או לחץ על מספר",stampsScanPromptTxt:"סרוק QR של הבהמה",
     slTitle:"מסך שחיטה",lgTitle:"משגיח רגלים / ראש",inTitle:"בודק פנים",outTitle:"בודק חוץ"},
-  en:{brand:"Kosher Slaughter System",online:"Connected",sync:"Sync Active",mgmt:"MANAGEMENT",work:"WORK SCREENS",mgr:"Team Leader",mgrD:"Full control, settings, summaries",sl:"Slaughter",slD:"Slaughtered / Nevela / Shot",lg:"Legs / Head",lgD:"Initial stickers",inner:"Inner Inspector",innerD:"Lung check",outer:"Outer Inspector",outerD:"Final ruling",parts:"Small Parts",soon:"Soon",ready:"Ready",syncInfo:"BroadcastChannel — Real-time sync",reset:"Reset Day",slS:"Slaughtered",slN:"Nevela",slSh:"Shot",slTot:"Total",lgWaiting:"Waiting",lgDone:"Done",lgNev:"Nevela",lgTot:"Total",inWaiting:"Waiting",inDone:"To outer",inTreif:"Treif",inTot:"Total",outPend:"Pending",outTr:"Treif",mawSub:"Maw Check",rumenLabel:"Rumen Check (S.A.)",mawK:"Kosher",mawT:"Treif",lungSub:"Mark what you felt",flip:"Flip",lTreif:"Treif",lConfirm:"Confirm to Outer",decSub:"Issue final kosher ruling",dGlatt:"Glatt",dBeit:"Beit Yosef",dKosher:"Kosher",dMk:"MK",dTreif:"Treif",nsTitle:"Cannot Skip!",nsDesc:"Must follow the order.",wTitle:"Change Status",wCancel:"Cancel",tap:"Tap to edit",stSlaughtered:"Slaughtered",stDone:"Done",stTreif:"Treif",stPending:"Pending",stGlatt:"Glatt",stBeit:"B.Y.",stKosher:"Kosher",stMk:"MK",stNev:"Nevela",welcome:"Welcome",    mgrFuncSlaughter:"Slaughter",    mgrFuncLegs:"Legs",    mgrFuncInspection:"Inspection",    mgrFuncParts:"Small Parts",    mgrFuncStamps:"Stamps",    mgrFuncCooler:"Cooler",    mgrBeepLabel:"Slaughter Beep",    mgrBeepSec:"Seconds",    mgrLegsMode:"Print mode:",    mgrLegsStickers:"Leg stickers:",    mgrHeadStickers:"Head stickers:",    mgrPartsStickers:"Stickers per animal:",    mgrPartsDefault:"Default: 3 (2 cheeks + 1 tongue)",    mgrStampsStickers:"Stickers per animal:",    mgrFloatLabel:"Floating Windows",    mgrLungLabel:"Lung Check",    mgrMawLabel:"Maw Check",    mgrRumenLabel:"Rumen Check",    mgrRumenSub:"South America",    mgrLoginMode:"Login mode:",    mgrNoLogin:"None",    mgrNameOnly:"Name only",    mgrCodeOnly:"Code only",    mgrNameCode:"Name + Code",    mgrAddUser:"+ Add User",    mgrSecLicense:"License",    mgrLicStatus:"Status",    mgrLicExpiry:"Expiry",    mgrDailyTarget:"Daily target",    mgrAnimalType:"Animal type:",    mgrCattle:"Cattle",    mgrSheep:"Sheep",    mgrMixed:"Mixed",    mgrSecFarmsTitle:"Farms",    mgrAddFarm:"+ Add Farm",    mgrSecStickers:"Sticker Settings",    mgrStickerSize:"Sticker size (mm):",    mgrSealTitle:"Kosher Seals for Stickers:",    mgrSecLungImg:"Lung Image",    mgrLungDesc:"Shown to inspectors — replaceable",    mgrLungReset:"↩ Reset to Default",    mgrSecStatuses:"Kosher Statuses",    mgrStatusNote:"Disabling removes from all screens",    mgrResetBtn:"Reset Day",    mgrResetTitle:"Reset",    mgrSecKosher:"Kosher Summary",    mgrSecPct:"Percentages",    mgrSecWorkers:"Slaughterers",    mgrSecInspectors:"Inspectors / Supervisors",    mgrSecFarmSum:"Count by Farm",    mgrSecAnimal:"By Animal Type",    mgrSecPie:"Kosher Chart",    mgrSecBar:"Slaughter by Hour",    mgrSecTrend:"Weekly Trend",    mgrSubReprint:"Reprints",    mgrSubErrors:"Errors",    mgrSubAi:"AI Assistant",    mgrAiTitle:"AI Assistant",    mgrAiBtn:"AI — Analyze Problems",    mgrAiSend:"Send",    mgrClearLog:"Clear",    mgrSecLive:"Live Monitor",    mgrSecProgress:"Daily Progress",    mgrSecSearch:"Search Animal",    mgrSearchBtn:"Search",    mgrSecProblems:"Problem Reports",    mgrScreensTitle:"Supervision Screens",    mgrTabMonitor:"Monitor",    mgrTabSettings:"Settings",    mgrTabSummaries:"Summaries",    mgrTabReports:"Reports",    mgrTabLog:"Log",    mgrSubScreens:"Screens",    mgrSubFunctions:"Functions",    mgrSubUsers:"Users",    mgrSubSystem:"System",    mgrSubKosher:"Kosher",    mgrSubWorkers:"Workers",    mgrSubFarms:"Farms",    mgrSubAnimals:"Animal Types",    mgrSubPie:"Pie",    mgrSubHourly:"Hourly",    mgrSubTrend:"Trend",    mgrSecDaily:"Daily Intake",    lgTitle:"Legs / Head Inspector",    loginBtn:"Enter System",    sys:"Connected",    slTitle:"Slaughter Screen",    partsSubTitle:"Tongue & Cheeks — Scan",    scanPrompt:"Scan or tap number",    stampsScanPromptTxt:"Scan animal QR",    stampsSubTitle:"QR → 5 Kosher Stickers",    partsD:"Tongue & Cheeks",    stampsTitle:"Stamps",    stampsD:"5 stickers per animal",    esoTitle:"Esophagus Check",    esoDesc:"Supervisor — Nevela disqualification",
+  en:{brand:"Kosher Slaughter System",online:"Connected",sync:"Sync Active",mgmt:"MANAGEMENT",work:"WORK SCREENS",mgr:"Team Leader",mgrD:"Full control, settings, summaries",sl:"Slaughter",slD:"Slaughtered / Nevela / Shot",lg:"Legs / Head",lgD:"Initial stickers",inner:"Inner Inspector",innerD:"Lung check",outer:"Outer Inspector",outerD:"Final ruling",parts:"Small Parts",soon:"Soon",ready:"Ready",syncInfo:"BroadcastChannel — Real-time sync",reset:"Reset Day",slS:"Slaughtered",slN:"Nevela",slSh:"Shot",slTot:"Total",lgWaiting:"Waiting",lgDone:"Done",lgNev:"Nevela",lgTot:"Total",inWaiting:"Waiting",inDone:"To outer",inTreif:"Treif",inTot:"Total",outPend:"Pending",outTr:"Treif",mawSub:"Maw Check",rumenLabel:"Rumen Check (S.A.)",mawK:"Kosher",mawT:"Treif",lungSub:"Mark what you felt",flip:"Flip",lTreif:"Treif",lConfirm:"Confirm to Outer",decSub:"Issue final kosher ruling",dGlatt:"Glatt",dBeit:"Beit Yosef",dKosher:"Kosher",dMk:"MK",dTreif:"Treif",nsTitle:"Cannot Skip!",nsDesc:"Must follow the order.",wTitle:"Change Status",wCancel:"Cancel",tap:"Tap to edit",stSlaughtered:"Slaughtered",stDone:"Done",stTreif:"Treif",stPending:"Pending",stGlatt:"Glatt",stBeit:"B.Y.",stKosher:"Kosher",stMk:"MK",stNev:"Nevela",welcome:"Welcome",    mgrFuncSlaughter:"Slaughter",    mgrFuncLegs:"Legs",    mgrFuncInspection:"Inspection",    mgrFuncParts:"Small Parts",    mgrFuncStamps:"Stamps",    mgrFuncCooler:"Cooler",    mgrBeepLabel:"Slaughter Beep",    mgrBeepSec:"Seconds",    mgrLegsMode:"Print mode:",    mgrLegsStickers:"Leg stickers:",    mgrHeadStickers:"Head stickers:",    mgrPartsStickers:"Stickers per animal:",    mgrPartsDefault:"Default: 3 (2 cheeks + 1 tongue)",    mgrStampsStickers:"Stickers per animal:",    mgrFloatLabel:"Floating Windows",    mgrLungLabel:"Lung Check",    mgrMawLabel:"Maw Check",    mgrRumenLabel:"Rumen Check",    mgrRumenSub:"South America",    mgrLoginMode:"Login mode:",    mgrNoLogin:"None",    mgrNameOnly:"Name only",    mgrCodeOnly:"Code only",    mgrNameCode:"Name + Code",    mgrAddUser:"+ Add User",    mgrSecLicense:"License",    mgrLicStatus:"Status",    mgrLicExpiry:"Expiry",    mgrDailyTarget:"Daily target",    mgrAnimalType:"Animal type:",    mgrCattle:"Cattle",    mgrSheep:"Sheep",    mgrMixed:"Mixed",    mgrSecFarmsTitle:"Farms",    mgrAddFarm:"+ Add Farm",    mgrSecStickers:"Sticker Settings",    mgrStickerSize:"Sticker size (mm):",    mgrSealTitle:"Kosher Seals for Stickers:",    mgrSecLungImg:"Lung Image",    mgrLungDesc:"Shown to inspectors — replaceable",    mgrLungReset:"↩ Reset to Default",    mgrSecStatuses:"Kosher Statuses",    mgrStatusNote:"Disabling removes from all screens",    mgrResetBtn:"Reset Day",    mgrResetTitle:"Reset",    mgrSecKosher:"Kosher Summary",    mgrSecPct:"Percentages",    mgrSecWorkers:"Slaughterers",    mgrSecInspectors:"Inspectors / Supervisors",    mgrSecFarmSum:"Count by Farm",    mgrSecAnimal:"By Animal Type",    mgrSecPie:"Kosher Chart",    mgrSecBar:"Slaughter by Hour",    mgrSecTrend:"Weekly Trend",    mgrSubReprint:"Reprints",    mgrSubErrors:"Errors",    mgrSubAi:"AI Assistant",    mgrAiTitle:"AI Assistant",    mgrAiBtn:"AI — Analyze Problems",    mgrAiSend:"Send",    mgrClearLog:"Clear",    mgrSecLive:"Live Monitor",    mgrSecProgress:"Daily Progress",    mgrSecSearch:"Search Animal",    mgrSearchBtn:"Search",    mgrSecProblems:"Problem Reports",    mgrScreensTitle:"Supervision Screens",    mgrTabMonitor:"Monitor",    mgrTabSettings:"Settings",    mgrTabSummaries:"Summaries",    mgrTabReports:"Reports",    mgrTabLog:"Log",    mgrSubScreens:"Screens",    mgrSubFunctions:"Functions",    mgrSubUsers:"Users",    mgrSubSystem:"System",    mgrSubKosher:"Kosher",    mgrSubWorkers:"Workers",    mgrSubFarms:"Farms",    mgrSubAnimals:"Animal Types",    mgrSubPie:"Pie",    mgrSubHourly:"Hourly",    mgrSubTrend:"Trend",    mgrSecDaily:"Daily Intake",    lgTitle:"Legs / Head Inspector",    loginBtn:"Enter System",    sys:"Connected",    slTitle:"Slaughter Screen",    partsSubTitle:"Tongue & Cheeks — Scan",    scanPrompt:"Scan or tap number",    stampsScanPromptTxt:"Scan animal QR",    stampsSubTitle:"QR → Kosher Stickers",    partsD:"Tongue & Cheeks",    stampsTitle:"Stamps",    stampsD:"Stamps and kosher stickers",    esoTitle:"Esophagus Check",    esoDesc:"Supervisor — Nevela disqualification",
         perDay:"Day",    perWeek:"Week",    perMonth:"Month",    perYear:"Year",    defineUsers:"Define users in Settings",    noWorkers:"No workers defined",
         slaughtered:"Slaughtered",
     nevela:"Nevela",
@@ -6164,10 +6273,10 @@ const T={
     mgrSecInspectors:"Inspectors",mgrSecFarmSum:"Count by Farm",mgrSecAnimal:"By Animal Type",
     mgrSecPie:"Kosher Chart",mgrSecBar:"Slaughter by Hour",mgrSecTrend:"Weekly Trend",
     mgrAiTitle:"AI Assistant",
-    loginBtn:"Enter System",partsSubTitle:"Tongue & Cheeks — Scan",stampsSubTitle:"QR ← 5 Stickers",
+    loginBtn:"Enter System",partsSubTitle:"Tongue & Cheeks — Scan",stampsSubTitle:"QR ← Kosher Stickers",
     scanPrompt:"Scan barcode or tap number",stampsScanPromptTxt:"Scan animal QR",
     slTitle:"Slaughter Screen",lgTitle:"Legs / Head Inspector",inTitle:"Inner Inspector",outTitle:"Outer Inspector"},
-  es:{brand:"Sistema Matanza Kosher",online:"Conectado",sync:"Sincronización Activa",mgmt:"GESTIÓN",work:"PANTALLAS",mgr:"Jefe de equipo",mgrD:"Control total, configuración",sl:"Matanza",slD:"Sacrificado / Nevela / Baleado",lg:"Patas / Cabeza",lgD:"Etiquetas iniciales",inner:"Inspector Interno",innerD:"Revisión pulmón",outer:"Inspector Externo",outerD:"Fallo final",parts:"Partes Pequeñas",soon:"Próximo",ready:"Listo",syncInfo:"BroadcastChannel — Sincronización",reset:"Resetear Día",slS:"Faenado",slN:"Nevela",slSh:"Baleado",slTot:"Total",lgWaiting:"Esperando",lgDone:"Listo",lgNev:"Nevela",lgTot:"Total",inWaiting:"Esperando",inDone:"Al externo",inTreif:"Treif",inTot:"Total",outPend:"Esperando",outTr:"Treif",mawSub:"Revisión Cuajar",rumenLabel:"Revisión Panza (A.S.)",mawK:"Kosher",mawT:"Treif",lungSub:"Marque lo que sintió",flip:"Voltear",lTreif:"Treif",lConfirm:"Confirmar al Externo",decSub:"Emitir fallo kosher final",dGlatt:"Glatt",dBeit:"Beit Yosef",dKosher:"Kosher",dMk:"MK",dTreif:"Treif",nsTitle:"No se puede saltar!",nsDesc:"Debe seguir el orden.",wTitle:"Cambiar Estado",wCancel:"Cancelar",tap:"Toca para editar",stSlaughtered:"Sacrificado",stDone:"Listo",stTreif:"Treif",stPending:"Pendiente",stGlatt:"Glatt",stBeit:"B.Y.",stKosher:"Kosher",stMk:"MK",stNev:"Nevela",welcome:"Bienvenido",    mgrFuncSlaughter:"Matanza",    mgrFuncLegs:"Patas",    mgrFuncInspection:"Inspección",    mgrFuncParts:"Partes Peq.",    mgrFuncStamps:"Sellos",    mgrFuncCooler:"Cámara",    mgrBeepLabel:"Pitido",    mgrBeepSec:"Segundos",    mgrLegsMode:"Modo impresión:",    mgrLegsStickers:"Etiquetas patas:",    mgrHeadStickers:"Etiquetas cabeza:",    mgrPartsStickers:"Etiquetas/animal:",    mgrPartsDefault:"Predeterminado: 3",    mgrStampsStickers:"Etiquetas/animal:",    mgrFloatLabel:"Ventanas flotantes",    mgrLungLabel:"Revisión pulmón",    mgrMawLabel:"Revisión cuajar",    mgrRumenLabel:"Revisión panza",    mgrRumenSub:"América del Sur",    mgrLoginMode:"Modo acceso:",    mgrNoLogin:"Sin acceso",    mgrNameOnly:"Solo nombre",    mgrCodeOnly:"Solo código",    mgrNameCode:"Nombre + Código",    mgrAddUser:"+ Agregar Usuario",    mgrSecLicense:"Licencia",    mgrLicStatus:"Estado",    mgrLicExpiry:"Vencimiento",    mgrDailyTarget:"Meta diaria",    mgrAnimalType:"Tipo animal:",    mgrCattle:"Vacuno",    mgrSheep:"Ovino",    mgrMixed:"Mixto",    mgrSecFarmsTitle:"Granjas",    mgrAddFarm:"+ Agregar Granja",    mgrSecStickers:"Etiquetas",    mgrStickerSize:"Tamaño etiqueta (mm):",    mgrSealTitle:"Sellos Kosher para Etiquetas:",    mgrSecLungImg:"Imagen Pulmón",    mgrLungDesc:"Mostrado a inspectores — reemplazable",    mgrLungReset:"↩ Restablecer",    mgrSecStatuses:"Estados Kosher",    mgrStatusNote:"Deshabilitar elimina de todas las pantallas",    mgrResetBtn:"Reiniciar Día",    mgrResetTitle:"Reiniciar",    mgrSecKosher:"Resumen Kosher",    mgrSecPct:"Porcentajes",    mgrSecWorkers:"Matarifes",    mgrSecInspectors:"Inspectores",    mgrSecFarmSum:"Por Granja",    mgrSecAnimal:"Por Animal",    mgrSecPie:"Gráfico",    mgrSecBar:"Por Hora",    mgrSecTrend:"Tendencia",    mgrSubReprint:"Reimpresiones",    mgrSubErrors:"Errores",    mgrSubAi:"Asistente AI",    mgrAiTitle:"Asistente AI",    mgrAiBtn:"AI — Analizar",    mgrAiSend:"Enviar",    mgrClearLog:"Limpiar",    mgrSecLive:"Monitor en Vivo",    mgrSecProgress:"Progreso",    mgrSecSearch:"Buscar Animal",    mgrSearchBtn:"Buscar",    mgrSecProblems:"Reportes",    mgrScreensTitle:"Pantallas de Supervisión",    mgrTabMonitor:"Monitor",    mgrTabSettings:"Ajustes",    mgrTabSummaries:"Resúmenes",    mgrTabReports:"Informes",    mgrTabLog:"Registro",    mgrSubScreens:"Pantallas",    mgrSubFunctions:"Funciones",    mgrSubUsers:"Usuarios",    mgrSubSystem:"Sistema",    mgrSubKosher:"Kosher",    mgrSubWorkers:"Trabajadores",    mgrSubFarms:"Granjas",    mgrSubAnimals:"Animales",    mgrSubPie:"Pastel",    mgrSubHourly:"Por Hora",    mgrSubTrend:"Tendencia",    mgrSecDaily:"Ingreso Diario",    lgTitle:"Inspector Patas/Cabeza",    loginBtn:"Entrar al Sistema",    sys:"Conectado",    slTitle:"Pantalla Matanza",    partsSubTitle:"Lengua y Mejillas",    scanPrompt:"Escanear o tocar",    stampsScanPromptTxt:"Escanear QR animal",    stampsSubTitle:"QR → 5 Sellos",    partsD:"Lengua y Mejillas",    stampsTitle:"Sellos",    stampsD:"5 etiquetas por animal",    esoTitle:"Revisión Esófago",    esoDesc:"Supervisor — Descalificación Nevela",
+  es:{brand:"Sistema Matanza Kosher",online:"Conectado",sync:"Sincronización Activa",mgmt:"GESTIÓN",work:"PANTALLAS",mgr:"Jefe de equipo",mgrD:"Control total, configuración",sl:"Matanza",slD:"Sacrificado / Nevela / Baleado",lg:"Patas / Cabeza",lgD:"Etiquetas iniciales",inner:"Inspector Interno",innerD:"Revisión pulmón",outer:"Inspector Externo",outerD:"Fallo final",parts:"Partes Pequeñas",soon:"Próximo",ready:"Listo",syncInfo:"BroadcastChannel — Sincronización",reset:"Resetear Día",slS:"Faenado",slN:"Nevela",slSh:"Baleado",slTot:"Total",lgWaiting:"Esperando",lgDone:"Listo",lgNev:"Nevela",lgTot:"Total",inWaiting:"Esperando",inDone:"Al externo",inTreif:"Treif",inTot:"Total",outPend:"Esperando",outTr:"Treif",mawSub:"Revisión Cuajar",rumenLabel:"Revisión Panza (A.S.)",mawK:"Kosher",mawT:"Treif",lungSub:"Marque lo que sintió",flip:"Voltear",lTreif:"Treif",lConfirm:"Confirmar al Externo",decSub:"Emitir fallo kosher final",dGlatt:"Glatt",dBeit:"Beit Yosef",dKosher:"Kosher",dMk:"MK",dTreif:"Treif",nsTitle:"No se puede saltar!",nsDesc:"Debe seguir el orden.",wTitle:"Cambiar Estado",wCancel:"Cancelar",tap:"Toca para editar",stSlaughtered:"Sacrificado",stDone:"Listo",stTreif:"Treif",stPending:"Pendiente",stGlatt:"Glatt",stBeit:"B.Y.",stKosher:"Kosher",stMk:"MK",stNev:"Nevela",welcome:"Bienvenido",    mgrFuncSlaughter:"Matanza",    mgrFuncLegs:"Patas",    mgrFuncInspection:"Inspección",    mgrFuncParts:"Partes Peq.",    mgrFuncStamps:"Sellos",    mgrFuncCooler:"Cámara",    mgrBeepLabel:"Pitido",    mgrBeepSec:"Segundos",    mgrLegsMode:"Modo impresión:",    mgrLegsStickers:"Etiquetas patas:",    mgrHeadStickers:"Etiquetas cabeza:",    mgrPartsStickers:"Etiquetas/animal:",    mgrPartsDefault:"Predeterminado: 3",    mgrStampsStickers:"Etiquetas/animal:",    mgrFloatLabel:"Ventanas flotantes",    mgrLungLabel:"Revisión pulmón",    mgrMawLabel:"Revisión cuajar",    mgrRumenLabel:"Revisión panza",    mgrRumenSub:"América del Sur",    mgrLoginMode:"Modo acceso:",    mgrNoLogin:"Sin acceso",    mgrNameOnly:"Solo nombre",    mgrCodeOnly:"Solo código",    mgrNameCode:"Nombre + Código",    mgrAddUser:"+ Agregar Usuario",    mgrSecLicense:"Licencia",    mgrLicStatus:"Estado",    mgrLicExpiry:"Vencimiento",    mgrDailyTarget:"Meta diaria",    mgrAnimalType:"Tipo animal:",    mgrCattle:"Vacuno",    mgrSheep:"Ovino",    mgrMixed:"Mixto",    mgrSecFarmsTitle:"Granjas",    mgrAddFarm:"+ Agregar Granja",    mgrSecStickers:"Etiquetas",    mgrStickerSize:"Tamaño etiqueta (mm):",    mgrSealTitle:"Sellos Kosher para Etiquetas:",    mgrSecLungImg:"Imagen Pulmón",    mgrLungDesc:"Mostrado a inspectores — reemplazable",    mgrLungReset:"↩ Restablecer",    mgrSecStatuses:"Estados Kosher",    mgrStatusNote:"Deshabilitar elimina de todas las pantallas",    mgrResetBtn:"Reiniciar Día",    mgrResetTitle:"Reiniciar",    mgrSecKosher:"Resumen Kosher",    mgrSecPct:"Porcentajes",    mgrSecWorkers:"Matarifes",    mgrSecInspectors:"Inspectores",    mgrSecFarmSum:"Por Granja",    mgrSecAnimal:"Por Animal",    mgrSecPie:"Gráfico",    mgrSecBar:"Por Hora",    mgrSecTrend:"Tendencia",    mgrSubReprint:"Reimpresiones",    mgrSubErrors:"Errores",    mgrSubAi:"Asistente AI",    mgrAiTitle:"Asistente AI",    mgrAiBtn:"AI — Analizar",    mgrAiSend:"Enviar",    mgrClearLog:"Limpiar",    mgrSecLive:"Monitor en Vivo",    mgrSecProgress:"Progreso",    mgrSecSearch:"Buscar Animal",    mgrSearchBtn:"Buscar",    mgrSecProblems:"Reportes",    mgrScreensTitle:"Pantallas de Supervisión",    mgrTabMonitor:"Monitor",    mgrTabSettings:"Ajustes",    mgrTabSummaries:"Resúmenes",    mgrTabReports:"Informes",    mgrTabLog:"Registro",    mgrSubScreens:"Pantallas",    mgrSubFunctions:"Funciones",    mgrSubUsers:"Usuarios",    mgrSubSystem:"Sistema",    mgrSubKosher:"Kosher",    mgrSubWorkers:"Trabajadores",    mgrSubFarms:"Granjas",    mgrSubAnimals:"Animales",    mgrSubPie:"Pastel",    mgrSubHourly:"Por Hora",    mgrSubTrend:"Tendencia",    mgrSecDaily:"Ingreso Diario",    lgTitle:"Inspector Patas/Cabeza",    loginBtn:"Entrar al Sistema",    sys:"Conectado",    slTitle:"Pantalla Matanza",    partsSubTitle:"Lengua y Mejillas",    scanPrompt:"Escanear o tocar",    stampsScanPromptTxt:"Escanear QR animal",    stampsSubTitle:"QR → Etiquetas kosher",    partsD:"Lengua y Mejillas",    stampsTitle:"Sellos",    stampsD:"Sellos y etiquetas kosher",    esoTitle:"Revisión Esófago",    esoDesc:"Supervisor — Descalificación Nevela",
         perDay:"Día",    perWeek:"Semana",    perMonth:"Mes",    perYear:"Año",    defineUsers:"Definir usuarios en Ajustes",    noWorkers:"Sin trabajadores definidos",
         slaughtered:"Sacrificado",
     nevela:"Nevela",
@@ -7634,7 +7743,8 @@ function _lgRole(){
 // v10.35 (owner): sorting is for the LEGS — no legs screen (switched off) or the head screen → no sorting at all,
 // and only a number that got its leg stickers is sorted
 function _lgSortOn(){ const s=KS.getSettings(); const r=_lgRole();
-  return s.legsSortEnabled===true && s.legsMode!==false && s.legsPaused!==true && (r==='both' || r==='legs'); }
+  return s.legsSortEnabled===true && s.legsMode!==false && s.legsPaused!==true && (r==='both' || r==='legs') && _gtLegsSortAt()==='legs'; }
+function _gtSortFocus(){ if(_gtLegsSortAt()==='parts'){ try{ focusScan(); }catch(e){} } else { const i=document.getElementById('lgScanInput'); if(i) i.focus(); } }
 function _lgSortable(x){ return isKosherReady(x) && !!x.legsStickers; }
 function _lgSortBar(){ const mb=document.getElementById('lgModeBar'); const on=_lgSortOn();
   if(mb) mb.style.display=on?'flex':'none';
@@ -7990,7 +8100,7 @@ function lgProcessSort(code){
     return;
   }
   // v10.26: USDA hold / an open "?"
-  {const _h=gtHeldAt(idx,'legs');
+  {const _h=gtHeldAt(idx,_gtLegsSortAt());   // v10.38: the sorting station's holds
    if(_h){ lgShowWarn(_h.kind==='usda'?(_h.resolution==='condemned'?L('נפסל USDA','USDA condemned','Condenado USDA'):'USDA HOLD'):L('? שאלה','? Question','? Pregunta'), L('רגל #','Leg #','Pata #')+(idx+1)+L(' — מעוכבת, לא למיין',' — held, do not sort',' — retenida, no clasificar')); return; }
    if(_gtSlQx(a)){ lgShowWarn(L('? שאלה בשחיטה','? Slaughter question','? Pregunta de faena'), L('רגל #','Leg #','Pata #')+(idx+1)+L(' — עוד לא נפסק בשחיטה',' — not ruled at slaughter yet',' — aún sin dictamen de faena')); return; }}
   // Not kosher: nevela, shot, treif
@@ -8007,7 +8117,7 @@ function lgProcessSort(code){
     );return;
   }
   // v10.35: sorting only on a working legs screen, and only a number that got its leg stickers
-  if(!_lgSortOn()){ lgShowWarn(L('אין מיון','No sorting','Sin clasificación'), L('מסך הרגליים כבוי — אין רגליים למיין','The legs screen is off — no legs to sort','Pantalla de patas apagada — nada que clasificar')); return; }
+  if(!(_gtLegsSortAt()==='parts'?_gtPartsSortOn():_lgSortOn())){ lgShowWarn(L('אין מיון','No sorting','Sin clasificación'), L('מסך הרגליים כבוי — אין רגליים למיין','The legs screen is off — no legs to sort','Pantalla de patas apagada — nada que clasificar')); return; }
   if(!a.legsStickers && !a.legsSorted && isKosherReady(a)){ lgShowWarn(L('אין רגליים','No legs','Sin patas'), L('רגל #','Leg #','Pata #')+(idx+1)+L(' — לא הודפסו מדבקות רגליים',' — no leg stickers were printed',' — sin etiquetas de patas')); return; }
   // No outer ruling yet
   if(!isKosherReady(a)){
@@ -8022,7 +8132,7 @@ function lgProcessSort(code){
 
 function lgShowStatus(idx,status){
   // Mark as sorted
-  KS.setLegsSorted(idx);lgSortManualPage=false;lgSortRenderGrid();
+  KS.setLegsSorted(idx);lgSortManualPage=false;lgSortRenderGrid();try{ if(_gtLegsSortAt()==='parts') partsRenderGrid(); }catch(e){}
   const labels={glatt:'גלאט',beit:'בית יוסף',kosher:'כשר',mk:'MK'};
   const colors={glatt:'var(--glatt)',beit:'var(--beit)',kosher:'var(--kosher)',mk:'var(--mk)'};
   // include custom statuses
@@ -8038,7 +8148,7 @@ function lgShowStatus(idx,status){
   modal.querySelector('div').style.borderColor=color;
   modal.style.display='flex';
   // Auto-close after 1.5s
-  setTimeout(()=>{modal.style.display='none';const i=document.getElementById('lgScanInput');if(i)i.focus();},1500);
+  setTimeout(()=>{modal.style.display='none';_gtSortFocus();},1500);
 }
 
 function lgShowWarn(title,desc){
@@ -8046,7 +8156,7 @@ function lgShowWarn(title,desc){
   document.getElementById('lgWarnDesc').textContent=desc||'';
   const modal=document.getElementById('lgWarnModal');
   modal.style.display='flex';
-  setTimeout(()=>{modal.style.display='none';const i=document.getElementById('lgScanInput');if(i)i.focus();},2000);
+  setTimeout(()=>{modal.style.display='none';_gtSortFocus();},2000);
 }
 
 function lgRenderGrid(){
@@ -8126,7 +8236,7 @@ function buildStickerPayload(idx){
 }
 // Render a visual sticker into a container. kind: 'legs'|'head'|'kosher'
 // If sample=true, render an example sticker (number 1, today, sample status).
-function renderSticker(containerId,idx,kind,sample){
+function renderSticker(containerId,idx,kind,sample,piece){   // v10.38: piece = {pid, i, name} — the part on a kosher sticker
   const cont=document.getElementById(containerId);
   if(!cont)return;
   const s=KS.getSettings();
@@ -8144,7 +8254,7 @@ function renderSticker(containerId,idx,kind,sample){
       const a=KS.getAnimal(idx);
       stRaw=a?_stickerStatus(a):null;
       shochet=(a&&a.slaughteredBy)||''; slTime=(a&&a.slaughterTime)?new Date(a.slaughterTime):null;
-      try{payload=buildStickerPayload(idx);}catch(e){payload='N:'+num;}
+      try{payload=(piece&&piece.pid)?buildPieceStickerPayload(idx,piece.pid,piece.i):buildStickerPayload(idx);}catch(e){payload='N:'+num;}
     }
     // every sticker carries the status in Hebrew AND English: [Hebrew, color, English]
     const stMap={glatt:['גלאט','#28C76F','Glatt'],beit:['בית יוסף','#4DA6FF','Beit Yosef'],kosher:['כשר','#D4A843','Kosher'],mk:['MK','#A080F0','MK'],rabChalak:['רבנות חלק','#16A085','Rabbinate Chalak'],treif:['טרף','#E03030','Treif'],slaughtered:['נשחט','#2A7FFF','Slaughtered'],notChalak:['לא חלק','#C99A00','Non-Chalak'],nevela:['נבלה','#E03030','Nevela'],shot:['נבלה','#E03030','Nevela']};
@@ -8174,6 +8284,7 @@ function renderSticker(containerId,idx,kind,sample){
     <div data-no-i18n style="background:#fff;color:#000;border:2px solid #000;border-radius:6px;padding:${Math.round(8*scale)}px ${Math.round(10*scale)}px;width:${W}px;min-height:${minH}px;display:flex;flex-wrap:wrap;gap:${Math.round(8*scale)}px;align-items:center;align-content:center;font-family:sans-serif;direction:rtl;box-sizing:border-box;">
       <div style="flex:1;text-align:center;">
         <div style="font-size:${numFS}px;font-weight:900;line-height:1;">${num}</div>
+        ${(piece&&piece.name)?`<div style="font-size:${Math.round(11*scale)}px;font-weight:800;margin-top:2px;">${escapeHtml(piece.name)}</div>`:''}
         ${heb?`<div style="font-size:${dateFS}px;color:#333;margin-top:3px;">${heb}</div>`:''}
         ${greg?`<div style="font-size:${dateFS}px;color:#333;" dir="ltr">${greg}</div>`:''}
         ${kind!=='kosher'&&slTime?`<div style="font-size:${dateFS}px;color:#000;" dir="ltr">${String(slTime.getHours()).padStart(2,'0')}:${String(slTime.getMinutes()).padStart(2,'0')}</div>`:''}
@@ -10034,6 +10145,8 @@ async function gtAnimalCard(date, n){
   const d = r && !r.error && r.data;
   if(!d || !d.ok){ m.innerHTML = shell('<div style="font-size:14px;">' + escapeHtml(gtErrText((d && d.error) || (r && r.error) || 'server_error')) + '</div>'); return; }
   const x = Object.assign({}, d.row || {}), c = d.carry || null;
+  var _gtNkCard = null;
+  if(d.live){ try{ const nr = await _withTimeout(window.sb.rpc('nikur_board'), 6000); if(nr && nr.data && nr.data.ok) _gtNkCard = nr.data.pieces || []; }catch(e){} }
   if(c) ['legs_stickers', 'head_stickers', 'legs_sorted', 'parts_scanned', 'tongue_sticker', 'cheek_sticker', 'parts_print_count', 'parts_printed_as', 'stamped', 'stamped_as',
          'weight_right', 'weight_left', 'weight_stage2', 'weight_stage3', 'weight_right_skipped', 'weight_left_skipped'].forEach(k => { if(c[k] != null) x[k] = c[k]; });
   const E = escapeHtml, tm = v => v ? new Date(Number(v)).toLocaleString(lang === 'he' ? 'he-IL' : 'en-GB', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
@@ -10064,6 +10177,9 @@ async function gtAnimalCard(date, n){
       [x.legs_stickers ? L('מדבקות רגלים', 'leg stickers', 'etiquetas patas') : '', x.head_stickers ? L('מדבקות ראש', 'head stickers', 'etiquetas cabeza') : '', x.legs_sorted ? L('מוין', 'sorted', 'clasificado') : ''].filter(Boolean).join(' · '), '');
     h += stage(Number(x.parts_print_count) > 0 || !!x.parts_scanned, L('חלקים קטנים', 'Small parts', 'Partes'), x.parts_printed_as ? nm(x.parts_printed_as) : '', Number(x.parts_print_count) > 0 ? L('הודפס ', 'printed ', 'impreso ') + x.parts_print_count + L(' פעמים', ' times', ' veces') : '');
     h += stage(!!x.stamped, L('חותמות', 'Stamps', 'Sellos'), x.stamped_as ? nm(x.stamped_as) : '', '');
+    if(d.live && _gtNkCard){ const pc = _gtNkCard.filter(q => q.n === n + 1);     // v10.38: the nikur
+      h += stage(pc.length > 0, L('ניקור', 'Nikur', 'Nikur'), pc.length ? pc.length + ' ' + L('חתיכות', 'pieces', 'piezas') : '',
+        pc.map(q => (gtProductName(gtProducts().find(p => p.id === q.p)) || q.p) + (q.i > 1 ? ' ' + q.i : '') + ' · ' + new Date(q.at).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' }) + (q.by ? ' · ' + q.by : '')).join(' | ')); }
     h += stage(kg > 0, L('משקל', 'Weight', 'Peso'), kg > 0 ? _gtNum(kg, 1) + ' ' + L('ק״ג', 'kg', 'kg') : '',
       [x.weight_right ? L('ימין ', 'right ', 'der. ') + _gtNum(x.weight_right, 1) : (x.weight_right_skipped ? L('ימין דולג', 'right skipped', 'der. omitido') : ''), x.weight_left ? L('שמאל ', 'left ', 'izq. ') + _gtNum(x.weight_left, 1) : (x.weight_left_skipped ? L('שמאל דולג', 'left skipped', 'izq. omitido') : ''),
        x.weight_stage2 ? L('שלב 2: ', 'stage 2: ', 'etapa 2: ') + _gtNum(x.weight_stage2, 1) : '', x.weight_stage3 ? L('שלב 3: ', 'stage 3: ', 'etapa 3: ') + _gtNum(x.weight_stage3, 1) : ''].filter(Boolean).join(' · '));
@@ -11364,23 +11480,27 @@ function mgrMoveIntake(i,dir){
 // avg:  average weight per animal, kg (for the estimated weights)
 // The head / legs sticker counts are derived from this list (also on the server, push_settings).
 const GT_DEFAULT_PRODUCTS=[
-  {id:'tongue',   he:'לשון',         en:'Tongue',        es:'Lengua',          on:true,  pre:'head', n:1, post:'parts',  avg:null, builtin:true},
-  {id:'cheeks',   he:'לחיים',        en:'Cheeks',        es:'Mejillas',        on:true,  pre:'head', n:2, post:'parts',  avg:null, builtin:true},
-  {id:'sides',    he:'צדדים',        en:'Sides',         es:'Lados',           on:true,  pre:'head', n:2, post:'stamps', avg:null, builtin:true},
-  {id:'lung',     he:'ריאה',         en:'Lung',          es:'Pulmón',          on:true,  pre:'head', n:1, post:'none',   avg:null, builtin:true},
-  {id:'hook',     he:'קרס',          en:'Hook',          es:'Gancho',          on:true,  pre:'head', n:1, post:'none',   avg:null, builtin:true},
-  {id:'legs',     he:'רגליים',       en:'Legs',          es:'Patas',           on:true,  pre:'legs', n:2, post:'legs',   avg:null, builtin:true},
-  {id:'tail',     he:'זנב',          en:'Tail',          es:'Cola',            on:false, pre:'head', n:1, post:'stamps', avg:null, builtin:true},
-  {id:'liver',    he:'כבד',          en:'Liver',         es:'Hígado',          on:false, pre:'head', n:1, post:'none',   avg:null, builtin:true},
-  {id:'skirt_out',he:'Outside Skirt',en:'Outside Skirt', es:'Outside Skirt',   on:false, pre:'none', n:0, post:'stamps', avg:null, builtin:true},
-  {id:'skirt_in', he:'Inside Skirt', en:'Inside Skirt',  es:'Inside Skirt',    on:false, pre:'none', n:0, post:'stamps', avg:null, builtin:true, notGlatt:true},
-  {id:'hanger',   he:'Hanger steak', en:'Hanger steak',  es:'Hanger steak',    on:false, pre:'none', n:0, post:'stamps', avg:null, builtin:true},
+  // pre/n: number stickers (head / legs screen) · post/m: the area and its kosher stickers · nikur: big / small
+  {id:'tongue',   he:'לשון',         en:'Tongue',        es:'Lengua',          on:true,  pre:'head', n:1, post:'parts',  m:1, nikur:'small', avg:null, builtin:true},
+  {id:'cheeks',   he:'לחיים',        en:'Cheeks',        es:'Mejillas',        on:true,  pre:'head', n:2, post:'parts',  m:2, nikur:'small', avg:null, builtin:true},
+  {id:'sides',    he:'צדדים',        en:'Sides',         es:'Lados',           on:true,  pre:'head', n:2, post:'stamps', m:6, nikur:'big',   avg:null, builtin:true},
+  {id:'lung',     he:'ריאה',         en:'Lung',          es:'Pulmón',          on:true,  pre:'head', n:1, post:'none',   m:0, nikur:'none',  avg:null, builtin:true},
+  {id:'hook',     he:'קרס',          en:'Hook',          es:'Gancho',          on:true,  pre:'head', n:1, post:'none',   m:0, nikur:'none',  avg:null, builtin:true},
+  {id:'legs',     he:'רגליים',       en:'Legs',          es:'Patas',           on:true,  pre:'legs', n:2, post:'legs',   m:0, nikur:'none',  avg:null, builtin:true},
+  {id:'tail',     he:'זנב',          en:'Tail',          es:'Cola',            on:false, pre:'none', n:0, post:'stamps', m:1, nikur:'small', avg:null, builtin:true},
+  {id:'liver',    he:'כבד',          en:'Liver',         es:'Hígado',          on:false, pre:'head', n:1, post:'none',   m:0, nikur:'small', avg:null, builtin:true},
+  {id:'skirt_out',he:'Outside Skirt',en:'Outside Skirt', es:'Outside Skirt',   on:false, pre:'none', n:0, post:'stamps', m:1, nikur:'small', avg:null, builtin:true},
+  {id:'skirt_in', he:'Inside Skirt', en:'Inside Skirt',  es:'Inside Skirt',    on:false, pre:'none', n:0, post:'stamps', m:1, nikur:'small', avg:null, builtin:true, notGlatt:true},
+  {id:'hanger',   he:'Hanger steak', en:'Hanger steak',  es:'Hanger steak',    on:false, pre:'none', n:0, post:'stamps', m:1, nikur:'small', avg:null, builtin:true},
 ];
 // (before v10.38 the average weights were kept in partTypes — they carry over to the list)
 const _GT_OLD_PART_IDS={tongue:'tongue',hanger:'hanger',tail:'tail',skirt_out:'skirt_out',skirt_in:'skirt_in'};
 function gtProducts(s){
   s=s||KS.getSettings();
-  if(Array.isArray(s.products)&&s.products.length) return s.products.map(p=>({...p}));
+  if(Array.isArray(s.products)&&s.products.length) return s.products.map(p=>{
+    // (a list saved before stage 2 has no m / nikur yet: the built-in values, or none for the plant's own)
+    const d=GT_DEFAULT_PRODUCTS.find(x=>x.id===p.id)||{m:0,nikur:'none'};
+    return Object.assign({}, p, {m:p.m!=null?p.m:d.m, nikur:p.nikur||d.nikur}); });
   const list=GT_DEFAULT_PRODUCTS.map(p=>({...p}));
   (Array.isArray(s.partTypes)?s.partTypes:[]).forEach(o=>{
     const id=_GT_OLD_PART_IDS[o&&o.id];
@@ -11394,10 +11514,37 @@ function gtProducts(s){
   return list;
 }
 function gtProductCounts(list){
-  const c={headStickerCount:0,legStickerCount:0};
-  (list||[]).forEach(p=>{ if(!p.on)return; const n=Math.max(0,parseInt(p.n)||0);
-    if(p.pre==='head')c.headStickerCount+=n; else if(p.pre==='legs')c.legStickerCount+=n; });
+  const c={headStickerCount:0,legStickerCount:0,stampsCount:0,partsStickerCount:0};
+  (list||[]).forEach(p=>{ if(!p.on)return; const n=Math.max(0,parseInt(p.n)||0), m=Math.max(0,parseInt(p.m)||0);
+    if(p.pre==='head')c.headStickerCount+=n; else if(p.pre==='legs')c.legStickerCount+=n;
+    if(p.post==='stamps')c.stampsCount+=m; else if(p.post==='parts'&&p.id!=='legs')c.partsStickerCount+=m; });
   return c;
+}
+function _gtHasProducts(s){ s=s||KS.getSettings(); return Array.isArray(s.products)&&s.products.length>0; }
+// (stage 2) the kosher stickers an area prints for one animal — before the plant saves a list: as before
+function gtAreaPieces(area){
+  if(!_gtHasProducts()) return area==='parts'
+    ? [{pid:'cheeks',i:1,name:L('לחי 1','Cheek 1','Mejilla 1'),hold:'cheek1'},{pid:'cheeks',i:2,name:L('לחי 2','Cheek 2','Mejilla 2'),hold:'cheek2'},{pid:'tongue',i:1,name:L('לשון','Tongue','Lengua'),hold:'tongue'}]
+    : Array.from({length:Number(KS.getSettings().stampsCount)||5},(_,k)=>({pid:'',i:k+1,name:''}));
+  const out=[];
+  gtProducts().forEach(p=>{ if(!p.on||p.post!==area||p.id==='legs')return; const m=Math.max(0,parseInt(p.m)||0);
+    for(let i=1;i<=m;i++) out.push({pid:p.id,i,name:gtProductName(p)+(m>1?' '+i:''),
+      hold:p.id==='tongue'?'tongue':(p.id==='cheeks'&&i<=2?'cheek'+i:null)}); });
+  return out;
+}
+function gtPartsExpected(){ return gtAreaPieces('parts').length; }
+function gtStampsCount(){ return gtAreaPieces('stamps').length; }
+// where the legs are sorted: the legs screen, or with the small parts
+function _gtLegsSortAt(){ const l=gtProducts().find(p=>p.id==='legs'); return (_gtHasProducts()&&l&&l.post==='parts')?'parts':'legs'; }
+function _gtPartsSortOn(){ const s=KS.getSettings(); return s.legsSortEnabled===true && s.legsMode!==false && s.legsPaused!==true && _gtLegsSortAt()==='parts'; }
+// the payload of one piece's sticker: the animal's code + the part and its piece number (for the nikur scan)
+function buildPieceStickerPayload(idx,pid,i){ const b=buildStickerPayload(idx); return b&&pid ? b+'|P:'+pid+'|I:'+(i||1) : b; }
+// a list of pieces as rows: "name × count"
+function _gtPiecesRowsHtml(list){
+  const g={}; list.forEach(x=>{ const k=x.pid||'_'; (g[k]=g[k]||{n:0,name:x.pid?gtProductName(gtProducts().find(p=>p.id===x.pid))||x.pid:L('מדבקות כשרות','Kosher stickers','Etiquetas kosher')}).n++; });
+  const one=k=>k===1?L('1 מדבקה','1 sticker','1 etiqueta'):L(k+' מדבקות',k+' stickers',k+' etiquetas');
+  return Object.values(g).map(r=>`<div style="display:flex;justify-content:space-between;margin-bottom:4px"><span>${escapeHtml(r.name)}:</span><span style="color:var(--text);font-weight:600">${escapeHtml(one(r.n))}</span></div>`).join('')
+    +`<div style="display:flex;justify-content:space-between;border-top:1px solid var(--border);padding-top:4px"><span>${escapeHtml(L('סה״כ מודפס עכשיו:','Printing now:','Imprimiendo ahora:'))}</span><span style="color:var(--gold);font-weight:800">${escapeHtml(one(list.length))}</span></div>`;
 }
 function gtProductName(p){ return !p?'':(lang==='he'?p.he:lang==='es'?(p.es||p.en||p.he):(p.en||p.he)); }
 // the same rules as the server (_products_error) — said here, before saving
@@ -11407,6 +11554,7 @@ function _gtProductsProblem(list){
   const c=gtProductCounts(list);
   if(c.headStickerCount<1) return L('מסך הראש מדפיס לפחות מדבקת מספר אחת.','The head screen prints at least one number sticker.','La pantalla de cabeza imprime al menos una etiqueta de número.');
   if(c.headStickerCount>30) return L('יותר מדי מדבקות ראש (עד 30).','Too many head stickers (30 at most).','Demasiadas etiquetas de cabeza (máximo 30).');
+  if(legs.post!=='legs'&&legs.post!=='parts') return L('את הרגליים ממיינים במסך הרגליים או בחלקים הקטנים.','The legs are sorted on the legs screen or with the small parts.','Las patas se clasifican en la pantalla de patas o con las partes pequeñas.');
   return null;
 }
 function _gtSaveProducts(list){
@@ -11421,7 +11569,9 @@ function mgrSetProduct(id,field,val){
   if(field==='on') p.on=!p.on;
   else if(field==='n') p.n=Math.min(20,Math.max(0,parseInt(val)||0));
   else if(field==='pre'){ p.pre=['head','legs','none'].includes(val)?val:'none'; if(p.pre==='none')p.n=0; else if(!(p.n>0))p.n=1; }
-  else if(field==='post') p.post=['parts','stamps','legs','none'].includes(val)?val:'none';
+  else if(field==='post'){ p.post=['parts','stamps','legs','none'].includes(val)?val:'none'; if(p.post==='none'||p.id==='legs')p.m=0; else if(!(p.m>0))p.m=1; }
+  else if(field==='m') p.m=Math.min(20,Math.max(0,parseInt(val)||0));
+  else if(field==='nikur') p.nikur=['big','small','none'].includes(val)?val:'none';
   else if(field==='avg'){ const v=String(val).trim().replace(',','.'); p.avg=v===''?null:Math.min(1000,Math.max(0,Number(v)||0)); }
   else if(field==='notGlatt') p.notGlatt=!!val;
   _gtSaveProducts(list);
@@ -11431,7 +11581,7 @@ function mgrAddProduct(){
   const name=he.trim()||en.trim(); if(!name){ alert(L('חובה למלא שם','Name required','El nombre es obligatorio')); return; }
   const list=gtProducts();
   if(list.some(p=>[p.he,p.en].some(x=>String(x||'').trim()===name))){ alert(L('יש כבר חלק בשם הזה.','A cut with this name already exists.','Ya existe un corte con ese nombre.')); return; }
-  list.push({id:'p_'+Date.now().toString(36),he:name.slice(0,80),en:en.trim().slice(0,80),es:'',on:true,pre:'none',n:0,post:'none',avg:null});
+  list.push({id:'p_'+Date.now().toString(36),he:name.slice(0,80),en:en.trim().slice(0,80),es:'',on:true,pre:'none',n:0,post:'none',m:0,nikur:'none',avg:null});
   if(_gtSaveProducts(list)){ ['newProductHe','newProductEn'].forEach(k=>{const e=document.getElementById(k);if(e)e.value='';}); }
 }
 function mgrRemoveProduct(id){
@@ -11444,7 +11594,8 @@ function mgrGoProducts(){
 }
 function _gtProductCountsText(){
   const c=gtProductCounts(gtProducts());
-  return L('רגליים: ','Legs: ','Patas: ')+c.legStickerCount+' · '+L('ראש: ','Head: ','Cabeza: ')+c.headStickerCount;
+  return L('רגליים: ','Legs: ','Patas: ')+c.legStickerCount+' · '+L('ראש: ','Head: ','Cabeza: ')+c.headStickerCount
+    +' · '+L('חותמות: ','Stamps: ','Sellos: ')+c.stampsCount+' · '+L('חלקים קטנים: ','Small parts: ','Partes pequeñas: ')+c.partsStickerCount;
 }
 function mgrRenderProducts(){
   const el=document.getElementById('mgrProductsList'); if(!el)return;
@@ -11452,14 +11603,16 @@ function mgrRenderProducts(){
   const tot=document.getElementById('mgrProductsTotals');
   if(tot){
     const now={h:s.headStickerCount!=null?s.headStickerCount:7, l:s.legStickerCount!=null?s.legStickerCount:2};
-    tot.innerHTML=escapeHtml(L('מדבקות מספר לפני הפסיקה — ','Number stickers before the ruling — ','Etiquetas de número antes del dictamen — ')+_gtProductCountsText())
+    tot.innerHTML=escapeHtml(L('מדבקות לבהמה — ','Stickers per animal — ','Etiquetas por animal — ')+_gtProductCountsText())
       +((!Array.isArray(s.products)&&(now.h!==c.headStickerCount||now.l!==c.legStickerCount))
         ?'<div style="font-size:11px;color:#FFB020;font-weight:400;margin-top:3px;">'+escapeHtml(L('כרגע מודפס: רגליים '+now.l+' · ראש '+now.h+'. השינוי הראשון ברשימה יעדכן את המסכים.','Printed now: legs '+now.l+' · head '+now.h+'. The first change to the list updates the screens.','Ahora se imprime: patas '+now.l+' · cabeza '+now.h+'. El primer cambio en la lista actualiza las pantallas.'))+'</div>':'');
   }
   const sel=(id,field,val,opts,dis)=>`<select ${dis?'disabled':''} onchange="mgrSetProduct(${_jsArg(id)},'${field}',this.value)" style="background:var(--panel2);border:1px solid var(--border);border-radius:6px;padding:5px 4px;color:var(--text);font-size:12px;max-width:180px;">`
       +opts.map(([v,t])=>`<option value="${v}"${v===val?' selected':''}>${escapeHtml(t)}</option>`).join('')+'</select>';
   const PRE=[['head',L('ראש','Head','Cabeza')],['legs',L('רגליים','Legs','Patas')],['none',L('בלי','None','Ninguna')]];
-  const POST=[['parts',L('חלקים קטנים','Small parts','Partes pequeñas')],['stamps',L('חותמות','Stamps','Sellos')],['legs',L('רגליים','Legs','Patas')],['none',L('בלי — לפי המספר','None — by the number','Ninguna — por el número')]];
+  const POST=[['parts',L('חלקים קטנים','Small parts','Partes pequeñas')],['stamps',L('חותמות','Stamps','Sellos')],['legs',L('רגליים','Legs','Patas')],['none',L('בלי','None','Ninguna')]];
+  const NIK=[['big',L('ניקור','Nikur','Nikur')],['small',L('ניקור חלקים קטנים','Small-parts nikur','Nikur de partes pequeñas')],['none',L('בלי','None','Ninguno')]];
+  const num=(K,f,v,min)=>`<input type="number" inputmode="numeric" min="${min}" max="20" value="${Number(v)||0}" onchange="mgrSetProduct(${K},'${f}',this.value)" style="width:52px;background:var(--panel2);border:1px solid var(--border);border-radius:6px;padding:5px;color:var(--gold);font-weight:700;text-align:center;">`;
   el.innerHTML=list.map(p=>{
     const K=_jsArg(p.id), isLegs=p.id==='legs', on=!!p.on;
     const name=gtProductName(p), sub=(lang==='he'&&p.en&&p.en!==p.he)?p.en:'';
@@ -11473,13 +11626,19 @@ function mgrRenderProducts(){
         </button>
       </div>
       <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:7px;font-size:11px;color:var(--muted);">
-        <span>${escapeHtml(L('מספר לפני פסיקה:','Number before the ruling:','Número antes del dictamen:'))}</span>
+        <span>${escapeHtml(L('מדבקות מספר:','Number stickers:','Etiquetas de número:'))}</span>
         ${sel(p.id,'pre',p.pre,isLegs?PRE.filter(x=>x[0]==='legs'):PRE,isLegs)}
-        ${p.pre!=='none'?`<input type="number" inputmode="numeric" min="${isLegs?1:0}" max="20" value="${Number(p.n)||0}" onchange="mgrSetProduct(${K},'n',this.value)" style="width:52px;background:var(--panel2);border:1px solid var(--border);border-radius:6px;padding:5px;color:var(--gold);font-weight:700;text-align:center;">`:''}
+        ${p.pre!=='none'?num(K,'n',p.n,isLegs?1:0):''}
       </div>
       <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:6px;font-size:11px;color:var(--muted);">
-        <span>${escapeHtml(L('אחרי פסיקה:','After the ruling:','Después del dictamen:'))}</span>
+        <span>${escapeHtml(L('אזור:','Area:','Área:'))}</span>
         ${sel(p.id,'post',p.post,isLegs?POST.filter(x=>x[0]==='legs'||x[0]==='parts'):POST,false)}
+        ${(p.post!=='none'&&!isLegs)?num(K,'m',p.m,0)+`<span>${escapeHtml(L('מדבקות כשרות','kosher stickers','etiquetas kosher'))}</span>`:''}
+        ${isLegs?`<span>${escapeHtml(L('(מיון)','(sorting)','(clasificación)'))}</span>`:''}
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:6px;font-size:11px;color:var(--muted);">
+        <span>${escapeHtml(L('ניקור:','Nikur:','Nikur:'))}</span>
+        ${sel(p.id,'nikur',p.nikur||'none',NIK,false)}
         <span style="margin-inline-start:6px;">${escapeHtml(L('משקל ממוצע:','Average weight:','Peso medio:'))}</span>
         <input type="number" inputmode="decimal" step="0.01" min="0" value="${p.avg!=null?escapeHtml(p.avg):''}" placeholder="${escapeHtml(L('ק״ג','kg','kg'))}" onchange="mgrSetProduct(${K},'avg',this.value)" style="width:68px;background:var(--panel2);border:1px solid var(--border);border-radius:6px;padding:5px;color:var(--gold);font-weight:700;text-align:center;">
       </div>
@@ -13727,7 +13886,8 @@ function _stampsNeedsReprint(x){
   return !!(x && x.stamped && x.stampedAs && isKosherReady(x) && x.stampedAs!==_printedAsKey(x));
 }
 function _partsPending(x){
-  return isKosherReady(x) && ((!x.partsScanned && (x.partsPrintCount||0)<3) || _partsNeedsReprint(x)) && !gtSkip(x.id,'parts');
+  const n=gtPartsExpected();   // v10.38: the plant's small parts (none → nothing to print here)
+  return n>0 && isKosherReady(x) && ((!x.partsScanned && (x.partsPrintCount||0)<n) || _partsNeedsReprint(x)) && !gtSkip(x.id,'parts');
 }
 function _stampsPending(x){
   return isKosherReady(x) && (!x.stamped || _stampsNeedsReprint(x)) && !gtSkip(x.id,'stamps');
@@ -13768,6 +13928,7 @@ function scanKeyDown(e){
 }
 
 function processBarcode(code){
+  if(partsMode==='sort'){ lgProcessSort(code); return; }   // v10.38: sorting the legs here
   // Barcode format: KSH-XXXX-... or just a number
   let idx=-1;
   const _n=_gtCodeNum(code);
@@ -13871,13 +14032,14 @@ function showPartsError(title,desc){
 }
 
 // v10.30: how many stickers this print really makes (a part on USDA hold is not printed)
-function _ppBreak(cheeks, tongue){
-  const n=(k)=>k===1?L('1 מדבקה','1 sticker','1 etiqueta'):L(k+' מדבקות',k+' stickers',k+' etiquetas');
-  const set=(id,t)=>{ const e=document.getElementById(id); if(e) e.textContent=t; };
-  set('ppCheekN', n(cheeks)); set('ppTongueN', n(tongue)); set('ppTotalN', n(cheeks+tongue));
+function _ppBreak(cheeks, tongue){   // (one released part: the cheek / the tongue)
+  const all=gtAreaPieces('parts');
+  _ppRows([].concat(all.filter(x=>x.hold&&x.hold.startsWith('cheek')).slice(0,cheeks), all.filter(x=>x.hold==='tongue').slice(0,tongue)));
 }
+// v10.38: the rows of the print window — every part of the plant's small-parts set
+function _ppRows(list){ const e=document.getElementById('ppPartsRows'); if(e) e.innerHTML=_gtPiecesRowsHtml(list); }
 function showPartsPrint(idx,status,isReprint=false,stickerNum=1){
-  _ppBreak(2,1);
+  _ppRows(gtAreaPieces('parts'));
   const statusLabels={glatt:"גלאט",beit:"בית יוסף",kosher:"כשר",mk:"MK"};
   const statusColors={glatt:"var(--glatt)",beit:"var(--beit)",kosher:"var(--kosher)",mk:"var(--mk)"};
   document.getElementById("ppPartsNum").textContent="#"+(idx+1);
@@ -13887,7 +14049,8 @@ function showPartsPrint(idx,status,isReprint=false,stickerNum=1){
     const labels=lang==='he'?["לחי 1","לחי 2","לשון"]:lang==='es'?["Mejilla 1","Mejilla 2","Lengua"]:["Cheek 1","Cheek 2","Tongue"];
     const reprintTxt=lang==='he'?"הדפסה חוזרת":lang==='es'?"Reimpresión":"Reprint";
     const stickerTxt=lang==='he'?"מדבקה ":lang==='es'?"Etiqueta ":"Sticker ";
-    sn.textContent=isReprint?reprintTxt:(stickerNum===0?L('3 מדבקות','3 stickers','3 etiquetas'):(labels[stickerNum-1]||stickerTxt+stickerNum));
+    const _np=gtPartsExpected();
+    sn.textContent=isReprint?reprintTxt:(stickerNum===0?(_np===1?L('1 מדבקה','1 sticker','1 etiqueta'):L(_np+' מדבקות',_np+' stickers',_np+' etiquetas')):(labels[stickerNum-1]||stickerTxt+stickerNum));
     sn.style.color=stickerNum===3?"var(--purple)":"var(--blue-light,#7AAEFF)";
   }
   if(isReprint){
@@ -13919,8 +14082,10 @@ function showPartsPrint(idx,status,isReprint=false,stickerNum=1){
 // v10.32: the small parts on USDA hold now (open or condemned) — they are not printed
 function _partsHeldNow(idx){ try{ return gtPartHolds(idx,'parts').filter(h=>h.open||h.resolution==='condemned').map(h=>h.part); }catch(e){ return []; } }
 function _partsRecordPrinted(idx){
-  const held=_partsHeldNow(idx), out=['cheek1','cheek2','tongue'].filter(p=>!held.includes(p));
-  KS.setPartsPrinted(idx, out.length, out.includes('tongue'), out.includes('cheek1') && out.includes('cheek2'));
+  // v10.38: the plant's small-parts set; a part on USDA hold (tongue / a cheek) is not printed
+  const held=_partsHeldNow(idx), set=gtAreaPieces('parts'), outP=set.filter(x=>!(x.hold&&held.includes(x.hold)));
+  const out=outP.map(x=>x.hold).filter(Boolean);
+  KS.setPartsPrinted(idx, outP.length, out.includes('tongue'), out.includes('cheek1') && out.includes('cheek2'));
   return out;
 }
 function partsAddPrint(idx){
@@ -13934,8 +14099,8 @@ function partsAddPrint(idx){
   // v10.26: a part on USDA hold is not printed now — it prints when released
   try{ const _ph=gtPartHolds(idx,'parts').filter(h=>h.open||h.resolution==='condemned');
     if(_ph.length){ const sn=document.getElementById('ppPartsInfo');
-      const all=['cheek1','cheek2','tongue'], held=_ph.map(h=>h.part), out=all.filter(p=>!held.includes(p));
-      _ppBreak(out.filter(p=>p!=='tongue').length, out.includes('tongue')?1:0);
+      const held=_ph.map(h=>h.part), outP=gtAreaPieces('parts').filter(x=>!(x.hold&&held.includes(x.hold))), out=outP.map(x=>x.hold).filter(Boolean);
+      _ppRows(outP);
       if(sn){ sn.textContent=L('הודפס: ','Printed: ','Impreso: ')+out.map(p=>_gtL(GT_PART_NAME[p])).join(' + ')+L(' · מעוכב USDA: ',' · USDA hold: ',' · retenido USDA: ')+held.map(p=>_gtL(GT_PART_NAME[p])).join(', '); sn.style.color='#C5B3FF'; sn.style.fontWeight='800'; }
       KS.addAuditLog({type:'parts_printed_without', animal:idx+1, held}); } }catch(e){}
 }
@@ -13946,12 +14111,11 @@ function partsReprintWarn(idx){
   const a=KS.getAnimal(idx);
   const statusLabels={glatt:"גלאט",beit:"בית יוסף",kosher:"כשר",mk:"MK"};
   const cnt=a.partsPrintCount||0;
-  const stickerNames=lang==="he"?["לחי 1","לחי 2","לשון"]:lang==="es"?["Mejilla 1","Mejilla 2","Lengua"]:["Cheek 1","Cheek 2","Tongue"];
-  const _held=_partsHeldNow(idx), _out=['cheek1','cheek2','tongue'].map((p,i)=>_held.includes(p)?null:stickerNames[i]).filter(Boolean);
+  const _held=_partsHeldNow(idx), _out=gtAreaPieces('parts').filter(x=>!(x.hold&&_held.includes(x.hold))).map(x=>x.name);
   const printed=cnt>0?_out.slice(0,cnt).join(", "):L("אין","none","ninguna");
   document.getElementById("partsRpDesc").innerHTML=
     L("בהמה #","Animal #","Animal #")+(idx+1)+" — "+escapeHtml(statusDisplayName(a.outerStatus,a)||a.outerStatus)+
-    "<br>"+L("הודפסו עד כה: ","Printed so far: ","Impresas hasta ahora: ")+cnt+"/3 ("+printed+")"+
+    "<br>"+L("הודפסו עד כה: ","Printed so far: ","Impresas hasta ahora: ")+cnt+"/"+gtPartsExpected()+" ("+printed+")"+
     "<br>"+LK('reprintNote');
   document.getElementById("partsRpModal").classList.add("open");
 }
@@ -13987,7 +14151,28 @@ function partsDoReprint(){
   partsReprintIdx=-1;
   setTimeout(()=>focusScan(),1500);
 }
+// v10.38: the scan line says what one scan prints (the plant's set); the legs-sorting bar when sorting is here
+function _partsScanLine(){
+  const e=document.getElementById('tScanSub'), pc=document.getElementById('tScanPrompt'); if(!e) return;
+  if(partsMode==='sort'){ e.textContent=L('סריקת מדבקת רגל — מראה את הפסיקה ומסמנת "מוין"','Scan a leg sticker — shows the ruling and marks it sorted','Escanee una etiqueta de pata — muestra el dictamen y la marca clasificada');
+    if(pc) pc.textContent=L('סרוק רגל למיון כשרות','Scan a leg for kosher sorting','Escanee una pata para clasificar'); return; }
+  if(pc) pc.textContent=L('סרוק ברקוד או לחץ על מספר','Scan a barcode or tap a number','Escanee un código o toque un número');
+  const set=gtAreaPieces('parts'), g={};
+  set.forEach(x=>{ g[x.pid]=(g[x.pid]||0)+1; });
+  const parts=Object.keys(g).map(k=>(g[k]>1?g[k]+' ':'')+gtProductName(gtProducts().find(p=>p.id===k))).join(' + ');
+  e.textContent=set.length?L('סריקה אחת = '+set.length+' מדבקות ('+parts+')','One scan = '+set.length+' stickers ('+parts+')','Un escaneo = '+set.length+' etiquetas ('+parts+')')
+                          :L('אין חלקים קטנים להדפסה','No small parts to print','No hay partes pequeñas para imprimir');
+}
+let partsMode='print';
+function partsSetMode(m){
+  partsMode=(m==='sort'&&_gtPartsSortOn())?'sort':'print';
+  const bp=document.getElementById('partsModePrint'), bs=document.getElementById('partsModeSort');
+  [[bp,partsMode==='print'],[bs,partsMode==='sort']].forEach(([b,on])=>{ if(!b)return; b.style.background=on?'var(--gold)':'transparent'; b.style.color=on?'#07090F':'var(--muted)'; b.style.border=on?'none':'1px solid var(--border)'; });
+  _partsScanLine(); try{ focusScan(); }catch(e){}
+}
 function partsRenderGrid(){
+  { const mb=document.getElementById('partsModeBar'), on=_gtPartsSortOn(); if(mb) mb.style.display=on?'flex':'none';
+    if(!on && partsMode==='sort') partsMode='print'; _partsScanLine(); }
   const t=T[lang],a=KS.getAnimals();
   // Find first pending animal
   let firstPending=-1;
@@ -14973,7 +15158,7 @@ function stampsTapAnimal(idx){
     const sl={glatt:"גלאט",beit:"בית יוסף",kosher:"כשר",mk:"MK"};
     document.getElementById("stampsRpDesc").innerHTML=
       L("בהמה #","Animal #","Animal #")+(idx+1)+" — "+escapeHtml(statusDisplayName(a.outerStatus,a)||a.outerStatus)+
-      "<br>"+L("כבר הודפסו 5 חותמות.","5 stamps were already printed.","Ya se imprimieron 5 sellos.")+
+      "<br>"+L("כבר הודפסו "+gtStampsCount()+" חותמות.",gtStampsCount()+" stamps were already printed.","Ya se imprimieron "+gtStampsCount()+" sellos.")+
       "<br>"+LK('reprintNote');
     document.getElementById("stampsRpModal").classList.add("open");
     return;
@@ -15049,6 +15234,7 @@ function stampsShowError(title,desc){
 function stampsShowPrint(idx,status,isReprint){
   const sc={glatt:"var(--glatt)",beit:"var(--beit)",kosher:"var(--kosher)",mk:"var(--mk)",rabChalak:"#16A085"};
   document.getElementById("ppStampsNum").textContent="#"+(idx+1);
+  { const r=document.getElementById('ppStampsRows'); if(r) r.innerHTML=_gtPiecesRowsHtml(gtAreaPieces('stamps')); }   // v10.38: the plant's stamps set
   const st=document.getElementById("ppStampsStatus");
   st.textContent=statusDisplayName(status,KS.getAnimal(idx))||status;
   st.style.color=sc[status]||_safeColor((getAllStatuses().find(x=>x.key===status)||{}).color,"var(--gold)");
@@ -15259,7 +15445,8 @@ function _kioskRoleLabels(){
     parts: he?'חלקים קטנים':es?'Partes pequeñas':'Small parts',
     stamps: he?'חותמות':es?'Sellos':'Stamps',
     cooler: he?'משגיח קולר':es?'Supervisor de cámara':'Cooler supervisor',
-    nikur: he?'משגיח מנקר':es?'Supervisor de nikur':'Nikur supervisor',
+    nikur: he?'ניקור':es?'Nikur':'Nikur',
+    'nikur-1': he?'ניקור חלקים קטנים':es?'Nikur de partes pequeñas':'Small-parts nikur',
     salting: he?'משגיח מליחה':es?'Supervisor de salado':'Salting supervisor',
     shipping: he?'משגיח שיפינג':es?'Supervisor de envíos':'Shipping supervisor',
     'display-0': he?'מסך ספירה':es?'Pantalla de conteo':'Counter screen',
@@ -15270,7 +15457,7 @@ function _kioskRoleLabels(){
     'leader-3': he?'ראש צוות 4':es?'Jefe de equipo 4':'Team leader 4',
   };
 }
-const KIOSK_ROLE_KEYS = ['slaughter','esophagus','legs','legs-1','inner-0','inner-1','outer-0','outer-1','parts','stamps','cooler','nikur','salting','shipping','display-0','display-1'];
+const KIOSK_ROLE_KEYS = ['slaughter','esophagus','legs','legs-1','inner-0','inner-1','outer-0','outer-1','parts','stamps','cooler','nikur','nikur-1','salting','shipping','display-0','display-1'];
 
 /** Registers this device (heartbeat), listens for the manager assigning or
  *  resetting ITS role, and — separately — keeps the manager's devices panel
@@ -16619,9 +16806,8 @@ window.addEventListener("touchcancel",function(){isDrawing=false;},true);
     <div style="font-size:12px;color:var(--muted);margin-bottom:14px" id="ppPartsInfo"></div>
     <div class="gt-noprint" id="ppPartsNoPrinter"></div>
     <div style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:14px;font-size:12px;color:var(--muted);direction:rtl;text-align:right">
-      <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span>לחיים:</span><span id="ppCheekN" data-no-i18n style="color:var(--text);font-weight:600">2 מדבקות</span></div>
-      <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span>לשון:</span><span id="ppTongueN" data-no-i18n style="color:var(--text);font-weight:600">1 מדבקה</span></div>
-      <div style="display:flex;justify-content:space-between;border-top:1px solid var(--border);padding-top:4px"><span>סה״כ מודפס עכשיו:</span><span id="ppTotalN" data-no-i18n style="color:var(--gold);font-weight:800">3 מדבקות</span></div>
+      <div id="ppPartsRows"></div>
+    </div>
     </div>
     <div style="height:4px;background:var(--border);border-radius:2px;margin-bottom:14px;overflow:hidden">
       <div id="ppPartsBar" style="height:100%;background:var(--gold);border-radius:2px;width:100%;transition:width 3s linear;"></div>
@@ -16637,9 +16823,7 @@ window.addEventListener("touchcancel",function(){isDrawing=false;},true);
     <div style="font-family:'Frank Ruhl Libre',serif;font-size:30px;font-weight:900;color:var(--gold);margin-bottom:4px" id="ppStampsNum">#1</div>
     <div style="font-size:13px;font-weight:600;margin-bottom:6px" id="ppStampsStatus">גלאט</div>
     <div id="ppStampsReprint" style="display:none;font-size:11px;color:var(--red-light);margin-bottom:6px;font-weight:600;">&#128260; הדפסה חוזרת — נרשם בדוח</div>
-    <div style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:14px;font-size:13px;color:var(--text);font-weight:700;">
-      5 מדבקות כשרות
-    </div>
+    <div id="ppStampsRows" style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:14px;font-size:12px;color:var(--muted);direction:rtl;text-align:right"></div>
     <div style="font-size:11px;color:var(--muted);margin-bottom:10px" id="ppStampsTime"></div>
     <div class="gt-noprint" id="ppStampsNoPrinter"></div>
     <div style="height:4px;background:var(--border);border-radius:2px;margin-bottom:10px;overflow:hidden">

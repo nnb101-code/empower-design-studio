@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict vzoiTZyg66WkieDsE59i2W0jbTp66qj8jvfVQPP45Bfr549Qbmtdh3Zq7zn2zq0
+\restrict Cx1nPJBI7kmoirn335yBvvCIp6cjBFfMxf6Oy4f19s9SNvxd8TjyOhKRPN2E3k3
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -214,9 +214,11 @@ begin
     v_st := 'outer'; v_b := _hold_block(v_ep, old.id, 'outer');
   end if;
   if v_b is null and ((not coalesce(old.head_stickers, false) and coalesce(new.head_stickers, false))
-                      or (not coalesce(old.legs_stickers, false) and coalesce(new.legs_stickers, false))
-                      or (not coalesce(old.legs_sorted, false) and coalesce(new.legs_sorted, false))) then
+                      or (not coalesce(old.legs_stickers, false) and coalesce(new.legs_stickers, false))) then
     v_st := 'legs'; v_b := _hold_block(v_ep, old.id, 'legs');
+  end if;
+  if v_b is null and not coalesce(old.legs_sorted, false) and coalesce(new.legs_sorted, false) then   -- v10.38: the sorting station
+    v_st := _legs_sort_station(); v_b := _hold_block(v_ep, old.id, v_st);
   end if;
   if v_b is null and (coalesce(new.parts_print_count, 0) > coalesce(old.parts_print_count, 0)
                       or (not coalesce(old.parts_scanned, false) and coalesce(new.parts_scanned, false))) then
@@ -436,7 +438,10 @@ begin
     new.maw := old.maw; new.rumen := old.rumen;
   end if;
   if not _stage_allowed('legs') then
-    new.legs_sorted := old.legs_sorted; new.legs_stickers := old.legs_stickers; new.head_stickers := old.head_stickers;
+    new.legs_stickers := old.legs_stickers; new.head_stickers := old.head_stickers;
+  end if;
+  if not _stage_allowed('legs_sort') then                -- v10.38: the sorting station of the plant (legs / small parts)
+    new.legs_sorted := old.legs_sorted;
   end if;
   if not _stage_allowed('stamped') then
     new.stamped := old.stamped; new.stamped_as := old.stamped_as;
@@ -644,7 +649,7 @@ begin
     v_stage := 'legs_stickers'; v_err := 'legs_not_done';
   end if;
   if not coalesce(old.legs_sorted, false) and coalesce(new.legs_sorted, false) then
-    v_groups := v_groups || 'legs'::text;
+    v_groups := v_groups || 'legs_sort'::text;            -- v10.38: its own group (the sorting station)
     if v_err is null then v_stage := 'legs'; v_err := _stage_order_error('legs', new, true); end if;
     if v_err is null and not coalesce(new.legs_stickers, false) then v_stage := 'legs'; v_err := 'no_leg_stickers'; end if;   -- v10.35: nothing to sort
   end if;
@@ -1342,7 +1347,8 @@ begin
   v_ok := exists(select 1 from devices_pilot
                   where id = v_dev and assigned_role is not null
                     and assigned_role not in ('display', 'leader',       -- a counter screen only reads; a team-leader device writes only with the team leader's session
-                                              'cooler', 'nikur', 'salting', 'shipping')   -- v10.35 review: the supervisor screens are view-only for now
+                                              'cooler', 'salting', 'shipping')   -- v10.35 review: the supervisor screens are view-only for now
+                                                                                  -- (v10.38: the nikur writes its scans and its USDA holds)
                     and coalesce(device_status, 'active') <> 'retired');
   if not v_ok then perform _note_revoked_write(v_dev); end if;
   return v_ok;
@@ -1967,7 +1973,8 @@ CREATE FUNCTION public._hold_station_of_role(p_role text) RETURNS text
     SET search_path TO 'public', 'extensions', 'pg_temp'
     AS $$
   select case p_role when 'slaughter' then 'slaughter' when 'esophagus' then 'eso' when 'inner' then 'inner'
-                     when 'outer' then 'outer' when 'legs' then 'legs' when 'parts' then 'parts' when 'stamps' then 'stamps' end;
+                     when 'outer' then 'outer' when 'legs' then 'legs' when 'parts' then 'parts' when 'stamps' then 'stamps'
+                     when 'nikur' then 'nikur' end;   -- v10.38
 $$;
 
 
@@ -2228,6 +2235,37 @@ end $$;
 
 
 ALTER FUNCTION public._legs_slot_error(p_legs boolean, p_head boolean, p_sorted boolean) OWNER TO postgres;
+
+--
+-- Name: _legs_sort_pending(public.animals_pilot); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public._legs_sort_pending(a public.animals_pilot) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $$
+  select _gt_flag(_gt_settings(), 'legsSortEnabled', false) and not _gt_flag(_gt_settings(), 'legsPaused', false)
+         and coalesce(a.legs_stickers, false) and _kosher_ready(a) and not coalesce(a.legs_sorted, false);
+$$;
+
+
+ALTER FUNCTION public._legs_sort_pending(a public.animals_pilot) OWNER TO postgres;
+
+--
+-- Name: _legs_sort_station(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public._legs_sort_station() RETURNS text
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $$
+  select case when exists (select 1 from jsonb_array_elements(case when jsonb_typeof(_gt_settings() -> 'products') = 'array'
+                                                                   then _gt_settings() -> 'products' else '[]'::jsonb end) x
+                            where x ->> 'id' = 'legs' and x ->> 'post' = 'parts') then 'parts' else 'legs' end;
+$$;
+
+
+ALTER FUNCTION public._legs_sort_station() OWNER TO postgres;
 
 --
 -- Name: _list_tail(jsonb, integer); Type: FUNCTION; Schema: public; Owner: postgres
@@ -2498,6 +2536,34 @@ $$;
 ALTER FUNCTION public._nc_statuses() OWNER TO postgres;
 
 --
+-- Name: _nikur_refusal(public.animals_pilot, jsonb, bigint); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public._nikur_refusal(a public.animals_pilot, x jsonb, p_ep bigint) RETURNS text
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $$
+begin
+  if a.id is null or a.slaughter is null then return 'not_slaughtered'; end if;
+  if a.slaughter in ('nevela', 'shot') then return 'nevela'; end if;
+  if a.inner_status = 'treif' or a.outer_status = 'treif' then return 'treif'; end if;
+  if not _kosher_ready(a) then return 'no_ruling'; end if;
+  if exists (select 1 from animal_holds h where h.board_epoch = p_ep and h.animal_id = a.id
+               and ((h.kind = 'usda' and (h.resolved_at is null or h.resolution = 'condemned'))
+                    or (h.kind = 'question' and h.resolved_at is null))) then
+    return 'held';
+  end if;
+  if coalesce((x ->> 'notGlatt')::boolean, false) and a.outer_status = 'glatt' then return 'not_glatt'; end if;
+  -- the piece got its kosher sticker in its area (the scanned sticker was really printed)
+  if x ->> 'post' = 'stamps' and not coalesce(a.stamped, false) then return 'not_printed'; end if;
+  if x ->> 'post' = 'parts' and not coalesce(a.parts_scanned, false) then return 'not_printed'; end if;
+  return null;
+end $$;
+
+
+ALTER FUNCTION public._nikur_refusal(a public.animals_pilot, x jsonb, p_ep bigint) OWNER TO postgres;
+
+--
 -- Name: _no_device_error(); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -2564,6 +2630,21 @@ $$;
 ALTER FUNCTION public._outer_status_known(v text) OWNER TO postgres;
 
 --
+-- Name: _parts_expected(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public._parts_expected() RETURNS integer
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $$
+  select case when jsonb_typeof(_gt_settings() -> 'products') = 'array'
+              then coalesce((_products_counts(_gt_settings() -> 'products') ->> 'partsStickerCount')::int, 0) else 3 end;
+$$;
+
+
+ALTER FUNCTION public._parts_expected() OWNER TO postgres;
+
+--
 -- Name: _parts_print_block(bigint, integer, boolean, boolean, boolean, boolean, integer, integer); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -2580,7 +2661,7 @@ begin
     v := coalesce(_hold_block(p_epoch, p_id, 'parts', 'cheek1'), _hold_block(p_epoch, p_id, 'parts', 'cheek2'));
     if v is not null then return v; end if;
   end if;
-  if coalesce(n_count, 0) > coalesce(o_count, 0) and coalesce(n_count, 0) >= 3 then
+  if coalesce(n_count, 0) > coalesce(o_count, 0) and coalesce(n_count, 0) >= least(3, greatest(_parts_expected(), 1)) then   -- v10.38: the whole set
     v := coalesce(_hold_block(p_epoch, p_id, 'parts', 'tongue'), _hold_block(p_epoch, p_id, 'parts', 'cheek1'),
                   _hold_block(p_epoch, p_id, 'parts', 'cheek2'));
     if v is not null then return v; end if;
@@ -2800,12 +2881,12 @@ begin
   case p_station
     when 'legs' then
       v := (not coalesce(a.head_stickers, false) and _stage_order_error('legs_stickers', a, p_today) is null)
-          or (_gt_flag(_gt_settings(), 'legsSortEnabled', false) and not _gt_flag(_gt_settings(), 'legsPaused', false)
-              and coalesce(a.legs_stickers, false) and _kosher_ready(a) and not coalesce(a.legs_sorted, false));   -- v10.35: no legs → nothing to sort
+          or (_legs_sort_station() = 'legs' and _legs_sort_pending(a));
     when 'parts' then
-      v := _kosher_ready(a)
-         and ((not coalesce(a.parts_scanned, false) and coalesce(a.parts_print_count, 0) < 3)
-              or (a.parts_printed_as is not null and a.parts_printed_as is distinct from _printed_as_key(a)));
+      v := (_parts_expected() > 0 and _kosher_ready(a)        -- v10.38: the plant's small parts (none → nothing to print)
+            and ((not coalesce(a.parts_scanned, false) and coalesce(a.parts_print_count, 0) < _parts_expected())
+                 or (a.parts_printed_as is not null and a.parts_printed_as is distinct from _printed_as_key(a))))
+           or (_legs_sort_station() = 'parts' and _legs_sort_pending(a));
     when 'stamps' then
       v := _kosher_ready(a)
          and (not coalesce(a.stamped, false)
@@ -2830,6 +2911,7 @@ CREATE FUNCTION public._proc_station_of_group(p_group text) RETURNS text
     AS $$
   select case p_group
            when 'legs' then 'legs'
+           when 'legs_sort' then _legs_sort_station()
            when 'parts' then 'parts'
            when 'weights' then 'stamps'
            when 'stamped' then case when _caller_device_role() = 'parts' then 'parts' else 'stamps' end
@@ -2866,7 +2948,10 @@ CREATE FUNCTION public._products_counts(v jsonb) RETURNS jsonb
     AS $$
   select jsonb_build_object(
     'headStickerCount', coalesce(sum((x ->> 'n')::int) filter (where (x ->> 'on')::boolean and x ->> 'pre' = 'head'), 0),
-    'legStickerCount',  coalesce(sum((x ->> 'n')::int) filter (where (x ->> 'on')::boolean and x ->> 'pre' = 'legs'), 0))
+    'legStickerCount',  coalesce(sum((x ->> 'n')::int) filter (where (x ->> 'on')::boolean and x ->> 'pre' = 'legs'), 0),
+    -- (stage 2) the kosher stickers of the stamps and the small-parts screens (the legs are sorted, not printed)
+    'stampsCount',       coalesce(sum(coalesce((x ->> 'm')::int, 0)) filter (where (x ->> 'on')::boolean and x ->> 'post' = 'stamps'), 0),
+    'partsStickerCount', coalesce(sum(coalesce((x ->> 'm')::int, 0)) filter (where (x ->> 'on')::boolean and x ->> 'post' = 'parts' and x ->> 'id' <> 'legs'), 0))
   from jsonb_array_elements(case when jsonb_typeof(v) = 'array' then v else '[]'::jsonb end) x;
 $$;
 
@@ -2888,7 +2973,7 @@ begin
   for x in select * from jsonb_array_elements(v) loop
     if jsonb_typeof(x) <> 'object' then return 'a product must be an object'; end if;
     for k in select jsonb_object_keys(x) loop
-      if k not in ('id', 'he', 'en', 'es', 'on', 'pre', 'n', 'post', 'avg', 'notGlatt', 'builtin') then
+      if k not in ('id', 'he', 'en', 'es', 'on', 'pre', 'n', 'post', 'm', 'nikur', 'avg', 'notGlatt', 'builtin') then
         return 'unknown field ' || left(k, 40);
       end if;
     end loop;
@@ -2906,6 +2991,9 @@ begin
     if coalesce(x ->> 'pre', '') not in ('head', 'legs', 'none') then return 'product ' || v_id || ': pre must be head / legs / none'; end if;
     if not _jint_ok(x -> 'n', 0, 20) then return 'product ' || v_id || ': stickers 0..20'; end if;
     if coalesce(x ->> 'post', '') not in ('parts', 'stamps', 'legs', 'none') then return 'product ' || v_id || ': post must be parts / stamps / legs / none'; end if;
+    -- (v10.38 stage 2) m = the kosher stickers its area prints; nikur = the nikur screen it goes to
+    if x ? 'm' and not _jint_ok(x -> 'm', 0, 20) then return 'product ' || v_id || ': stickers 0..20'; end if;
+    if x ? 'nikur' and coalesce(x ->> 'nikur', '') not in ('big', 'small', 'none') then return 'product ' || v_id || ': nikur must be big / small / none'; end if;
     if x ? 'avg' and jsonb_typeof(x -> 'avg') <> 'null' and not _jnum_ok(x -> 'avg', 0, 1000) then return 'product ' || v_id || ': average weight 0..1000 kg'; end if;
     if x ? 'notGlatt' and jsonb_typeof(x -> 'notGlatt') <> 'boolean' then return 'product ' || v_id || ': notGlatt must be true / false'; end if;
     if x ? 'builtin' and jsonb_typeof(x -> 'builtin') <> 'boolean' then return 'product ' || v_id || ': builtin must be true / false'; end if;
@@ -3334,11 +3422,11 @@ begin
     return 'unknown time zone';
   end if;
   -- whole numbers in sane ranges
-  if p_key in ('beepSeconds', 'legStickerCount', 'headStickerCount', 'partsStickerCount', 'numInspectors', 'inspectorMode', 'maxAnimals',
+  if p_key in ('beepSeconds', 'legStickerCount', 'headStickerCount', 'partsStickerCount', 'stampsCount', 'numInspectors', 'inspectorMode', 'maxAnimals',
                'dailyTarget', 'archiveDays', 'esoFromIdx') then
     if _jint_ok(v, case p_key when 'numInspectors' then 1 when 'inspectorMode' then 1 when 'maxAnimals' then 1
                               when 'archiveDays' then 1 when 'beepSeconds' then 1 else 0 end,
-                   case p_key when 'beepSeconds' then 3600 when 'legStickerCount' then 999 when 'headStickerCount' then 999 when 'partsStickerCount' then 999
+                   case p_key when 'beepSeconds' then 3600 when 'legStickerCount' then 999 when 'headStickerCount' then 999 when 'partsStickerCount' then 999 when 'stampsCount' then 999
                               when 'numInspectors' then 20 when 'inspectorMode' then 10 when 'maxAnimals' then 1000
                               when 'dailyTarget' then 100000 when 'archiveDays' then 3650 when 'esoFromIdx' then 1000 end) then
       return null;
@@ -3532,6 +3620,7 @@ begin
       when 'outer'     then v_role in ('outer')              -- step 46: outer tablet → outer only
                              or (v_role = 'inner' and _gt_one_inspection())   -- one shared screen (the plant's choice)
       when 'legs'      then v_role in ('legs')
+      when 'legs_sort' then v_role = _legs_sort_station()   -- v10.38: the legs are sorted on the legs screen or with the small parts
       when 'stamped'   then v_role in ('stamps','parts')
       when 'parts'     then v_role in ('parts')
       when 'weights'   then v_role in ('stamps')        -- the scale is on the stamps screen
@@ -4508,7 +4597,7 @@ begin
   end if;
   v_dev := _call_device(null);
   if v_dev is null then return jsonb_build_object('claimed', false, 'error', _no_device_error()); end if;
-  if not _stage_allowed(p_stage) then return jsonb_build_object('claimed', false, 'error', 'wrong_station'); end if;
+  if not _stage_allowed(case when p_stage = 'legs' then 'legs_sort' else p_stage end) then return jsonb_build_object('claimed', false, 'error', 'wrong_station'); end if;   -- v10.38
   v_res := _cmd_get(p_command_id, v_dev, 'carry_claim');
   if v_res is not null then return v_res; end if;
   perform _proc_board_lock(p_board);              -- not while this board is being closed / archived
@@ -4527,7 +4616,7 @@ begin
   if v_reason is null and p_stage = 'legs' then                 -- v10.35: sorting only on the legs screen, only legs with stickers
     v_reason := coalesce(_legs_slot_error(false, false, true), case when not coalesce(c.legs_stickers, false) then 'no_leg_stickers' end);
   end if;
-  v_station := case when p_stage = 'legs' then 'legs' else _proc_station_of_group('stamped') end;
+  v_station := case when p_stage = 'legs' then _legs_sort_station() else _proc_station_of_group('stamped') end;
   v_open := _proc_open_board(v_station);
   if v_reason is not null then
     v_res := jsonb_build_object('claimed', false, 'error', 'out_of_order', 'reason', v_reason, 'row', to_jsonb(c), 'board', p_board);
@@ -4605,7 +4694,11 @@ begin
       if c.id is null then raise exception 'GT:BAD_ID no such animal on this board' using errcode = '22023'; end if;
       n := c;
       for k in select key from jsonb_object_keys(r) key where key <> 'id' loop
-        if k = any(legs_cols) and _stage_allowed('legs') then v_groups := v_groups || 'legs'::text;
+        if k = 'legs_sorted' and _stage_allowed('legs_sort') then v_groups := v_groups || 'legs_sort'::text;   -- v10.38
+        elsif k = 'legs_sorted' then
+          if not (k = any(v_ignored)) then v_ignored := v_ignored || k; end if;
+          continue;
+        elsif k = any(legs_cols) and _stage_allowed('legs') then v_groups := v_groups || 'legs'::text;
         elsif k = any(parts_cols) and _stage_allowed('parts') then v_groups := v_groups || 'parts'::text;
         elsif k = any(stamp_cols) and _stage_allowed('stamped') then v_groups := v_groups || 'stamped'::text;
         elsif k = any(weight_cols) and _stage_allowed('weights') then v_groups := v_groups || 'weights'::text;
@@ -4647,7 +4740,7 @@ begin
         end if;
         -- the order: a processing step only after the last ruling
         foreach g in array (select array_agg(distinct x) from unnest(v_groups) x) loop
-          v_reason := _stage_order_error(case g when 'legs' then (case when n.legs_sorted is distinct from c.legs_sorted then 'legs' else 'legs_stickers' end)
+          v_reason := _stage_order_error(case g when 'legs' then 'legs_stickers' when 'legs_sort' then 'legs'
                                                 else g end, a, false);
           if v_reason is not null then
             raise exception 'GT:OUT_OF_ORDER out-of-order: stage=% reason=%', g, v_reason using errcode = 'P0001';
@@ -4782,7 +4875,7 @@ declare
   v_now bigint := (extract(epoch from clock_timestamp()) * 1000)::bigint;
   v_dev text;
   v_epoch bigint := _board_epoch();
-  v_stage text := case when p_stage = 'inner_start' then 'inner' else p_stage end;
+  v_stage text := case when p_stage = 'inner_start' then 'inner' when p_stage = 'legs' then 'legs_sort' else p_stage end;   -- v10.38: sorting → its station
   v_actor text;
   v_res jsonb;
   v_dup boolean := false;
@@ -4845,14 +4938,14 @@ begin
     end if;
     -- v10.26: a USDA hold / the station's open "?" (a ruling of the station's own "?" goes ahead)
     v_order := _hold_block(coalesce(a.board_epoch, v_epoch), p_id,
-                           case p_stage when 'inner_start' then 'inner' when 'stamped' then _proc_station_of_group('stamped') else p_stage end);
+                           case p_stage when 'inner_start' then 'inner' when 'stamped' then _proc_station_of_group('stamped') when 'legs' then _legs_sort_station() else p_stage end);
     if v_order is not null then
       v_res := jsonb_build_object('claimed', false, 'error', 'held', 'reason', v_order, 'row', to_jsonb(a), 'serverNow', v_now);
       perform _cmd_put(p_command_id, v_dev, 'claim_animal_stage', v_res);
       return v_res;
     end if;
     if p_stage in ('legs', 'stamped') then
-      v_open := _proc_open_board(case when p_stage = 'legs' then 'legs' else _proc_station_of_group('stamped') end);
+      v_open := _proc_open_board(case when p_stage = 'legs' then _legs_sort_station() else _proc_station_of_group('stamped') end);
       if v_open is not null then
         v_res := jsonb_build_object('claimed', false, 'error', 'earlier_day_open', 'board', v_open,
                                     'day', (select slaughter_day from animals_carry where board_id = v_open limit 1),
@@ -5164,7 +5257,7 @@ begin
   if p_role not in ('slaughter','esophagus','legs','inner','outer','parts','stamps','display','leader','cooler','nikur','salting','shipping') then
     return jsonb_build_object('ok', false, 'error', 'bad_role');
   end if;
-  v_idx := case when p_role in ('inner','outer','display','leader','legs') then coalesce(p_index, 0) else 0 end;   -- v10.34: legs slot 1 = the head screen
+  v_idx := case when p_role in ('inner','outer','display','leader','legs','nikur') then coalesce(p_index, 0) else 0 end;   -- v10.38: nikur slot 1 = the small-parts nikur   -- v10.34: legs slot 1 = the head screen
   if (p_role in ('display', 'leader') and v_idx not between 0 and 3) or (p_role not in ('display', 'leader') and v_idx not in (0, 1)) then
     return jsonb_build_object('ok', false, 'error', 'bad_slot');
   end if;
@@ -5700,8 +5793,11 @@ declare v_dev text; v_role text; v_ep bigint; v_res jsonb; a animals_pilot; v_id
 begin
   if p_id is null or p_id < 0 or p_id > 999 then return jsonb_build_object('ok', false, 'error', 'bad_id'); end if;
   if p_kind is null or p_kind not in ('question', 'usda') then return jsonb_build_object('ok', false, 'error', 'bad_value'); end if;
-  if p_station is null or p_station not in ('slaughter', 'eso', 'inner', 'outer', 'legs', 'parts', 'stamps') then
+  if p_station is null or p_station not in ('slaughter', 'eso', 'inner', 'outer', 'legs', 'parts', 'stamps', 'nikur') then
     return jsonb_build_object('ok', false, 'error', 'bad_station');
+  end if;
+  if p_station = 'nikur' and (p_kind <> 'usda' or v_part <> 'whole') then    -- v10.38: the nikur puts a whole-animal USDA hold only
+    return jsonb_build_object('ok', false, 'error', 'bad_value');
   end if;
   if (p_kind = 'question' and not (v_part = 'whole'
                                    or (p_station = 'inner' and v_part in ('rumen', 'maw', 'lung'))))   -- v10.32: the window of an inner "?"
@@ -6356,6 +6452,96 @@ end $$;
 ALTER FUNCTION public.manufacturer_set_code(p_name text, p_code text) OWNER TO postgres;
 
 --
+-- Name: nikur_board(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.nikur_board() RETURNS jsonb
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $$
+declare v_dev text; v_screen text; v_ep bigint := _board_epoch(); v_tok text := _request_headers() ->> 'x-manager-token';
+begin
+  if v_tok is not null and _manager_session_valid(v_tok) and coalesce(_session_role(v_tok), '') <> 'manufacturer' then
+    v_screen := null;
+  else
+    v_dev := _current_device_id();
+    select case when coalesce(assigned_index, 0) % 2 = 1 then 'small' else 'big' end into v_screen
+      from devices_pilot where id = v_dev and assigned_role = 'nikur' and coalesce(device_status, 'active') <> 'retired';
+    if v_screen is null then return jsonb_build_object('ok', false, 'error', 'wrong_station'); end if;
+  end if;
+  return jsonb_build_object('ok', true, 'boardEpoch', v_ep, 'screen', v_screen,
+    'pieces', coalesce((select jsonb_agg(jsonb_build_object('n', s.animal_id + 1, 'p', s.product, 'i', s.piece, 's', s.screen,
+                                                            'at', s.at, 'by', s.worker) order by s.at)
+                          from piece_scans s where s.board_epoch = v_ep and (v_screen is null or s.screen = v_screen)), '[]'::jsonb));
+end $$;
+
+
+ALTER FUNCTION public.nikur_board() OWNER TO postgres;
+
+--
+-- Name: nikur_scan(integer, text, integer, bigint, uuid); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.nikur_scan(p_id integer, p_product text, p_piece integer, p_epoch bigint, p_command_id uuid DEFAULT NULL::uuid) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $_$
+declare v_dev text; v_res jsonb; v_err text; v_ep bigint; x jsonb; v_screen text; v_m int; a animals_pilot;
+        v_actor text; v_new bigint; v_piece int := coalesce(p_piece, 1);
+begin
+  if p_id is null or p_id < 0 or p_id > 999 then return jsonb_build_object('ok', false, 'error', 'bad_id'); end if;
+  if p_product is null or p_product !~ '^[a-z][a-z0-9_]{0,40}$' or v_piece not between 1 and 20 then
+    return jsonb_build_object('ok', false, 'error', 'bad_value');
+  end if;
+  v_dev := _call_device(null);
+  if v_dev is null then return jsonb_build_object('ok', false, 'error', _no_device_error()); end if;
+  v_err := _hold_caller_error('nikur');                  -- only a nikur tablet (its worker logged in)
+  if v_err is not null then return jsonb_build_object('ok', false, 'error', v_err); end if;
+  v_res := _cmd_get(p_command_id, v_dev, 'nikur_scan');
+  if v_res is not null then return v_res; end if;
+  perform _board_write_lock();
+  v_ep := _board_epoch();
+  if v_ep is not null and (p_epoch is null or p_epoch < v_ep) then
+    return jsonb_build_object('ok', false, 'error', 'stale_board', 'boardEpoch', v_ep);
+  end if;
+  select e into x from jsonb_array_elements(case when jsonb_typeof(_gt_settings() -> 'products') = 'array'
+                                                 then _gt_settings() -> 'products' else '[]'::jsonb end) e
+   where e ->> 'id' = p_product and coalesce((e ->> 'on')::boolean, false) limit 1;
+  if x is null then return jsonb_build_object('ok', false, 'error', 'unknown_part'); end if;
+  select case when coalesce(assigned_index, 0) % 2 = 1 then 'small' else 'big' end into v_screen
+    from devices_pilot where id = v_dev and assigned_role = 'nikur';
+  v_screen := coalesce(v_screen, case when coalesce(x ->> 'nikur', 'none') = 'small' then 'small' else 'big' end);   -- (test mode: the team leader)
+  if coalesce(x ->> 'nikur', 'none') <> v_screen then
+    return jsonb_build_object('ok', false, 'error', 'wrong_screen', 'nikur', x ->> 'nikur');
+  end if;
+  v_m := greatest(coalesce((x ->> 'm')::int, 0), 1);
+  if v_piece > v_m then return jsonb_build_object('ok', false, 'error', 'bad_value'); end if;
+  select * into a from animals_pilot where id = p_id;
+  v_actor := _derive_actor('nikur', null);
+  v_err := _nikur_refusal(a, x, v_ep);
+  if v_err is not null then
+    perform _gt_event(p_id + 1, 'nikur', 'piece_refused', jsonb_build_object('part', p_product, 'piece', v_piece, 'reason', v_err), v_actor, v_dev);
+    v_res := jsonb_build_object('ok', false, 'error', 'refused', 'reason', v_err, 'status', a.outer_status, 'slaughter', a.slaughter);
+    perform _cmd_put(p_command_id, v_dev, 'nikur_scan', v_res);
+    return v_res;
+  end if;
+  insert into piece_scans (board_epoch, animal_id, product, piece, screen, device_id, worker)
+  values (v_ep, p_id, p_product, v_piece, v_screen, v_dev, v_actor)
+  on conflict (board_epoch, animal_id, product, piece) do nothing
+  returning id into v_new;
+  if v_new is not null then
+    perform _gt_event(p_id + 1, 'nikur', 'piece_in', jsonb_build_object('part', p_product, 'piece', v_piece, 'screen', v_screen), v_actor, v_dev);
+  end if;
+  v_res := jsonb_build_object('ok', true, 'duplicate', v_new is null, 'status', a.outer_status,
+                              'today', (select count(*) from piece_scans where board_epoch = v_ep and screen = v_screen));
+  perform _cmd_put(p_command_id, v_dev, 'nikur_scan', v_res);
+  return v_res;
+end $_$;
+
+
+ALTER FUNCTION public.nikur_scan(p_id integer, p_product text, p_piece integer, p_epoch bigint, p_command_id uuid) OWNER TO postgres;
+
+--
 -- Name: outer_open(integer, bigint, boolean, text); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -6764,7 +6950,8 @@ begin
     return jsonb_build_object('ok', false, 'error', 'bad_settings', 'key', '*', 'reason', 'too_large');
   end if;
   -- v10.38: once the plant has a products list, the head / legs sticker counts follow it (never typed by hand)
-  if (incoming ? 'products' or incoming ? 'headStickerCount' or incoming ? 'legStickerCount')
+  if (incoming ? 'products' or incoming ? 'headStickerCount' or incoming ? 'legStickerCount'
+      or incoming ? 'stampsCount' or incoming ? 'partsStickerCount')
      and jsonb_typeof(coalesce(incoming -> 'products', cur -> 'products')) = 'array' then
     incoming := incoming || _products_counts(coalesce(incoming -> 'products', cur -> 'products'));
   end if;
@@ -7564,7 +7751,7 @@ CREATE TABLE public.animal_holds (
     CONSTRAINT animal_holds_kind_check CHECK ((kind = ANY (ARRAY['question'::text, 'usda'::text]))),
     CONSTRAINT animal_holds_part_check CHECK ((part = ANY (ARRAY['whole'::text, 'right'::text, 'left'::text, 'cheek1'::text, 'cheek2'::text, 'tongue'::text, 'rumen'::text, 'maw'::text, 'lung'::text]))),
     CONSTRAINT animal_holds_resolution_check CHECK ((resolution = ANY (ARRAY['ruled'::text, 'answered'::text, 'released'::text, 'condemned'::text, 'cancelled'::text, 'board_closed'::text]))),
-    CONSTRAINT animal_holds_station_check CHECK ((station = ANY (ARRAY['slaughter'::text, 'eso'::text, 'inner'::text, 'outer'::text, 'legs'::text, 'parts'::text, 'stamps'::text])))
+    CONSTRAINT animal_holds_station_check CHECK ((station = ANY (ARRAY['slaughter'::text, 'eso'::text, 'inner'::text, 'outer'::text, 'legs'::text, 'parts'::text, 'stamps'::text, 'nikur'::text])))
 );
 
 
@@ -8009,6 +8196,50 @@ CREATE TABLE public.pairing_requests (
 ALTER TABLE public.pairing_requests OWNER TO postgres;
 
 --
+-- Name: piece_scans; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.piece_scans (
+    id bigint NOT NULL,
+    board_epoch bigint NOT NULL,
+    animal_id integer NOT NULL,
+    product text NOT NULL,
+    piece integer DEFAULT 1 NOT NULL,
+    screen text NOT NULL,
+    device_id text,
+    worker text,
+    at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT piece_scans_animal_id_check CHECK (((animal_id >= 0) AND (animal_id <= 999))),
+    CONSTRAINT piece_scans_piece_check CHECK (((piece >= 1) AND (piece <= 20))),
+    CONSTRAINT piece_scans_product_check CHECK ((product ~ '^[a-z][a-z0-9_]{0,40}$'::text)),
+    CONSTRAINT piece_scans_screen_check CHECK ((screen = ANY (ARRAY['big'::text, 'small'::text])))
+);
+
+
+ALTER TABLE public.piece_scans OWNER TO postgres;
+
+--
+-- Name: piece_scans_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.piece_scans_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE public.piece_scans_id_seq OWNER TO postgres;
+
+--
+-- Name: piece_scans_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.piece_scans_id_seq OWNED BY public.piece_scans.id;
+
+
+--
 -- Name: plant_managers; Type: TABLE; Schema: public; Owner: postgres
 --
 
@@ -8302,6 +8533,13 @@ ALTER TABLE ONLY public.login_attempts ALTER COLUMN id SET DEFAULT nextval('publ
 
 
 --
+-- Name: piece_scans id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.piece_scans ALTER COLUMN id SET DEFAULT nextval('public.piece_scans_id_seq'::regclass);
+
+
+--
 -- Name: rate_events id; Type: DEFAULT; Schema: public; Owner: postgres
 --
 
@@ -8530,6 +8768,22 @@ ALTER TABLE ONLY public.manager_sessions
 
 ALTER TABLE ONLY public.outer_status_pilot
     ADD CONSTRAINT outer_status_pilot_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: piece_scans piece_scans_board_epoch_animal_id_product_piece_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.piece_scans
+    ADD CONSTRAINT piece_scans_board_epoch_animal_id_product_piece_key UNIQUE (board_epoch, animal_id, product, piece);
+
+
+--
+-- Name: piece_scans piece_scans_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.piece_scans
+    ADD CONSTRAINT piece_scans_pkey PRIMARY KEY (id);
 
 
 --
@@ -8783,6 +9037,13 @@ CREATE INDEX manager_sessions_auth_uid ON public.manager_sessions USING btree (a
 --
 
 CREATE INDEX pairing_requests_ip_at ON public.pairing_requests USING btree (ip, at DESC);
+
+
+--
+-- Name: piece_scans_epoch; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX piece_scans_epoch ON public.piece_scans USING btree (board_epoch, screen);
 
 
 --
@@ -9401,6 +9662,12 @@ ALTER TABLE public.outer_status_pilot ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE public.pairing_requests ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: piece_scans; Type: ROW SECURITY; Schema: public; Owner: postgres
+--
+
+ALTER TABLE public.piece_scans ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: plant_managers; Type: ROW SECURITY; Schema: public; Owner: postgres
@@ -10170,6 +10437,20 @@ REVOKE ALL ON FUNCTION public._legs_slot_error(p_legs boolean, p_head boolean, p
 
 
 --
+-- Name: FUNCTION _legs_sort_pending(a public.animals_pilot); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public._legs_sort_pending(a public.animals_pilot) FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION _legs_sort_station(); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public._legs_sort_station() FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION _list_tail(v jsonb, n integer); Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -10286,6 +10567,13 @@ REVOKE ALL ON FUNCTION public._nc_statuses() FROM PUBLIC;
 
 
 --
+-- Name: FUNCTION _nikur_refusal(a public.animals_pilot, x jsonb, p_ep bigint); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public._nikur_refusal(a public.animals_pilot, x jsonb, p_ep bigint) FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION _no_device_error(); Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -10304,6 +10592,13 @@ REVOKE ALL ON FUNCTION public._note_revoked_write(p_dev text) FROM PUBLIC;
 --
 
 REVOKE ALL ON FUNCTION public._outer_status_known(v text) FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION _parts_expected(); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public._parts_expected() FROM PUBLIC;
 
 
 --
@@ -11108,6 +11403,24 @@ REVOKE ALL ON FUNCTION public.manufacturer_set_code(p_name text, p_code text) FR
 
 
 --
+-- Name: FUNCTION nikur_board(); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public.nikur_board() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.nikur_board() TO anon;
+GRANT ALL ON FUNCTION public.nikur_board() TO authenticated;
+
+
+--
+-- Name: FUNCTION nikur_scan(p_id integer, p_product text, p_piece integer, p_epoch bigint, p_command_id uuid); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public.nikur_scan(p_id integer, p_product text, p_piece integer, p_epoch bigint, p_command_id uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.nikur_scan(p_id integer, p_product text, p_piece integer, p_epoch bigint, p_command_id uuid) TO anon;
+GRANT ALL ON FUNCTION public.nikur_scan(p_id integer, p_product text, p_piece integer, p_epoch bigint, p_command_id uuid) TO authenticated;
+
+
+--
 -- Name: FUNCTION outer_open(p_id integer, p_epoch bigint, p_open boolean, p_device_id text); Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -11525,5 +11838,5 @@ GRANT ALL ON TABLE public.system_flags TO service_role;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict vzoiTZyg66WkieDsE59i2W0jbTp66qj8jvfVQPP45Bfr549Qbmtdh3Zq7zn2zq0
+\unrestrict Cx1nPJBI7kmoirn335yBvvCIp6cjBFfMxf6Oy4f19s9SNvxd8TjyOhKRPN2E3k3
 
