@@ -2303,7 +2303,7 @@ begin
   delete from login_attempts;
   r  := pg_temp.api('{}', format('select manager_login(%L)', pg_temp.v('mgr_code')));
   r2 := pg_temp.api(pg_temp.dev('SL1'), format('select manager_login(%L)', pg_temp.v('mgr_code')));
-  ok := (select count(*) from login_attempts la where not la.ok) >= 2;
+  ok := (select count(*) from login_attempts la where not la.ok) = 0;   -- (v10.37: a right code on the wrong device is recorded, not counted)
   r3 := pg_temp.api(pg_temp.dev('LEADER'), format('select manager_login(%L)', pg_temp.v('mgr_code')));
   ok := ok and r ->> 'reason' = 'leader_device_required' and r2 ->> 'reason' = 'leader_device_required' and pg_temp.ok(r3)
         and (select device_id from manager_sessions where token = r3 ->> 'token') = v_id
@@ -2312,7 +2312,7 @@ begin
   r4 := pg_temp.api(pg_temp.dev('LEADER') || jsonb_build_object('x-manager-token', t), format('select manager_session_check(%L)', t));
   r5 := pg_temp.api(jsonb_build_object('x-manager-token', t), format('select manager_session_check(%L)', t));
   ok := ok and pg_temp.ok(r4) and not pg_temp.ok(r5);
-  perform pg_temp.rec('step 46 team-leader device: a team leader logs in only on a team-leader device (unpaired / station refused, counted, recorded); the session works only there', ok,
+  perform pg_temp.rec('step 46 team-leader device: a team leader logs in only on a team-leader device (unpaired / station refused and recorded, not counted as wrong codes); the session works only there', ok,
     concat_ws(' | ', r::text, r2::text, left(r3::text, 60), r5::text));
 
   -- a team-leader device has no ruling rights and writes nothing without the session
@@ -2922,6 +2922,51 @@ begin
     concat_ws(' | ', r4::text, r5::text, r2::text, r3::text, (pg_temp.ar(883)).parts_print_count, r::text));
 end $$;
 $gt72$;
+    v_step := 'v10.37 server fixes';
+    execute $gt73$
+-- ── v10.37 server fixes: the shochet's nevela, the reset list, wrong codes per device ──
+do $$
+declare r jsonb; r2 jsonb; r3 jsonb; r4 jsonb; ok boolean; i int;
+begin
+  -- 1. the shochet ruled nevela; an esophagus "nevela" arrives from a tablet that was offline;
+  --    a later esophagus "OK" must leave the shochet's nevela (it used to turn it into "slaughtered")
+  --    (the real path: the shochet's "?" is open, the esophagus checks "OK", the shochet rules nevela)
+  perform pg_temp.api(pg_temp.dev('SL1'), 'select hold_set(861, ''slaughter'', ''question'')');
+  perform pg_temp.api(pg_temp.dev('ESO1'), pg_temp.q_claim(861, 'eso', 'ok', '', ''));
+  r  := pg_temp.api(pg_temp.dev('SL1'), pg_temp.q_claim(861, 'slaughter', 'nevela', '', ''));
+  r2 := pg_temp.api(pg_temp.dev('ESO1'), pg_temp.q_push(861, '{"eso_result":"nevela","eso_checked":true}'));
+  ok := pg_temp.claimed(r) and pg_temp.ok(r2) and (pg_temp.ar(861)).slaughter = 'nevela'
+        and (pg_temp.ar(861)).eso_prev_slaughter = 'nevela';
+  r3 := pg_temp.api(pg_temp.dev('ESO1'), format('select eso_change(861, ''ok'', ''x'', %s)', pg_temp.ep()));
+  ok := ok and pg_temp.ok(r3) and (pg_temp.ar(861)).slaughter = 'nevela' and (pg_temp.ar(861)).eso_result = 'ok';
+  perform pg_temp.rec('v10.37 the shochet''s nevela stays nevela after an offline esophagus "nevela" and a later esophagus "OK"', ok,
+    concat_ws(' | ', r ->> 'error', r2 ->> 'error', r2 ->> 'reason', r3::text, (pg_temp.ar(861)).slaughter, (pg_temp.ar(861)).eso_prev_slaughter, (pg_temp.ar(861)).eso_result));
+
+  -- 2. the reset list of unfinished numbers names the shochet's open "?" too
+  r  := pg_temp.api(pg_temp.dev('SL1'), 'select hold_set(862, ''slaughter'', ''question'')');
+  r2 := pg_temp.api('{}', format('select reset_daily_board(%L)', pg_temp.v('mgr')));
+  ok := pg_temp.ok(r) and r2 ->> 'error' = 'unfinished_animals' and r2 -> 'numbers' @> '[863]'::jsonb;
+  perform pg_temp.api(pg_temp.dev('SL1'), pg_temp.q_claim(862, 'slaughter', 'nevela', '', ''));   -- (closes the "?")
+  perform pg_temp.rec('v10.37 the manual reset lists the number with the shochet''s open "?" (it was counted, not listed)', ok,
+    concat_ws(' | ', left(r::text, 60), r2::text));
+
+  -- 3. wrong team-leader codes are counted per address + device: 8 on one station tablet lock that
+  --    tablet, not the team leader's own device
+  delete from login_attempts;
+  for i in 1..8 loop
+    perform pg_temp.api(pg_temp.dev('SL1'), 'select manager_login(''gtselftest-wrong-code'')');
+  end loop;
+  r  := pg_temp.api(pg_temp.dev('SL1'), 'select manager_login(''gtselftest-wrong-code'')');
+  r2 := pg_temp.api(pg_temp.dev('LEADER'), format('select manager_login(%L)', pg_temp.v('mgr_code')));
+  r3 := pg_temp.api(pg_temp.dev('SL1'), format('select manager_login(%L)', pg_temp.v('mgr_code')));
+  r4 := pg_temp.api(pg_temp.dev('ESO1'), 'select manager_login(''gtselftest-wrong-code'')');
+  ok := r ->> 'reason' = 'locked' and r2 ->> 'reason' is distinct from 'locked' and r3 ->> 'reason' = 'locked' and r4 ->> 'reason' = 'wrong_code'
+        and (select count(*) from login_attempts la where not la.ok and la.ip like 'm:%:' || pg_temp.devid('SL1')) = 8;
+  delete from login_attempts;
+  perform pg_temp.rec('v10.37 wrong team-leader codes counted per address + device: 8 on one station tablet lock only that tablet, not the team-leader device or another tablet', ok,
+    concat_ws(' | ', r::text, left(r2::text, 60), r3::text, r4::text));
+end $$;
+$gt73$;
     v_step := 'the ACTIVE security surface against the expected manifest';
     execute $gt70$
 -- ── the ACTIVE security surface against the expected manifest ───────────────

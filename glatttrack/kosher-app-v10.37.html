@@ -498,19 +498,20 @@ body{padding-top:var(--gt-bar-h,0px);box-sizing:border-box;}
 .gt-winq{display:block;margin:12px auto 0;min-width:160px;padding:12px 18px;border-radius:12px;border:2px solid #FFE57F;background:#FFC400;color:#000;font:800 18px Arial;cursor:pointer}
 .lung-actions .gt-winq{display:inline-block;min-width:auto}
 .gt-tbu{background:#6A3FB5;color:#fff;border-color:#C5B3FF}
-.gt-tbl{background:#1c2433;color:#E8EDF5;border-color:#55607a}
+.gt-tbb.gt-tbl{background:#1c2433;color:#E8EDF5;border-color:#55607a}   /* v10.37: the top-bar 'held' button only (it painted the report tables too) */
 .gt-slq{background:#FFC400!important;color:#000!important;box-shadow:0 0 24px rgba(255,196,0,.55)!important;display:flex;flex-direction:column;align-items:center;justify-content:center}
 .gt-slq-m{font:900 40px Arial;line-height:1}.gt-slq-t{font:800 15px Arial}
 .gt-sheet-bg{position:fixed;inset:0;background:rgba(0,0,0,.66);z-index:99990;display:flex;align-items:center;justify-content:center;padding:12px}
 .gt-sheet{background:#111827;border:3px solid #D4A843;border-radius:18px;padding:18px 20px;max-width:760px;width:100%;max-height:90vh;overflow:auto;text-align:center;color:#fff;font-family:Arial}
 .gt-sheet-t{color:#E8B84A;font:800 26px Arial}.gt-sheet-s{font-size:16px;margin:6px 0 12px;color:#cdd5e3}
-.gt-row{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:10px}
+.gt-sheet .gt-row{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:10px;border-top:0;padding:0;font-size:inherit}   /* v10.37: scoped (it changed the report rows too) */
+.gt-box .gt-row{margin-top:10px}
 .gt-sb{min-width:130px;padding:12px 14px;border-radius:12px;border:2px solid;font:700 17px Arial;background:transparent;cursor:pointer}
 .gt-sb.gt-up.on{background:#B39DFF!important;color:#000!important;box-shadow:0 0 0 3px rgba(179,157,255,.35)}
 .gt-num{display:flex;gap:10px;align-items:center;justify-content:center;font-size:17px}
 .gt-num input{width:110px;font:800 24px Arial;text-align:center;border-radius:10px;border:2px solid #55607a;background:#0b1220;color:#fff;padding:6px}
-.gt-hrow{display:flex;justify-content:space-between;align-items:center;gap:10px;background:#1c2433;border-radius:10px;padding:8px 10px;margin:6px 0;text-align:start;flex-wrap:wrap}
-.gt-hrow .gt-sb{min-width:96px;padding:8px 10px;font-size:14px}
+.gt-sheet .gt-hrow,#gtOpenCard .gt-hrow{display:flex;justify-content:space-between;align-items:center;gap:10px;background:#1c2433;border-radius:10px;padding:8px 10px;margin:6px 0;text-align:start;flex-wrap:wrap}   /* v10.37: scoped (it changed the health / processing rows) */
+.gt-sheet .gt-hrow .gt-sb,#gtOpenCard .gt-hrow .gt-sb{min-width:96px;padding:8px 10px;font-size:14px}
 .gt-muted{color:#9aa4b5;font-size:13px}
 .gt-tag{border-radius:6px;padding:1px 7px;font-weight:800}.gt-tag-q{background:#FFC400;color:#000}.gt-tag-u{background:#6A3FB5;color:#fff}.gt-tag-r{background:#E53935;color:#fff}
 .gt-oc-t{font:800 18px Arial;color:#E8B84A;margin-bottom:6px}.gt-oc-lock{color:#ff8a80;font-weight:700;margin-top:6px}
@@ -2131,7 +2132,17 @@ const KS = (function(){
   const QRGen={
     draw:function(canvas,text,px){
       try{
-        const model=_qrcode.create(text,'M');
+        let model;
+        try{ model=_qrcode.create(text,'M'); }
+        catch(e1){
+          // v10.37: a long payload (long Hebrew shochet name / date) can exceed the largest code this
+          // generator makes — the sticker used to come out with NO QR, so the next stations could not scan it.
+          // Fall back to the part the scanners read: the animal number.
+          const m=String(text||'').match(/(?:^|\|)N:(\d+)/);
+          if(!m) throw e1;
+          model=_qrcode.create('BH|N:'+m[1],'M');
+          try{ gtLogError('qr.long', String(text).length+' chars → number only'); }catch(_){}
+        }
         const n=model.getModuleCount();
         const quiet=2;
         const scale=Math.max(1,Math.floor((px||140)/(n+quiet*2)));
@@ -2839,8 +2850,15 @@ const KS = (function(){
   // database on write. Closing that gap needs a Supabase Edge Function
   // (same JS runtime as the browser) — a natural next layer, not built yet.
   async function _sha256Hex(str){
-    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
-    return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+    // v10.37: a plant server on a plain-http address has no crypto.subtle — every ledger event
+    // (rulings, corrections, reprints) failed there and was lost. Same hash, computed in JS.
+    try{
+      if(window.crypto && crypto.subtle){
+        const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+        return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+      }
+    }catch(e){}
+    return _sha256SyncHex(str);
   }
 
   // All calls funnel through this queue so that even if several mutations
@@ -2943,7 +2961,7 @@ const KS = (function(){
     action = String(action == null ? '' : action).replace(/[^A-Za-z0-9_:.-]/g, '_').slice(0, 80) || 'none';
     try{
       const prevHash = localStorage.getItem('ks_last_event_hash') || null;
-      const eventId = (crypto.randomUUID ? crypto.randomUUID() : (Date.now()+'-'+Math.random().toString(36).slice(2)));
+      const eventId = _uuid();   // v10.37: always a real UUID (randomUUID is missing on a plain-http address; the old fallback was not a UUID)
       const occurredAt = new Date().toISOString();
       const e = {
         eventId, animalNo: (animalNo===undefined?null:animalNo), stage, action,
@@ -3202,6 +3220,15 @@ const KS = (function(){
     if(!sh) return true;   // not known — treat the local value as this device's own
     return _fieldMembers(f).some(([lk,ck])=>!_svEq(a[lk], sh[ck], f.maxWins && lk===f.local));
   }
+  // v10.37: the server's event_append takes from a station tablet only events of ITS OWN stage
+  // (slaughter / esophagus / inner / outer / legs / parts / stamps; the team leader's device: settings).
+  // Extra events (unsent rulings, reprints, problem reports) are written under that stage, the kind is in the action.
+  function _myEventStage(fallback){
+    const r=_myStationRole();
+    const m={slaughter:'slaughter',esophagus:'esophagus',inner:'inner',outer:'outer',legs:'legs',parts:'parts',stamps:'stamps',leader:'settings'};
+    if(r) return m[r] || null;                 // a supervisor screen (cooler / nikur …) may not write events
+    return fallback || 'settings';             // a team leader logged in on an unpaired device
+  }
   function _myStationRole(){
     try{ const r=localStorage.getItem('ks_kiosk_role')||''; return r ? r.replace(/-\d+$/,'') : null; }catch(e){ return null; }
   }
@@ -3303,7 +3330,7 @@ const KS = (function(){
           if(!window.sb || _boardIsStale()) return;
           const q=_loadSyncQueue(), ep=_boardEpoch();
           const op=(q.ops||[])[0];
-          if(op && op.epoch && ep && op.epoch!==ep){ _removePendingOp(op); _opDone(op, null); continue; }   // another day's board
+          if(op && op.epoch && ep && op.epoch!==ep){ _recordUnsentOp(op, 'day_ended'); _removePendingOp(op); _opDone(op, null); continue; }   // another day's board
           const backoff=Date.now() < _pushBackoffUntil;
           const pushAt=backoff ? null : _nextPushAt(q);
           if(op && (pushAt===null || (Number(op.at)||0) <= pushAt)){
@@ -3417,7 +3444,7 @@ const KS = (function(){
       // an older day's board is never sent; a device that simply didn't know the day yet
       // keeps its change and sends it again once it has learned the day
       try{ _carryKeepUnsent(_boardEpoch(), ids); }catch(e){}   // step 46: a processing station's work goes to the day that ended
-      if(_boardEpoch()) ids.forEach(i=>_clearAnimalDirty(i));
+      if(_boardEpoch()) ids.forEach(i=>{ const r=sentOf(i); if(!_PROC_STATIONS.includes(_myStationRole())) _recordUnsentRuling('ruling', i, { row: r, epoch: batch.epoch || null }, 'stale_board'); _clearAnimalDirty(i); });
       _sbFetchSettingsSnapshot(true);
       return 'stop';
     }
@@ -3606,7 +3633,7 @@ const KS = (function(){
     const d=data || {};
     if(d.error === 'stale_board'){
       try{ if(stage==='legs' || stage==='stamped') _carryKeepUnsent(args.p_epoch, [idx]); }catch(e){}   // step 46
-      if(args.p_epoch) _clearAnimalDirty(idx); else _addPendingOp(op);   // didn't know the day yet: sent once it does
+      if(args.p_epoch){ _recordUnsentOp(op, 'stale_board'); _clearAnimalDirty(idx); } else _addPendingOp(op);   // didn't know the day yet: sent once it does
       _sbFetchSettingsSnapshot(true); done(d); return 'stop';
     }
     if(d.error === 'wrong_station' || d.error === 'device_not_paired'){
@@ -3689,7 +3716,7 @@ const KS = (function(){
     }
     const d=data || {};
     if(d.error === 'stale_board'){
-      if(!ep) _addPendingOp(op);
+      if(!ep) _addPendingOp(op); else _recordUnsentOp(op, 'stale_board');
       _sbFetchSettingsSnapshot(true); done(d); return 'stop';
     }
     if(d.error){
@@ -3702,6 +3729,19 @@ const KS = (function(){
       if(d.row) _revertToServer(idx, d.row, _RULING_COLS); else _sbRefetchAnimal(idx);
       return done(d);
     }
+    // v10.37 safety net: this tablet keeps the shochet's own nevela when the esophagus goes back to OK.
+    // If the SERVER answers "slaughtered" for it, the server's eso_change has the old double-change mistake —
+    // say it loudly (team leader's error list + the event log + a notice here) instead of hiding it.
+    try{
+      const _a=_state.animals[idx];
+      if(op.value==='ok' && d.row && _a && _a.slaughter==='nevela' && _a.esoPrevSlaughter==='nevela' && d.row.slaughter && d.row.slaughter!=='nevela'){
+        gtLogError('eso_change #'+(idx+1)+' server', 'server set slaughter='+d.row.slaughter+' over the shochet\'s nevela');
+        _sbRecordEvent('esophagus', 'server_mismatch', { expected:'nevela', server:String(d.row.slaughter) }, idx+1);
+        _showRuleNotice(L('⚠ בהמה #'+(idx+1)+': השוחט פסק נבלה, אבל השרת רשם "'+d.row.slaughter+'". יש לבדוק ידנית ולעדכן את ראש הצוות.',
+                          '⚠ Animal #'+(idx+1)+': the shochet ruled nevela, but the server recorded "'+d.row.slaughter+'". Check it by hand and tell the team leader.',
+                          '⚠ Animal #'+(idx+1)+': el shojet dictaminó nevelá, pero el servidor registró "'+d.row.slaughter+'". Revíselo a mano e informe al jefe de equipo.'));
+      }
+    }catch(e){}
     _applyOwnCallRow(op, d.row);
     return done(d);
   }
@@ -3733,7 +3773,7 @@ const KS = (function(){
       setFlag(d.row ? !!d.row.not_chalak_outer : true);
       return done(d);
     }
-    if(d.error === 'stale_board'){ if(!ep) _addPendingOp(op); _sbFetchSettingsSnapshot(true); done(d); return 'stop'; }
+    if(d.error === 'stale_board'){ if(!ep) _addPendingOp(op); else _recordUnsentOp(op, 'stale_board'); _sbFetchSettingsSnapshot(true); done(d); return 'stop'; }
     // refused: the animal stays on the glatt screen as the server holds it
     if(d.error==='wrong_station' || d.error==='device_not_paired') _deviceRefusal(idx, d.error);
     else _showRuleNotice(gtErrText(d.error || 'server_error'));
@@ -4324,6 +4364,22 @@ const KS = (function(){
   }
   // processing work that can't reach its slaughter day any more: kept in the event log
   // (stage = the station, action 'unsent_processing'), never silently dropped
+  // v10.37: a RULING (slaughter / esophagus / inner / outer) made on a day that ended before it reached
+  // the server is never dropped silently either — it goes into the event log (action 'unsent_ruling')
+  // and the team leader's error list, like the processing work above
+  const _PROC_OP_STAGES=['legs','stamped','parts','stamps'];
+  function _recordUnsentRuling(stage, idx, detail, why){
+    if(_PROC_OP_STAGES.includes(String(stage||''))) return;   // processing work is kept by _carryKeepUnsent
+    const pl=Object.assign({ reason: why || 'stale_board', ruling_stage: stage || null }, detail || {});
+    const evStage=_myEventStage(null);
+    if(evStage) _eventChainQueue = _eventChainQueue.then(() => _sbRecordEventNow(evStage, 'unsent_ruling', pl, (idx!=null) ? Number(idx)+1 : null)).catch(()=>{});
+    try{ gtLogError('sync.rulingUnsent', (stage||'?')+' #'+((idx!=null)?Number(idx)+1:'?')+' · '+(why||'stale_board')); }catch(e){}
+  }
+  function _recordUnsentOp(op, why){
+    if(!op) return;
+    _recordUnsentRuling(op.stage || (op.kind==='eso_change' ? 'eso' : op.kind==='nc_outer' ? 'outer' : op.kind), op.idx,
+                        { value: op.value!=null ? String(op.value) : null, actor: op.actor || '', epoch: op.epoch || null, kind: op.kind || null }, why);
+  }
   function _carryRecordUnsent(rows, board, day, why){
     const st=_myStationRole() || 'processing';
     (rows||[]).forEach(r=>{
@@ -4604,7 +4660,7 @@ const KS = (function(){
       a.esoByDevice=SB_DEVICE_ID;
       a.esoTime=_stamp(a.esoTime);   // this device's ruling time (the "moved on" check)
       if(result==='nevela'){
-        a.esoPrevSlaughter=(a.slaughter==='nevela'?(a.esoPrevSlaughter||'slaughtered'):a.slaughter);
+        a.esoPrevSlaughter=a.slaughter;   // v10.37: the previous result was OK, so this is the shochet's own status (a nevela of the shochet is kept)
         a.slaughter='nevela';
       }else{
         const _q=a.esoPrevSlaughter==null && typeof _gtFlags!=='undefined' && _gtFlags.holds.some(h=>h.n===idx && h.station==='slaughter' && h.kind==='question' && h.note==='eso_nevela');
@@ -4781,10 +4837,10 @@ const KS = (function(){
    *  the kind of action that needs an explicit, visible confirmation. */
   function importBackup(data){
     if(!data || !Array.isArray(data.animals) || typeof data.settings !== 'object'){
-      return { ok:false, error:'קובץ לא תקין — חסרים animals/settings' };
+      return { ok:false, error:L('קובץ לא תקין — חסרים animals/settings','Invalid file — animals/settings missing','Archivo no válido — faltan animals/settings') };
     }
     if(data.animals.length > TOTAL || data.animals.length < 1){
-      return { ok:false, error:'מספר בהמות לא תואם (מצופה עד '+TOTAL+', התקבל '+data.animals.length+')' };
+      return { ok:false, error:L('מספר בהמות לא תואם (מצופה עד '+TOTAL+', התקבל '+data.animals.length+')','Animal count does not match (expected up to '+TOTAL+', got '+data.animals.length+')','El número de animales no coincide (se esperaba hasta '+TOTAL+', se recibió '+data.animals.length+')') };
     }
     _state.animals = data.animals.slice();
     while(_state.animals.length < TOTAL) _state.animals.push(defaultAnimal(_state.animals.length));
@@ -4813,12 +4869,16 @@ const KS = (function(){
     getState, getAnimal, getAnimals, getSettings,
     setSlaughter, setLegsStickers, setHeadStickers,
     setMaw, setRumen, setLungDrawing, getLungDrawing, fetchLungDrawing, flushLungDrawings: ()=>_lungFlush(),
+    recordEvent: (stage, action, payload, animalNo)=>_sbRecordEvent(stage, action, payload, animalNo),   // v10.37
+    // v10.37: an extra event under the stage this device may write (null = this device writes none)
+    recordOwnEvent: (action, payload, animalNo)=>{ const st=_myEventStage(null); return st ? _sbRecordEvent(st, action, payload, animalNo) : Promise.resolve(); },
     setInnerConfirmed, setInnerTreif,
     setInnerInProgress,
     claimInnerStart, clearInnerInProgress,
     setOuterStatus,
     sbSubscribeOuterStatus,
     syncNow: ()=>_sbCatchUp(),
+    getBoardEpoch: ()=>_boardEpoch(),   // v10.37
     syncQueue: ()=>_loadSyncQueue(),
     syncPump: ()=>_syncPump(),
     setPartsScanned, setPartsPrintCount, setPartsPrinted, setPartsPrintedAs, setStampedAs,
@@ -4888,6 +4948,14 @@ const KS = (function(){
 //   ⚠ השתנה (red frame) — a ruling changed after the next stations worked, until the team
 //                   leader marks it handled.
 var _gtFlags={holds:[],changes:[],epoch:null,ok:false,at:0,sig:''};
+// v10.37: the last list of holds from the server is kept on the tablet. After a reload with no
+// connection (or before the first answer) a USDA HOLD / "?" still stops parts and stamps —
+// it used to be an empty list, so a held animal could be printed / stamped.
+const _GT_FLAGS_KEY='gt_flags_cache_v1';
+try{ const _c=JSON.parse(localStorage.getItem(_GT_FLAGS_KEY)||'null');
+     if(_c && Array.isArray(_c.holds)) _gtFlags={holds:_c.holds.filter(h=>h && !h.local),changes:Array.isArray(_c.changes)?_c.changes:[],epoch:(_c.epoch!=null?_c.epoch:null),ok:false,at:0,sig:''}; }catch(e){}
+window.addEventListener('gt-day-reset', ()=>{ _gtFlags={holds:[],changes:[],epoch:null,ok:false,at:0,sig:''}; try{ localStorage.removeItem(_GT_FLAGS_KEY); }catch(e){} setTimeout(()=>{ try{ gtFlagsPull(); }catch(e){} }, 500); });
+function _gtFlagsCacheSave(){ try{ localStorage.setItem(_GT_FLAGS_KEY, JSON.stringify({holds:_gtFlags.holds.filter(h=>!h.local),changes:_gtFlags.changes,epoch:_gtFlags.epoch,at:Date.now()})); }catch(e){} }
 var _gtFlagsBusy=false, _gtNext={};
 const GT_ST_NAME={slaughter:['שחיטה','Slaughter','Faena'],eso:['וושט','Esophagus','Esófago'],legs:['רגליים וראש','Legs & head','Patas y cabeza'],
   inner:['פנים','Inner','Interno'],outer:['חוץ','Outer','Externo'],parts:['חלקים','Parts','Partes'],stamps:['חותמות ושקילה','Stamps & weighing','Sellos y pesaje']};
@@ -4945,6 +5013,7 @@ async function gtFlagsPull(){
       const sig=JSON.stringify([holds.map(h=>[h.id,h.open,h.resolution]),(d.changes||[]).map(c=>[c.id,c.ackAt]),d.boardEpoch]);
       const changed=sig!==_gtFlags.sig;
       _gtFlags={holds,changes:d.changes||[],epoch:d.boardEpoch,ok:true,at:Date.now(),sig};
+      _gtFlagsCacheSave();
       if(changed) gtRerenderAll();
     }
   }catch(e){}
@@ -4964,7 +5033,7 @@ const GT_GRID_STATION={slGrid:'slaughter',esoGrid:'eso',lgGrid:'legs',lgSortGrid
 function _gtPartsLabel(hs){ return hs.map(h=>(h.resolution==='condemned'?'✕ ':'')+_gtL(GT_PART_NAME[h.part]||[h.part,h.part,h.part])).join(' · '); }
 function gtGridWrap(gridId,getCls,getLabel,getTap){
   const st=GT_GRID_STATION[gridId];
-  if(!st || !_gtFlags.ok || (!_gtFlags.holds.length && !_gtFlags.changes.length)) return null;
+  if(!st || (!_gtFlags.ok && !_gtFlags.holds.length) || (!_gtFlags.holds.length && !_gtFlags.changes.length)) return null;   // v10.37: kept holds show offline too
   const info=(i)=>{
     const held=gtHeldAt(i,st), own=gtOwnQ(i,st), slq=gtSlQ(i), parts=gtPartHolds(i,st);
     const _c=gtChange(i), chg=(_c && gtHoldSeenAt({station:_c.stage==='esophagus'?'eso':_c.stage, part:'x'}, st)) ? _c : null;   // v10.32: only here and further down the line
@@ -5694,7 +5763,12 @@ function _gtDoneAfterHtml(stage, a){
     +'</div>';
 }
 
-var GT_APP_VERSION='v10.36';
+// v10.37 (code review): settings send only the changed key · a double esophagus change keeps the shochet's
+// nevela · a re-opened inner treif closed without a decision stays treif (and survives a reload) · the hold
+// list is kept on the tablet (parts / stamps stop offline too) · reprints check holds · rulings of a day that
+// ended before they were sent go to the event log · ledger + backup hash on plain-http · archive dated by the
+// slaughter day · GS1 / pound scale labels · QR falls back to the number · translations · CSS clashes
+var GT_APP_VERSION='v10.37';
 document.addEventListener('DOMContentLoaded',()=>{ try{ document.querySelectorAll('.gt-ver').forEach(e=>e.textContent=GT_APP_VERSION); }catch(e){} });
 function escapeHtml(str){
   return String(str==null?'':str).replace(/[&<>"']/g, c=>({
@@ -6364,7 +6438,10 @@ function _reportProblemSend(screenName){ // called after the confirm window (rep
       note:window._gtProblemNote||''
     });
     window._gtProblemNote='';
-    KS.updateSettings({problemReports:probs});
+    KS.updateSettings({problemReports:probs.slice(-200)});
+    // v10.37: also an append-only event — the settings copy can be overwritten by another station's report
+    // at the same moment, and a supervisor screen does not send settings at all; the event always arrives
+    try{ KS.recordOwnEvent && KS.recordOwnEvent('problem_report', { screen: String(screenName||''), summary: String(diag.summary||'').slice(0,500), note: String(probs[probs.length-1].note||'').slice(0,500) }, null); }catch(e){}   // v10.37: only the newest 200 (they travel inside the settings)
     
     setTimeout(()=>{
       icon.textContent='✅';
@@ -7405,48 +7482,12 @@ function _gtCorrectionBlock(stage, idx){
         return L('בהמה #'+(idx+1)+' — כבר עברה ל'+nextName[0]+'. אי אפשר לשנות כאן.','Animal #'+(idx+1)+' — already passed to '+nextName[1]+'. It cannot be changed here.','Animal #'+(idx+1)+' — ya pasó a '+nextName[2]+'. No se puede cambiar aquí.')+usda;
       }
     } }
-  if(KS.getAnimal(idx)) return null;
-  const a=KS.getAnimal(idx);
-  const P=L('בהמה #'+(idx+1)+' — ','Animal #'+(idx+1)+' — ','Animal #'+(idx+1)+' — ');
-  const FINAL=(why)=>P+L('אי אפשר לשנות — הפסיקה סופית ('+why[0]+').','Cannot change — the ruling is final ('+why[1]+').','No se puede cambiar — el dictamen es definitivo ('+why[2]+').');
-  if(!a) return P+L('אי אפשר לשנות.','Cannot change.','No se puede cambiar.');
-  let test=false; try{ test=(typeof _gtTestModeOn==='function') && _gtTestModeOn(); }catch(e){}
-  let me=null; try{ me=KS.getDeviceId(); }catch(e){}
-  const K={slaughter:'slaughterByDevice',eso:'esoByDevice',inner:'innerByDevice',outer:'outerByDevice'}[stage];
-  const esoSt=(stage==='eso') ? _gtIsEsoStation() : false;
-  const mine=(x)=>{
-    if(stage==='eso' && (x[K]===undefined || x[K]===null)) return esoSt;   // esophagus device not known here yet
-    return !!me && KS.isMe(x[K]);
-  };
-  const ruled=(x)=>!!x && (stage==='slaughter' ? !!x.slaughter
-                        : stage==='eso' ? x.esoChecked===true
-                        : stage==='inner' ? (x.innerStatus==='confirmed'||x.innerStatus==='treif')
-                        : !!x.outerStatus);
-  if(!mine(a)) return P+L('אי אפשר לשנות — הפסיקה נעשתה במכשיר אחר. רק המכשיר שפסק יכול לתקן, ורק מיד.',
-                          'Cannot change — the ruling was made on another device. Only the device that ruled can correct it, and only right away.',
-                          'No se puede cambiar — el dictamen se hizo en otro dispositivo. Solo el dispositivo que dictaminó puede corregirlo, y solo de inmediato.');
-  const NEXT=['כבר נבדקה בשלב הבא','the next station already checked it','la siguiente estación ya lo revisó'];
-  if(stage==='slaughter' && (a.esoChecked || a.innerStatus || a.outerStatus)) return FINAL(NEXT);
-  if(stage==='eso' && a.innerStatus) return FINAL(NEXT);
-  if(stage==='inner' && a.outerStatus) return FINAL(NEXT);
-  if(stage==='outer' && (((a.partsPrintCount||0)>0) || a.stamped || a.legsSorted))
-    return FINAL(['כבר הודפסו מדבקות / חותמות או שהבהמה מוינה','stickers / stamps were already printed or it was sorted','ya se imprimieron etiquetas / sellos o ya se clasificó']);
-  // "Moved on" = THIS device ruled this stage on ANOTHER animal AFTER its ruling of this
-  // one (by time, not by number): an animal that reached the station late (e.g. #16 sent
-  // to the rabbinate screen after it ruled #17, #18) is worked next and may be corrected
-  // right after its ruling. Only when a time is missing (an old record) the number decides.
-  const TK={slaughter:'slaughterTime',eso:'esoTime',inner:'innerTime',outer:'outerTime'}[stage];
-  const tOf=(x)=>{ const v=Number(x && x[TK]); return (isFinite(v) && v>0) ? v : null; };
-  const tMe=tOf(a);
-  const all=KS.getAnimals();
-  for(let j=0;j<all.length;j++){
-    if(j===idx) continue;
-    const x=all[j];
-    if(!ruled(x) || !mine(x)) continue;
-    const tx=tOf(x);
-    const later=(tMe!=null && tx!=null) ? tx>tMe : j>idx;
-    if(later) return FINAL(['עברת לבהמה הבאה','you already moved on to the next animal','ya pasó al siguiente animal']);
-  }
+  // v10.37: the rule (owner, v10.32–v10.37) is only the "next station" check above — any tablet of the
+  // station may change its ruling until the number reached the next station, and the OUTER ruling may be
+  // changed even after parts stickers / stamps. The server enforces the same (_correction_check).
+  // The older checks that used to follow here (same device only, "moved on", outer after printing) had
+  // not run since v10.26 and were removed so nobody switches them back on by mistake.
+  if(!KS.getAnimal(idx)) return L('בהמה #'+(idx+1)+' — אי אפשר לשנות.','Animal #'+(idx+1)+' — cannot change.','Animal #'+(idx+1)+' — no se puede cambiar.');
   return null;
 }
 // true = the change may go ahead; false = a notice was shown instead
@@ -7522,7 +7563,7 @@ function inCancelRumenMaw(){
   if(idx>=0){
     const x=KS.getAnimal(idx);
     if(x && x.innerStatus==='in_progress'){
-      if(inReopened[idx]){ const r=inReopened[idx]; delete inReopened[idx]; KS.setInnerConfirmed(idx, r.by||activeUserName("inner","בודק פנים")); }
+      if(inReopened[idx]){ const r=inReopened[idx]; delete inReopened[idx]; _inReopenedSave(); _inRestoreReopened(idx, r); }
       else KS.clearInnerInProgress(idx);
     }
     inFloats=inFloats.filter(f=>f.idx!==idx);
@@ -8110,6 +8151,7 @@ function renderSticker(containerId,idx,kind,sample){
     const stMap={glatt:['גלאט','#28C76F','Glatt'],beit:['בית יוסף','#4DA6FF','Beit Yosef'],kosher:['כשר','#D4A843','Kosher'],mk:['MK','#A080F0','MK'],rabChalak:['רבנות חלק','#16A085','Rabbinate Chalak'],treif:['טרף','#E03030','Treif'],slaughtered:['נשחט','#2A7FFF','Slaughtered'],notChalak:['לא חלק','#C99A00','Non-Chalak'],nevela:['נבלה','#E03030','Nevela'],shot:['נבלה','#E03030','Nevela']};
     st=stMap[stRaw]||(stRaw?[statusDisplayName(stRaw)||stRaw,(getAllStatuses().find(x=>x.key===stRaw)||{}).color||'#888',statusEnglishName(stRaw)]:['—','#888','']);
     { const _sn=_gtStickerNames(stRaw); if(_sn) st=[_sn.he, st[1], _sn.en]; }   // v10.36: the plant's names (and sticker names)
+    if(!/^(#[0-9a-fA-F]{3,8}|[a-zA-Z]{3,20}|rgba?\([\d\s.,%]+\))$/.test(String(st[1]||''))) st[1]='#888';   // v10.37: a plant colour goes into a style attribute — only a real colour
     const _d=slTime||new Date();
     if(opt.showHeb){try{heb=(typeof getHebrewDate==='function')?getHebrewDate(_d):'';
       }catch(e){heb='';}}
@@ -8576,10 +8618,14 @@ function lgReprintWarn(idx){
 function lgDoReprint(step){
   document.getElementById("lgRpModal").classList.remove("open");
   if(lgReprintIdx<0)return;
+  {const _h=gtHeldAt(lgReprintIdx,'legs'); if(_h){ const _i=lgReprintIdx; lgReprintIdx=-1; lgShowWarn(_gtHoldTitle(_h), _gtHoldReprintText(_i)); return; }}
   // Log reprint
   const logs=KS.getSettings().reprintLog||[];
   logs.push({idx:lgReprintIdx+1,step,screen:(step==="legs"?"רגלים":"ראש"),time:new Date().toLocaleTimeString("he-IL")});
   KS.updateSettings({reprintLog:logs.slice(-2000)});   // (improvement round) only the newest 2000 lines
+  // v10.37: also an append-only event — two stations reprinting at the same moment each sent their own copy of
+  // the whole log, and one copy overwrote the other (a reprint is a kashrut audit line, it must not be lost)
+  try{ const _e=logs[logs.length-1]||{}; KS.recordOwnEvent && KS.recordOwnEvent('reprint', Object.assign({ step: _e.step||null }, _e), (_e.idx!=null && isFinite(Number(_e.idx))) ? Number(_e.idx) : null); }catch(e){}
   showPrintPopup(lgReprintIdx,step,true);
   lgReprintIdx=-1;
 }
@@ -9029,12 +9075,22 @@ function removeFloat(idx){
   }
   // If the animal was still mid-check (in_progress, no final decision), revert it to pending
   // so it returns to the queue and keeps blinking until a decision is made.
-  if(inReopened[idx]){ const r=inReopened[idx]; delete inReopened[idx]; KS.setInnerConfirmed(idx, r.by||activeUserName("inner","בודק פנים")); }
+  if(inReopened[idx]){ const r=inReopened[idx]; delete inReopened[idx]; _inReopenedSave(); _inRestoreReopened(idx, r); }
   else KS.clearInnerInProgress(idx);
   inFloats=inFloats.filter(f=>f.idx!==idx);renderFloats();inRenderGrid();inUpdateSummary();
 }
 let inChangeIdx=-1;
-const inReopened={};
+// v10.37: a re-opened inner ruling remembers its ORIGINAL ruling (kosher / treif) and survives a
+// reload — closing without a new decision puts back exactly what was there (a treif never becomes kosher)
+const _IN_REOPEN_KEY='gt_in_reopened_v1';
+const inReopened=(()=>{ try{ const o=JSON.parse(localStorage.getItem(_IN_REOPEN_KEY)||'{}'); return (o && typeof o==='object') ? o : {}; }catch(e){ return {}; } })();
+function _inReopenedSave(){ try{ localStorage.setItem(_IN_REOPEN_KEY, JSON.stringify(inReopened)); }catch(e){} }
+function _inRestoreReopened(idx, r){
+  const who=(r && r.by) || activeUserName("inner","בודק פנים");
+  if(r && r.status==='treif') KS.setInnerTreif(idx, who);
+  else KS.setInnerConfirmed(idx, who);
+}
+window.addEventListener('gt-day-reset', ()=>{ Object.keys(inReopened).forEach(k=>delete inReopened[k]); _inReopenedSave(); });
 function inOpenChangeWarn(idx){
   if(!_gtCorrectionGate('inner', idx)) return;
   inChangeIdx=idx;
@@ -9055,7 +9111,7 @@ function inConfirmChange(){
    }}
   // Revert to in_progress (remember it was confirmed, so closing without a
   // new decision puts it back instead of dropping it to "pending")
-  { const pa=KS.getAnimal(inChangeIdx); inReopened[inChangeIdx]={by:pa&&pa.innerBy}; }
+  { const pa=KS.getAnimal(inChangeIdx); inReopened[inChangeIdx]={by:pa&&pa.innerBy, status:pa&&pa.innerStatus}; _inReopenedSave(); }
   KS.setInnerInProgress(inChangeIdx);
   inFloats.push({idx:inChangeIdx,drawing:KS.getLungDrawing(inChangeIdx)});
   renderFloats();
@@ -9166,7 +9222,7 @@ function lungDone(result){
     const bg=document.getElementById("lungBg"),draw=document.getElementById("lungDraw");
     if(bg&&draw){const tmp=document.createElement("canvas");tmp.width=bg.width;tmp.height=bg.height;const ctx=tmp.getContext("2d");ctx.drawImage(bg,0,0);ctx.drawImage(draw,0,0);const dataUrl=tmp.toDataURL();KS.setLungDrawing(confirmedIdx,dataUrl);const fw=inFloats.find(f=>f.idx===confirmedIdx);if(fw)fw.drawing=dataUrl;}
   }catch(e){/* drawing save failed (Android WebView quirk) — proceed with the ruling anyway */}
-  try{ delete inReopened[confirmedIdx]; }catch(e){}
+  try{ delete inReopened[confirmedIdx]; _inReopenedSave(); }catch(e){}
   if(result==="treif"){ try{ _gtQStepsSet(confirmedIdx, []); }catch(e){} }
   else {
     try{ _gtQStepDone(confirmedIdx,'lung'); }catch(e){}
@@ -10023,7 +10079,18 @@ async function gtAnimalCard(date, n){
 }
 function gtCardPrint(){
   const b = document.querySelector('#gtCardModal .gt-box'); if(!b) return;
-  const w = window.open('', '_blank'); if(!w) return;
+  let w = null; try{ w = window.open('', '_blank'); }catch(e){ w = null; }
+  if(!w){
+    // v10.37: a tablet app (WebView) or a popup blocker gives no new window — the button did nothing.
+    // Print the card in place instead (same as the summaries' print).
+    const shut=[...b.querySelectorAll('details:not([open])')]; shut.forEach(d=>d.open=true);
+    b.classList.add('gt-print-area');
+    const done=()=>{ b.classList.remove('gt-print-area'); shut.forEach(d=>d.open=false); window.removeEventListener('afterprint', done); };
+    window.addEventListener('afterprint', done);
+    try{ window.print(); }catch(e){}
+    setTimeout(done, 60000);
+    return;
+  }
   w.document.write('<html dir="' + (lang === 'he' ? 'rtl' : 'ltr') + '"><head><meta charset="utf-8"><title>GlattTrack</title><style>body{font-family:Arial;color:#000;padding:16px}button{display:none}details>*{display:block}</style></head><body>' + b.innerHTML + '</body></html>');
   w.document.close(); w.focus(); setTimeout(() => { w.print(); }, 300);
 }
@@ -10479,7 +10546,7 @@ function mgrUpdateMonitor(){
 }
 
 async function mgrToggleScreen(key,val,toggleId){
-  const s=KS.getSettings();s[key]=val;KS.updateSettings(s);
+  KS.updateSettings({[key]: val});   // v10.37: only the changed key (a whole copy put back other devices' changes)
   // Re-render the whole toggle list instead of hand-patching just this element:
   // each row's onclick is baked with the OPPOSITE of its current value at
   // render time, so if we only toggled this element's CSS classes (old code),
@@ -10527,10 +10594,22 @@ function mgrRenderWeightControls(){
       <div style="font-size:13px;color:var(--gold);font-weight:700;margin-bottom:4px;">${label}</div>
       ${row('scaleEnabled','⚖️ סריקה/מאזניים', p.scaleEnabled!==false)}
       ${row('manualEnabled','✍️ הזנה ידנית', p.manualEnabled!==false)}
+      ${key==='stage1'?`<div class="mgr-toggle-row"><div><div style="font-size:12px;color:var(--text);font-weight:600;">🏷️ ${L('יחידה במדבקת המשקל (כשכתוב רק מספר)','Unit on the weight label (when it shows only a number)','Unidad en la etiqueta de peso (cuando solo muestra un número)')}</div>
+        <div style="font-size:10px;color:var(--muted);">${L('ליברה: המשקל מומר לק״ג. הזנה ידנית תמיד בק״ג.','Pounds: the weight is converted to kg. Manual entry is always in kg.','Libras: el peso se convierte a kg. La entrada manual siempre es en kg.')}</div></div>
+        <div style="display:flex;gap:6px;">${['kg','lb'].map(u=>`<button onclick="mgrSetWeightLabelUnit('${u}')" style="padding:5px 12px;border-radius:8px;cursor:pointer;font-weight:800;border:1px solid ${((p.labelUnit||'kg')===u)?'var(--gold)':'var(--border)'};background:${((p.labelUnit||'kg')===u)?'var(--gold)':'transparent'};color:${((p.labelUnit||'kg')===u)?'#07090F':'var(--text)'};">${u==='kg'?L('ק״ג','kg','kg'):'lb'}</button>`).join('')}</div></div>`:''}
     </div>`;
   }).join('') + `<div style="font-size:10px;color:var(--muted);margin-top:8px;">כיבוי "סריקה/מאזניים" חוסם ברקוד/QR/OCR עבור השלב הזה. כיבוי "הזנה ידנית" חוסם הקלדה ידנית.</div>`;
 }
 
+function mgrSetWeightLabelUnit(u){
+  const s=KS.getSettings();
+  const wc=JSON.parse(JSON.stringify(s.weightControl||{}));
+  wc.stage1=Object.assign({scaleEnabled:true,manualEnabled:true}, wc.stage1||{});
+  wc.stage1.labelUnit = (u==='lb') ? 'lb' : 'kg';
+  KS.updateSettings({weightControl:wc});
+  try{ KS.addAuditLog({type:'weight_label_unit', unit:wc.stage1.labelUnit}); }catch(e){}
+  mgrRenderWeightControls();
+}
 function mgrSetWeightControl(stage, field, val){
   const s=KS.getSettings();
   const wc=JSON.parse(JSON.stringify(s.weightControl||{}));
@@ -11152,7 +11231,7 @@ function mgrDoSearch(val){
 // ── SETTINGS ──
 function mgrToggle(key,def,toggleId,dotId){
   const s=KS.getSettings(),cur=s[key]!==undefined?s[key]:def,nv=!cur;
-  s[key]=nv;KS.updateSettings(s);
+  KS.updateSettings({[key]: nv});   // v10.37: only the changed key
   // Update ALL toggles for this key (may appear in multiple tabs)
   const allToggles=document.querySelectorAll(`[id^="${toggleId}"]`);
   allToggles.forEach(t=>{t.classList.toggle('on',nv);t.classList.toggle('off',!nv);});
@@ -11381,18 +11460,11 @@ function mgrRenderFarmSystem(){
       </div>`;
     }).join('')+`<div style="display:flex;justify-content:space-between;padding:8px 0 0;font-size:13px;font-weight:700;"><span style="color:var(--muted);">${L('סה״כ','Total','Total')}</span><span style="color:var(--gold);">${Number(total)||0}</span></div>`):'<div style="font-size:11px;color:var(--muted);">'+L('לא הוזנו בהמות היום','No animals entered today','No se registraron animales hoy')+'</div>';
   }
-  // Small-parts weight table + billing sync
+  // Small-parts weight table (billing is set only by the manufacturer — its old leader fields were removed in v10.37)
   try{mgrRenderPartsWeightTable();}catch(e){}
-  try{
-    const b=KS.getSettings().billing||{};
-    const be=document.getElementById('billingEnabled');if(be)be.checked=!!b.enabled;
-    const bb=document.getElementById('billingBody');if(bb)bb.style.display=b.enabled?'block':'none';
-    const bp=document.getElementById('billingPrice');if(bp&&b.price!=null)bp.value=b.price;
-    const bc=document.getElementById('billingCurrency');if(bc&&b.currency)bc.value=b.currency;
-  }catch(e){}
 }
 function mgrRemoveFarm(i){mgrRemoveIntake(i);}
-async function mgrAddUser(){const name=prompt('שם משתמש:');if(!name)return;const role=prompt('תפקיד (שוחט/משגיח/בודק):');const code=prompt('קוד (אופציונלי):');const s=KS.getSettings();const users=s.users||[];users.push({name,role:role||'משגיח'});if(code){KS.updateSettings({users});const res=await gtWorkerCodeSet(role||'משגיח',name,code);if(!res||!res.ok)alert(_gtWorkerCodeErr(res));}KS.updateSettings({users});mgrSyncUI();}
+// (v10.37: the old mgrAddUser — free-text roles, never called — was removed)
 function mgrClearReprintLog(){KS.updateSettings({reprintLog:[]});mgrUpdateLog();}
 function mgrClearErrors(){KS.updateSettings({errorLog:[]});mgrUpdateLog();}
 function mgrSetPeriod(p){
@@ -11484,9 +11556,7 @@ function mgrUploadLung(input){
   reader.onload=function(e){
     const data=e.target.result;
     // Save custom lung image
-    const s=KS.getSettings();
-    s.customLungImage=data;
-    KS.updateSettings(s);
+    KS.updateSettings({customLungImage: data});   // v10.37: only the changed key
     // Update LUNG_B64 for current session
     window.CUSTOM_LUNG=data;
     // Show preview
@@ -11497,9 +11567,7 @@ function mgrUploadLung(input){
   reader.readAsDataURL(file);
 }
 function mgrResetLung(){
-  const s=KS.getSettings();
-  delete s.customLungImage;
-  KS.updateSettings(s);
+  KS.updateSettings({customLungImage: null});   // v10.37: only the changed key
   window.CUSTOM_LUNG=null;
   const img=document.getElementById('lungPreviewImg');
   if(img)img.src='data:image/jpeg;base64,'+LUNG_B64.replace('data:image/jpeg;base64,','');
@@ -12849,7 +12917,11 @@ function mgrSyncArchiveSettings(){
 function mgrCreateArchiveEntry(){
   const s = KS.getSettings();
   const arch = s.archiveSettings || {slaughter:true, lungs:false, log:true};
-  const now = new Date();
+  // v10.37: the archive is dated by the day the animals were SLAUGHTERED (the first slaughter time on
+  // the board), not by the moment of the reset — an automatic reset runs the next morning, which used to
+  // file the day under the wrong date (and the week / month reports took weights from the wrong day)
+  const _times = KS.getAnimals().map(a=>Number(a && a.slaughterTime)).filter(t=>isFinite(t) && t>0);
+  const now = _times.length ? new Date(Math.min.apply(null, _times)) : new Date();
   const dateKey = now.toLocaleDateString('he-IL',{year:'numeric',month:'2-digit',day:'2-digit'});
   const entry = {
     date: dateKey,
@@ -13025,8 +13097,14 @@ const KS_AUTO_BACKUP = (function(){
     });
   }
   async function sha256Text(str){
-    const buf=await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
-    return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+    // v10.37: plain-http plant address (no crypto.subtle) — the backup failed there, and with it every daily reset
+    try{
+      if(window.crypto && crypto.subtle){
+        const buf=await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+        return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+      }
+    }catch(e){}
+    return _sha256SyncHex(str);
   }
   async function create(reason){
     try{
@@ -13077,7 +13155,7 @@ let _lastResetFailureReason = '';
 let _lastResetServerCleared = false;
 async function ksRunProtectedDailyReset(reason){
   _lastResetFailureReason = '';
-  if(_autoResetBusy){ _lastResetFailureReason = 'תהליך איפוס אחר כבר רץ כרגע'; return false; }
+  if(_autoResetBusy){ _lastResetFailureReason = L('תהליך איפוס אחר כבר רץ כרגע','Another reset is already running','Ya hay otro reinicio en curso'); return false; }
   const lockKey = 'glatttrack_daily_reset_lock_v2';
   const token = (crypto.randomUUID ? crypto.randomUUID() : String(Date.now())+'-'+Math.random());
   const now = Date.now();
@@ -13092,8 +13170,12 @@ async function ksRunProtectedDailyReset(reason){
     // older day's board is never sent (stale_board).
     if(current && current.expiresAt>now && current.date===ksCurrentDateKey(new Date())){
       _lastResetFailureReason = current.completedAt
-        ? 'המכשיר הזה כבר אופס היום (ננעל עד מחר). כדי לאפס שוב לבדיקה, מחק ב-localStorage את "'+lockKey+'"'
-        : 'ניסיון איפוס קודם עדיין "תפוס" (ננעל ל-2 דקות) — נסה שוב בעוד רגע';
+        ? L('המכשיר הזה כבר אופס היום (ננעל עד מחר). כדי לאפס שוב לבדיקה, מחק ב-localStorage את "'+lockKey+'"',
+            'This device was already reset today (locked until tomorrow). To reset again for a test, delete "'+lockKey+'" in localStorage',
+            'Este dispositivo ya se reinició hoy (bloqueado hasta mañana). Para reiniciar de nuevo en una prueba, borre "'+lockKey+'" en localStorage')
+        : L('ניסיון איפוס קודם עדיין "תפוס" (ננעל ל-2 דקות) — נסה שוב בעוד רגע',
+            'A previous reset attempt is still "holding" (locked for 2 minutes) — try again in a moment',
+            'Un intento de reinicio anterior aún está "ocupado" (bloqueado 2 minutos) — intente de nuevo en un momento');
       return false;
     }
     localStorage.setItem(lockKey, JSON.stringify({token, date:ksCurrentDateKey(new Date()), expiresAt: now+120000}));
@@ -13103,7 +13185,7 @@ async function ksRunProtectedDailyReset(reason){
   try{
     const backedUp = await KS_AUTO_BACKUP.create(reason||'daily-reset');
     if(!backedUp){
-      _lastResetFailureReason = 'הגיבוי האוטומטי נכשל (בעיה ב-IndexedDB של הדפדפן) — האיפוס נחסם בכוונה כדי לא לאבד נתונים';
+      _lastResetFailureReason = L('הגיבוי האוטומטי נכשל (בעיה ב-IndexedDB של הדפדפן) — האיפוס נחסם בכוונה כדי לא לאבד נתונים','The automatic backup failed (a browser IndexedDB problem) — the reset was blocked on purpose so no data is lost','La copia de seguridad automática falló (problema de IndexedDB del navegador) — el reinicio se bloqueó a propósito para no perder datos');
       console.error('[KS] Backup failed; daily reset BLOCKED — today\'s data was left untouched.');
       return false;
     }
@@ -13115,7 +13197,19 @@ async function ksRunProtectedDailyReset(reason){
     // even if this fails (offline-first), but we log it loudly since it
     // means other devices may still see stale data until this succeeds.
     _lastResetServerCleared = false;
+    // v10.37: was the day ALREADY reset on the server after the board this tablet shows? (a first press
+    // whose answer was lost in a disconnect, or another team-leader device). Then it is not reset again —
+    // a second reset would archive the new day's first rulings. The tablet just takes the server's day.
+    let _alreadyReset = false;
     if(window.sb){
+      try{
+        const _myEp = KS.getBoardEpoch ? KS.getBoardEpoch() : null;
+        const { data: _sd } = await window.sb.from('settings_pilot').select('settings').eq('id', 1).maybeSingle();
+        const _srvEp = Number(_sd && _sd.settings && _sd.settings.boardEpoch) || 0;
+        if(_myEp && _srvEp > _myEp){ _alreadyReset = true; _lastResetServerCleared = true; try{ KS.syncNow(); }catch(e){} }
+      }catch(e){}
+    }
+    if(window.sb && !_alreadyReset){
       try{
         // step11: reset_daily_board now requires a valid manager session
         // token — a manager must be logged in (KS.getManagerToken()) for
@@ -13135,7 +13229,7 @@ async function ksRunProtectedDailyReset(reason){
           _lastResetFailureReason = rpcErr.message;
           console.error('[KS] Server-side board reset FAILED — other devices may still see yesterday\'s data:', rpcErr.message); gtLogError('reset.server', rpcErr);
         } else if(rpcData && rpcData.ok === false){
-          _lastResetFailureReason = 'השרת דחה את הבקשה (' + rpcData.error + ') — נדרשת כניסת ראש צוות. צא והיכנס שוב.';
+          _lastResetFailureReason = L('השרת דחה את הבקשה (','The server refused the request (','El servidor rechazó la solicitud (') + rpcData.error + L(') — נדרשת כניסת ראש צוות. צא והיכנס שוב.',') — a team-leader login is needed. Log out and in again.',') — se necesita el ingreso del jefe de equipo. Salga y vuelva a ingresar.');
           console.error('[KS] Server-side board reset REJECTED (no valid manager session):', rpcData.error); gtLogError('reset.server', String(rpcData.error));
         }
         else { _lastResetServerCleared = true; console.log('[KS] Server-side board reset succeeded.'); }
@@ -13143,8 +13237,8 @@ async function ksRunProtectedDailyReset(reason){
         _lastResetFailureReason = e.message;
         console.error('[KS] Server-side board reset FAILED:', e.message);
       }
-    } else {
-      _lastResetFailureReason = 'אין חיבור לשרת כרגע';
+    } else if(!_alreadyReset){
+      _lastResetFailureReason = L('אין חיבור לשרת כרגע','No server connection right now','Sin conexión al servidor ahora');
       console.warn('[KS] No Supabase connection — server-side board was NOT cleared. Will remain stale until a connected device resets.');
     }
     // The server is the single source of the day: if IT didn't clear, this
@@ -13787,10 +13881,15 @@ function partsReprintWarn(idx){
     "<br>"+LK('reprintNote');
   document.getElementById("partsRpModal").classList.add("open");
 }
+// v10.37: a REPRINT is stopped by a USDA HOLD / USDA condemned / the station's open "?" exactly like the first
+// print (the reprint paths did not check it, so kosher stickers / stamps could be reprinted for a held or condemned animal)
+function _gtHoldTitle(h){ return h.kind==='usda'?(h.resolution==='condemned'?L('נפסל USDA','USDA condemned','Condenado USDA'):'USDA HOLD'):L('? שאלה','? Question','? Pregunta'); }
+function _gtHoldReprintText(idx){ return L('בהמה #'+(idx+1)+' — מעוכבת. אין להדפיס מחדש עד שהתחנה המסמנת משחררת.','Animal #'+(idx+1)+' — held. Do not reprint until the marking station releases it.','Animal #'+(idx+1)+' — retenido. No reimprima hasta que la estación que lo marcó lo libere.'); }
 function partsDoReprint(){
   document.getElementById("partsRpModal").classList.remove("open");
   if(partsReprintIdx<0)return;
   const a=KS.getAnimal(partsReprintIdx);
+  {const _h=gtHeldAt(partsReprintIdx,'parts'); if(_h){ const _i=partsReprintIdx; partsReprintIdx=-1; showPartsError(_gtHoldTitle(_h), _gtHoldReprintText(_i)); partsRenderGrid();partsUpdateSummary(); return; }}
   if(_gtRulingPending(partsReprintIdx)){ const _i=partsReprintIdx; partsReprintIdx=-1; showPartsError(_gtRulingPendingTitle(), _gtRulingPendingText(_i)); return; }
   if(!isKosherReady(a)){
     const _i=partsReprintIdx; partsReprintIdx=-1;
@@ -13806,6 +13905,9 @@ function partsDoReprint(){
   const logs=s.reprintLog||[];
   logs.push({screen:"חלקים",idx:partsReprintIdx+1,sticker:cnt+"/3",time:new Date().toLocaleTimeString("he-IL")});
   KS.updateSettings({reprintLog:logs.slice(-2000)});   // (improvement round) only the newest 2000 lines
+  // v10.37: also an append-only event — two stations reprinting at the same moment each sent their own copy of
+  // the whole log, and one copy overwrote the other (a reprint is a kashrut audit line, it must not be lost)
+  try{ const _e=logs[logs.length-1]||{}; KS.recordOwnEvent && KS.recordOwnEvent('reprint', Object.assign({ step: _e.step||null }, _e), (_e.idx!=null && isFinite(Number(_e.idx))) ? Number(_e.idx) : null); }catch(e){}
   showPartsPrint(partsReprintIdx,a.outerStatus,true,cnt);
   try{ const _h=_partsHeldNow(partsReprintIdx); if(_h.length) _ppBreak(['cheek1','cheek2'].filter(p=>!_h.includes(p)).length, _h.includes('tongue')?0:1); }catch(e){}   // v10.32: a held part is not reprinted
   partsReprintIdx=-1;
@@ -13940,23 +14042,58 @@ function looksLikeAnimalCode(code){
   if(/^#\d+$/.test(c)){ const n=parseInt(c.slice(1),10); return n>=1 && n<=KS.getAnimals().length; }
   return false;
 }
+// v10.37: the unit printed on this plant's scale labels when the label shows only a number.
+// 'kg' (default) or 'lb' — set by the team leader in Settings → weight control (stage 1).
+function _gtLabelUnitLb(){ try{ const w=(KS.getSettings().weightControl||{}).stage1||{}; return w.labelUnit==='lb'; }catch(e){ return false; } }
+function _gtLbToKg(v){ return Math.round(Number(v)*0.45359237*10)/10; }
+function _gtGs1Weight(code){
+  const raw=String(code||'');
+  const conv=(ai,digits)=>{ const dec=Number(ai.charAt(3)), v=Number(digits)/Math.pow(10,dec); if(!isFinite(v)||v<=0) return null;
+                           return ai.charAt(1)==='1' ? v : Math.round(v*0.45359237*10)/10; };
+  // with brackets: (01)...(3102)012345
+  let m=raw.match(/\((3[12]0[0-5])\)\s*(\d{6})/);
+  if(m) return conv(m[1],m[2]);
+  // without brackets: walk the fixed-length AIs from the start (FNC1 / GS separators allowed)
+  const c=raw.replace(/^\]C1/,'').replace(/[\x1d\s]/g,'\x1d');
+  if(!/^(00|01|02)\d/.test(c)) return null;
+  const FIX={'00':18,'01':14,'02':14,'11':6,'12':6,'13':6,'15':6,'16':6,'17':6,'20':2};
+  let i=0;
+  while(i<c.length){
+    if(c.charAt(i)==='\x1d'){ i++; continue; }
+    const two=c.substr(i,2), four=c.substr(i,4);
+    if(/^3[12]0[0-5]$/.test(four)){ const d=c.substr(i+4,6); return /^\d{6}$/.test(d) ? conv(four,d) : null; }
+    if(/^3\d{3}$/.test(four) && /^\d{6}$/.test(c.substr(i+4,6))){ i+=10; continue; }   // other measures (gross, length …)
+    if(FIX[two]!=null){ i+=2+FIX[two]; continue; }
+    if(two==='10'||two==='21'){ const j=c.indexOf('\x1d',i+2); if(j<0) return null; i=j+1; continue; }   // batch / serial (variable)
+    return null;
+  }
+  return null;
+}
 function parseWeightFromCode(code){
   if(!code)return null;
   if(looksLikeAnimalCode(code)) return null;
   // ignore dates/times inside the code (2026-09-23T10:15 …)
+  // v10.37: a GS1-128 scale label (the common format on US / EU scale printers): AI 310n = net kg,
+  // AI 320n = net lb, n = decimals. It used to be read as "the first number in the code".
+  { const g=_gtGs1Weight(code); if(g!=null) return g; }
   code=String(code).replace(/\d{4}-\d{2}-\d{2}(T[\d:.]+Z?)?/g,' ');
   const kg=String(code).match(/(\d+(?:[.,]\d+)?)\s*(kg|ק"?ג|KG)/);
   if(kg) return parseFloat(kg[1].replace(',','.'));
+  // v10.37: a label in pounds is converted (it used to be taken as kilograms — 2.2× too heavy)
+  const lb=String(code).match(/(\d+(?:[.,]\d+)?)\s*(lbs?|LBS?|Lbs?)\b/);
+  if(lb) return Math.round(parseFloat(lb[1].replace(',','.'))*0.45359237*10)/10;
   const matches=String(code).match(/\d+(?:[.,]\d+)?/g);
   if(!matches||!matches.length)return null;
   let best=null;
+  const lbPlant=_gtLabelUnitLb();                       // v10.37: a number with no unit is in the plant's label unit
+  const lo=lbPlant?44:20, hi=lbPlant?1323:600;          // the same carcass range, in pounds
   matches.forEach(m=>{
     const v=parseFloat(m.replace(',','.'));
     if(isNaN(v))return;
     if(best===null)best=v;
-    else if(v>=20&&v<=600&&!(best>=20&&best<=600))best=v;
+    else if(v>=lo&&v<=hi&&!(best>=lo&&best<=hi))best=v;
   });
-  return best;
+  return (best!=null && lbPlant) ? _gtLbToKg(best) : best;
 }
 // Small rising "receiving weight" toast.
 let weightToastTimer=null;
@@ -14403,7 +14540,10 @@ function gtOcrPickWeight(lines){
       if(!(v>=1 && v<2000)) continue;
       if(/#\s?$/.test(t.slice(0,s))) continue;                             // "#12" = an animal / item number
       const kg=/^\s?[kK]\s?[gG98q]/.test(nx) || /^\s?(ק"?ג)/.test(nx);
+      const lbMark=!kg && /^\s?(lbs?|LBS?|Lbs?)\b/.test(nx);        // v10.37: a weight in pounds is converted to kg
+      const lbU=lbMark || (!kg && _gtLabelUnitLb());                 // (no unit on the label + the plant's labels are in pounds)
       let sc=1;
+      if(lbMark) sc+=3;
       if(kg) sc+=3;
       if(/(net|neto|netto|peso|weight|wt|n\.w|gewicht|משקל)\W*$/i.test(prev)) sc+=1.5;
       if(/(tare|tara)\W*$/i.test(prev)) sc-=2.5;
@@ -14415,12 +14555,13 @@ function gtOcrPickWeight(lines){
         conf=Math.min(conf, 0.25+Math.min(...cs.map(c=>c.conf)));
         hh=dg.length?Math.max(...dg.map(c=>c.h)):l.H; }
       // no unit and no decimals: only the one big number on the display/label counts
-      if(!kg && !dp && (ip.length<2 || nNums>1 || (maxH && hh<0.85*maxH) || (l.meta && conf<0.45))) continue;
+      if(!kg && !lbMark && !dp && (ip.length<2 || nNums>1 || (maxH && hh<0.85*maxH) || (l.meta && conf<0.45))) continue;
       if(!kg && ip.length+dp.length<2) continue;
       if(l.meta && conf<(kg?0.25:0.4)) continue;                          // too unsure to offer
       sc+=2.5*(maxH?hh/maxH:1)+conf;
       if(ip.length+dp.length>=2) sc+=0.3;
-      if(!best || sc>best.score) best={value:v, raw:m[0], score:sc, conf};
+      if(!best || sc>best.score) best= lbU ? {value:Math.round(v*0.45359237*10)/10, raw:String(Math.round(v*0.45359237*10)/10), score:sc, conf, unit:'lb', rawLb:m[0]}
+                                           : {value:v, raw:m[0], score:sc, conf};
     }
   }
   return best;
@@ -14457,7 +14598,7 @@ function gtOcrBuiltin(src){
   }
   const text=bestLines?bestLines.map(l=>l.text).join('\n'):'';
   if(!best||!best.p) return {value:null,text,engine:'builtin',confidence:0};
-  return {value:best.p.value,text,engine:'builtin',confidence:Math.round(best.p.conf*100)/100,raw:best.p.raw};
+  return {value:best.p.value,text,engine:'builtin',confidence:Math.round(best.p.conf*100)/100,raw:best.p.raw,unit:best.p.unit||null,rawLb:best.p.rawLb||null};
 }
 // ═══ WEIGHT OCR BUILT-IN END ═══
 // ═══ WEIGHT OCR — engine chain: native app → Tesseract.js → built-in ═══
@@ -14522,7 +14663,7 @@ async function _gtoTesseractRead(cv){
   const d=(r&&r.data)||{}, text=String(d.text||'');
   const p=gtOcrPickWeight(_gtoLinesFromText(text));
   const conf=Math.max(0,Math.min(1,(Number(d.confidence)||0)/100));
-  return {value:p?p.value:null, text, engine:'tesseract', confidence:Math.round(conf*100)/100, raw:p?p.raw:''};
+  return {value:p?p.value:null, text, engine:'tesseract', confidence:Math.round(conf*100)/100, raw:p?p.raw:'', unit:p&&p.unit||null, rawLb:p&&p.rawLb||null};
 }
 async function _gtoNativeRead(cv){
   const N=window.GlattTrackNativeOCR;
@@ -14531,6 +14672,7 @@ async function _gtoNativeRead(cv){
   const o=(typeof r==='string')?{text:r}:(r||{});
   let v=(o.value!=null && isFinite(Number(o.value)))?Number(o.value):null;
   const text=String(o.text||'');
+  if(v!=null && _gtLabelUnitLb()) v=_gtLbToKg(v);       // v10.37: the native reader returns the number as printed
   if(v==null){ const p=gtOcrPickWeight(_gtoLinesFromText(text)); v=p?p.value:null; }
   let c=Number(o.confidence); c=isFinite(c)?(c>1?c/100:c):0.8;
   return {value:(v!=null && v>0 && v<2000)?v:null, text, engine:'native', confidence:Math.round(c*100)/100};
@@ -14632,7 +14774,7 @@ function _gtoRenderResult(){
   _gtoEl('wmOcrValue').style.display=ok?'block':'none';
   _gtoEl('wmOcrUnit').style.display=ok?'block':'none';
   _gtoEl('wmOcrUnit').textContent=L('ק״ג','kg','kg');
-  _gtoEl('wmOcrEngine').textContent=ok?(_gtoEngineName(r.engine)+' · '+Math.round((r.confidence||0)*100)+'%'):'';
+  _gtoEl('wmOcrEngine').textContent=ok?(_gtoEngineName(r.engine)+' · '+Math.round((r.confidence||0)*100)+'%'+(r.unit==='lb'?' · '+r.rawLb+' lb → kg':'')):'';   // v10.37: a pounds label says it was converted
   const msg=_gtoEl('wmOcrMsg');
   msg.style.display=ok?'none':'block';
   msg.textContent=ok?'':L('לא זוהה משקל בתמונה. ודא שהמספר בתוך המסגרת, מואר וחד — וצלם שוב.','No weight was found in the picture. Make sure the number is inside the frame, lit and sharp — and try again.','No se encontró el peso en la imagen. Asegúrese de que el número esté dentro del marco, iluminado y nítido, e inténtelo de nuevo.');
@@ -14642,7 +14784,7 @@ function _gtoRenderResult(){
 }
 function gtOcrConfirm(){
   const r=_gtoUi.res; if(!r || r.value==null) return;
-  const ok=weightCaptured(r.value,{source:'ocr', engine:r.engine, confidence:r.confidence, rawText:String(r.text||'').slice(0,300)});
+  const ok=weightCaptured(r.value,{source:'ocr', engine:r.engine, confidence:r.confidence, rawText:String(r.text||'').slice(0,300), unit:r.unit||'kg'});
   if(!ok) return;                           // blocked / invalid: weightCaptured showed why
   _gtoUi.res=null;
   if(weightPending()) gtOcrRetry();          // the other half next
@@ -14799,6 +14941,7 @@ function stampsDoReprint(){
   document.getElementById("stampsRpModal").classList.remove("open");
   if(stampsRpIdx<0)return;
   const a=KS.getAnimal(stampsRpIdx);
+  {const _h=gtHeldAt(stampsRpIdx,'stamps'); if(_h){ const _i=stampsRpIdx; stampsRpIdx=-1; stampsShowError(_gtHoldTitle(_h), _gtHoldReprintText(_i)); stampsRenderGrid();stampsUpdateSummary(); return; }}
   if(_gtRulingPending(stampsRpIdx)){ const _i=stampsRpIdx; stampsRpIdx=-1; stampsShowError(_gtRulingPendingTitle(), _gtRulingPendingText(_i)); return; }
   if(!isKosherReady(a)){
     const _i=stampsRpIdx; stampsRpIdx=-1;
@@ -14813,6 +14956,9 @@ function stampsDoReprint(){
   const logs=s.reprintLog||[];
   logs.push({screen:"חותמות",idx:stampsRpIdx+1,time:new Date().toLocaleTimeString("he-IL")});
   KS.updateSettings({reprintLog:logs.slice(-2000)});   // (improvement round) only the newest 2000 lines
+  // v10.37: also an append-only event — two stations reprinting at the same moment each sent their own copy of
+  // the whole log, and one copy overwrote the other (a reprint is a kashrut audit line, it must not be lost)
+  try{ const _e=logs[logs.length-1]||{}; KS.recordOwnEvent && KS.recordOwnEvent('reprint', Object.assign({ step: _e.step||null }, _e), (_e.idx!=null && isFinite(Number(_e.idx))) ? Number(_e.idx) : null); }catch(e){}
   stampsShowPrint(stampsRpIdx,a.outerStatus,true);
   stampsRpIdx=-1;
   setTimeout(()=>stampsFocusScan(),1500);
@@ -15158,7 +15304,7 @@ function _kioskWipeDevice(){
   console.warn('[Kiosk] this device was unpaired — removing the plant data it holds');
   _setDevToken('');
   try{
-    const keep = new Set(['ks_device_id','gt_pair_secret','gt_lang','lang','ks_lang_by_screen']);
+    const keep = new Set(['ks_device_id','ks_pair_secret','gt_lang','lang','ks_lang_by_screen']);   // v10.37: the real key name (was gt_pair_secret)
     Object.keys(localStorage).forEach(k=>{ if(!keep.has(k) && (k.startsWith('ks_') || k.startsWith('kosher') || k.startsWith('gt_') || k.startsWith('glatttrack'))) localStorage.removeItem(k); });
   }catch(e){}
   try{ indexedDB.databases && indexedDB.databases().then(dbs=>dbs.forEach(d=>{ if(d.name) indexedDB.deleteDatabase(d.name); })); }catch(e){}

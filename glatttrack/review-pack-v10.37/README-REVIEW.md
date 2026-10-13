@@ -1,4 +1,4 @@
-# GlattTrack — review pack (app v10.36, server schema step 46)
+# GlattTrack — review pack (app v10.37, server schema step 46)
 
 This pack is the CURRENT state. Review these files only.
 
@@ -9,14 +9,38 @@ This pack is the CURRENT state. Review these files only.
 | `active-schema-snapshot.sql` | **Audit this first.** `pg_dump --schema-only` (public + gt_rls) of a clean database built from `glatttrack-schema-full.sql`. Exactly one ACTIVE definition of each function, trigger, RLS policy and grant. |
 | `setup-supabase-step46-order-and-processing-days.sql` | The new migration (run after step 45). |
 | `STEP46-CHANGES.md` | What step 46 / app v10.6 changed (Hebrew). |
-| `security-selftest.sql` + `security-selftest-result.txt` | Release gate: **150 / 150**. One statement (one DO block) whose changes are all undone inside it (see v10.15 below). |
+| `security-selftest.sql` + `security-selftest-result.txt` | Release gate: **153 / 153**. One statement (one DO block) whose changes are all undone inside it (see v10.15 below). |
 | `SECURITY-MANIFEST.md` | Permission map (step 45 observed table) + a step-46 section. |
 | `active-security-manifest.sql` + `-result.txt` | Prints the active security surface. |
-| `kosher-app-v10.36.html` | The app (UI, offline store, sync client). `GT_MIN_SCHEMA = 46`. |
+| `kosher-app-v10.37.html` | The app (UI, offline store, sync client). `GT_MIN_SCHEMA = 46`. |
 | `setup-supabase-step44/45/46-*.sql` | The last three migrations. |
 | `glatttrack-schema-full.sql` | Full install script (base + steps 1–46, history included; last definition wins). |
 | `test-mode-on.sql` / `test-mode-off.sql` | The owner's SQL-only test switch. |
 | `plant-server/` | Plant resilience kit (bash, runs as root on the plant servers, NOT in the database): standby server, floating address, UPS, nightly checked backup. Guide: `PLANT-RESILIENCE-HE.md`. |
+
+## Changed in v10.37 (server 02 + app) — after a code review
+
+**Server (02, §34; self-test 153/153, three new checks):**
+1. **`_animals_merge`:** the shochet's "?" is open, the esophagus checks "OK", the shochet rules nevela, then an esophagus "nevela" arrives from a tablet that was offline. The merge stored `eso_prev_slaughter = 'slaughtered'`, so a later esophagus "OK" turned the shochet's nevela into "slaughtered". It now keeps `old.slaughter`.
+2. **`reset_daily_board`:** the list of unfinished numbers left out a number with the shochet's open "?" (counted by `_board_unfinished`, not listed). Now listed.
+3. **`manager_login`:** wrong codes were counted per address only. All the tablets of a plant reach the cloud from one address, so 8 wrong codes anywhere locked the team leader out on every device. Now per address + device (the device only from its pairing token, `_current_device_id()`, so it cannot be changed per try). A right code on a non-leader device is recorded (`leader_device_required`), not counted as a wrong code. The global throttle (`v_all`) is unchanged.
+
+Each new check fails on the old functions and passes on the new ones (tested).
+
+**App (v10.37):**
+- A settings save sends only the key that changed, not the whole settings object.
+- A reopened inner treif that was cancelled returns to its original ruling (kept across a refresh).
+- An esophagus double change no longer loses the shochet's nevela.
+- USDA / "?" block parts and stamps offline too, and on a reprint.
+- A ruling not sent before the day was reset is recorded in the log, not dropped.
+- The event ledger and the backup work on a plain-http plant server (no `crypto.subtle`).
+- The archive is dated by the slaughter day, not the reset time.
+- GS1 / pound scale labels: pounds converted to kg; a new setting for the label unit (kg / lb) at stage-1 weighing.
+- A long QR payload falls back to the number only.
+- Printing an animal card on a tablet; reset texts in all three languages; CSS clashes; dead code.
+- `_gtCorrectionBlock`: dead checks removed (not run since v10.26) — no change in behaviour.
+- A daily reset whose answer was lost: the tablet first asks whether the server already reset, and does not reset twice.
+- **Kept on purpose (owner):** the outer ruling may still be changed after parts stickers / stamps.
 
 ## Fixed while recording the v10.36 videos (app only, after the improvement round)
 

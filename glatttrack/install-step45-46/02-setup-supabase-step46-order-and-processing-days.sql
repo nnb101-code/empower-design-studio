@@ -4930,6 +4930,367 @@ begin
   end if;
 end $$;
 
+-- ── §34 three server fixes (v10.37, from the code review) ──────────────────────
+-- 1. _animals_merge — an esophagus "nevela" sent by a tablet that was offline stored the wrong
+--    "slaughter before the esophagus" when the shochet himself had ruled nevela; a later esophagus
+--    "OK" then turned the shochet's nevela into "slaughtered".
+-- 2. reset_daily_board — the list of unfinished numbers left out the shochet's open "?"
+--    (they were counted, not listed).
+-- 3. manager_login — wrong codes were counted per internet address only; all the tablets of a plant
+--    share one address toward the cloud, so 8 wrong codes anywhere locked the team leader out
+--    everywhere. Now per address + device (the device only from its pairing token). A right code
+--    on a non-leader device is recorded, not counted as a wrong code.
+CREATE OR REPLACE FUNCTION public._animals_merge()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'extensions', 'pg_temp'
+AS $function$
+declare
+  v_epoch bigint := _board_epoch();
+  v_api   boolean := _is_api_request() and not _request_is_service_role();
+  v_dev   text;
+  v_priv  boolean;
+  v_now   bigint := (extract(epoch from clock_timestamp()) * 1000)::bigint;
+  v_cap   bigint;
+  v_eso   boolean := coalesce(current_setting('gt.eso_ruling', true), '') = 'true';
+  v_claim boolean := coalesce(current_setting('gt.claim', true), '') = 'true';
+  v_admin boolean := coalesce(current_setting('app.device_admin', true), '') = 'on';
+  v_eso_upsert boolean := false;
+begin
+  if current_setting('gt.reset_in_progress', true) = 'true' then
+    return new;
+  end if;
+  v_dev := case when v_api then _acting_device() else _current_device_id() end;
+
+  if v_epoch is not null and _is_api_request() and (new.board_epoch is null or new.board_epoch < v_epoch) then
+    raise exception 'GT:STALE_BOARD stale-board: this device still has the previous day''s board' using errcode = 'P0001';
+  end if;
+
+  new.updated_at := clock_timestamp();
+  if v_api and not v_admin then new.device_id := v_dev; end if;          -- the server's identity, never the tablet's word
+
+  if tg_op = 'INSERT' then
+    new.board_epoch := coalesce(v_epoch, new.board_epoch);
+    if _is_api_request() and not exists (select 1 from animals_pilot x where x.id = new.id) then
+      new.slaughter := null; new.slaughtered_by := null; new.slaughter_time := null; new.slaughter_by_device := null;
+      new.inner_status := null; new.inner_by := null; new.inner_time := null; new.inner_by_device := null;
+      new.outer_status := null; new.outer_by := null; new.outer_time := null; new.outer_by_device := null;
+      new.maw := null; new.rumen := null; new.not_chalak_inner := false;
+      new.legs_stickers := false; new.head_stickers := false; new.legs_sorted := false;
+      new.parts_scanned := false; new.tongue_sticker := false; new.cheek_sticker := false;
+      new.parts_print_count := 0; new.parts_printed_as := null;
+      new.stamped := false; new.stamped_as := null;
+      new.weight_right := null; new.weight_left := null; new.weight_stage2 := null; new.weight_stage3 := null;
+      new.weight_right_skipped := false; new.weight_left_skipped := false;
+      new.weight_stage2_skipped := false; new.weight_stage3_skipped := false;
+      new.eso_checked := false; new.eso_result := null; new.eso_prev_slaughter := null; new.eso_by_device := null;
+    end if;
+    return new;
+  end if;
+  new.board_epoch := coalesce(v_epoch, new.board_epoch, old.board_epoch);
+  v_priv := _request_privileged();
+
+  if _is_api_request() then
+    v_cap := v_now + 60000;
+    if new.slaughter_time is distinct from old.slaughter_time and new.slaughter_time > v_cap then new.slaughter_time := v_cap; end if;
+    if new.inner_time     is distinct from old.inner_time     and new.inner_time     > v_cap then new.inner_time     := v_cap; end if;
+    if new.outer_time     is distinct from old.outer_time     and new.outer_time     > v_cap then new.outer_time     := v_cap; end if;
+  end if;
+
+  -- esophagus: only through the ruling itself — except a "nevela" sent by an
+  -- esophagus tablet that was offline, which is applied whole
+  if not v_eso then
+    if new.eso_result = 'nevela' and old.eso_result is distinct from 'nevela' and _stage_allowed('eso')
+       and (v_dev is not null or not v_api) then
+      v_eso_upsert := true;
+      new.eso_checked := true;
+      new.eso_by_device := coalesce(v_dev, old.eso_by_device);
+      -- v10.37: the esophagus result before this was NOT nevela, so a nevela on the slaughter column is the
+      -- shochet's own ruling — keep it (it used to be stored as 'slaughtered', and a later esophagus "OK"
+      -- turned the shochet's nevela into "slaughtered")
+      new.eso_prev_slaughter := old.slaughter;
+      new.slaughter := 'nevela';
+      new.slaughtered_by := old.slaughtered_by;
+      new.slaughter_time := greatest(v_now, coalesce(old.slaughter_time, 0) + 1);
+      new.slaughter_by_device := coalesce(v_dev, old.slaughter_by_device);
+      perform set_config('gt.eso_upsert_row', new.id::text, true);
+    else
+      new.eso_result := old.eso_result;
+      new.eso_checked := old.eso_checked;
+      new.eso_prev_slaughter := old.eso_prev_slaughter;
+      new.eso_by_device := old.eso_by_device;
+    end if;
+  end if;
+
+  if not (v_eso or v_eso_upsert) and old.slaughter_time is not null
+     and (new.slaughter_time is null or new.slaughter_time < old.slaughter_time) then
+    new.slaughter := old.slaughter; new.slaughter_time := old.slaughter_time;
+    new.slaughtered_by := old.slaughtered_by; new.slaughter_by_device := old.slaughter_by_device;
+  end if;
+  if old.inner_time is not null and (new.inner_time is null or new.inner_time < old.inner_time) then
+    new.inner_status := old.inner_status; new.inner_time := old.inner_time;
+    new.inner_by := old.inner_by; new.inner_by_device := old.inner_by_device;
+    new.not_chalak_inner := old.not_chalak_inner;
+  end if;
+  if old.outer_time is not null and (new.outer_time is null or new.outer_time < old.outer_time) then
+    new.outer_status := old.outer_status; new.outer_time := old.outer_time;
+    new.outer_by := old.outer_by; new.outer_by_device := old.outer_by_device;
+  end if;
+  if new.slaughter is null and old.slaughter is not null
+     and (not v_priv or new.slaughter_time is null) then
+    new.slaughter := old.slaughter; new.slaughter_time := old.slaughter_time;
+    new.slaughtered_by := old.slaughtered_by; new.slaughter_by_device := old.slaughter_by_device;
+  end if;
+  if new.outer_status is null and old.outer_status is not null and new.outer_time is null then new.outer_status := old.outer_status; end if;
+
+  if new.inner_status is null and old.inner_status is not null then
+    if old.inner_status in ('confirmed', 'treif')
+       or (old.inner_status = 'in_progress' and not v_priv and old.inner_by_device is distinct from v_dev) then
+      new.inner_status := old.inner_status; new.inner_time := old.inner_time;
+      new.inner_by := old.inner_by; new.inner_by_device := old.inner_by_device;
+      new.not_chalak_inner := old.not_chalak_inner;
+    end if;
+  end if;
+
+  -- an open lung check belongs to the tablet holding it (10-minute takeover
+  -- aside): another tablet's write — e.g. the one that lost the check after a
+  -- takeover — can't replace it. The refusal is recorded.
+  if v_api and not v_claim and not v_admin
+     and old.inner_status = 'in_progress' and old.inner_by_device is distinct from v_dev
+     and coalesce(old.inner_time, 0) >= v_now - 600000
+     and ((new.inner_status, new.inner_time, new.inner_by, new.inner_by_device, coalesce(new.not_chalak_inner, false))
+          is distinct from (old.inner_status, old.inner_time, old.inner_by, old.inner_by_device, coalesce(old.not_chalak_inner, false))
+          or coalesce(new.maw, old.maw) is distinct from old.maw
+          or coalesce(new.rumen, old.rumen) is distinct from old.rumen) then
+    perform _security_event(new.id + 1, 'inner_takeover_rejected',
+      jsonb_build_object('holder', old.inner_by_device, 'tried', new.inner_status, 'via', 'push'), null, coalesce(v_dev, 'unknown'));
+    new.inner_status := old.inner_status; new.inner_time := old.inner_time;
+    new.inner_by := old.inner_by; new.inner_by_device := old.inner_by_device;
+    new.not_chalak_inner := old.not_chalak_inner;
+    new.maw := old.maw; new.rumen := old.rumen;
+  end if;
+
+  if not (v_eso or v_eso_upsert)
+     and (new.slaughter, new.slaughter_time, new.slaughtered_by, new.slaughter_by_device)
+         is distinct from (old.slaughter, old.slaughter_time, old.slaughtered_by, old.slaughter_by_device)
+     and not _stage_allowed('slaughter') then
+    new.slaughter := old.slaughter; new.slaughter_time := old.slaughter_time;
+    new.slaughtered_by := old.slaughtered_by; new.slaughter_by_device := old.slaughter_by_device;
+  end if;
+  if (new.inner_status, new.inner_time, new.inner_by, new.inner_by_device, coalesce(new.not_chalak_inner, false))
+     is distinct from (old.inner_status, old.inner_time, old.inner_by, old.inner_by_device, coalesce(old.not_chalak_inner, false))
+     and not _stage_allowed('inner') then
+    new.inner_status := old.inner_status; new.inner_time := old.inner_time;
+    new.inner_by := old.inner_by; new.inner_by_device := old.inner_by_device;
+    new.not_chalak_inner := old.not_chalak_inner;
+  end if;
+  if (new.outer_status, new.outer_time, new.outer_by, new.outer_by_device)
+     is distinct from (old.outer_status, old.outer_time, old.outer_by, old.outer_by_device)
+     and not _stage_allowed('outer') then
+    new.outer_status := old.outer_status; new.outer_time := old.outer_time;
+    new.outer_by := old.outer_by; new.outer_by_device := old.outer_by_device;
+  end if;
+
+  -- which device made a ruling: always the server's identity of the caller
+  if v_api and not v_admin then
+    if (new.slaughter, new.slaughter_time) is distinct from (old.slaughter, old.slaughter_time) then new.slaughter_by_device := v_dev;
+    else new.slaughter_by_device := old.slaughter_by_device; end if;
+    if (new.inner_status, new.inner_time) is distinct from (old.inner_status, old.inner_time) then new.inner_by_device := v_dev;
+    else new.inner_by_device := old.inner_by_device; end if;
+    if (new.outer_status, new.outer_time) is distinct from (old.outer_status, old.outer_time) then new.outer_by_device := v_dev;
+    else new.outer_by_device := old.outer_by_device; end if;
+  end if;
+
+  if v_api and not v_claim then
+    if not (v_eso or v_eso_upsert) and new.slaughter is not null
+       and (new.slaughter, new.slaughter_time, new.slaughtered_by) is distinct from (old.slaughter, old.slaughter_time, old.slaughtered_by) then
+      new.slaughtered_by := _derive_actor('slaughter', case when new.slaughtered_by is distinct from old.slaughtered_by then new.slaughtered_by end);
+    end if;
+    if new.inner_status is not null
+       and (new.inner_status, new.inner_time, new.inner_by) is distinct from (old.inner_status, old.inner_time, old.inner_by) then
+      new.inner_by := _derive_actor('inner', case when new.inner_by is distinct from old.inner_by then new.inner_by end);
+    end if;
+    if new.outer_status is not null
+       and (new.outer_status, new.outer_time, new.outer_by) is distinct from (old.outer_status, old.outer_time, old.outer_by) then
+      new.outer_by := _derive_actor('outer', case when new.outer_by is distinct from old.outer_by then new.outer_by end);
+    end if;
+  end if;
+
+  if not _stage_allowed('inner') then
+    new.maw := old.maw; new.rumen := old.rumen;
+  end if;
+  if not _stage_allowed('legs') then
+    new.legs_sorted := old.legs_sorted; new.legs_stickers := old.legs_stickers; new.head_stickers := old.head_stickers;
+  end if;
+  if not _stage_allowed('stamped') then
+    new.stamped := old.stamped; new.stamped_as := old.stamped_as;
+  end if;
+  if not _stage_allowed('parts') then
+    new.parts_scanned := old.parts_scanned; new.tongue_sticker := old.tongue_sticker; new.cheek_sticker := old.cheek_sticker;
+    new.parts_print_count := old.parts_print_count; new.parts_printed_as := old.parts_printed_as;
+  end if;
+  if not _stage_allowed('weights') then
+    new.weight_right := old.weight_right; new.weight_left := old.weight_left;
+    new.weight_stage2 := old.weight_stage2; new.weight_stage3 := old.weight_stage3;
+    new.weight_right_skipped := old.weight_right_skipped; new.weight_left_skipped := old.weight_left_skipped;
+    new.weight_stage2_skipped := old.weight_stage2_skipped; new.weight_stage3_skipped := old.weight_stage3_skipped;
+  end if;
+
+  new.legs_stickers         := coalesce(old.legs_stickers, false)         or coalesce(new.legs_stickers, false);
+  new.head_stickers         := coalesce(old.head_stickers, false)         or coalesce(new.head_stickers, false);
+  new.parts_scanned         := coalesce(old.parts_scanned, false)         or coalesce(new.parts_scanned, false);
+  new.tongue_sticker        := coalesce(old.tongue_sticker, false)        or coalesce(new.tongue_sticker, false);
+  new.cheek_sticker         := coalesce(old.cheek_sticker, false)         or coalesce(new.cheek_sticker, false);
+  new.stamped               := coalesce(old.stamped, false)               or coalesce(new.stamped, false);
+  new.weight_right_skipped  := coalesce(old.weight_right_skipped, false)  or coalesce(new.weight_right_skipped, false);
+  new.weight_left_skipped   := coalesce(old.weight_left_skipped, false)   or coalesce(new.weight_left_skipped, false);
+  new.weight_stage2_skipped := coalesce(old.weight_stage2_skipped, false) or coalesce(new.weight_stage2_skipped, false);
+  new.weight_stage3_skipped := coalesce(old.weight_stage3_skipped, false) or coalesce(new.weight_stage3_skipped, false);
+  new.eso_checked           := coalesce(old.eso_checked, false)           or coalesce(new.eso_checked, false);
+  new.legs_sorted           := coalesce(old.legs_sorted, false)           or coalesce(new.legs_sorted, false);
+  new.not_chalak_inner      := coalesce(new.not_chalak_inner, false);
+
+  new.maw           := coalesce(new.maw, old.maw);
+  new.rumen         := coalesce(new.rumen, old.rumen);
+  new.weight_right  := coalesce(new.weight_right, old.weight_right);
+  new.weight_left   := coalesce(new.weight_left, old.weight_left);
+  new.weight_stage2 := coalesce(new.weight_stage2, old.weight_stage2);
+  new.weight_stage3 := coalesce(new.weight_stage3, old.weight_stage3);
+  new.eso_result    := coalesce(new.eso_result, old.eso_result);
+
+  new.parts_print_count := greatest(coalesce(old.parts_print_count, 0), coalesce(new.parts_print_count, 0));
+  return new;
+end $function$;
+
+CREATE OR REPLACE FUNCTION public.reset_daily_board(p_token text, p_reason text DEFAULT NULL::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'extensions', 'pg_temp'
+AS $function$
+declare tz text; v_unfinished int; v_carried int; v_numbers jsonb;
+begin
+  if not _manager_session_valid(p_token) or coalesce(_session_role(p_token), 'manager') = 'manufacturer' then
+    return jsonb_build_object('ok', false, 'error', 'unauthorized');
+  end if;
+  perform pg_advisory_xact_lock(hashtext('glatttrack_daily_rollover'));
+  v_unfinished := _board_unfinished();
+  -- an emergency tool: slaughtered animals without their last ruling would leave the
+  -- screens for good — stop, say which, and go on only with a written reason
+  if v_unfinished > 0 then
+    select coalesce(jsonb_agg(id + 1 order by id), '[]'::jsonb) into v_numbers from (
+      select id from animals_pilot
+       where slaughter in ('slaughtered', 'notChalak') and inner_status is distinct from 'treif' and outer_status is null
+      union
+      select id from animals_pilot a where a.slaughter is null and _slaughter_q_open(a)   -- v10.37: the shochet's open "?" too (counted, but was not listed)
+      union
+      select * from _board_proc_unfinished_ids()) x;          -- v10.35: also legs / parts / stamps not done
+    if not _reason_ok(p_reason) then
+      return jsonb_build_object('ok', false, 'error', 'unfinished_animals', 'unfinished', v_unfinished, 'numbers', v_numbers);
+    end if;
+  end if;
+  perform _do_board_reset('manual', null);
+  tz := coalesce(nullif(_gt_settings() ->> 'plantTimezone', ''), 'UTC');
+  if not exists (select 1 from pg_timezone_names where name = tz) then tz := 'UTC'; end if;
+  insert into plant_state (key, value) values ('lastRolloverDate', ((now() at time zone tz)::date)::text)
+    on conflict (key) do update set value = excluded.value, updated_at = now();
+  delete from plant_state where key = 'rolloverWaitingSince';
+  select count(distinct board_id) into v_carried from animals_carry;
+  perform _admin_audit(p_token, 'daily_reset', 'animals_pilot',
+                       jsonb_build_object('reason', left(trim(coalesce(p_reason, '')), 200),
+                                          'unfinished', v_unfinished, 'unfinishedNumbers', coalesce(v_numbers, '[]'::jsonb),
+                                          'openProcessingBoards', v_carried));
+  return jsonb_build_object('ok', true, 'unfinished', v_unfinished, 'openProcessingBoards', v_carried);
+end $function$;
+
+CREATE OR REPLACE FUNCTION public.manager_login(p_code text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'extensions', 'pg_temp'
+AS $function$
+declare
+  v_manager plant_managers%rowtype;
+  v_token text;
+  v_expires timestamptz;
+  v_ip text := _request_ip();
+  -- v10.37: failed codes are counted per address AND device. All the tablets of a plant reach the
+  -- cloud server from ONE address — 8 wrong codes typed anywhere in the plant used to lock the team
+  -- leader out on every device for 15 minutes.
+  v_key text := 'm:' || coalesce(_request_ip(), '?') || ':' || coalesce(_current_device_id(), '-');
+  v_fails int;
+  v_all int;
+  v_last timestamptz;
+begin
+  delete from login_attempts where at < now() - interval '1 day';
+  select count(*), max(at) into v_fails, v_last from login_attempts
+   where ip = v_key and not ok and at > now() - interval '15 minutes';
+  if v_fails >= 8 then
+    return jsonb_build_object('ok', false, 'reason', 'locked',
+                              'retry_after', ceil(extract(epoch from (v_last + interval '15 minutes' - now()))));
+  end if;
+  select count(*) into v_all from login_attempts where not ok and at > now() - interval '15 minutes';
+  if v_all >= 30 then perform pg_sleep(least(3.0, v_all / 30.0)); end if;
+
+  if length(p_code) > 200 then p_code := null; end if;          -- (a code is never that long)
+  select * into v_manager from plant_managers
+    where active and code_hash = crypt(p_code, code_hash)
+    order by (role = 'manager') desc
+    limit 1;
+  if v_manager.id is null then
+    if not exists(select 1 from plant_managers where role = 'manager' and active) then
+      return jsonb_build_object('ok', false, 'reason', 'no_managers');
+    end if;
+    insert into login_attempts (ip, ok) values (v_key, false);
+    perform pg_sleep(0.4);
+    return jsonb_build_object('ok', false, 'reason', 'wrong_code', 'attempts_left', greatest(0, 7 - v_fails));
+  end if;
+  -- step 46: the team leader works only from a team-leader device (paired with the role
+  -- 'leader'). Until the plant has one (installation) any device may log in — the app
+  -- then registers that device as the first team-leader device.
+  if v_manager.role = 'manager' and _is_api_request() and not _request_is_service_role()
+     and _leader_devices_exist() and not _is_leader_device(_current_device_id()) then
+    -- (v10.37: a right code on the wrong device is not a guessing attempt — recorded, not counted)
+    perform _security_event(null, 'leader_device_required', jsonb_build_object('ip', v_ip, 'device', _current_device_id()),
+                            v_manager.name, coalesce(_current_device_id(), 'unpaired'));
+    return jsonb_build_object('ok', false, 'reason', 'leader_device_required');
+  end if;
+  -- step 46 (5th review): a station tablet is only for its station — the owner and the
+  -- manufacturer watch from any other device, never from a station tablet
+  if v_manager.role in ('owner', 'manufacturer') and _is_api_request() and not _request_is_service_role()
+     and exists (select 1 from devices_pilot where id = _current_device_id()
+                   and assigned_role in ('slaughter', 'esophagus', 'legs', 'inner', 'outer', 'parts', 'stamps', 'cooler', 'nikur', 'salting', 'shipping')
+                   and coalesce(device_status, 'active') <> 'retired') then
+    perform _security_event(null, 'login_on_station_device', jsonb_build_object('ip', v_ip, 'device', _current_device_id(), 'role', v_manager.role),
+                            v_manager.name, _current_device_id());
+    return jsonb_build_object('ok', false, 'reason', 'station_device');
+  end if;
+  -- the manufacturer's code opens every plant: while wrong codes are being tried
+  -- here, or after 6 manufacturer logins in an hour, it is locked for a while
+  if v_manager.role = 'manufacturer' then
+    if v_all >= 20 or _rate_count('maker_login', null, interval '1 hour') >= 6 then
+      return jsonb_build_object('ok', false, 'reason', 'locked', 'retry_after', 900);
+    end if;
+    perform _rate_hit('maker_login', v_ip);
+  end if;
+  delete from login_attempts where ip in (v_ip, v_key);
+  -- bound to the device key and the app session it is made with
+  insert into manager_sessions (manager_id, auth_uid, device_id, expires_at)
+  values (v_manager.id, _auth_uid_safe(), _current_device_id(), now() + interval '10 hours')
+    returning token, expires_at into v_token, v_expires;
+  if v_manager.role = 'manufacturer' then
+    v_expires := _maker_session_end();
+    update manager_sessions set expires_at = v_expires where token = v_token;
+    perform _admin_audit(v_token, 'login', 'plant', jsonb_build_object('ip', v_ip));
+  end if;
+  return jsonb_build_object('ok', true, 'token', v_token, 'name', v_manager.name,
+                            'role', v_manager.role, 'expires_at', v_expires,
+                            'repairAccess', _support_access_open(),
+                            'leaderDevice', _is_leader_device(_current_device_id()),
+                            'registerLeaderDevice', v_manager.role = 'manager' and not _leader_devices_exist());
+end $function$;
+
 -- ── self-check ──────────────────────────────────────────────────────────────
 do $$
 declare problems text[] := '{}';
@@ -4985,6 +5346,10 @@ begin
      or _printed_as_key(jsonb_populate_record(null::animals_pilot, '{"id":5,"slaughter":"notChalak","outer_status":"kosher","nc_plain":true}')) <> 'kosher'
      or _printed_as_key(jsonb_populate_record(null::animals_pilot, '{"id":5,"slaughter":"notChalak","outer_status":"custom_1"}')) <> 'custom_1' then
     problems := problems || '"not chalak" plain kosher at the outer ruling (v10.33)'::text; end if;
+  if pg_get_functiondef('manager_login(text)'::regprocedure) !~ 'v_key text := ''m:'''
+     or pg_get_functiondef('reset_daily_board(text,text)'::regprocedure) !~ '_slaughter_q_open\(a\)'
+     or pg_get_functiondef('_animals_merge()'::regprocedure) !~ 'new.eso_prev_slaughter := old.slaughter;' then
+    problems := problems || 'v10.37 server fixes'::text; end if;
   if (select value from plant_state where key = 'schemaStep')::int < 46 then
     problems := problems || 'schemaStep not 46'::text; end if;
   if array_length(problems, 1) > 0 then

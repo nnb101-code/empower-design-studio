@@ -1,6 +1,6 @@
-מצורפת חבילת הבדיקה העדכנית של GlattTrack (אפליקציה v10.36, שרת שלב 46).
-זה סבב עשרים. חדש מאז סבב 19 (README: "Fixed while recording the v10.36 videos", "Improvement round (after round 19)" ו-"Fixed after round 19"): (1) התיקונים של סבב 19; (2) סבב שיפור — יומני reprintLog / problemReports / errorLog נחתכים ל-2000 שורות (_list_tail, גם אחרי _merge_list), בדיקת ההגדרות כל 20 שניות שואלת רק updated_at, ובדיקת הבהמות כל 20 שניות מורידה רק שורות שהשתנו; (3) תיקון באפליקציה: טאבלט חדש לא טען את הגדרות המפעל כי השמירה הראשונה שלו הייתה השורה האחרונה בשרת (_applyRemoteSettings דילג על "ההד שלי"). בדוק במיוחד: _list_tail ו-push_settings (האם אפשר לאבד שורות חדשות, או לעקוף את המגבלה), את מנגנון ה-updated_at בשני ה-polls באפליקציה (_sbFetchSettingsSnapshot, _sbSettingsSeenAt, _sbRowSeenAt — האם טאבלט יכול לפספס שינוי לתמיד, למשל אחרי איפוס יומי, החלפת מכשיר, או שני שינויים באותו updated_at), ואת התיקון ב-_applyRemoteSettings (האם הוא יכול לדרוס שינוי מקומי שעוד לא נשלח).
-קודם תקרא את README-REVIEW.md, החלק "Fixed while recording the v10.36 videos", ואחריו "Improvement round (after round 19)" ו-"Fixed after round 19", ומטה.
+מצורפת חבילת הבדיקה העדכנית של GlattTrack (אפליקציה v10.37, שרת שלב 46).
+זה סבב עשרים ואחד. חדש מאז סבב 20 (README: "Changed in v10.37"): שלושה תיקוני שרת ב-02 (§34) — _animals_merge (נבלה של השוחט אחרי "?" ו"נבלה" של וושט שהיה בלי רשת), reset_daily_board (רשימת המספרים שלא הסתיימו כוללת "?" פתוח של השוחט), manager_login (קודים שגויים נספרים לפי כתובת + טאבלט) — ותיקונים באפליקציה (שמירת הגדרה רק של המפתח שהשתנה, חסימת USDA/"?" גם בלי רשת ובהדפסה חוזרת, פסיקה שלא נשלחה לפני איפוס נרשמת, ארכיון לפי יום השחיטה, מדבקות משקל GS1/lb, איפוס כפול). בדוק במיוחד: האם הספירה החדשה ב-manager_login מאפשרת ניחוש קודים מהר יותר (טאבלט לא מצומד, הרבה טאבלטים, הנעילה הגלובלית v_all); האם התיקון ב-_animals_merge נכון בכל הסדרים האפשריים של שוחט/וושט/בלי רשת; ובאפליקציה — האם שמירה של מפתח אחד בלבד יכולה לאבד שינוי (שני מפתחות שתלויים זה בזה, או מפתח שנמחק).
+קודם תקרא את README-REVIEW.md, החלק "Changed in v10.37", ואחריו "Fixed while recording the v10.36 videos" ו-"Improvement round (after round 19)", ומטה.
 
 הכללים של בעל המערכת (המצב הנוכחי):
 - סדר הקו: שחיטה ← וושט ← רגליים ← ראש (אם מפוצל) ← פנים ← חוץ ← חותמות / חלקים.
@@ -27,13 +27,13 @@
 (2) _stage_order_error('inner') עם head_stickers: האם יש מסלול כתיבה של פסיקת פנים לפני מדבקות ראש (claim, animal_push, carry_push, המסך המשותף)?
 (3) באפליקציה: _pushAnswer, הסדר במסך ראש מפוצל, כיבוי מסך — האם יכול להיתקע תור או לאבד שינוי תקין?
 (4) הנקודות הפתוחות B1, B2, B5, B6 מהסבב הקודם, ו-_hold_caller_error, _parts_print_block, _correction_check, מצב בדיקה.
-בדיקת האבטחה: 150/150 (מסד נקי מ-glatttrack-schema-full.sql + הרצה שנייה של 02).
+בדיקת האבטחה: 153/153 (מסד נקי מ-glatttrack-schema-full.sql + הרצה שנייה של 02).
 
 Please review this pack according to README-REVIEW.md.
 
 Rules for the review:
 1. Audit the ACTIVE state in active-schema-snapshot.sql (one definition per function). Do not audit older step files or the history inside glatttrack-schema-full.sql as if it were active.
-2. Use SECURITY-MANIFEST.md and security-selftest-result.txt (150/150) to see what is already enforced and tested. Before reporting a vulnerability, check whether a self-test already covers it; if it does, say so and explain why you still think it is exploitable (with the exact function name and line from the snapshot).
+2. Use SECURITY-MANIFEST.md and security-selftest-result.txt (153/153) to see what is already enforced and tested. Before reporting a vulnerability, check whether a self-test already covers it; if it does, say so and explain why you still think it is exploitable (with the exact function name and line from the snapshot).
 3. Separate your findings into:
    A. Real, exploitable problems (with a concrete attack: which role, which call, which parameters, what wrong result).
    B. Defense-in-depth improvements (not exploitable today).
