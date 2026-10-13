@@ -18,6 +18,11 @@ This pack is the CURRENT state. Review these files only.
 | `test-mode-on.sql` / `test-mode-off.sql` | The owner's SQL-only test switch. |
 | `plant-server/` | Plant resilience kit (bash, runs as root on the plant servers, NOT in the database): standby server, floating address, UPS, nightly checked backup. Guide: `PLANT-RESILIENCE-HE.md`. |
 
+## Changed in v10.38 (app only, labels) — breeds, cattle only
+
+- "Cattle types" is now "Breeds" everywhere (settings list, summaries, search, focus filter), in Hebrew (זני בקר / זן בהמה), English and Spanish (Razas).
+- The plant works with cattle only: the old cattle / sheep / mixed choice (no buttons left on screen) was removed from the code, with its translations, and the "animal type: cattle" line under the daily target is gone. No server change.
+
 ## Added in v10.38 (server 02 + app) — stage 2 of the cuts list, and the two nikur screens
 
 **The owner's rules:** a kosher sticker, a sorting, a stamp — always after the ruling. Every cut is on / off, in the area the plant chose. Every kosher piece goes into the nikur (every kashrut status, chalak and not chalak); never a treif, nevela, held or unruled one.
