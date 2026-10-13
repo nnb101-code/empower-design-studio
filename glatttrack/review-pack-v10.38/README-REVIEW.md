@@ -43,7 +43,7 @@ This pack is the CURRENT state. Review these files only.
 - `_device_write_allowed`: the nikur tablet may write now (its scans and holds). Cooler / salting / shipping stay view-only.
 - **A "?" at the nikur too** (`hold_set` station `nikur`, kind `question`, whole animal). `hold_resolve` lets the nikur answer it ("answered") or cancel it. The pieces wait meanwhile (`_nikur_refusal`: held).
 - **The tail** gets its sticker once: on the head screen (`pre` head) or at the stamps (`m` > 0), never both (`_products_error`).
-- **App defaults:** stamps 9 stickers (sides 6 + outside skirt + hanger + tail; inside skirt off). Hebrew names for the skirts and the hanger.
+- **App defaults:** stamps 9 stickers (sides 6 + outside skirt + hanger + tail; inside skirt off). Trade names: Hebrew סרעפת חיצונית / סרעפת פנימית / נתח קצבים, Spanish Entraña fina / Entraña gruesa / Centro de entraña.
 - Self-test: 156/156 (new checks "v10.38 stage 2" and "v10.38 nikur").
 
 ## Added in v10.38 (server 02 + app) — the plant's inner & outer cuts list ("products", stage 1)

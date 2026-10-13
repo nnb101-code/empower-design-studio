@@ -11501,9 +11501,9 @@ const GT_DEFAULT_PRODUCTS=[
   {id:'legs',     he:'רגליים',       en:'Legs',          es:'Patas',           on:true,  pre:'legs', n:2, post:'legs',   m:0, nikur:'none',  avg:null, builtin:true},
   {id:'tail',     he:'זנב',          en:'Tail',          es:'Cola',            on:true,  pre:'none', n:0, post:'stamps', m:1, nikur:'small', avg:null, builtin:true},
   {id:'liver',    he:'כבד',          en:'Liver',         es:'Hígado',          on:false, pre:'head', n:1, post:'none',   m:0, nikur:'small', avg:null, builtin:true},
-  {id:'skirt_out',he:'סקירט חיצוני', en:'Outside Skirt', es:'Outside Skirt',   on:true,  pre:'none', n:0, post:'stamps', m:1, nikur:'small', avg:null, builtin:true},
-  {id:'skirt_in', he:'סקירט פנימי',  en:'Inside Skirt',  es:'Inside Skirt',    on:false, pre:'none', n:0, post:'stamps', m:1, nikur:'small', avg:null, builtin:true, notGlatt:true},
-  {id:'hanger',   he:'הנגר סטייק',   en:'Hanger steak',  es:'Hanger steak',    on:true,  pre:'none', n:0, post:'stamps', m:1, nikur:'small', avg:null, builtin:true},
+  {id:'skirt_out',he:'סרעפת חיצונית', en:'Outside Skirt', es:'Entraña fina',    on:true,  pre:'none', n:0, post:'stamps', m:1, nikur:'small', avg:null, builtin:true},
+  {id:'skirt_in', he:'סרעפת פנימית',  en:'Inside Skirt',  es:'Entraña gruesa',  on:false, pre:'none', n:0, post:'stamps', m:1, nikur:'small', avg:null, builtin:true, notGlatt:true},
+  {id:'hanger',   he:'נתח קצבים',     en:'Hanger steak',  es:'Centro de entraña', on:true,  pre:'none', n:0, post:'stamps', m:1, nikur:'small', avg:null, builtin:true},
 ];
 // (before v10.38 the average weights were kept in partTypes — they carry over to the list)
 const _GT_OLD_PART_IDS={tongue:'tongue',hanger:'hanger',tail:'tail',skirt_out:'skirt_out',skirt_in:'skirt_in'};
@@ -11513,7 +11513,9 @@ function gtProducts(s){
     // (a list saved before stage 2 has no m / nikur yet: the built-in values, or none for the plant's own)
     const d=GT_DEFAULT_PRODUCTS.find(x=>x.id===p.id)||{m:0,nikur:'none'};
     const o=Object.assign({}, p, {m:p.m!=null?p.m:d.m, nikur:p.nikur||d.nikur});
-    if(p.builtin && d.he && ['Outside Skirt','Inside Skirt','Hanger steak'].includes(p.he)) o.he=d.he;   // (the Hebrew names of v10.38)
+    // (v10.38: the trade names in Hebrew and Spanish — a built-in name the plant did not change follows them)
+    if(p.builtin && d.he && ['Outside Skirt','Inside Skirt','Hanger steak','סקירט חיצוני','סקירט פנימי','הנגר סטייק'].includes(p.he)) o.he=d.he;
+    if(p.builtin && d.es && (!p.es || ['Outside Skirt','Inside Skirt','Hanger steak'].includes(p.es))) o.es=d.es;
     return o; });
   const list=GT_DEFAULT_PRODUCTS.map(p=>({...p}));
   (Array.isArray(s.partTypes)?s.partTypes:[]).forEach(o=>{
