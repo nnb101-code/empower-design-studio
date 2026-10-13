@@ -18,7 +18,7 @@ This pack is the CURRENT state. Review these files only.
 | `test-mode-on.sql` / `test-mode-off.sql` | The owner's SQL-only test switch. |
 | `plant-server/` | Plant resilience kit (bash, runs as root on the plant servers, NOT in the database): standby server, floating address, UPS, nightly checked backup. Guide: `PLANT-RESILIENCE-HE.md`. |
 
-## Added in v10.38 (server 02 + app) — the plant's products list (stage 1)
+## Added in v10.38 (server 02 + app) — the plant's inner & outer cuts list ("products", stage 1)
 
 **The owner's rule:** a sticker with a kashrut status, and any sorting, only after the ruling. Before the ruling only a number / barcode sticker (legs, head, liver…).
 
@@ -40,7 +40,7 @@ Defaults: tongue 1 + cheeks 2 + sides 2 + lung 1 + hook 1 = 7 head stickers (as 
 - `push_settings`: once the plant has a list, `headStickerCount` / `legStickerCount` are derived from it (`_products_counts`). A count typed by hand does not win.
 - Self-test: 154/154 (new check "v10.38 products list").
 
-**App:** Settings → "Products from the animal" replaces the old "small parts — average weight" card (its weights carry over); the legs / head counts are shown, not typed.
+**App:** Settings → "Inner & outer cuts" (חלקי פנים וחוץ) replaces the old "small parts — average weight" card (its weights carry over); the legs / head counts are shown, not typed.
 
 **Not yet (stage 2):** the small-parts and stamps screens still work as before (tongue + 2 cheeks; 5 stamps). They will follow the list next, with the leg sorting at the small parts.
 

@@ -6,7 +6,7 @@
 5-SECURITY-MANIFEST.txt — מה כבר נאכף בשרת.
 6-support-center-central-setup.sql.txt — מרכז השירות של היצרן (מסד נפרד): מפעלים, דיווחים, התראות, פקודות מרחוק, עדכונים.
 7-plant-server-report-and-update.sh.txt — הסקריפטים בשרת המפעל: דיווח למרכז, ביצוע פקודות, התקנת עדכון.
-חדש בסבב הזה (README: "Added in v10.38" ו-"Changed in v10.37"): רשימת "מוצרים מהבהמה" (products, _products_error, החישוב של מספר המדבקות ב-push_settings), ושלושה תיקוני שרת — _animals_merge, reset_daily_board, manager_login.
+חדש בסבב הזה (README: "Added in v10.38" ו-"Changed in v10.37"): רשימת "חלקי פנים וחוץ" (products, _products_error, החישוב של מספר המדבקות ב-push_settings), ושלושה תיקוני שרת — _animals_merge, reset_daily_board, manager_login.
 קודם תקרא ב-README את החלק "Added in v10.38", ואחריו "Changed in v10.37" ומטה.
 
 חשוב — איך לבדוק (בסבב הקודם הבדיקה הסתמכה על התיאור במסמכים ולא על הקוד):
