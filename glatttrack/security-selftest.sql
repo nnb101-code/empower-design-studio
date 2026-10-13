@@ -3009,6 +3009,60 @@ begin
     concat_ws(' | ', left(r2::text, 60), left(r3::text, 60), left(r4::text, 80), array_to_string(bad, ' ; '), _gt_settings() ->> 'headStickerCount'));
 end $$;
 $gt74$;
+    v_step := 'v10.38 stage 2: legs sorted with the small parts; the areas from the list';
+    execute $gt75$
+-- ── v10.38 stage 2: the legs sorted where the plant sorts them; the stamps / small-parts sets from the list ──
+do $$
+declare r jsonb; r2 jsonb; r3 jsonb; r4 jsonb; r5 jsonb; ok boolean; s0 jsonb; p jsonb;
+  pr jsonb := '[{"id":"tongue","he":"לשון","on":true,"pre":"head","n":1,"post":"parts","m":1,"nikur":"small","builtin":true},
+                {"id":"cheeks","he":"לחיים","on":true,"pre":"head","n":2,"post":"parts","m":2,"nikur":"small","builtin":true},
+                {"id":"sides","he":"צדדים","on":true,"pre":"head","n":2,"post":"stamps","m":6,"nikur":"big","builtin":true},
+                {"id":"lung","he":"ריאה","on":true,"pre":"head","n":1,"post":"none","m":0,"nikur":"none","builtin":true},
+                {"id":"hook","he":"קרס","on":true,"pre":"head","n":1,"post":"none","m":0,"nikur":"none","builtin":true},
+                {"id":"legs","he":"רגליים","on":true,"pre":"legs","n":2,"post":"parts","m":0,"nikur":"none","builtin":true},
+                {"id":"hanger","he":"Hanger steak","on":true,"pre":"none","n":0,"post":"stamps","m":1,"nikur":"small","builtin":true}]';
+begin
+  select settings into s0 from settings_pilot where id = 1;
+  r := pg_temp.api(pg_temp.mgr(), format('select push_settings(%L::jsonb, ''x'', %L)', jsonb_build_object('products', pr, 'legsSortEnabled', true), pg_temp.v('mgr')));
+  ok := pg_temp.ok(r) and (_gt_settings() ->> 'stampsCount')::int = 7 and (_gt_settings() ->> 'partsStickerCount')::int = 3
+        and _legs_sort_station() = 'parts' and _parts_expected() = 3;
+  -- bad stickers / nikur values are refused
+  r2 := pg_temp.api(pg_temp.mgr(), format('select push_settings(%L::jsonb, ''x'', %L)', jsonb_build_object('products', jsonb_set(pr, '{0,m}', '99')), pg_temp.v('mgr')));
+  r3 := pg_temp.api(pg_temp.mgr(), format('select push_settings(%L::jsonb, ''x'', %L)', jsonb_build_object('products', jsonb_set(pr, '{0,nikur}', '"freezer"')), pg_temp.v('mgr')));
+  ok := ok and r2 ->> 'error' = 'bad_settings' and r3 ->> 'error' = 'bad_settings';
+  -- sorting with the small parts: the parts tablet sorts, the legs tablet does not (claim and push);
+  -- the parts tablet can't print leg stickers
+  perform pg_temp.prep(862, 'outer'); perform pg_temp.prep(863, 'outer');
+  perform set_config('gt.reset_in_progress', 'true', true);
+  update animals_pilot set legs_stickers = true, head_stickers = true where id in (862, 863);
+  perform set_config('gt.reset_in_progress', 'false', true);
+  r  := pg_temp.api(pg_temp.dev('LEGS'), pg_temp.q_claim(862, 'legs', 'sorted', '', ''));
+  r2 := pg_temp.api(pg_temp.dev('LEGS'), pg_temp.q_push(863, '{"legs_sorted":true}'));
+  r3 := pg_temp.api(pg_temp.dev('PARTS'), pg_temp.q_claim(862, 'legs', 'sorted', '', ''));
+  r4 := pg_temp.api(pg_temp.dev('PARTS'), pg_temp.q_push(863, '{"legs_sorted":true}'));
+  perform pg_temp.prep(864, 'slaughter');
+  r5 := pg_temp.api(pg_temp.dev('PARTS'), pg_temp.q_push(864, '{"legs_stickers":true}'));
+  ok := ok and r ->> 'error' = 'wrong_station' and pg_temp.claimed(r3) and (pg_temp.ar(862)).legs_sorted
+        and (pg_temp.ar(863)).legs_sorted and not coalesce((pg_temp.ar(864)).legs_stickers, false);
+  -- back on the legs screen: the legs tablet sorts again, the parts tablet does not
+  p := jsonb_set(pr, '{5,post}', '"legs"');
+  perform pg_temp.api(pg_temp.mgr(), format('select push_settings(%L::jsonb, ''x'', %L)', jsonb_build_object('products', p), pg_temp.v('mgr')));
+  perform pg_temp.prep(865, 'outer');
+  perform set_config('gt.reset_in_progress', 'true', true);
+  update animals_pilot set legs_stickers = true, head_stickers = true where id = 865;
+  perform set_config('gt.reset_in_progress', 'false', true);
+  r  := pg_temp.api(pg_temp.dev('PARTS'), pg_temp.q_claim(865, 'legs', 'sorted', '', ''));
+  r2 := pg_temp.api(pg_temp.dev('LEGS'), pg_temp.q_claim(865, 'legs', 'sorted', '', ''));
+  ok := ok and r ->> 'error' = 'wrong_station' and pg_temp.claimed(r2) and _legs_sort_station() = 'legs';
+  -- no tongue: the small-parts set is 2
+  p := jsonb_set(p, '{0,on}', 'false');
+  perform pg_temp.api(pg_temp.mgr(), format('select push_settings(%L::jsonb, ''x'', %L)', jsonb_build_object('products', p), pg_temp.v('mgr')));
+  ok := ok and _parts_expected() = 2 and (_gt_settings() ->> 'partsStickerCount')::int = 2;
+  update settings_pilot set settings = s0 where id = 1;
+  perform pg_temp.rec('v10.38 stage 2: stamps / small-parts counts from the list; legs sorted only by the plant''s sorting station (parts or legs, claim + push), the parts tablet prints no leg stickers; the small-parts set follows the list', ok,
+    concat_ws(' | ', left(r::text, 60), left(r2::text, 60), left(r3::text, 60), left(r4::text, 60), left(r5::text, 80), _legs_sort_station(), _parts_expected()));
+end $$;
+$gt75$;
     v_step := 'the ACTIVE security surface against the expected manifest';
     execute $gt70$
 -- ── the ACTIVE security surface against the expected manifest ───────────────
