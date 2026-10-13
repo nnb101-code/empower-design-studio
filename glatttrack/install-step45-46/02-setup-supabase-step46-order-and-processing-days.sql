@@ -2251,6 +2251,10 @@ begin
       if x ->> 'post' not in ('legs', 'parts') then return 'the legs are sorted on the legs screen or with the small parts'; end if;
       legs_on := true;
     end if;
+    -- (owner) the tail gets its sticker once: on the head screen or at the stamps
+    if v_id = 'tail' and x ->> 'pre' <> 'none' and coalesce((x ->> 'n')::int, 0) > 0 and coalesce((x ->> 'm')::int, 0) > 0 then
+      return 'the tail gets its sticker on the head screen or at the stamps, not both';
+    end if;
     if (x ->> 'on')::boolean and x ->> 'pre' = 'head' then head := head + (x ->> 'n')::int; end if;
   end loop;
   if not legs_on then return 'the legs product is missing'; end if;
@@ -6455,7 +6459,7 @@ begin
   if p_station is null or p_station not in ('slaughter', 'eso', 'inner', 'outer', 'legs', 'parts', 'stamps', 'nikur') then
     return jsonb_build_object('ok', false, 'error', 'bad_station');
   end if;
-  if p_station = 'nikur' and (p_kind <> 'usda' or v_part <> 'whole') then    -- v10.38: the nikur puts a whole-animal USDA hold only
+  if p_station = 'nikur' and v_part <> 'whole' then    -- v10.38: the nikur holds the whole animal (USDA or "?")
     return jsonb_build_object('ok', false, 'error', 'bad_value');
   end if;
   if (p_kind = 'question' and not (v_part = 'whole'
@@ -6597,6 +6601,50 @@ end $function$;
 alter table animal_holds drop constraint if exists animal_holds_station_check;
 alter table animal_holds add constraint animal_holds_station_check
   check (station = any (array['slaughter', 'eso', 'inner', 'outer', 'legs', 'parts', 'stamps', 'nikur']));
+
+-- a "?" of the nikur is answered by the nikur (the piece may go in) or cancelled
+CREATE OR REPLACE FUNCTION public.hold_resolve(p_hold bigint, p_resolution text, p_command_id uuid DEFAULT NULL::uuid)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'extensions', 'pg_temp'
+AS $function$
+declare v_dev text; v_res jsonb; h animal_holds%rowtype; v_actor text;
+begin
+  v_dev := _call_device(null);
+  if v_dev is null then return jsonb_build_object('ok', false, 'error', _no_device_error()); end if;
+  v_res := _cmd_get(p_command_id, v_dev, 'hold_resolve');
+  if v_res is not null then return v_res; end if;
+  select * into h from animal_holds where id = p_hold for update;
+  if h.id is null then return jsonb_build_object('ok', false, 'error', 'bad_id'); end if;
+  v_actor := _hold_caller_error(h.station);                         -- v10.32: worker login + shared screen
+  if v_actor is not null then return jsonb_build_object('ok', false, 'error', v_actor); end if;
+  -- v10.35 review: legs and head are two screens — only the screen (slot) that marked the hold resolves it
+  if h.station = 'legs' and _caller_legs_slot() is not null
+     and exists (select 1 from devices_pilot d where d.id = h.created_by_device and d.assigned_role = 'legs'
+                   and coalesce(d.device_status, 'active') <> 'retired'
+                   and coalesce(d.assigned_index, 0) <> _caller_legs_slot()) then
+    return jsonb_build_object('ok', false, 'error', 'wrong_screen');
+  end if;
+  if h.resolved_at is not null then
+    return jsonb_build_object('ok', true, 'hold', to_jsonb(h), 'already', true);
+  end if;
+  if not ((h.kind = 'usda' and p_resolution in ('released', 'condemned'))
+          or (h.kind = 'question' and (p_resolution = 'cancelled'
+                                       or (p_resolution = 'answered' and h.station in ('legs', 'parts', 'stamps', 'inner', 'nikur'))))) then   -- v10.32: inner — the window of the "?" was decided
+    return jsonb_build_object('ok', false, 'error', 'bad_value');
+  end if;
+  v_actor := _derive_actor(case h.station when 'eso' then 'eso' when 'stamps' then 'stamped' else h.station end, null);
+  update animal_holds set resolved_at = now(), resolution = p_resolution, resolved_by = v_actor, resolved_by_device = v_dev
+   where id = h.id returning * into h;
+  perform _gt_event(h.animal_id + 1, h.station, 'hold_' || p_resolution,
+                    jsonb_build_object('kind', h.kind, 'part', h.part, 'hold', h.id), v_actor, v_dev);
+  -- a board kept only for this hold may now be archived
+  perform _proc_finalize(c.board_id) from (select distinct board_id from animals_carry where board_epoch = h.board_epoch) c;
+  v_res := jsonb_build_object('ok', true, 'hold', to_jsonb(h));
+  perform _cmd_put(p_command_id, v_dev, 'hold_resolve', v_res);
+  return v_res;
+end $function$;
 
 -- why this piece may not go into the nikur (null = it may)
 create or replace function _nikur_refusal(a animals_pilot, x jsonb, p_ep bigint) returns text

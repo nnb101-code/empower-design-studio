@@ -5230,7 +5230,7 @@ function gtHeldList(st){
     let acts='';
     if(!h.open) acts=`<span class="gt-muted">${L('נפסל USDA','USDA condemned','Condenado USDA')}</span>`;
     else if(h.kind==='usda') acts=_gtHBtn(L('שחרור','Release','Liberar'),'#28C76F',`gtHoldResolve(${h.id},'released',gtAfterRelease)`)+_gtHBtn(L('נפסל USDA','USDA condemned','Condenado USDA'),'#E53935',`gtCondemnAsk(${h.id})`);
-    else if(['legs','parts','stamps'].includes(st)) acts=_gtHBtn(L('נענתה — להמשיך','Answered — go on','Respondida — seguir'),'#28C76F',`gtHoldResolve(${h.id},'answered')`)+_gtHBtn(L('ביטול ה-?','Cancel the ?','Anular el ?'),'#9aa4b5',`gtHoldResolve(${h.id},'cancelled')`);
+    else if(['legs','parts','stamps','nikur'].includes(st)) acts=_gtHBtn(L('נענתה — להמשיך','Answered — go on','Respondida — seguir'),'#28C76F',`gtHoldResolve(${h.id},'answered')`)+_gtHBtn(L('ביטול ה-?','Cancel the ?','Anular el ?'),'#9aa4b5',`gtHoldResolve(${h.id},'cancelled')`);
     else acts=_gtHBtn(L('לפסוק','Rule','Dictaminar'),'#FFC400',`gtSheetClose();gtOwnQTap(${h.n},'${st}',null)`)+_gtHBtn(L('ביטול ה-?','Cancel the ?','Anular el ?'),'#9aa4b5',`gtHoldResolve(${h.id},'cancelled')`);
     return `<div class="gt-hrow"><span><b>#${h.n+1}</b> · ${what}${t?' · '+t:''}${h.by?' · '+escapeHtml(h.by):''}</span><span>${acts}</span></div>`;
   };
@@ -5385,7 +5385,7 @@ function _gtResumeAfterUpdate(){
 // screen). They have no write rights on the server yet; each screen's own work comes after its design.
 const GT_SUP_SCREENS={
   cooler:  {icon:'❄️', t:['משגיח קולר','Cooler supervisor','Supervisor de cámara'],   n:['קולר (קירור)','Cooler','Cámara fría'],      w:['משגיח קולר','Cooler supervisor','Supervisor de cámara']},
-  nikur:   {icon:'🔪', t:['משגיח מנקר','Nikur supervisor','Supervisor de nikur'],     n:['מנקר','Nikur (deveining)','Nikur'],         w:['משגיח מנקר','Nikur supervisor','Supervisor de nikur']},
+  nikur:   {icon:'🔪', t:['ניקור','Nikur','Nikur'],                                  n:['ניקור','Nikur (deveining)','Nikur'],        w:['משגיח ניקור','Nikur supervisor','Supervisor de nikur']},
   salting: {icon:'🧂', t:['משגיח מליחה','Salting supervisor','Supervisor de salado'], n:['מליחה','Salting','Salado'],                 w:['משגיח מליחה','Salting supervisor','Supervisor de salado']},
   shipping:{icon:'📦', t:['משגיח שיפינג','Shipping supervisor','Supervisor de envíos'],n:['שיפינג (משלוח)','Shipping','Envíos'],      w:['משגיח שיפינג','Shipping supervisor','Supervisor de envíos']}
 };
@@ -5430,6 +5430,7 @@ function nikurRender(el){
     el.innerHTML=`<input type="text" id="nkScan" inputmode="none" style="position:absolute;opacity:0;width:1px;height:1px;top:0;left:0;pointer-events:none;" onkeydown="nkKey(event)">
       <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
         <div id="nkTitle" style="flex:1;font-size:20px;font-weight:900;color:var(--gold);"></div>
+        <button class="gt-tbb" onclick="nkQuestion()" style="border-color:#FFC400;background:#FFC400;color:#000;font-weight:800;">? ${escapeHtml(L('שאלה','Question','Pregunta'))}</button>
         <button class="gt-tbb gt-tbu" onclick="gtUsdaStart('nikur')">USDA HOLD</button>
         <button class="gt-tbb" id="nkHeldBtn" onclick="gtHeldList('nikur')" style="display:none;border-color:#B39DFF;color:#B39DFF;"></button>
       </div>
@@ -5465,6 +5466,17 @@ function nikurRender(el){
         +(rows||`<div class="gt-muted">${escapeHtml(L('הכל נכנס.','Everything is in.','Todo está dentro.'))}</div>`)+(miss.length>30?`<div class="gt-muted">+${miss.length-30}</div>`:''); } }
 }
 function nkFocus(){ const i=document.getElementById('nkScan'); if(i) i.focus(); }
+// a "?" at the nikur (to be sure): the animal's pieces wait until the nikur answers it
+function nkQuestion(){
+  gtSheet('? '+L('שאלה — ניקור','Question — nikur','Pregunta — nikur'), L('על איזה מספר? החתיכות שלו לא ייכנסו עד שעונים על השאלה כאן.','Which number? Its pieces do not go in until the question is answered here.','¿Qué número? Sus piezas no entran hasta responder la pregunta aquí.'),
+    _gtNumInput(-1)+'<div class="gt-row">'+_gtHBtn(L('סמן ?','Mark ?','Marcar ?'),'#FFC400','nkQuestionDo()')+_gtHBtn(L('ביטול','Cancel','Cancelar'),'#9aa4b5','gtSheetClose()')+'</div>');
+}
+async function nkQuestionDo(){
+  const idx=_gtReadNum(); if(idx<0){ KS.notice(L('מספר לא תקין','Invalid number','Número inválido')); return; }
+  gtSheetClose();
+  if(await gtHoldPut(idx,'nikur','question','whole')) KS.notice('? #'+(idx+1)+L(' — מחכה לתשובה',' — waits for the answer',' — espera respuesta'));
+  supRender();
+}
 function nkKey(e){ if(e.key==='Enter'||e.keyCode===13){ const v=e.target.value.trim(); e.target.value=''; if(v) nkScan(v); } }
 async function nkLoad(){
   if(!window.sb) return;
@@ -11487,11 +11499,11 @@ const GT_DEFAULT_PRODUCTS=[
   {id:'lung',     he:'ריאה',         en:'Lung',          es:'Pulmón',          on:true,  pre:'head', n:1, post:'none',   m:0, nikur:'none',  avg:null, builtin:true},
   {id:'hook',     he:'קרס',          en:'Hook',          es:'Gancho',          on:true,  pre:'head', n:1, post:'none',   m:0, nikur:'none',  avg:null, builtin:true},
   {id:'legs',     he:'רגליים',       en:'Legs',          es:'Patas',           on:true,  pre:'legs', n:2, post:'legs',   m:0, nikur:'none',  avg:null, builtin:true},
-  {id:'tail',     he:'זנב',          en:'Tail',          es:'Cola',            on:false, pre:'none', n:0, post:'stamps', m:1, nikur:'small', avg:null, builtin:true},
+  {id:'tail',     he:'זנב',          en:'Tail',          es:'Cola',            on:true,  pre:'none', n:0, post:'stamps', m:1, nikur:'small', avg:null, builtin:true},
   {id:'liver',    he:'כבד',          en:'Liver',         es:'Hígado',          on:false, pre:'head', n:1, post:'none',   m:0, nikur:'small', avg:null, builtin:true},
-  {id:'skirt_out',he:'Outside Skirt',en:'Outside Skirt', es:'Outside Skirt',   on:false, pre:'none', n:0, post:'stamps', m:1, nikur:'small', avg:null, builtin:true},
-  {id:'skirt_in', he:'Inside Skirt', en:'Inside Skirt',  es:'Inside Skirt',    on:false, pre:'none', n:0, post:'stamps', m:1, nikur:'small', avg:null, builtin:true, notGlatt:true},
-  {id:'hanger',   he:'Hanger steak', en:'Hanger steak',  es:'Hanger steak',    on:false, pre:'none', n:0, post:'stamps', m:1, nikur:'small', avg:null, builtin:true},
+  {id:'skirt_out',he:'סקירט חיצוני', en:'Outside Skirt', es:'Outside Skirt',   on:true,  pre:'none', n:0, post:'stamps', m:1, nikur:'small', avg:null, builtin:true},
+  {id:'skirt_in', he:'סקירט פנימי',  en:'Inside Skirt',  es:'Inside Skirt',    on:false, pre:'none', n:0, post:'stamps', m:1, nikur:'small', avg:null, builtin:true, notGlatt:true},
+  {id:'hanger',   he:'הנגר סטייק',   en:'Hanger steak',  es:'Hanger steak',    on:true,  pre:'none', n:0, post:'stamps', m:1, nikur:'small', avg:null, builtin:true},
 ];
 // (before v10.38 the average weights were kept in partTypes — they carry over to the list)
 const _GT_OLD_PART_IDS={tongue:'tongue',hanger:'hanger',tail:'tail',skirt_out:'skirt_out',skirt_in:'skirt_in'};
@@ -11500,7 +11512,9 @@ function gtProducts(s){
   if(Array.isArray(s.products)&&s.products.length) return s.products.map(p=>{
     // (a list saved before stage 2 has no m / nikur yet: the built-in values, or none for the plant's own)
     const d=GT_DEFAULT_PRODUCTS.find(x=>x.id===p.id)||{m:0,nikur:'none'};
-    return Object.assign({}, p, {m:p.m!=null?p.m:d.m, nikur:p.nikur||d.nikur}); });
+    const o=Object.assign({}, p, {m:p.m!=null?p.m:d.m, nikur:p.nikur||d.nikur});
+    if(p.builtin && d.he && ['Outside Skirt','Inside Skirt','Hanger steak'].includes(p.he)) o.he=d.he;   // (the Hebrew names of v10.38)
+    return o; });
   const list=GT_DEFAULT_PRODUCTS.map(p=>({...p}));
   (Array.isArray(s.partTypes)?s.partTypes:[]).forEach(o=>{
     const id=_GT_OLD_PART_IDS[o&&o.id];
@@ -11554,6 +11568,8 @@ function _gtProductsProblem(list){
   const c=gtProductCounts(list);
   if(c.headStickerCount<1) return L('מסך הראש מדפיס לפחות מדבקת מספר אחת.','The head screen prints at least one number sticker.','La pantalla de cabeza imprime al menos una etiqueta de número.');
   if(c.headStickerCount>30) return L('יותר מדי מדבקות ראש (עד 30).','Too many head stickers (30 at most).','Demasiadas etiquetas de cabeza (máximo 30).');
+  { const t=list.find(p=>p.id==='tail'); if(t && t.pre!=='none' && (parseInt(t.n)||0)>0 && (parseInt(t.m)||0)>0)
+      return L('הזנב מקבל מדבקה פעם אחת — בראש או בחותמות.','The tail gets its sticker once — at the head or at the stamps.','La cola recibe su etiqueta una vez — en la cabeza o en los sellos.'); }
   if(legs.post!=='legs'&&legs.post!=='parts') return L('את הרגליים ממיינים במסך הרגליים או בחלקים הקטנים.','The legs are sorted on the legs screen or with the small parts.','Las patas se clasifican en la pantalla de patas o con las partes pequeñas.');
   return null;
 }
@@ -11571,6 +11587,8 @@ function mgrSetProduct(id,field,val){
   else if(field==='pre'){ p.pre=['head','legs','none'].includes(val)?val:'none'; if(p.pre==='none')p.n=0; else if(!(p.n>0))p.n=1; }
   else if(field==='post'){ p.post=['parts','stamps','legs','none'].includes(val)?val:'none'; if(p.post==='none'||p.id==='legs')p.m=0; else if(!(p.m>0))p.m=1; }
   else if(field==='m') p.m=Math.min(20,Math.max(0,parseInt(val)||0));
+  // (owner) the tail gets its sticker once: on the head screen or at the stamps — choosing one clears the other
+  if(p.id==='tail'){ if(field==='pre' && p.pre!=='none') p.m=0; if((field==='m'||field==='post') && p.m>0 && p.post!=='none'){ p.pre='none'; p.n=0; } }
   else if(field==='nikur') p.nikur=['big','small','none'].includes(val)?val:'none';
   else if(field==='avg'){ const v=String(val).trim().replace(',','.'); p.avg=v===''?null:Math.min(1000,Math.max(0,Number(v)||0)); }
   else if(field==='notGlatt') p.notGlatt=!!val;

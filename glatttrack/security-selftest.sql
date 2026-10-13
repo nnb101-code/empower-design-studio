@@ -3001,12 +3001,13 @@ begin
       jsonb_set(pr, '{5,on}', 'false'), jsonb_set(pr, '{5,pre}', '"none"'), pr || jsonb_build_array(pr -> 0),
       jsonb_set(pr, '{0,post}', '"cooler"'),
       (select jsonb_agg(case when x ->> 'pre' = 'head' then jsonb_set(x, '{on}', 'false') else x end) from jsonb_array_elements(pr) x),
-      jsonb_set(pr, '{0,id}', '"Tongue!"'), jsonb_set(pr, '{0,price}', '5'), jsonb_set(pr, '{0,avg}', '-1')] loop
+      jsonb_set(pr, '{0,id}', '"Tongue!"'), jsonb_set(pr, '{0,price}', '5'), jsonb_set(pr, '{0,avg}', '-1'),
+      jsonb_set(jsonb_set(pr, '{6,m}', '1'), '{6,post}', '"stamps"')] loop   -- (the tail: head sticker and stamps sticker — not both)
     r := pg_temp.api(pg_temp.mgr(), format('select push_settings(%L::jsonb, ''x'', %L)', jsonb_build_object('products', b), pg_temp.v('mgr')));
     if r ->> 'error' is distinct from 'bad_settings' then bad := bad || left(r::text, 80); end if;
   end loop;
   ok := ok and cardinality(bad) = 0 and (_gt_settings() ->> 'headStickerCount')::int = 8;
-  perform pg_temp.rec('v10.38 products list: head / legs sticker counts derived on the server (a hand-typed count does not win); only the team leader changes it; bad lists refused (legs off, duplicate, unknown area, no head sticker, bad id / field / weight)', ok,
+  perform pg_temp.rec('v10.38 products list: head / legs sticker counts derived on the server (a hand-typed count does not win); only the team leader changes it; bad lists refused (legs off, duplicate, unknown area, no head sticker, bad id / field / weight, a tail sticker both at the head and at the stamps)', ok,
     concat_ws(' | ', left(r2::text, 60), left(r3::text, 60), left(r4::text, 80), array_to_string(bad, ' ; '), _gt_settings() ->> 'headStickerCount'));
 end $$;
 $gt74$;
@@ -3109,7 +3110,7 @@ begin
   r  := pg_temp.api(pg_temp.dev('NIK'), 'select hold_set(873, ''nikur'', ''usda'', ''whole'')');
   h  := (r #>> '{hold,id}')::bigint;
   r2 := pg_temp.api(pg_temp.dev('NIK'), format('select nikur_scan(873, ''sides'', 1, %s)', pg_temp.ep()));
-  r3 := pg_temp.api(pg_temp.dev('NIK'), 'select hold_set(873, ''nikur'', ''question'')');
+  r3 := pg_temp.api(pg_temp.dev('NIK'), 'select hold_set(873, ''nikur'', ''usda'', ''right'')');   -- (the whole animal only)
   r4 := pg_temp.api(pg_temp.dev('STAMPS'), format('select hold_resolve(%s, ''released'')', h));
   r5 := pg_temp.api(pg_temp.dev('NIK'), format('select hold_resolve(%s, ''released'')', h));
   r6 := pg_temp.api(pg_temp.dev('NIK'), format('select nikur_scan(873, ''sides'', 1, %s)', pg_temp.ep()));
@@ -3119,8 +3120,14 @@ begin
   ok := ok and pg_temp.ok(r) and r2 ->> 'reason' = 'held' and r3 ->> 'error' = 'bad_value' and r4 ->> 'error' = 'wrong_station'
         and pg_temp.ok(r5) and pg_temp.ok(r6) and pg_temp.ok(r7) and r7 ->> 'screen' = 'big'
         and jsonb_array_length(r7 -> 'pieces') = 2 and r8 ->> 'error' = 'wrong_station';
+  -- a "?" at the nikur: the piece waits; the nikur answers it and the piece goes in
+  r  := pg_temp.api(pg_temp.dev('NIK'), 'select hold_set(870, ''nikur'', ''question'')');
+  r2 := pg_temp.api(pg_temp.dev('NIK'), format('select nikur_scan(870, ''sides'', 3, %s)', pg_temp.ep()));
+  r3 := pg_temp.api(pg_temp.dev('NIK'), format('select hold_resolve(%s, ''answered'')', (r #>> '{hold,id}')::bigint));
+  r4 := pg_temp.api(pg_temp.dev('NIK'), format('select nikur_scan(870, ''sides'', 3, %s)', pg_temp.ep()));
+  ok := ok and pg_temp.ok(r) and r2 ->> 'reason' = 'held' and pg_temp.ok(r3) and pg_temp.ok(r4);
   update settings_pilot set settings = s0 where id = 1;
-  perform pg_temp.rec('v10.38 nikur: a kosher piece is scanned in once, on its own nikur screen only; treif / unruled / Inside Skirt of glatt / unknown refused and recorded; a nikur USDA hold stops it until the nikur releases it; each nikur tablet sees its own pieces', ok,
+  perform pg_temp.rec('v10.38 nikur: a kosher piece is scanned in once, on its own nikur screen only; treif / unruled / Inside Skirt of glatt / unknown refused and recorded; a nikur USDA hold / "?" stops it until the nikur releases / answers it; each nikur tablet sees its own pieces', ok,
     concat_ws(' | ', left(r::text, 60), left(r2::text, 80), left(r3::text, 60), left(r4::text, 60), left(r5::text, 60), left(r6::text, 60), left(r7::text, 80), left(r8::text, 60)));
 end $$;
 $gt76$;

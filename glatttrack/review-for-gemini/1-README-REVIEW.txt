@@ -41,6 +41,9 @@ This pack is the CURRENT state. Review these files only.
 - `nikur_board()`: a nikur tablet sees its screen's pieces; the team leader / owner see all.
 - **USDA at the nikur:** a whole-animal USDA hold only (`hold_set` station `nikur`, `_hold_station_of_role`, `animal_holds_station_check`). Only the nikur releases it.
 - `_device_write_allowed`: the nikur tablet may write now (its scans and holds). Cooler / salting / shipping stay view-only.
+- **A "?" at the nikur too** (`hold_set` station `nikur`, kind `question`, whole animal). `hold_resolve` lets the nikur answer it ("answered") or cancel it. The pieces wait meanwhile (`_nikur_refusal`: held).
+- **The tail** gets its sticker once: on the head screen (`pre` head) or at the stamps (`m` > 0), never both (`_products_error`).
+- **App defaults:** stamps 9 stickers (sides 6 + outside skirt + hanger + tail; inside skirt off). Hebrew names for the skirts and the hanger.
 - Self-test: 156/156 (new checks "v10.38 stage 2" and "v10.38 nikur").
 
 ## Added in v10.38 (server 02 + app) — the plant's inner & outer cuts list ("products", stage 1)

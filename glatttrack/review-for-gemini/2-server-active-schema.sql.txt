@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict Cx1nPJBI7kmoirn335yBvvCIp6cjBFfMxf6Oy4f19s9SNvxd8TjyOhKRPN2E3k3
+\restrict xzJGcvLjMjcMfTHHJD3dh3C2wfyTCWbq2ZP10eCtBZcYfLNHxnfEY4eD94aNL9n
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -3005,6 +3005,10 @@ begin
       if x ->> 'post' not in ('legs', 'parts') then return 'the legs are sorted on the legs screen or with the small parts'; end if;
       legs_on := true;
     end if;
+    -- (owner) the tail gets its sticker once: on the head screen or at the stamps
+    if v_id = 'tail' and x ->> 'pre' <> 'none' and coalesce((x ->> 'n')::int, 0) > 0 and coalesce((x ->> 'm')::int, 0) > 0 then
+      return 'the tail gets its sticker on the head screen or at the stamps, not both';
+    end if;
     if (x ->> 'on')::boolean and x ->> 'pre' = 'head' then head := head + (x ->> 'n')::int; end if;
   end loop;
   if not legs_on then return 'the legs product is missing'; end if;
@@ -5762,7 +5766,7 @@ begin
   end if;
   if not ((h.kind = 'usda' and p_resolution in ('released', 'condemned'))
           or (h.kind = 'question' and (p_resolution = 'cancelled'
-                                       or (p_resolution = 'answered' and h.station in ('legs', 'parts', 'stamps', 'inner'))))) then   -- v10.32: inner — the window of the "?" was decided
+                                       or (p_resolution = 'answered' and h.station in ('legs', 'parts', 'stamps', 'inner', 'nikur'))))) then   -- v10.32: inner — the window of the "?" was decided
     return jsonb_build_object('ok', false, 'error', 'bad_value');
   end if;
   v_actor := _derive_actor(case h.station when 'eso' then 'eso' when 'stamps' then 'stamped' else h.station end, null);
@@ -5796,7 +5800,7 @@ begin
   if p_station is null or p_station not in ('slaughter', 'eso', 'inner', 'outer', 'legs', 'parts', 'stamps', 'nikur') then
     return jsonb_build_object('ok', false, 'error', 'bad_station');
   end if;
-  if p_station = 'nikur' and (p_kind <> 'usda' or v_part <> 'whole') then    -- v10.38: the nikur puts a whole-animal USDA hold only
+  if p_station = 'nikur' and v_part <> 'whole' then    -- v10.38: the nikur holds the whole animal (USDA or "?")
     return jsonb_build_object('ok', false, 'error', 'bad_value');
   end if;
   if (p_kind = 'question' and not (v_part = 'whole'
@@ -11838,5 +11842,5 @@ GRANT ALL ON TABLE public.system_flags TO service_role;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict Cx1nPJBI7kmoirn335yBvvCIp6cjBFfMxf6Oy4f19s9SNvxd8TjyOhKRPN2E3k3
+\unrestrict xzJGcvLjMjcMfTHHJD3dh3C2wfyTCWbq2ZP10eCtBZcYfLNHxnfEY4eD94aNL9n
 
