@@ -4961,7 +4961,8 @@ window.addEventListener('gt-day-reset', ()=>{ _gtFlags={holds:[],changes:[],epoc
 function _gtFlagsCacheSave(){ try{ localStorage.setItem(_GT_FLAGS_KEY, JSON.stringify({holds:_gtFlags.holds.filter(h=>!h.local),changes:_gtFlags.changes,epoch:_gtFlags.epoch,at:Date.now()})); }catch(e){} }
 var _gtFlagsBusy=false, _gtNext={};
 const GT_ST_NAME={slaughter:['שחיטה','Slaughter','Faena'],eso:['וושט','Esophagus','Esófago'],legs:['רגליים וראש','Legs & head','Patas y cabeza'],
-  inner:['פנים','Inner','Interno'],outer:['חוץ','Outer','Externo'],parts:['חלקים','Parts','Partes'],stamps:['חותמות ושקילה','Stamps & weighing','Sellos y pesaje']};
+  inner:['פנים','Inner','Interno'],outer:['חוץ','Outer','Externo'],parts:['חלקים','Parts','Partes'],stamps:['חותמות ושקילה','Stamps & weighing','Sellos y pesaje'],
+  nikur:['ניקור','Nikur','Nikur']};
 const GT_PART_NAME={whole:['כל הבהמה','Whole animal','Animal entero'],right:['חצי ימין','Right half','Mitad derecha'],left:['חצי שמאל','Left half','Mitad izquierda'],
   cheek1:['לחי 1','Cheek 1','Mejilla 1'],cheek2:['לחי 2','Cheek 2','Mejilla 2'],tongue:['לשון','Tongue','Lengua']};
 function _gtL(a){ return L(a[0],a[1],a[2]); }
@@ -5396,7 +5397,8 @@ function supTitles(){
   const t=c.icon+' '+L(c.t[0],c.t[1],c.t[2]);
   const set=(id,v)=>{const e=document.getElementById(id); if(e) e.textContent=v;};
   set('supLTitle', t); set('supTitle', t);
-  set('supLSub', L('המסך בהכנה — כניסה ותצוגה בלבד','Screen in preparation — login and view only','Pantalla en preparación — solo acceso y vista'));
+  set('supLSub', supRole==='nikur' ? L('סריקת כל חתיכה לפני הניקור','Scan every piece before the nikur','Escanear cada pieza antes del nikur')
+                                   : L('המסך בהכנה — כניסה ותצוגה בלבד','Screen in preparation — login and view only','Pantalla en preparación — solo acceso y vista'));
   set('supWelcome', L('ברוך הבא','Welcome','Bienvenido'));
 }
 function supOpen(role){ if(GT_SUP_SCREENS[role]) supRole=role; supTitles(); goTo('scSupLogin'); }
@@ -5405,11 +5407,112 @@ function supEnter(){
   supTitles();
   let nm=null; try{ nm=(JSON.parse(localStorage.getItem('gt_active_users')||'{}'))[supRole]||null; }catch(e){}
   const c=GT_SUP_SCREENS[supRole]; const u=document.getElementById('supUser'); if(u) u.textContent=nm||(c?L(c.w[0],c.w[1],c.w[2]):'');
-  goTo('scSup'); supRender();
+  goTo('scSup'); supRender(); if(supRole==='nikur') nkLoad();
 }
+// ── v10.38 (owner): THE NIKUR — every piece is scanned before the nikur ──
+// slot 0 = the nikur (large parts), slot 1 = the small-parts nikur. Every kosher piece goes in (every kashrut
+// status, chalak and not chalak); a treif / nevela / held / unruled piece is refused by the server.
+function _nkScreen(){ let i=0; try{ i=parseInt(localStorage.getItem('ks_kiosk_index')||'0',10)||0; }catch(e){} return (i%2===1)?'small':'big'; }
+let _nkBoard={pieces:[],at:0}, _nkLast=null;
+function _nkTitle(){ return _nkScreen()==='small'?L('ניקור חלקים קטנים','Small-parts nikur','Nikur de partes pequeñas'):L('ניקור','Nikur','Nikur'); }
+// the pieces of one animal this screen takes (its parts, their stickers printed)
+function _nkExpected(a){
+  if(!a||!isKosherReady(a)) return [];
+  const out=[], scr=_nkScreen();
+  gtProducts().forEach(p=>{ if(!p.on||p.nikur!==scr) return;
+    if(p.notGlatt && a.outerStatus==='glatt') return;
+    if(p.post==='stamps' && !a.stamped) return; if(p.post==='parts' && !a.partsScanned) return;
+    const m=Math.max(1,parseInt(p.m)||0); for(let i=1;i<=m;i++) out.push({pid:p.id,i}); });
+  return out;
+}
+function nikurRender(el){
+  if(!document.getElementById('nkScan')){
+    el.innerHTML=`<input type="text" id="nkScan" inputmode="none" style="position:absolute;opacity:0;width:1px;height:1px;top:0;left:0;pointer-events:none;" onkeydown="nkKey(event)">
+      <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+        <div id="nkTitle" style="flex:1;font-size:20px;font-weight:900;color:var(--gold);"></div>
+        <button class="gt-tbb gt-tbu" onclick="gtUsdaStart('nikur')">USDA HOLD</button>
+        <button class="gt-tbb" id="nkHeldBtn" onclick="gtHeldList('nikur')" style="display:none;border-color:#B39DFF;color:#B39DFF;"></button>
+      </div>
+      <div onclick="nkFocus()" id="nkScanArea" style="background:var(--panel2);border:2px dashed var(--border2);border-radius:12px;padding:14px 16px;display:flex;align-items:center;gap:12px;cursor:pointer;margin-bottom:10px;">
+        <div><div style="font-size:15px;font-weight:700;color:var(--text)" id="nkPrompt"></div><div style="font-size:11px;color:var(--muted)" id="nkSub"></div></div>
+        <div style="margin-inline-start:auto;width:10px;height:10px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);animation:pulse 1s infinite;"></div>
+      </div>
+      <div id="nkResult" style="display:none;border-radius:14px;padding:16px;text-align:center;margin-bottom:10px;"></div>
+      <div id="nkPick" style="display:none;margin-bottom:10px;"></div>
+      <div id="nkTiles" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;"></div>
+      <div id="nkMissing" style="background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:12px;"></div>`;
+    setTimeout(nkFocus,200);
+  }
+  const set=(id,v)=>{ const e=document.getElementById(id); if(e) e.textContent=v; };
+  set('nkTitle','🔪 '+_nkTitle());
+  set('nkPrompt',L('סורקים כל חתיכה לפני הניקור','Scan every piece before the nikur','Escanee cada pieza antes del nikur'));
+  set('nkSub',L('חתיכה כשרה נרשמת ועוברת להכשרה. טרף, נבלה, מעוכב או בלי פסיקה — לא נכנס.','A kosher piece is recorded and goes on to kashering. Treif, nevela, held or not ruled — does not go in.','Una pieza kosher se registra y pasa al kashering. Treif, nevelá, retenida o sin dictamen — no entra.'));
+  const held=(_gtFlags.holds||[]).filter(h=>h.station==='nikur'&&_gtOnBoard(h)&&!h.local&&(h.open||h.resolution==='condemned')).length;
+  { const b=document.getElementById('nkHeldBtn'); if(b){ b.style.display=held?'':'none'; b.textContent=L('מעוכבים ','Held ','Retenidos ')+'('+held+')'; } }
+  // what went in today, and the animals still missing pieces here
+  const got={}; (_nkBoard.pieces||[]).forEach(x=>{ got[(x.n-1)+':'+x.p+':'+x.i]=1; });
+  const A=KS.getAnimals()||[]; let full=0; const miss=[];
+  A.forEach(a=>{ const ex=_nkExpected(a); if(!ex.length) return; const left=ex.filter(q=>!got[a.id+':'+q.pid+':'+q.i]);
+    if(!left.length) full++; else miss.push({n:a.id+1, left}); });
+  const tile=(v,l,c)=>`<div style="flex:1;min-width:110px;background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:10px;text-align:center;"><div style="font-size:28px;font-weight:800;color:${c};">${v}</div><div style="font-size:12px;color:var(--muted);">${escapeHtml(l)}</div></div>`;
+  { const t=document.getElementById('nkTiles'); if(t) t.innerHTML=tile((_nkBoard.pieces||[]).length,L('חתיכות נכנסו היום','Pieces in today','Piezas hoy'),'var(--glatt)')
+      +tile(full,L('בהמות שלמות','Animals complete','Animales completos'),'var(--text)')+tile(miss.length,L('בהמות עם חתיכות חסרות','Animals missing pieces','Animales con piezas pendientes'),'var(--amber)'); }
+  { const m=document.getElementById('nkMissing'); if(m){
+      const nm=pid=>gtProductName(gtProducts().find(p=>p.id===pid))||pid;
+      const rows=miss.slice(0,30).map(r=>{ const g={}; r.left.forEach(q=>{ (g[q.pid]=g[q.pid]||[]).push(q.i); });
+        return `<div style="display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;"><b>#${r.n}</b><span style="color:var(--muted);text-align:end;">${escapeHtml(Object.keys(g).map(k=>nm(k)+(g[k].length>1||gtProducts().find(p=>p.id===k&&(p.m||0)>1)?' '+g[k].join(','):'')).join(' · '))}</span></div>`; }).join('');
+      m.innerHTML=`<div style="font-size:13px;font-weight:700;color:var(--gold);margin-bottom:6px;">${escapeHtml(L('עוד לא נכנסו לניקור','Not in the nikur yet','Aún no en el nikur'))}</div>`
+        +(rows||`<div class="gt-muted">${escapeHtml(L('הכל נכנס.','Everything is in.','Todo está dentro.'))}</div>`)+(miss.length>30?`<div class="gt-muted">+${miss.length-30}</div>`:''); } }
+}
+function nkFocus(){ const i=document.getElementById('nkScan'); if(i) i.focus(); }
+function nkKey(e){ if(e.key==='Enter'||e.keyCode===13){ const v=e.target.value.trim(); e.target.value=''; if(v) nkScan(v); } }
+async function nkLoad(){
+  if(!window.sb) return;
+  try{ const r=await window.sb.rpc('nikur_board'); if(r&&r.data&&r.data.ok){ _nkBoard={pieces:r.data.pieces||[],at:Date.now()}; } }catch(e){}
+  const s=document.querySelector('.screen.active'); if(s&&s.id==='scSup'&&supRole==='nikur') supRender();
+}
+function _nkShow(kind,big,sub){
+  const r=document.getElementById('nkResult'); if(!r) return;
+  const c={ok:['rgba(40,199,111,.15)','var(--green)'],dup:['rgba(255,176,32,.12)','#FFB020'],no:['rgba(224,48,48,.18)','var(--red)']}[kind];
+  r.style.display='block'; r.style.background=c[0]; r.style.border='3px solid '+c[1];
+  r.innerHTML=`<div style="font-size:30px;font-weight:900;color:${c[1]};font-family:'Frank Ruhl Libre',serif;">${escapeHtml(big)}</div><div style="font-size:15px;color:var(--text);margin-top:4px;">${escapeHtml(sub||'')}</div>`;
+  clearTimeout(_nkShow.t); _nkShow.t=setTimeout(()=>{ r.style.display='none'; },kind==='no'?6000:3500);
+  if(kind==='no'){ try{ playBeep('nevela'); }catch(e){} }
+}
+const GT_NK_REASON={treif:['טרף — לא להכניס!','Treif — do not take in!','Treif — ¡no ingresar!'],nevela:['נבלה — לא להכניס!','Nevela — do not take in!','Nevelá — ¡no ingresar!'],
+  no_ruling:['אין פסיקה כשרה — לא להכניס!','No kosher ruling — do not take in!','Sin dictamen kosher — ¡no ingresar!'],held:['מעוכב (USDA / שאלה) — לא להכניס!','Held (USDA / question) — do not take in!','Retenido (USDA / pregunta) — ¡no ingresar!'],
+  not_glatt:['לא נלקח מבהמה גלאט','Not taken from a glatt animal','No se toma de un animal glatt'],not_printed:['לא הודפסה מדבקה כשרה לחתיכה','No kosher sticker was printed for this piece','No se imprimió etiqueta kosher para esta pieza'],
+  not_slaughtered:['לא נשחט','Not slaughtered','No faenado']};
+async function nkScan(code, pid, piece){
+  const pick=document.getElementById('nkPick'); if(pick) pick.style.display='none';
+  const n=_gtCodeNum(code), idx=isNaN(n)?-1:n-1;
+  if(idx<0||idx>999){ _nkShow('no',L('ברקוד לא מזוהה','Barcode not recognized','Código no reconocido'),'#'+code); return; }
+  if(!pid){ const mP=/\|P:([a-z0-9_]+)/.exec(code), mI=/\|I:(\d+)/.exec(code); if(mP){ pid=mP[1]; piece=mI?parseInt(mI[1],10):1; } }
+  if(!pid){   // a number sticker without a part (e.g. the liver's head sticker): the parts of this screen with no kosher sticker
+    const c=gtProducts().filter(p=>p.on&&p.nikur===_nkScreen()&&!(parseInt(p.m)>0));
+    if(c.length===1){ pid=c[0].id; piece=1; }
+    else if(c.length>1 && pick){ pick.style.display='block';
+      pick.innerHTML=`<div style="font-size:13px;color:var(--muted);margin-bottom:6px;">#${idx+1} — ${escapeHtml(L('איזה חלק?','Which part?','¿Qué parte?'))}</div><div class="gt-row">`+c.map(p=>`<button class="gt-sb" onclick="nkScan(${_jsArg(code)},${_jsArg(p.id)},1)">${escapeHtml(gtProductName(p))}</button>`).join('')+'</div>'; return; }
+    else { _nkShow('no',L('סרקו את מדבקת החלק','Scan the part\'s sticker','Escanee la etiqueta de la pieza'),L('על המדבקה הזו אין שם חלק','This sticker carries no part','Esta etiqueta no lleva parte')); return; }
+  }
+  const prod=gtProducts().find(p=>p.id===pid), pname=gtProductName(prod)||pid, m=prod?Math.max(1,parseInt(prod.m)||0):1;
+  if(!window.sb){ _nkShow('no',L('אין חיבור לשרת','No server connection','Sin conexión'),L('לא נרשם — סורקים שוב כשהחיבור חוזר','Not recorded — scan again when the connection is back','No registrado — escanee de nuevo al volver la conexión')); return; }
+  let r=null; try{ r=await _withTimeout(window.sb.rpc('nikur_scan',{p_id:idx,p_product:pid,p_piece:piece||1,p_epoch:KS.getBoardEpoch?KS.getBoardEpoch():null,p_command_id:_gtUuid()}),10000); }catch(e){ r={error:e}; }
+  const d=r&&r.data;
+  const what='#'+(idx+1)+' · '+pname+(m>1?' '+(piece||1)+'/'+m:'');
+  if(d&&d.ok){ _nkShow(d.duplicate?'dup':'ok', d.duplicate?L('כבר נסרק','Already scanned','Ya escaneado'):L('✓ נכנס לניקור','✓ Into the nikur','✓ Al nikur'), what+(d.status?' · '+(_gtStatusInfo(d.status).name||d.status):'')); }
+  else if(d&&d.error==='refused'){ const t=GT_NK_REASON[d.reason]||[d.reason,d.reason,d.reason]; _nkShow('no',L('⛔ ','⛔ ','⛔ ')+L(t[0],t[1],t[2]),what); }
+  else if(d&&d.error==='wrong_screen'){ _nkShow('no',L('לא בניקור הזה','Not this nikur','No en este nikur'),what+' — '+(d.nikur==='small'?L('לניקור חלקים קטנים','to the small-parts nikur','al nikur de partes pequeñas'):L('לניקור','to the nikur','al nikur'))); }
+  else if(d&&d.error==='worker_login_required'){ _gtHoldNeedsLogin(); }
+  else { _nkShow('no',L('לא נרשם','Not recorded','No registrado'),gtErrText((d&&d.error)||(r&&r.error)||'network')); }
+  nkLoad(); setTimeout(nkFocus,100);
+}
+setInterval(()=>{ const s=document.querySelector('.screen.active'); if(s&&s.id==='scSup'&&supRole==='nikur') nkLoad(); },8000);
 // read-only: what reached this part of the line today (after the outer ruling)
 function supRender(){
   const el=document.getElementById('supBody'); if(!el) return;
+  if(supRole==='nikur'){ nikurRender(el); return; }
+  { const ni=document.getElementById('nkScan'); if(ni) el.innerHTML=''; }
   const a=KS.getAnimals()||[];
   const slaughtered=a.filter(x=>x.slaughter==='slaughtered').length;
   const ruled=a.filter(x=>x.outerStatus);
@@ -10042,6 +10145,8 @@ async function gtAnimalCard(date, n){
   const d = r && !r.error && r.data;
   if(!d || !d.ok){ m.innerHTML = shell('<div style="font-size:14px;">' + escapeHtml(gtErrText((d && d.error) || (r && r.error) || 'server_error')) + '</div>'); return; }
   const x = Object.assign({}, d.row || {}), c = d.carry || null;
+  var _gtNkCard = null;
+  if(d.live){ try{ const nr = await _withTimeout(window.sb.rpc('nikur_board'), 6000); if(nr && nr.data && nr.data.ok) _gtNkCard = nr.data.pieces || []; }catch(e){} }
   if(c) ['legs_stickers', 'head_stickers', 'legs_sorted', 'parts_scanned', 'tongue_sticker', 'cheek_sticker', 'parts_print_count', 'parts_printed_as', 'stamped', 'stamped_as',
          'weight_right', 'weight_left', 'weight_stage2', 'weight_stage3', 'weight_right_skipped', 'weight_left_skipped'].forEach(k => { if(c[k] != null) x[k] = c[k]; });
   const E = escapeHtml, tm = v => v ? new Date(Number(v)).toLocaleString(lang === 'he' ? 'he-IL' : 'en-GB', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
@@ -10072,6 +10177,9 @@ async function gtAnimalCard(date, n){
       [x.legs_stickers ? L('מדבקות רגלים', 'leg stickers', 'etiquetas patas') : '', x.head_stickers ? L('מדבקות ראש', 'head stickers', 'etiquetas cabeza') : '', x.legs_sorted ? L('מוין', 'sorted', 'clasificado') : ''].filter(Boolean).join(' · '), '');
     h += stage(Number(x.parts_print_count) > 0 || !!x.parts_scanned, L('חלקים קטנים', 'Small parts', 'Partes'), x.parts_printed_as ? nm(x.parts_printed_as) : '', Number(x.parts_print_count) > 0 ? L('הודפס ', 'printed ', 'impreso ') + x.parts_print_count + L(' פעמים', ' times', ' veces') : '');
     h += stage(!!x.stamped, L('חותמות', 'Stamps', 'Sellos'), x.stamped_as ? nm(x.stamped_as) : '', '');
+    if(d.live && _gtNkCard){ const pc = _gtNkCard.filter(q => q.n === n + 1);     // v10.38: the nikur
+      h += stage(pc.length > 0, L('ניקור', 'Nikur', 'Nikur'), pc.length ? pc.length + ' ' + L('חתיכות', 'pieces', 'piezas') : '',
+        pc.map(q => (gtProductName(gtProducts().find(p => p.id === q.p)) || q.p) + (q.i > 1 ? ' ' + q.i : '') + ' · ' + new Date(q.at).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' }) + (q.by ? ' · ' + q.by : '')).join(' | ')); }
     h += stage(kg > 0, L('משקל', 'Weight', 'Peso'), kg > 0 ? _gtNum(kg, 1) + ' ' + L('ק״ג', 'kg', 'kg') : '',
       [x.weight_right ? L('ימין ', 'right ', 'der. ') + _gtNum(x.weight_right, 1) : (x.weight_right_skipped ? L('ימין דולג', 'right skipped', 'der. omitido') : ''), x.weight_left ? L('שמאל ', 'left ', 'izq. ') + _gtNum(x.weight_left, 1) : (x.weight_left_skipped ? L('שמאל דולג', 'left skipped', 'izq. omitido') : ''),
        x.weight_stage2 ? L('שלב 2: ', 'stage 2: ', 'etapa 2: ') + _gtNum(x.weight_stage2, 1) : '', x.weight_stage3 ? L('שלב 3: ', 'stage 3: ', 'etapa 3: ') + _gtNum(x.weight_stage3, 1) : ''].filter(Boolean).join(' · '));
@@ -15337,7 +15445,8 @@ function _kioskRoleLabels(){
     parts: he?'חלקים קטנים':es?'Partes pequeñas':'Small parts',
     stamps: he?'חותמות':es?'Sellos':'Stamps',
     cooler: he?'משגיח קולר':es?'Supervisor de cámara':'Cooler supervisor',
-    nikur: he?'משגיח מנקר':es?'Supervisor de nikur':'Nikur supervisor',
+    nikur: he?'ניקור':es?'Nikur':'Nikur',
+    'nikur-1': he?'ניקור חלקים קטנים':es?'Nikur de partes pequeñas':'Small-parts nikur',
     salting: he?'משגיח מליחה':es?'Supervisor de salado':'Salting supervisor',
     shipping: he?'משגיח שיפינג':es?'Supervisor de envíos':'Shipping supervisor',
     'display-0': he?'מסך ספירה':es?'Pantalla de conteo':'Counter screen',
@@ -15348,7 +15457,7 @@ function _kioskRoleLabels(){
     'leader-3': he?'ראש צוות 4':es?'Jefe de equipo 4':'Team leader 4',
   };
 }
-const KIOSK_ROLE_KEYS = ['slaughter','esophagus','legs','legs-1','inner-0','inner-1','outer-0','outer-1','parts','stamps','cooler','nikur','salting','shipping','display-0','display-1'];
+const KIOSK_ROLE_KEYS = ['slaughter','esophagus','legs','legs-1','inner-0','inner-1','outer-0','outer-1','parts','stamps','cooler','nikur','nikur-1','salting','shipping','display-0','display-1'];
 
 /** Registers this device (heartbeat), listens for the manager assigning or
  *  resetting ITS role, and — separately — keeps the manager's devices panel

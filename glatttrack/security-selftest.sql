@@ -275,7 +275,8 @@ declare
     array['OUT1','outer','90','active'], array['OUT2','outer','91','active'], array['LEGS','legs','90','active'],
     array['PARTS','parts','90','active'], array['STAMPS','stamps','90','active'], array['RET','outer','92','retired'],
     array['UNP','','','active'], array['BRK','slaughter','92','active'], array['DISP','display','90','active'],
-    array['NEW','','','active'], array['COOL','cooler','90','active']];
+    array['NEW','','','active'], array['COOL','cooler','90','active'],
+    array['NIK','nikur','90','active'], array['NIKS','nikur','91','active']];
   i int;
 begin
   -- v10.34: the checks run without the plant's own screen choice (the inner check waits for legs only
@@ -3063,6 +3064,66 @@ begin
     concat_ws(' | ', left(r::text, 60), left(r2::text, 60), left(r3::text, 60), left(r4::text, 60), left(r5::text, 80), _legs_sort_station(), _parts_expected()));
 end $$;
 $gt75$;
+    v_step := 'v10.38 the nikur screens';
+    execute $gt76$
+-- ── v10.38 the nikur screens: every kosher piece is scanned in; never a treif / held / unruled one ──
+do $$
+declare r jsonb; r2 jsonb; r3 jsonb; r4 jsonb; r5 jsonb; r6 jsonb; r7 jsonb; r8 jsonb; ok boolean; s0 jsonb; h bigint;
+  pr jsonb := '[{"id":"tongue","he":"לשון","on":true,"pre":"head","n":1,"post":"parts","m":1,"nikur":"small","builtin":true},
+                {"id":"cheeks","he":"לחיים","on":true,"pre":"head","n":2,"post":"parts","m":2,"nikur":"small","builtin":true},
+                {"id":"sides","he":"צדדים","on":true,"pre":"head","n":2,"post":"stamps","m":6,"nikur":"big","builtin":true},
+                {"id":"lung","he":"ריאה","on":true,"pre":"head","n":1,"post":"none","m":0,"nikur":"none","builtin":true},
+                {"id":"legs","he":"רגליים","on":true,"pre":"legs","n":2,"post":"legs","m":0,"nikur":"none","builtin":true},
+                {"id":"skirt_in","he":"Inside Skirt","on":true,"pre":"none","n":0,"post":"stamps","m":1,"nikur":"small","notGlatt":true,"builtin":true}]';
+begin
+  select settings into s0 from settings_pilot where id = 1;
+  perform pg_temp.api(pg_temp.mgr(), format('select push_settings(%L::jsonb, ''x'', %L)', jsonb_build_object('products', pr), pg_temp.v('mgr')));
+  -- 870 glatt, stamped; 871 treif; 872 not ruled; 873 kosher, stamped (not glatt)
+  perform pg_temp.prep(870, 'outer'); perform pg_temp.prep(871, 'inner'); perform pg_temp.prep(872, 'slaughter'); perform pg_temp.prep(873, 'outer');
+  perform set_config('gt.reset_in_progress', 'true', true);
+  update animals_pilot set stamped = true, parts_scanned = true where id in (870, 873);
+  update animals_pilot set outer_status = 'treif', outer_time = 1 where id = 871;
+  update animals_pilot set outer_status = 'kosher' where id = 873;
+  perform set_config('gt.reset_in_progress', 'false', true);
+  -- a kosher piece goes in (once); the other nikur screen and a station tablet can't scan it
+  r  := pg_temp.api(pg_temp.dev('NIK'),  format('select nikur_scan(870, ''sides'', 1, %s)', pg_temp.ep()));
+  r2 := pg_temp.api(pg_temp.dev('NIK'),  format('select nikur_scan(870, ''sides'', 1, %s)', pg_temp.ep()));
+  r3 := pg_temp.api(pg_temp.dev('NIKS'), format('select nikur_scan(870, ''sides'', 2, %s)', pg_temp.ep()));
+  r4 := pg_temp.api(pg_temp.dev('STAMPS'), format('select nikur_scan(870, ''sides'', 2, %s)', pg_temp.ep()));
+  r5 := pg_temp.api(pg_temp.dev('NIKS'), format('select nikur_scan(870, ''tongue'', 1, %s)', pg_temp.ep()));
+  ok := pg_temp.ok(r) and not (r ->> 'duplicate')::boolean and pg_temp.ok(r2) and (r2 ->> 'duplicate')::boolean
+        and r3 ->> 'error' = 'wrong_screen' and r4 ->> 'error' = 'wrong_station' and pg_temp.ok(r5)
+        and (select count(*) from piece_scans where board_epoch = pg_temp.ep() and animal_id = 870) = 2;
+  -- refused: treif, not ruled, Inside Skirt of a glatt animal, a piece number that does not exist, a part that is off
+  r  := pg_temp.api(pg_temp.dev('NIK'),  format('select nikur_scan(871, ''sides'', 1, %s)', pg_temp.ep()));
+  r2 := pg_temp.api(pg_temp.dev('NIK'),  format('select nikur_scan(872, ''sides'', 1, %s)', pg_temp.ep()));
+  r3 := pg_temp.api(pg_temp.dev('NIKS'), format('select nikur_scan(870, ''skirt_in'', 1, %s)', pg_temp.ep()));
+  r6 := pg_temp.api(pg_temp.dev('NIKS'), format('select nikur_scan(873, ''skirt_in'', 1, %s)', pg_temp.ep()));
+  r4 := pg_temp.api(pg_temp.dev('NIK'),  format('select nikur_scan(870, ''sides'', 7, %s)', pg_temp.ep()));
+  r5 := pg_temp.api(pg_temp.dev('NIK'),  format('select nikur_scan(870, ''hanger'', 1, %s)', pg_temp.ep()));
+  ok := ok and r ->> 'reason' = 'treif' and r2 ->> 'reason' = 'no_ruling' and r3 ->> 'reason' = 'not_glatt' and pg_temp.ok(r6)
+        and r4 ->> 'error' = 'bad_value' and r5 ->> 'error' = 'unknown_part'
+        and not exists (select 1 from piece_scans where board_epoch = pg_temp.ep() and animal_id in (871, 872))
+        and exists (select 1 from events_pilot where stage = 'nikur' and action = 'piece_refused' and animal_no = 872);
+  -- USDA at the nikur: only its whole animal; it stops the nikur until the nikur releases it
+  r  := pg_temp.api(pg_temp.dev('NIK'), 'select hold_set(873, ''nikur'', ''usda'', ''whole'')');
+  h  := (r #>> '{hold,id}')::bigint;
+  r2 := pg_temp.api(pg_temp.dev('NIK'), format('select nikur_scan(873, ''sides'', 1, %s)', pg_temp.ep()));
+  r3 := pg_temp.api(pg_temp.dev('NIK'), 'select hold_set(873, ''nikur'', ''question'')');
+  r4 := pg_temp.api(pg_temp.dev('STAMPS'), format('select hold_resolve(%s, ''released'')', h));
+  r5 := pg_temp.api(pg_temp.dev('NIK'), format('select hold_resolve(%s, ''released'')', h));
+  r6 := pg_temp.api(pg_temp.dev('NIK'), format('select nikur_scan(873, ''sides'', 1, %s)', pg_temp.ep()));
+  -- what was scanned: the nikur tablet sees its screen's pieces, a station tablet nothing
+  r7 := pg_temp.api(pg_temp.dev('NIK'), 'select nikur_board()');
+  r8 := pg_temp.api(pg_temp.dev('PARTS'), 'select nikur_board()');
+  ok := ok and pg_temp.ok(r) and r2 ->> 'reason' = 'held' and r3 ->> 'error' = 'bad_value' and r4 ->> 'error' = 'wrong_station'
+        and pg_temp.ok(r5) and pg_temp.ok(r6) and pg_temp.ok(r7) and r7 ->> 'screen' = 'big'
+        and jsonb_array_length(r7 -> 'pieces') = 2 and r8 ->> 'error' = 'wrong_station';
+  update settings_pilot set settings = s0 where id = 1;
+  perform pg_temp.rec('v10.38 nikur: a kosher piece is scanned in once, on its own nikur screen only; treif / unruled / Inside Skirt of glatt / unknown refused and recorded; a nikur USDA hold stops it until the nikur releases it; each nikur tablet sees its own pieces', ok,
+    concat_ws(' | ', left(r::text, 60), left(r2::text, 80), left(r3::text, 60), left(r4::text, 60), left(r5::text, 60), left(r6::text, 60), left(r7::text, 80), left(r8::text, 60)));
+end $$;
+$gt76$;
     v_step := 'the ACTIVE security surface against the expected manifest';
     execute $gt70$
 -- ── the ACTIVE security surface against the expected manifest ───────────────
@@ -3165,7 +3226,7 @@ begin
                 'eso_change(integer,text,text,bigint)', 'eso_change(integer,text,text,bigint,uuid)', 'event_append(jsonb)',
                 'lung_drawing_get(integer)', 'lung_drawing_set(integer,bigint,text)', 'manager_add(text,text,text)',
                 'manager_add_owner(text,text,text)', 'manager_deactivate(text,uuid)', 'manager_list(text)', 'manager_login(text)',
-                'manager_logout(text)', 'manager_session_check(text)', 'leader_recovery_code_new(text)', 'leader_recovery_status(text)', 'leader_device_replace(text,text)', 'plant_server_status(text)', 'animal_card(text,date,integer)', 'seal_set(text,text,text)', 'seals_get(text,bigint)', 'hold_set(integer,text,text,text,bigint,uuid)', 'hold_resolve(bigint,text,uuid)', 'board_flags(text)', 'change_ack(text,bigint)', 'manufacturer_set_billing(text,boolean,numeric,text,text)',
+                'manager_logout(text)', 'manager_session_check(text)', 'leader_recovery_code_new(text)', 'leader_recovery_status(text)', 'leader_device_replace(text,text)', 'plant_server_status(text)', 'animal_card(text,date,integer)', 'seal_set(text,text,text)', 'seals_get(text,bigint)', 'hold_set(integer,text,text,text,bigint,uuid)', 'hold_resolve(bigint,text,uuid)', 'nikur_scan(integer,text,integer,bigint,uuid)', 'nikur_board()', 'board_flags(text)', 'change_ack(text,bigint)', 'manufacturer_set_billing(text,boolean,numeric,text,text)',
                 'outer_open(integer,bigint,boolean,text)', 'outer_open(integer,bigint,boolean,text,uuid)', 'plant_status_snapshot()', 'plant_setup_needed()',
                 'push_settings(jsonb,text,text,text)', 'request_daily_rollover()', 'reset_daily_board(text,text)', 'security_summary(text)',
                 'processing_board(text)', 'carry_push(bigint,jsonb,uuid)', 'carry_claim(bigint,integer,text,uuid)',
