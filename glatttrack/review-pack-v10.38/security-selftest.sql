@@ -2967,6 +2967,48 @@ begin
     concat_ws(' | ', r::text, left(r2::text, 60), r3::text, r4::text));
 end $$;
 $gt73$;
+    v_step := 'v10.38 the plant''s products list';
+    execute $gt74$
+-- ── v10.38 the plant's products list: head / legs sticker counts follow it ──
+do $$
+declare r jsonb; r2 jsonb; r3 jsonb; r4 jsonb; ok boolean; p jsonb; bad text[] := '{}'; b jsonb;
+  pr jsonb := '[{"id":"tongue","he":"לשון","on":true,"pre":"head","n":1,"post":"parts","avg":2.1,"builtin":true},
+                {"id":"cheeks","he":"לחיים","on":true,"pre":"head","n":2,"post":"parts","avg":null,"builtin":true},
+                {"id":"sides","he":"צדדים","on":true,"pre":"head","n":2,"post":"stamps","builtin":true},
+                {"id":"lung","he":"ריאה","on":true,"pre":"head","n":1,"post":"none","builtin":true},
+                {"id":"hook","he":"קרס","on":true,"pre":"head","n":1,"post":"none","builtin":true},
+                {"id":"legs","he":"רגליים","on":true,"pre":"legs","n":2,"post":"legs","builtin":true},
+                {"id":"tail","he":"זנב","on":false,"pre":"head","n":1,"post":"stamps","builtin":true},
+                {"id":"skirt_in","he":"Inside Skirt","en":"Inside Skirt","on":false,"pre":"none","n":0,"post":"stamps","notGlatt":true,"builtin":true}]';
+begin
+  p := pr;
+  r  := pg_temp.api(pg_temp.mgr(), format('select push_settings(%L::jsonb, ''x'', %L)', jsonb_build_object('products', p), pg_temp.v('mgr')));
+  ok := pg_temp.ok(r) and (_gt_settings() ->> 'headStickerCount')::int = 7 and (_gt_settings() ->> 'legStickerCount')::int = 2;
+  -- the tail taken before the ruling: one more head sticker
+  p := jsonb_set(pr, '{6,on}', 'true');
+  r2 := pg_temp.api(pg_temp.mgr(), format('select push_settings(%L::jsonb, ''x'', %L)', jsonb_build_object('products', p), pg_temp.v('mgr')));
+  -- a count typed by hand does not win over the list
+  r3 := pg_temp.api(pg_temp.mgr(), format('select push_settings(''{"headStickerCount":3,"legStickerCount":9}''::jsonb, ''x'', %L)', pg_temp.v('mgr')));
+  -- a station tablet can't change the list
+  r4 := pg_temp.api(pg_temp.dev('SL1'), format('select push_settings(%L::jsonb, ''x'')', jsonb_build_object('products', pr)));
+  ok := ok and pg_temp.ok(r2) and pg_temp.ok(r3) and (_gt_settings() ->> 'headStickerCount')::int = 8
+        and (_gt_settings() ->> 'legStickerCount')::int = 2 and r4 -> 'ignored' ? 'products'
+        and (_gt_settings() -> 'products' -> 6 ->> 'on')::boolean;
+  -- bad lists are refused: legs off, legs without number stickers, a duplicate id, an unknown area,
+  -- nothing printed on the head screen, a bad id, an unknown field, a negative weight
+  foreach b in array array[
+      jsonb_set(pr, '{5,on}', 'false'), jsonb_set(pr, '{5,pre}', '"none"'), pr || jsonb_build_array(pr -> 0),
+      jsonb_set(pr, '{0,post}', '"cooler"'),
+      (select jsonb_agg(case when x ->> 'pre' = 'head' then jsonb_set(x, '{on}', 'false') else x end) from jsonb_array_elements(pr) x),
+      jsonb_set(pr, '{0,id}', '"Tongue!"'), jsonb_set(pr, '{0,price}', '5'), jsonb_set(pr, '{0,avg}', '-1')] loop
+    r := pg_temp.api(pg_temp.mgr(), format('select push_settings(%L::jsonb, ''x'', %L)', jsonb_build_object('products', b), pg_temp.v('mgr')));
+    if r ->> 'error' is distinct from 'bad_settings' then bad := bad || left(r::text, 80); end if;
+  end loop;
+  ok := ok and cardinality(bad) = 0 and (_gt_settings() ->> 'headStickerCount')::int = 8;
+  perform pg_temp.rec('v10.38 products list: head / legs sticker counts derived on the server (a hand-typed count does not win); only the team leader changes it; bad lists refused (legs off, duplicate, unknown area, no head sticker, bad id / field / weight)', ok,
+    concat_ws(' | ', left(r2::text, 60), left(r3::text, 60), left(r4::text, 80), array_to_string(bad, ' ; '), _gt_settings() ->> 'headStickerCount'));
+end $$;
+$gt74$;
     v_step := 'the ACTIVE security surface against the expected manifest';
     execute $gt70$
 -- ── the ACTIVE security surface against the expected manifest ───────────────

@@ -1,9 +1,9 @@
 == 1. plant state =======================================================
     key     |     value     |          updated_at           
 ------------+---------------+-------------------------------
- boardEpoch | 1791880570135 | 2026-10-13 08:36:10.134457+00
- schemaStep | 46            | 2026-10-13 08:36:11.618131+00
- testMode   | off           | 2026-10-13 08:36:10.896027+00
+ boardEpoch | 1791882432415 | 2026-10-13 09:07:12.414953+00
+ schemaStep | 46            | 2026-10-13 09:07:13.662192+00
+ testMode   | off           | 2026-10-13 09:07:13.057456+00
 (3 rows)
 
 == 2. functions (public, gt_rls) ========================================
@@ -183,6 +183,8 @@
  public | _proc_pending(text,animals_pilot,boolean)                                          | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _proc_station_of_group(text)                                                       | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _proc_stations()                                                                   | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _products_counts(jsonb)                                                            | function | f                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _products_error(jsonb)                                                             | function | f                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _push_is_correction(jsonb)                                                         | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _raise_correction(text,text)                                                       | function | f                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _rate_count(text,text,interval)                                                    | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
@@ -232,7 +234,7 @@
  public | leader_account_remove(text)                                                        | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | leader_device_recovery(text)                                                       | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | manufacturer_set_code(text,text)                                                   | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
-(223 rows)
+(225 rows)
 
 == 2b. API surface: functions the app roles can run ======================
                        callable_by_app                       | security_definer 

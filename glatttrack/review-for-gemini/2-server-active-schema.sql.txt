@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict M29tNNToz27hcDx0hawW9yB3hBb7OrcXhGJRmo408LQUMbllFNFAyoDLTZVpbDz
+\restrict vzoiTZyg66WkieDsE59i2W0jbTp66qj8jvfVQPP45Bfr549Qbmtdh3Zq7zn2zq0
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -2857,6 +2857,78 @@ $$;
 ALTER FUNCTION public._proc_stations() OWNER TO postgres;
 
 --
+-- Name: _products_counts(jsonb); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public._products_counts(v jsonb) RETURNS jsonb
+    LANGUAGE sql IMMUTABLE
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $$
+  select jsonb_build_object(
+    'headStickerCount', coalesce(sum((x ->> 'n')::int) filter (where (x ->> 'on')::boolean and x ->> 'pre' = 'head'), 0),
+    'legStickerCount',  coalesce(sum((x ->> 'n')::int) filter (where (x ->> 'on')::boolean and x ->> 'pre' = 'legs'), 0))
+  from jsonb_array_elements(case when jsonb_typeof(v) = 'array' then v else '[]'::jsonb end) x;
+$$;
+
+
+ALTER FUNCTION public._products_counts(v jsonb) OWNER TO postgres;
+
+--
+-- Name: _products_error(jsonb); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public._products_error(v jsonb) RETURNS text
+    LANGUAGE plpgsql IMMUTABLE
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $_$
+declare x jsonb; ids text[] := '{}'; v_id text; k text; head int := 0; legs_on boolean := false;
+begin
+  if jsonb_typeof(v) <> 'array' then return 'expected a list'; end if;
+  if jsonb_array_length(v) > 60 then return 'too many products'; end if;
+  for x in select * from jsonb_array_elements(v) loop
+    if jsonb_typeof(x) <> 'object' then return 'a product must be an object'; end if;
+    for k in select jsonb_object_keys(x) loop
+      if k not in ('id', 'he', 'en', 'es', 'on', 'pre', 'n', 'post', 'avg', 'notGlatt', 'builtin') then
+        return 'unknown field ' || left(k, 40);
+      end if;
+    end loop;
+    v_id := x ->> 'id';
+    if jsonb_typeof(x -> 'id') <> 'string' or v_id !~ '^[a-z][a-z0-9_]{0,40}$' then return 'bad product id'; end if;
+    if v_id = any(ids) then return 'duplicate product ' || v_id; end if;
+    ids := ids || v_id;
+    if jsonb_typeof(x -> 'he') <> 'string' or length(trim(x ->> 'he')) = 0 or length(x ->> 'he') > 80 then
+      return 'product ' || v_id || ': a name is required (up to 80)'; end if;
+    foreach k in array array['en', 'es'] loop
+      if x ? k and jsonb_typeof(x -> k) not in ('string', 'null') then return 'product ' || v_id || ': bad ' || k; end if;
+      if length(coalesce(x ->> k, '')) > 80 then return 'product ' || v_id || ': ' || k || ' too long'; end if;
+    end loop;
+    if jsonb_typeof(x -> 'on') <> 'boolean' then return 'product ' || v_id || ': on must be true / false'; end if;
+    if coalesce(x ->> 'pre', '') not in ('head', 'legs', 'none') then return 'product ' || v_id || ': pre must be head / legs / none'; end if;
+    if not _jint_ok(x -> 'n', 0, 20) then return 'product ' || v_id || ': stickers 0..20'; end if;
+    if coalesce(x ->> 'post', '') not in ('parts', 'stamps', 'legs', 'none') then return 'product ' || v_id || ': post must be parts / stamps / legs / none'; end if;
+    if x ? 'avg' and jsonb_typeof(x -> 'avg') <> 'null' and not _jnum_ok(x -> 'avg', 0, 1000) then return 'product ' || v_id || ': average weight 0..1000 kg'; end if;
+    if x ? 'notGlatt' and jsonb_typeof(x -> 'notGlatt') <> 'boolean' then return 'product ' || v_id || ': notGlatt must be true / false'; end if;
+    if x ? 'builtin' and jsonb_typeof(x -> 'builtin') <> 'boolean' then return 'product ' || v_id || ': builtin must be true / false'; end if;
+    -- the legs always get their number stickers before the ruling, on the legs screen; their sorting is
+    -- on the legs screen or with the small parts
+    if v_id = 'legs' then
+      if not (x ->> 'on')::boolean then return 'the legs are always on'; end if;
+      if x ->> 'pre' <> 'legs' or (x ->> 'n')::int < 1 then return 'the legs get their number stickers on the legs screen'; end if;
+      if x ->> 'post' not in ('legs', 'parts') then return 'the legs are sorted on the legs screen or with the small parts'; end if;
+      legs_on := true;
+    end if;
+    if (x ->> 'on')::boolean and x ->> 'pre' = 'head' then head := head + (x ->> 'n')::int; end if;
+  end loop;
+  if not legs_on then return 'the legs product is missing'; end if;
+  if head < 1 then return 'the head screen prints at least one number sticker'; end if;
+  if head > 30 then return 'too many head stickers (30 at most)'; end if;
+  return null;
+end $_$;
+
+
+ALTER FUNCTION public._products_error(v jsonb) OWNER TO postgres;
+
+--
 -- Name: _push_is_correction(jsonb); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -3342,6 +3414,7 @@ begin
     end loop;
     return null;
   end if;
+  if p_key = 'products' then return _products_error(v); end if;   -- v10.38
   if p_key = 'customStatuses' then
     if t <> 'array' or jsonb_array_length(v) > 200 then return 'expected a list of statuses'; end if;
     if (select count(*) <> count(distinct x ->> 'key') from jsonb_array_elements(v) x) then   -- step 46
@@ -6689,6 +6762,11 @@ begin
   end loop;
   if length(incoming::text) > 4000000 then
     return jsonb_build_object('ok', false, 'error', 'bad_settings', 'key', '*', 'reason', 'too_large');
+  end if;
+  -- v10.38: once the plant has a products list, the head / legs sticker counts follow it (never typed by hand)
+  if (incoming ? 'products' or incoming ? 'headStickerCount' or incoming ? 'legStickerCount')
+     and jsonb_typeof(coalesce(incoming -> 'products', cur -> 'products')) = 'array' then
+    incoming := incoming || _products_counts(coalesce(incoming -> 'products', cur -> 'products'));
   end if;
 
   foreach k in array list_keys loop
@@ -10320,6 +10398,20 @@ REVOKE ALL ON FUNCTION public._proc_stations() FROM PUBLIC;
 
 
 --
+-- Name: FUNCTION _products_counts(v jsonb); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public._products_counts(v jsonb) FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION _products_error(v jsonb); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public._products_error(v jsonb) FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION _push_is_correction(p_rows jsonb); Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -11433,5 +11525,5 @@ GRANT ALL ON TABLE public.system_flags TO service_role;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict M29tNNToz27hcDx0hawW9yB3hBb7OrcXhGJRmo408LQUMbllFNFAyoDLTZVpbDz
+\unrestrict vzoiTZyg66WkieDsE59i2W0jbTp66qj8jvfVQPP45Bfr549Qbmtdh3Zq7zn2zq0
 

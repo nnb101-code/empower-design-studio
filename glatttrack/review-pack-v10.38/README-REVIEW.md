@@ -1,4 +1,4 @@
-# GlattTrack — review pack (app v10.37, server schema step 46)
+# GlattTrack — review pack (app v10.38, server schema step 46)
 
 This pack is the CURRENT state. Review these files only.
 
@@ -9,14 +9,40 @@ This pack is the CURRENT state. Review these files only.
 | `active-schema-snapshot.sql` | **Audit this first.** `pg_dump --schema-only` (public + gt_rls) of a clean database built from `glatttrack-schema-full.sql`. Exactly one ACTIVE definition of each function, trigger, RLS policy and grant. |
 | `setup-supabase-step46-order-and-processing-days.sql` | The new migration (run after step 45). |
 | `STEP46-CHANGES.md` | What step 46 / app v10.6 changed (Hebrew). |
-| `security-selftest.sql` + `security-selftest-result.txt` | Release gate: **153 / 153**. One statement (one DO block) whose changes are all undone inside it (see v10.15 below). |
+| `security-selftest.sql` + `security-selftest-result.txt` | Release gate: **154 / 154**. One statement (one DO block) whose changes are all undone inside it (see v10.15 below). |
 | `SECURITY-MANIFEST.md` | Permission map (step 45 observed table) + a step-46 section. |
 | `active-security-manifest.sql` + `-result.txt` | Prints the active security surface. |
-| `kosher-app-v10.37.html` | The app (UI, offline store, sync client). `GT_MIN_SCHEMA = 46`. |
+| `kosher-app-v10.38.html` | The app (UI, offline store, sync client). `GT_MIN_SCHEMA = 46`. |
 | `setup-supabase-step44/45/46-*.sql` | The last three migrations. |
 | `glatttrack-schema-full.sql` | Full install script (base + steps 1–46, history included; last definition wins). |
 | `test-mode-on.sql` / `test-mode-off.sql` | The owner's SQL-only test switch. |
 | `plant-server/` | Plant resilience kit (bash, runs as root on the plant servers, NOT in the database): standby server, floating address, UPS, nightly checked backup. Guide: `PLANT-RESILIENCE-HE.md`. |
+
+## Added in v10.38 (server 02 + app) — the plant's products list (stage 1)
+
+**The owner's rule:** a sticker with a kashrut status, and any sorting, only after the ruling. Before the ruling only a number / barcode sticker (legs, head, liver…).
+
+**Settings key `products`** (team leader only — not a station key, not a manufacturer key). Each product:
+- `id`, `he` (required), `en` / `es` (optional);
+- `on` (true / false);
+- `pre`: the number sticker before the ruling — `head` / `legs` / `none`, and `n` stickers per animal (0..20);
+- `post`: the area after the ruling — `parts` / `stamps` / `legs` / `none`;
+- `avg`: average weight per animal, kg (or null);
+- `notGlatt` (Inside Skirt), `builtin`.
+
+Defaults: tongue 1 + cheeks 2 + sides 2 + lung 1 + hook 1 = 7 head stickers (as before); legs 2; tail, liver, Outside / Inside Skirt, Hanger steak off.
+
+**Server (02):**
+- `_products_error` (called from `_settings_value_error`):
+  - a list of up to 60 objects, only the known fields, ids `^[a-z][a-z0-9_]{0,40}$` without duplicates;
+  - the legs are always on, with number stickers on the legs screen, sorted on the legs screen or with the small parts;
+  - the head screen prints 1..30 stickers.
+- `push_settings`: once the plant has a list, `headStickerCount` / `legStickerCount` are derived from it (`_products_counts`). A count typed by hand does not win.
+- Self-test: 154/154 (new check "v10.38 products list").
+
+**App:** Settings → "Products from the animal" replaces the old "small parts — average weight" card (its weights carry over); the legs / head counts are shown, not typed.
+
+**Not yet (stage 2):** the small-parts and stamps screens still work as before (tongue + 2 cheeks; 5 stamps). They will follow the list next, with the leg sorting at the small parts.
 
 ## Changed in v10.37 (server 02 + app) — after a code review
 

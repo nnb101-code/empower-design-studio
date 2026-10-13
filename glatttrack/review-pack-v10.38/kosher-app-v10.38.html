@@ -1562,12 +1562,8 @@ const LUNG_B64="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICA
         <div class="mgr-sec">כמות מדבקות</div>
         <div class="mgr-card">
           <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);">
-            <span style="font-size:13px;color:var(--text);">מדבקות רגליים</span>
-            <select id="printLegsCount" onchange="mgrSetPrintCount('legs',this.value)" style="width:70px;background:var(--panel2);border:1px solid var(--border);border-radius:7px;padding:7px;color:var(--gold);font-size:15px;font-weight:700;"><option value="2">2</option><option value="3">3</option><option value="4">4</option></select>
-          </div>
-          <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);">
-            <span style="font-size:13px;color:var(--text);">מדבקות ראש</span>
-            <input type="number" inputmode="numeric" min="0" id="printHeadCount" onchange="mgrSetPrintCount('head',this.value)" style="width:70px;background:var(--panel2);border:1px solid var(--border);border-radius:7px;padding:7px;color:var(--gold);font-size:15px;font-weight:700;text-align:center;">
+            <span style="font-size:13px;color:var(--text);">מדבקות רגליים / ראש</span>
+            <span id="printLegsHeadCount" onclick="mgrGoProducts()" style="font-size:14px;font-weight:700;color:var(--gold);cursor:pointer;"></span>
           </div>
           <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;">
             <span style="font-size:13px;color:var(--text);">מדבקות כשרות (חלקים)</span>
@@ -1753,14 +1749,16 @@ const LUNG_B64="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICA
           </div>
         </div>
 
-        <!-- Small parts: average weights + billing -->
-        <div class="mgr-sec">חלקים קטנים — משקל ממוצע</div>
-        <div class="mgr-card">
-          <div style="font-size:11px;color:var(--muted);margin-bottom:8px;">משקל ממוצע ליחידה (כל מפעל מזין את שלו). Skirt פנימי נלקח בכשר/רבנות כשר, ובגלאט לא — אפשר לעקוף ידנית.</div>
-          <div id="mgrPartsWeightTable"></div>
-          <div style="display:flex;gap:6px;margin-top:10px;">
-            <input id="newPartName" type="text" placeholder="שם חלק חדש" style="flex:1;background:var(--panel2);border:1px solid var(--border);border-radius:7px;padding:8px;color:var(--text);font-size:13px;">
-            <button onclick="mgrAddPartType()" style="padding:8px 14px;border-radius:7px;border:none;background:var(--gold);color:#07090F;font-size:13px;font-weight:700;cursor:pointer;">הוסף</button>
+        <!-- v10.38 (owner): what is taken from the animal — one list: on/off, where, how many stickers, weight -->
+        <div class="mgr-sec">מוצרים מהבהמה</div>
+        <div class="mgr-card" id="mgrProductsCard">
+          <div style="font-size:11px;color:var(--muted);line-height:1.6;margin-bottom:8px;">לכל מוצר: פעיל או לא, מדבקת מספר לפני הפסיקה (ממסך הראש או הרגליים), האזור שמטפל בו אחרי הפסיקה, ומשקל ממוצע לבהמה. מדבקה עם סטטוס ומיון — תמיד אחרי הפסיקה. מספר המדבקות במסך הראש והרגליים מחושב לבד מהרשימה.</div>
+          <div id="mgrProductsTotals" style="font-size:13px;font-weight:700;color:var(--gold);margin-bottom:6px;"></div>
+          <div id="mgrProductsList"></div>
+          <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;">
+            <input id="newProductHe" type="text" maxlength="80" placeholder="שם מוצר חדש" style="flex:1;min-width:120px;background:var(--panel2);border:1px solid var(--border);border-radius:7px;padding:8px;color:var(--text);font-size:13px;">
+            <input id="newProductEn" type="text" maxlength="80" placeholder="English (רשות)" style="flex:1;min-width:100px;background:var(--panel2);border:1px solid var(--border);border-radius:7px;padding:8px;color:var(--text);font-size:13px;">
+            <button onclick="mgrAddProduct()" style="padding:8px 14px;border-radius:7px;border:none;background:var(--gold);color:#07090F;font-size:13px;font-weight:700;cursor:pointer;">הוסף</button>
           </div>
         </div>
 
@@ -5768,7 +5766,7 @@ function _gtDoneAfterHtml(stage, a){
 // list is kept on the tablet (parts / stamps stop offline too) · reprints check holds · rulings of a day that
 // ended before they were sent go to the event log · ledger + backup hash on plain-http · archive dated by the
 // slaughter day · GS1 / pound scale labels · QR falls back to the number · translations · CSS clashes
-var GT_APP_VERSION='v10.37';
+var GT_APP_VERSION='v10.38';
 document.addEventListener('DOMContentLoaded',()=>{ try{ document.querySelectorAll('.gt-ver').forEach(e=>e.textContent=GT_APP_VERSION); }catch(e){} });
 function escapeHtml(str){
   return String(str==null?'':str).replace(/[&<>"']/g, c=>({
@@ -5915,6 +5913,7 @@ Object.assign(I18N_DOM,{"🧪 איפוס יום עכשיו — רק במצב ב�
 Object.assign(I18N_DOM,{"שינוי — בבחירת מסכים ←": ["Change — in Choosing screens →", "Cambiar — en Elegir pantallas →"]});
 Object.assign(I18N_DOM,{"\"לא חלק\" ומסכי חוץ": ["\"Non-Chalak\" and outer screens", "\"No Jalak\" y pantallas externas"]});
 Object.assign(I18N_DOM,{"סטטוס רגיל לבהמה חלקה — למשל במפעל שכולו תחת הרבנות (רבנות חלק / רבנות כשר). לא לבהמה \"לא חלק\".": ["A regular status for a chalak animal — e.g. in a plant fully under the rabbinate (רבנות חלק / רבנות כשר). Not for a \"Non-Chalak\" animal.", "Un estado normal para un animal jalak — p. ej. en una planta totalmente bajo el rabinato (רבנות חלק / רבנות כשר). No para un animal \"No Jalak\"."]});
+Object.assign(I18N_DOM,{"מוצרים מהבהמה":["Products from the animal","Productos del animal"],"לכל מוצר: פעיל או לא, מדבקת מספר לפני הפסיקה (ממסך הראש או הרגליים), האזור שמטפל בו אחרי הפסיקה, ומשקל ממוצע לבהמה. מדבקה עם סטטוס ומיון — תמיד אחרי הפסיקה. מספר המדבקות במסך הראש והרגליים מחושב לבד מהרשימה.":["For each product: on or off, a number sticker before the ruling (from the head or the legs screen), the area that handles it after the ruling, and an average weight per animal. A sticker with a status, and sorting — always after the ruling. The number of stickers on the head and legs screens is worked out from the list.","Para cada producto: activo o no, una etiqueta de número antes del dictamen (desde la pantalla de cabeza o de patas), el área que lo maneja después del dictamen y un peso medio por animal. Una etiqueta con estado, y la clasificación — siempre después del dictamen. La cantidad de etiquetas en las pantallas de cabeza y patas se calcula a partir de la lista."],"שם מוצר חדש":["New product name","Nombre del producto nuevo"],"English (רשות)":["English (optional)","Inglés (opcional)"],"מדבקות רגליים / ראש":["Legs / head stickers","Etiquetas de patas / cabeza"]});
 // v10.30: known pieces of a longer text that holds a name (e.g. "🟢 ראש צוות — <name> (המכשיר הזה)")
 const I18N_PARTS=[['ראש צוות — ',['Team leader — ','Jefe de equipo — ']],['(המכשיר הזה)',['(this device)','(este dispositivo)']],
                   ['"סגור" — רק כשמה שנשאר לא יעובד בתחנה הזו.',['"Close" — only when what is left will not be processed at this station.','"Cerrar" — solo cuando lo que queda no se procesará en esta estación.']],
@@ -8470,8 +8469,7 @@ function mgrRenderPrintPreview(){
   try{renderSticker('previewKosherSticker',0,'kosher',true);}catch(e){}
   // Sync count inputs
   const s=KS.getSettings();
-  const lc=document.getElementById('printLegsCount');if(lc)lc.value=s.legStickerCount!=null?s.legStickerCount:2;
-  const hc=document.getElementById('printHeadCount');if(hc)hc.value=s.headStickerCount!=null?s.headStickerCount:7;
+  const lhc=document.getElementById('printLegsHeadCount');if(lhc)lhc.textContent=_gtProductCountsText()+' ✎';   // v10.38: from the products list
   const pc=document.getElementById('printPartsCount');if(pc)pc.value=s.partsStickerCount!=null?s.partsStickerCount:3;
   const qz=document.getElementById('printShowQR');if(qz)qz.checked=s.printShowQR!==false;
   const hz=document.getElementById('printShowHeb');if(hz)hz.checked=s.printShowHeb!==false;
@@ -11359,58 +11357,134 @@ function mgrMoveIntake(i,dir){
   const tmp=intake[i];intake[i]=intake[j];intake[j]=tmp;
   KS.updateSettings({dailyIntake:intake});mgrRenderFarmSystem();mgrUpdateSummaries();
 }
-// ── SMALL PARTS (average weights) + BILLING ──
-const DEFAULT_PARTS=[
-  {id:'tongue',name:'לשון',units:1,avg:null,internal:false},
-  {id:'hanger',name:'Hanger steak',units:1,avg:null,internal:false},
-  {id:'tail',name:'זנב',units:1,avg:null,internal:false},
-  {id:'skirt_out',name:'Skirt חיצוני',units:1,avg:null,internal:false},
-  {id:'skirt_in',name:'Skirt פנימי',units:1,avg:null,internal:true},
+// ── v10.38 (owner): THE PLANT'S PRODUCTS — what is taken from the animal ──
+// pre:  the number sticker before the ruling — from the head screen, the legs screen, or none
+// n:    how many such stickers per animal
+// post: the area that handles it after the ruling (parts / stamps / legs / none)
+// avg:  average weight per animal, kg (for the estimated weights)
+// The head / legs sticker counts are derived from this list (also on the server, push_settings).
+const GT_DEFAULT_PRODUCTS=[
+  {id:'tongue',   he:'לשון',         en:'Tongue',        es:'Lengua',          on:true,  pre:'head', n:1, post:'parts',  avg:null, builtin:true},
+  {id:'cheeks',   he:'לחיים',        en:'Cheeks',        es:'Mejillas',        on:true,  pre:'head', n:2, post:'parts',  avg:null, builtin:true},
+  {id:'sides',    he:'צדדים',        en:'Sides',         es:'Lados',           on:true,  pre:'head', n:2, post:'stamps', avg:null, builtin:true},
+  {id:'lung',     he:'ריאה',         en:'Lung',          es:'Pulmón',          on:true,  pre:'head', n:1, post:'none',   avg:null, builtin:true},
+  {id:'hook',     he:'קרס',          en:'Hook',          es:'Gancho',          on:true,  pre:'head', n:1, post:'none',   avg:null, builtin:true},
+  {id:'legs',     he:'רגליים',       en:'Legs',          es:'Patas',           on:true,  pre:'legs', n:2, post:'legs',   avg:null, builtin:true},
+  {id:'tail',     he:'זנב',          en:'Tail',          es:'Cola',            on:false, pre:'head', n:1, post:'stamps', avg:null, builtin:true},
+  {id:'liver',    he:'כבד',          en:'Liver',         es:'Hígado',          on:false, pre:'head', n:1, post:'none',   avg:null, builtin:true},
+  {id:'skirt_out',he:'Outside Skirt',en:'Outside Skirt', es:'Outside Skirt',   on:false, pre:'none', n:0, post:'stamps', avg:null, builtin:true},
+  {id:'skirt_in', he:'Inside Skirt', en:'Inside Skirt',  es:'Inside Skirt',    on:false, pre:'none', n:0, post:'stamps', avg:null, builtin:true, notGlatt:true},
+  {id:'hanger',   he:'Hanger steak', en:'Hanger steak',  es:'Hanger steak',    on:false, pre:'none', n:0, post:'stamps', avg:null, builtin:true},
 ];
-function getPartTypes(){
-  const s=KS.getSettings();
-  if(!s.partTypes||!s.partTypes.length)return DEFAULT_PARTS.map(p=>({...p}));
-  return s.partTypes;
+// (before v10.38 the average weights were kept in partTypes — they carry over to the list)
+const _GT_OLD_PART_IDS={tongue:'tongue',hanger:'hanger',tail:'tail',skirt_out:'skirt_out',skirt_in:'skirt_in'};
+function gtProducts(s){
+  s=s||KS.getSettings();
+  if(Array.isArray(s.products)&&s.products.length) return s.products.map(p=>({...p}));
+  const list=GT_DEFAULT_PRODUCTS.map(p=>({...p}));
+  (Array.isArray(s.partTypes)?s.partTypes:[]).forEach(o=>{
+    const id=_GT_OLD_PART_IDS[o&&o.id];
+    const p=id&&list.find(x=>x.id===id);
+    if(p&&o.avg!=null&&isFinite(o.avg)) p.avg=Number(o.avg);
+    if(p&&id==='skirt_in'&&o.internal===false) p.notGlatt=false;
+    if(o&&!id&&o.name&&String(o.id||'').charAt(0)==='p')   // a part the plant added before
+      list.push({id:'p_'+String(o.id).slice(1).toLowerCase().replace(/[^a-z0-9_]/g,'').slice(0,30)||('p_'+Date.now().toString(36)),
+                 he:String(o.name).slice(0,80),en:'',es:'',on:false,pre:'none',n:0,post:'none',avg:o.avg!=null&&isFinite(o.avg)?Number(o.avg):null});
+  });
+  return list;
 }
-function mgrAddPartType(){
-  const inp=document.getElementById('newPartName');
-  const name=inp?inp.value.trim():'';
-  if(!name)return;
-  const parts=getPartTypes();
-  parts.push({id:'p'+Date.now(),name,units:1,avg:null,internal:false});
-  KS.updateSettings({partTypes:parts});
-  if(inp)inp.value='';
-  mgrRenderPartsWeightTable();
+function gtProductCounts(list){
+  const c={headStickerCount:0,legStickerCount:0};
+  (list||[]).forEach(p=>{ if(!p.on)return; const n=Math.max(0,parseInt(p.n)||0);
+    if(p.pre==='head')c.headStickerCount+=n; else if(p.pre==='legs')c.legStickerCount+=n; });
+  return c;
 }
-function mgrRemovePartType(id){
-  const parts=getPartTypes().filter(p=>p.id!==id);
-  KS.updateSettings({partTypes:parts});
-  mgrRenderPartsWeightTable();
+function gtProductName(p){ return !p?'':(lang==='he'?p.he:lang==='es'?(p.es||p.en||p.he):(p.en||p.he)); }
+// the same rules as the server (_products_error) — said here, before saving
+function _gtProductsProblem(list){
+  const legs=list.find(p=>p.id==='legs');
+  if(!legs||!legs.on||legs.pre!=='legs'||!(parseInt(legs.n)>=1)) return L('הרגליים תמיד מקבלות מדבקות מספר במסך הרגליים.','The legs always get number stickers on the legs screen.','Las patas siempre reciben etiquetas de número en la pantalla de patas.');
+  const c=gtProductCounts(list);
+  if(c.headStickerCount<1) return L('מסך הראש מדפיס לפחות מדבקת מספר אחת.','The head screen prints at least one number sticker.','La pantalla de cabeza imprime al menos una etiqueta de número.');
+  if(c.headStickerCount>30) return L('יותר מדי מדבקות ראש (עד 30).','Too many head stickers (30 at most).','Demasiadas etiquetas de cabeza (máximo 30).');
+  return null;
 }
-function mgrSetPartField(id,field,val){
-  const parts=getPartTypes();
-  const p=parts.find(x=>x.id===id);
-  if(!p)return;
-  if(field==='avg')p.avg=val===''?null:parseFloat(val);
-  else if(field==='units')p.units=parseInt(val)||1;
-  else if(field==='internal')p.internal=!!val;
-  KS.updateSettings({partTypes:parts});
-  mgrRenderPartsWeightTable();
+function _gtSaveProducts(list){
+  const bad=_gtProductsProblem(list);
+  if(bad){ alert(bad); mgrRenderProducts(); return false; }
+  KS.updateSettings(Object.assign({products:list}, gtProductCounts(list)));
+  mgrRenderProducts(); try{ mgrRenderPrintPreview(); }catch(e){}
+  return true;
 }
-function mgrRenderPartsWeightTable(){
-  const el=document.getElementById('mgrPartsWeightTable');
-  if(!el)return;
-  const parts=getPartTypes();
-  el.innerHTML=parts.map(p=>{
-    const isSkirtIn=(p.id==='skirt_in'||p.internal);
-    return '<div style="padding:8px 0;border-bottom:1px solid var(--border);">'+
-      '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">'+
-        '<span style="font-size:13px;color:var(--text);font-weight:600;flex:1;">'+escapeHtml(p.name)+'</span>'+
-        '<input type="number" inputmode="decimal" step="0.01" value="'+(p.avg!=null?escapeHtml(p.avg):'')+'" placeholder="ק\u05f4ג" onchange="mgrSetPartField('+_jsArg(p.id)+',\'avg\',this.value)" style="width:74px;background:var(--panel2);border:1px solid var(--border);border-radius:6px;padding:6px;color:var(--gold);font-size:13px;font-weight:700;text-align:center;">'+
-        (String(p.id).charAt(0)==='p'?'<button onclick="mgrRemovePartType('+_jsArg(p.id)+')" style="color:#FF6B6B;background:none;border:none;font-size:14px;cursor:pointer;">\u2715</button>':'<span style="width:14px;display:inline-block;"></span>')+
-      '</div>'+
-      (isSkirtIn?'<label style="display:flex;align-items:center;gap:6px;margin-top:5px;font-size:11px;color:var(--muted);cursor:pointer;"><input type="checkbox" '+(p.internal!==false?'checked':'')+' onchange="mgrSetPartField('+_jsArg(p.id)+',\'internal\',this.checked)" style="width:15px;height:15px;"><span>נלקח בכשר/רבנות כשר (בגלאט אוטומטית לא)</span></label>':'')+
-    '</div>';
+function mgrSetProduct(id,field,val){
+  const list=gtProducts(); const p=list.find(x=>x.id===id); if(!p)return;
+  if(field==='on') p.on=!p.on;
+  else if(field==='n') p.n=Math.min(20,Math.max(0,parseInt(val)||0));
+  else if(field==='pre'){ p.pre=['head','legs','none'].includes(val)?val:'none'; if(p.pre==='none')p.n=0; else if(!(p.n>0))p.n=1; }
+  else if(field==='post') p.post=['parts','stamps','legs','none'].includes(val)?val:'none';
+  else if(field==='avg'){ const v=String(val).trim().replace(',','.'); p.avg=v===''?null:Math.min(1000,Math.max(0,Number(v)||0)); }
+  else if(field==='notGlatt') p.notGlatt=!!val;
+  _gtSaveProducts(list);
+}
+function mgrAddProduct(){
+  const he=(document.getElementById('newProductHe')||{}).value||'', en=(document.getElementById('newProductEn')||{}).value||'';
+  const name=he.trim()||en.trim(); if(!name){ alert(L('חובה למלא שם','Name required','El nombre es obligatorio')); return; }
+  const list=gtProducts();
+  if(list.some(p=>[p.he,p.en].some(x=>String(x||'').trim()===name))){ alert(L('יש כבר מוצר בשם הזה.','A product with this name already exists.','Ya existe un producto con ese nombre.')); return; }
+  list.push({id:'p_'+Date.now().toString(36),he:name.slice(0,80),en:en.trim().slice(0,80),es:'',on:true,pre:'none',n:0,post:'none',avg:null});
+  if(_gtSaveProducts(list)){ ['newProductHe','newProductEn'].forEach(k=>{const e=document.getElementById(k);if(e)e.value='';}); }
+}
+function mgrRemoveProduct(id){
+  const list=gtProducts(); const p=list.find(x=>x.id===id); if(!p||p.builtin)return;
+  if(!confirm(L('למחוק את "'+p.he+'"?','Delete "'+(p.en||p.he)+'"?','¿Borrar "'+(p.es||p.en||p.he)+'"?')))return;
+  _gtSaveProducts(list.filter(x=>x.id!==id));
+}
+function mgrGoProducts(){
+  try{ const c=document.getElementById('mgrProductsCard'); if(c){ let n=c; while(n){ if(n.tagName==='DETAILS')n.open=true; n=n.parentElement; } c.scrollIntoView({behavior:'smooth',block:'start'}); } }catch(e){}
+}
+function _gtProductCountsText(){
+  const c=gtProductCounts(gtProducts());
+  return L('רגליים: ','Legs: ','Patas: ')+c.legStickerCount+' · '+L('ראש: ','Head: ','Cabeza: ')+c.headStickerCount;
+}
+function mgrRenderProducts(){
+  const el=document.getElementById('mgrProductsList'); if(!el)return;
+  const s=KS.getSettings(), list=gtProducts(s), c=gtProductCounts(list);
+  const tot=document.getElementById('mgrProductsTotals');
+  if(tot){
+    const now={h:s.headStickerCount!=null?s.headStickerCount:7, l:s.legStickerCount!=null?s.legStickerCount:2};
+    tot.innerHTML=escapeHtml(L('מדבקות מספר לפני הפסיקה — ','Number stickers before the ruling — ','Etiquetas de número antes del dictamen — ')+_gtProductCountsText())
+      +((!Array.isArray(s.products)&&(now.h!==c.headStickerCount||now.l!==c.legStickerCount))
+        ?'<div style="font-size:11px;color:#FFB020;font-weight:400;margin-top:3px;">'+escapeHtml(L('כרגע מודפס: רגליים '+now.l+' · ראש '+now.h+'. השינוי הראשון ברשימה יעדכן את המסכים.','Printed now: legs '+now.l+' · head '+now.h+'. The first change to the list updates the screens.','Ahora se imprime: patas '+now.l+' · cabeza '+now.h+'. El primer cambio en la lista actualiza las pantallas.'))+'</div>':'');
+  }
+  const sel=(id,field,val,opts,dis)=>`<select ${dis?'disabled':''} onchange="mgrSetProduct(${_jsArg(id)},'${field}',this.value)" style="background:var(--panel2);border:1px solid var(--border);border-radius:6px;padding:5px 4px;color:var(--text);font-size:12px;max-width:180px;">`
+      +opts.map(([v,t])=>`<option value="${v}"${v===val?' selected':''}>${escapeHtml(t)}</option>`).join('')+'</select>';
+  const PRE=[['head',L('ראש','Head','Cabeza')],['legs',L('רגליים','Legs','Patas')],['none',L('בלי','None','Ninguna')]];
+  const POST=[['parts',L('חלקים קטנים','Small parts','Partes pequeñas')],['stamps',L('חותמות','Stamps','Sellos')],['legs',L('רגליים','Legs','Patas')],['none',L('בלי — לפי המספר','None — by the number','Ninguna — por el número')]];
+  el.innerHTML=list.map(p=>{
+    const K=_jsArg(p.id), isLegs=p.id==='legs', on=!!p.on;
+    const name=gtProductName(p), sub=(lang==='he'&&p.en&&p.en!==p.he)?p.en:'';
+    return `<div data-product="${escapeHtml(p.id)}" style="padding:9px 2px;border-bottom:1px solid var(--border);${on?'':'opacity:.55;'}">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span style="flex:1;font-size:13px;color:#E8EDF5;font-weight:700;">${escapeHtml(name)}${sub?`<span style="font-size:11px;color:var(--muted);font-weight:400;margin-inline-start:6px;">${escapeHtml(sub)}</span>`:''}</span>
+        ${p.builtin?'':`<button onclick="mgrRemoveProduct(${K})" aria-label="${escapeHtml(L('מחק','Delete','Eliminar'))}" style="color:#FF6B6B;background:none;border:1px solid rgba(224,48,48,.3);border-radius:6px;font-size:13px;min-width:34px;min-height:30px;cursor:pointer;">✕</button>`}
+        <button ${isLegs?'disabled title="'+escapeHtml(L('רגליים תמיד פעילות','The legs are always on','Las patas siempre están activas'))+'"':''} onclick="mgrSetProduct(${K},'on')"
+          style="width:50px;height:28px;min-width:50px;border-radius:14px;border:none;cursor:${isLegs?'default':'pointer'};position:relative;background:${on?'#28C76F':'#1F2D45'};">
+          <div style="position:absolute;top:3px;${on?'right:3px':'left:3px'};width:22px;height:22px;border-radius:50%;background:white;pointer-events:none;"></div>
+        </button>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:7px;font-size:11px;color:var(--muted);">
+        <span>${escapeHtml(L('מספר לפני פסיקה:','Number before the ruling:','Número antes del dictamen:'))}</span>
+        ${sel(p.id,'pre',p.pre,isLegs?PRE.filter(x=>x[0]==='legs'):PRE,isLegs)}
+        ${p.pre!=='none'?`<input type="number" inputmode="numeric" min="${isLegs?1:0}" max="20" value="${Number(p.n)||0}" onchange="mgrSetProduct(${K},'n',this.value)" style="width:52px;background:var(--panel2);border:1px solid var(--border);border-radius:6px;padding:5px;color:var(--gold);font-weight:700;text-align:center;">`:''}
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:6px;font-size:11px;color:var(--muted);">
+        <span>${escapeHtml(L('אחרי פסיקה:','After the ruling:','Después del dictamen:'))}</span>
+        ${sel(p.id,'post',p.post,isLegs?POST.filter(x=>x[0]==='legs'||x[0]==='parts'):POST,false)}
+        <span style="margin-inline-start:6px;">${escapeHtml(L('משקל ממוצע:','Average weight:','Peso medio:'))}</span>
+        <input type="number" inputmode="decimal" step="0.01" min="0" value="${p.avg!=null?escapeHtml(p.avg):''}" placeholder="${escapeHtml(L('ק״ג','kg','kg'))}" onchange="mgrSetProduct(${K},'avg',this.value)" style="width:68px;background:var(--panel2);border:1px solid var(--border);border-radius:6px;padding:5px;color:var(--gold);font-weight:700;text-align:center;">
+      </div>
+      ${p.id==='skirt_in'?`<label style="display:flex;align-items:center;gap:6px;margin-top:6px;font-size:11px;color:var(--muted);cursor:pointer;"><input type="checkbox" ${p.notGlatt!==false?'checked':''} onchange="mgrSetProduct(${K},'notGlatt',this.checked)" style="width:15px;height:15px;"><span>${escapeHtml(L('לא נלקח מבהמה גלאט','Not taken from a glatt animal','No se toma de un animal glatt'))}</span></label>`:''}
+    </div>`;
   }).join('');
 }
 function mgrRenderFarmSystem(){
@@ -11460,8 +11534,8 @@ function mgrRenderFarmSystem(){
       </div>`;
     }).join('')+`<div style="display:flex;justify-content:space-between;padding:8px 0 0;font-size:13px;font-weight:700;"><span style="color:var(--muted);">${L('סה״כ','Total','Total')}</span><span style="color:var(--gold);">${Number(total)||0}</span></div>`):'<div style="font-size:11px;color:var(--muted);">'+L('לא הוזנו בהמות היום','No animals entered today','No se registraron animales hoy')+'</div>';
   }
-  // Small-parts weight table (billing is set only by the manufacturer — its old leader fields were removed in v10.37)
-  try{mgrRenderPartsWeightTable();}catch(e){}
+  // v10.38: the plant's products (billing is set only by the manufacturer — its old leader fields were removed in v10.37)
+  try{mgrRenderProducts();}catch(e){}
 }
 function mgrRemoveFarm(i){mgrRemoveIntake(i);}
 // (v10.37: the old mgrAddUser — free-text roles, never called — was removed)
