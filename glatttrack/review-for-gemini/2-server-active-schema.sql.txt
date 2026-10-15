@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict MRlKRTrRb4fgMC58JkTud9o80X8lpWwI1l9FJxo0KXmW4UDxc2FjW8xxy8BKGPT
+\restrict 1RvZfB0dvSAjlfwtwQqd8VV4xqF0oh31L3c0IS54IagVPW9mlfE2uJkqaxYbCgU
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -2757,6 +2757,27 @@ end $$;
 ALTER FUNCTION public._parts_print_block(p_epoch bigint, p_id integer, o_tongue boolean, n_tongue boolean, o_cheek boolean, n_cheek boolean, o_count integer, n_count integer) OWNER TO postgres;
 
 --
+-- Name: _plant_issues(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public._plant_issues() RETURNS jsonb
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $$
+  select coalesce(jsonb_agg(x), '[]'::jsonb) from (
+    select jsonb_build_object('key', 'L' || id, 'at', at, 'source', 'leader', 'message', message) x
+      from support_issues where at > now() - interval '14 days'
+    union all
+    select jsonb_build_object('key', 'E' || server_seq, 'at', created_at, 'source', 'station', 'screen', left(payload ->> 'screen', 40),
+                              'message', left(concat_ws(' · ', nullif(payload ->> 'note', ''), payload ->> 'summary'), 1000))
+      from events_pilot where action = 'problem_report' and created_at > now() - interval '14 days'
+     limit 300) q;
+$$;
+
+
+ALTER FUNCTION public._plant_issues() OWNER TO postgres;
+
+--
 -- Name: _plant_report(); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -2773,7 +2794,9 @@ CREATE FUNCTION public._plant_report() RETURNS jsonb
                   'online', d.last_seen > now() - interval '3 minutes', 'lastSeen', d.last_seen,
                   'version', d.app_info ->> 'v', 'screen', d.app_info ->> 'screen')
                   order by d.assigned_role, d.assigned_index)
-                from devices_pilot d where d.assigned_role is not null and coalesce(d.device_status, 'active') <> 'retired'), '[]'::jsonb));
+                from devices_pilot d where d.assigned_role is not null and coalesce(d.device_status, 'active') <> 'retired'), '[]'::jsonb),
+    'issues', _plant_issues(),
+    'usage', _plant_usage());
 $$;
 
 
@@ -2810,6 +2833,31 @@ end $$;
 
 
 ALTER FUNCTION public._plant_state_test_mode_trg() OWNER TO postgres;
+
+--
+-- Name: _plant_usage(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public._plant_usage() RETURNS jsonb
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $$
+  select coalesce(jsonb_agg(jsonb_build_object('day', d, 'animals', n, 'kg', round(kg, 1)) order by d), '[]'::jsonb)
+    from (select d, sum(n)::int n, sum(kg) kg from (
+            select b.business_date d, count(*) filter (where x ->> 'slaughter' is not null) n,
+                   coalesce(sum(coalesce(nullif(x ->> 'weight_right', '')::numeric, 0) + coalesce(nullif(x ->> 'weight_left', '')::numeric, 0)), 0) kg
+              from daily_board_archive b, jsonb_array_elements(case when jsonb_typeof(b.board) = 'array' then b.board else '[]'::jsonb end) x
+             where b.business_date > current_date - 40
+             group by b.business_date
+            union all
+            select _board_business_date(), count(*) filter (where a.slaughter is not null),
+                   coalesce(sum(coalesce(a.weight_right, 0) + coalesce(a.weight_left, 0)), 0)
+              from animals_pilot a) u
+           where d is not null group by d) t;
+$$;
+
+
+ALTER FUNCTION public._plant_usage() OWNER TO postgres;
 
 --
 -- Name: _printed_as_key(public.animals_pilot); Type: FUNCTION; Schema: public; Owner: postgres
@@ -6294,6 +6342,26 @@ end $_$;
 ALTER FUNCTION public.lung_drawing_set(p_id integer, p_epoch bigint, p_drawing text) OWNER TO postgres;
 
 --
+-- Name: maker_changes(text); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.maker_changes(p_token text) RETURNS jsonb
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $$
+begin
+  if not _manager_session_valid(p_token) or coalesce(_session_role(p_token), 'manager') not in ('manager', 'owner') then
+    return jsonb_build_object('ok', false, 'error', 'unauthorized');
+  end if;
+  return jsonb_build_object('ok', true, 'rows', coalesce((select jsonb_agg(jsonb_build_object('at', a.at, 'who', a.who, 'action', a.action,
+            'target', a.target, 'detail', left(a.detail::text, 400)) order by a.at desc)
+     from (select * from admin_audit where role = 'manufacturer' order by at desc limit 200) a), '[]'::jsonb));
+end $$;
+
+
+ALTER FUNCTION public.maker_changes(p_token text) OWNER TO postgres;
+
+--
 -- Name: manager_add(text, text, text); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -7667,6 +7735,67 @@ end $$;
 ALTER FUNCTION public.support_force_reload(p_token text, p_reason text) OWNER TO postgres;
 
 --
+-- Name: support_issue_add(text, text); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.support_issue_add(p_token text, p_message text) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $$
+declare v_id bigint;
+begin
+  if not _manager_session_valid(p_token) or coalesce(_session_role(p_token), 'manager') not in ('manager', 'owner') then
+    return jsonb_build_object('ok', false, 'error', 'unauthorized');
+  end if;
+  if coalesce(trim(p_message), '') = '' then return jsonb_build_object('ok', false, 'error', 'bad_value'); end if;
+  if (select count(*) from support_issues where at > now() - interval '1 hour') >= 30 then
+    return jsonb_build_object('ok', false, 'error', 'too_many');
+  end if;
+  insert into support_issues (who, message) values (left(coalesce(_session_name(p_token), ''), 60), left(trim(p_message), 1000))
+  returning id into v_id;
+  return jsonb_build_object('ok', true, 'key', 'L' || v_id);
+end $$;
+
+
+ALTER FUNCTION public.support_issue_add(p_token text, p_message text) OWNER TO postgres;
+
+--
+-- Name: support_tickets(text); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.support_tickets(p_token text) RETURNS jsonb
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $$
+declare t jsonb;
+begin
+  if not _manager_session_valid(p_token) or coalesce(_session_role(p_token), 'manager') not in ('manager', 'owner') then
+    return jsonb_build_object('ok', false, 'error', 'unauthorized');
+  end if;
+  begin t := (select value from plant_state where key = 'supportTickets')::jsonb; exception when others then t := null; end;
+  return jsonb_build_object('ok', true,
+    'at', (select updated_at from plant_state where key = 'supportTickets'),
+    'issues', coalesce((select jsonb_agg(x order by x ->> 'at' desc) from (
+        select jsonb_build_object('key', 'L' || i.id, 'at', i.at, 'source', 'leader', 'message', i.message,
+                                  'status', tk ->> 'status', 'reply', tk ->> 'reply') x
+          from support_issues i
+          left join lateral (select e from jsonb_array_elements(case when jsonb_typeof(t) = 'array' then t else '[]'::jsonb end) e
+                              where e ->> 'key' = 'L' || i.id limit 1) z(tk) on true
+         where i.at > now() - interval '30 days'
+        union all
+        select jsonb_build_object('key', 'E' || e.server_seq, 'at', e.created_at, 'source', 'station', 'screen', e.payload ->> 'screen',
+                                  'message', left(concat_ws(' · ', nullif(e.payload ->> 'note', ''), e.payload ->> 'summary'), 1000),
+                                  'status', tk ->> 'status', 'reply', tk ->> 'reply')
+          from events_pilot e
+          left join lateral (select x from jsonb_array_elements(case when jsonb_typeof(t) = 'array' then t else '[]'::jsonb end) x
+                              where x ->> 'key' = 'E' || e.server_seq limit 1) z(tk) on true
+         where e.action = 'problem_report' and e.created_at > now() - interval '30 days') q), '[]'::jsonb));
+end $$;
+
+
+ALTER FUNCTION public.support_tickets(p_token text) OWNER TO postgres;
+
+--
 -- Name: system_health(text); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -8728,6 +8857,35 @@ CREATE TABLE public.source_farms (
 ALTER TABLE public.source_farms OWNER TO postgres;
 
 --
+-- Name: support_issues; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.support_issues (
+    id bigint NOT NULL,
+    at timestamp with time zone DEFAULT now() NOT NULL,
+    who text,
+    message text NOT NULL,
+    CONSTRAINT support_issues_message_check CHECK (((length(message) >= 1) AND (length(message) <= 1000)))
+);
+
+
+ALTER TABLE public.support_issues OWNER TO postgres;
+
+--
+-- Name: support_issues_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+ALTER TABLE public.support_issues ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.support_issues_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
 -- Name: system_flags; Type: TABLE; Schema: public; Owner: postgres
 --
 
@@ -9173,6 +9331,14 @@ ALTER TABLE ONLY public.settings_pilot
 
 ALTER TABLE ONLY public.source_farms
     ADD CONSTRAINT source_farms_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: support_issues support_issues_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.support_issues
+    ADD CONSTRAINT support_issues_pkey PRIMARY KEY (id);
 
 
 --
@@ -10173,6 +10339,12 @@ CREATE POLICY statuses_write ON public.custom_statuses USING (((plant_id = publi
 
 
 --
+-- Name: support_issues; Type: ROW SECURITY; Schema: public; Owner: postgres
+--
+
+ALTER TABLE public.support_issues ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: system_flags; Type: ROW SECURITY; Schema: public; Owner: postgres
 --
 
@@ -10949,6 +11121,13 @@ REVOKE ALL ON FUNCTION public._parts_print_block(p_epoch bigint, p_id integer, o
 
 
 --
+-- Name: FUNCTION _plant_issues(); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public._plant_issues() FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION _plant_report(); Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -10960,6 +11139,13 @@ REVOKE ALL ON FUNCTION public._plant_report() FROM PUBLIC;
 --
 
 REVOKE ALL ON FUNCTION public._plant_state_test_mode_trg() FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION _plant_usage(); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public._plant_usage() FROM PUBLIC;
 
 
 --
@@ -11676,6 +11862,15 @@ GRANT ALL ON FUNCTION public.lung_drawing_set(p_id integer, p_epoch bigint, p_dr
 
 
 --
+-- Name: FUNCTION maker_changes(p_token text); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public.maker_changes(p_token text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.maker_changes(p_token text) TO anon;
+GRANT ALL ON FUNCTION public.maker_changes(p_token text) TO authenticated;
+
+
+--
 -- Name: FUNCTION manager_add(p_token text, p_name text, p_code text); Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -11989,6 +12184,24 @@ GRANT ALL ON FUNCTION public.support_force_reload(p_token text, p_reason text) T
 
 
 --
+-- Name: FUNCTION support_issue_add(p_token text, p_message text); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public.support_issue_add(p_token text, p_message text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.support_issue_add(p_token text, p_message text) TO anon;
+GRANT ALL ON FUNCTION public.support_issue_add(p_token text, p_message text) TO authenticated;
+
+
+--
+-- Name: FUNCTION support_tickets(p_token text); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public.support_tickets(p_token text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.support_tickets(p_token text) TO anon;
+GRANT ALL ON FUNCTION public.support_tickets(p_token text) TO authenticated;
+
+
+--
 -- Name: FUNCTION system_health(p_token text); Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -12210,5 +12423,5 @@ GRANT ALL ON TABLE public.system_flags TO service_role;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict MRlKRTrRb4fgMC58JkTud9o80X8lpWwI1l9FJxo0KXmW4UDxc2FjW8xxy8BKGPT
+\unrestrict 1RvZfB0dvSAjlfwtwQqd8VV4xqF0oh31L3c0IS54IagVPW9mlfE2uJkqaxYbCgU
 

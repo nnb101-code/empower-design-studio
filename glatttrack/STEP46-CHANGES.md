@@ -1117,3 +1117,11 @@
 - איפוס היום שומר בארכיון גם מספר עם "?" / USDA פתוח (גם "?" של השוחט לפני שחיטה).
 - כניסת ראש צוות: בלי ספריית השרת — אין כניסה למסך, חלון הקוד ונסיון חוזר.
 - בדיקת האבטחה: 160/160.
+
+## v10.38 — מערכת היצרן (15.10)
+- **מרכז (`support-center/central-setup.sql`):** תפקידים (`admin` / `support` / `finance` / `viewer`), `sc_tickets`, `sc_usage`, `sc_billing`, `sc_paid`; פעולות `sc_tickets`, `sc_ticket_set`, `sc_billing`, `sc_billing_set`, `sc_paid_set`, `sc_staff_list`, `sc_staff_add`, `sc_staff_set`, `sc_whoami`. כל פעולת כתיבה בודקת תפקיד. המנהל האחרון נשמר. `sc_report` מחזיר למפעל את מצב התקלות ואת התשובה האחרונה.
+- **מפעל (02, סעיף 39):** `support_issues`, `support_issue_add`, `support_tickets`, `maker_changes`, `_plant_usage`, `_plant_issues`; `_plant_report` שולח גם דיווחי בעיה וסכומים יומיים.
+- **`report-to-center.sh`:** שומר את תשובת המרכז ב-`plant_state` (`supportTickets`).
+- **אפליקציה:** "דווח על תקלה" נשלח לשרת המפעל ומשם למרכז; רשימת פניות עם מצב ותשובה; "מה היצרן שינה".
+- **`support-center/index.html`:** 5 לשוניות לפי תפקיד; דף מפעל עם תקלות וחיוב החודש; טבלת חיובים עם עריכה וייצוא.
+- **בדיקות:** מרכז 21/21, 03 162/162, דפדפן (מנהל, כספים, צפייה, תמיכה בטלפון; לשונית תקלות באפליקציה).

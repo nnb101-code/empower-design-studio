@@ -1,6 +1,7 @@
 #!/bin/bash
 # GlattTrack — report to the manufacturer's support center (v10.36). Every 5 minutes (systemd timer
-# gt-report.timer). Sends the plant's health (_plant_report: no kashrut data, no names, no codes),
+# gt-report.timer). Sends the plant's health (_plant_report: no kashrut data, no names, no codes;
+# v10.38: + the problem reports and the daily totals for billing),
 # gets back the support center's commands and the current release, and carries them out:
 #   restart_standby · reload_tablets · run_nightly_check · update_now
 #   a new release → downloaded over https, sha256 checked, installed with update-app.sh (02 + the
@@ -26,6 +27,12 @@ SQL
 )"
 [ "$ok" = "t" ] || { gt_log "support center: no answer / refused: ${resp:0:200}"; exit 0; }
 gt_state centerReportAt "$(date -Is)"
+# v10.38: the tickets' status + the center's last reply → the team leader sees them (support_tickets)
+J -v r="$resp" >/dev/null <<'SQL'
+insert into plant_state (key, value)
+select 'supportTickets', coalesce(nullif(:'r', '')::jsonb -> 'tickets', '[]'::jsonb)::text
+on conflict (key) do update set value = excluded.value, updated_at = now();
+SQL
 
 done_cmd(){ printf '%s' "{\"p_code\":\"$GT_PLANT_CODE\",\"p_secret\":\"$GT_PLANT_SECRET\",\"p_id\":$1,\"p_result\":\"$2\"}" | RPC sc_command_done >/dev/null; }
 working(){ [ "$(J -c "select exists (select 1 from animals_pilot where updated_at > now() - interval '10 minutes')")" = "t" ]; }

@@ -67,6 +67,57 @@ begin
   insert into sc_t (name, ok, detail) values ('notifications: each channel on / off; addresses checked',
     r ->> 'error' = 'bad_value' and (r2 -> 'settings' -> 'whatsapp' ->> 'on')::boolean and not (r2 -> 'settings' -> 'sms' ->> 'on')::boolean
     and r2 -> 'settings' ->> 'minLevel' = 'warn', r2::text);
+  -- ── v10.38: the manufacturer center ──
+  -- staff with roles (the admin adds them); the last admin cannot be removed
+  r  := sc_staff_add(tok, 'Selftest support', 'selftest-support-code-1', 'support');
+  r2 := sc_staff_add(tok, 'Selftest finance', 'selftest-finance-code-1', 'finance');
+  perform sc_staff_add(tok, 'Selftest viewer', 'selftest-viewer-code-1', 'viewer');
+  insert into sc_t (name, ok, detail) values ('staff: the admin adds a member with a role; a short code is refused; the last admin stays',
+    (r ->> 'ok')::boolean and (r2 ->> 'ok')::boolean and sc_staff_add(tok, 'x', 'short', 'viewer') ->> 'error' = 'code_too_short'
+    and sc_staff_set(tok, (select id from sc_staff where name = 'selftest staff'), 'viewer') ->> 'error' = 'last_admin', r::text);
+  declare tsup text := sc_login('selftest-support-code-1') ->> 'token'; tfin text := sc_login('selftest-finance-code-1') ->> 'token';
+          tview text := sc_login('selftest-viewer-code-1') ->> 'token';
+  begin
+    insert into sc_t (name, ok) values ('roles: finance sees billing only; viewer sees all and changes nothing; support no billing / staff',
+      sc_overview(tfin) ->> 'error' = 'unauthorized' and (sc_billing(tfin) ->> 'ok')::boolean
+      and (sc_overview(tview) ->> 'ok')::boolean and (sc_billing(tview) ->> 'ok')::boolean
+      and sc_command_add(tview, '9001', 'reload_tablets') ->> 'error' = 'unauthorized' and sc_billing_set(tview, '9001', 'kg', 1) ->> 'error' = 'unauthorized'
+      and sc_billing(tsup) ->> 'error' = 'unauthorized' and sc_staff_list(tsup) ->> 'error' = 'unauthorized' and sc_plant_add(tsup, '9002', 'x') ->> 'error' = 'unauthorized'
+      and (sc_command_add(tsup, '9001', 'reload_tablets') ->> 'ok')::boolean and sc_staff_add(tfin, 'x', 'selftest-xxxx-code', 'admin') ->> 'error' = 'unauthorized');
+    -- the plant's problem reports become tickets (once); the plant gets their status back
+    r := sc_report('9001', sec, '{"attention":[],"issues":[{"key":"E17","at":"2026-10-15T10:00:00Z","source":"station","screen":"legs","message":"printer stuck"},{"key":"L3","source":"leader","message":"tablet 2 slow"}],"usage":[{"day":"2026-09-01","animals":100,"kg":30000},{"day":"2026-09-02","animals":50,"kg":15000.5}]}');
+    r2 := sc_report('9001', sec, '{"attention":[],"issues":[{"key":"E17","message":"printer stuck"}],"usage":[{"day":"2026-09-02","animals":60,"kg":18000}]}');
+    insert into sc_t (name, ok, detail) values ('reports: problem reports → tickets once; daily totals kept (the last one of a day wins); no issues / usage kept in the status',
+      (select count(*) from sc_tickets where code = '9001') = 2 and jsonb_array_length(r2 -> 'tickets') = 2
+      and (select sum(animals) from sc_usage where code = '9001') = 160 and not ((select report from sc_status where code = '9001') ? 'issues'), r2::text);
+    r := sc_ticket_set(tview, '9001', 'E17', 'working');
+    r2 := sc_ticket_set(tsup, '9001', 'E17', 'working', 'on it');
+    insert into sc_t (name, ok, detail) values ('a ticket: support takes it (status, note, who); the viewer cannot; the plant sees the new status',
+      r ->> 'error' = 'unauthorized' and (r2 ->> 'ok')::boolean
+      and (select status = 'working' and assignee = 'Selftest support' and jsonb_array_length(notes) = 1 from sc_tickets where code = '9001' and key = 'E17')
+      and exists (select 1 from jsonb_array_elements(sc_report('9001', sec, '{"attention":[]}') -> 'tickets') t where t ->> 'key' = 'E17' and t ->> 'status' = 'working'), r2::text);
+    -- billing: by kg / by animal / monthly, with a monthly minimum; paid / not paid
+    perform sc_billing_set(tfin, '9001', 'kg', 0.02);
+    r := sc_billing(tfin, '2026-09');
+    perform sc_billing_set(tfin, '9001', 'animal', 3, 1000);
+    r2 := sc_billing(tfin, '2026-09');
+    insert into sc_t (name, ok, detail) values ('billing: by kg (48,000 kg × 0.02 = 960), by animal with a minimum (160 × 3 = 480 → 1,000); bad values refused',
+      (r -> 'rows' -> 0 ->> 'amount')::numeric = 960 and (r2 -> 'rows' -> 0 ->> 'amount')::numeric = 1000
+      and sc_billing_set(tfin, '9001', 'hours', 1) ->> 'error' = 'bad_value' and sc_billing_set(tfin, '9001', 'kg', -1) ->> 'error' = 'bad_value', r::text || ' | ' || r2::text);
+    perform sc_billing_set(tfin, '9001', 'monthly', 2500);
+    r := sc_paid_set(tfin, '9001', '2026-09', true);
+    r2 := sc_billing(tfin, '2026-09');
+    insert into sc_t (name, ok, detail) values ('billing: a fixed monthly sum; marked paid by finance (audited)',
+      (r2 -> 'rows' -> 0 ->> 'amount')::numeric = 2500 and (r2 -> 'rows' -> 0 ->> 'paid')::boolean
+      and exists (select 1 from sc_audit where action = 'paid_set' and who = 'Selftest finance'), r2::text);
+  end;
+  perform set_config('role', 'anon', true);
+  begin perform 1 from sc_tickets limit 1; ok := false; exception when insufficient_privilege then ok := true; end;
+  begin perform 1 from sc_usage limit 1; ok := ok and false; exception when insufficient_privilege then ok := ok and true; end;
+  begin perform 1 from sc_billing limit 1; ok := ok and false; exception when insufficient_privilege then ok := ok and true; end;
+  begin perform _sc_can('x', 'staff'); ok := ok and false; exception when insufficient_privilege then ok := ok and true; end;
+  perform set_config('role', 'postgres', true);
+  insert into sc_t (name, ok) values ('the app reads no ticket / usage / billing table and calls no internal role check', ok);
 end $$;
 do $$ declare t int; f int; lst text; begin
   select count(*), count(*) filter (where not ok) into t, f from sc_t;

@@ -3205,6 +3205,42 @@ begin
   update settings_pilot set settings = s0 where id = 1;
 end $$;
 $gt77$;
+    v_step := 'v10.38 the manufacturer support center: problem reports, daily totals, maker changes';
+    execute $gt78$
+-- ── v10.38 (owner): what the plant sends to the manufacturer's support center, and what it gets back ──
+do $$
+declare r jsonb; r2 jsonb; r3 jsonb; r4 jsonb; rep jsonb; ok boolean; k text;
+begin
+  r  := pg_temp.api('{}', format('select support_issue_add(%L, ''selftest: tablet 2 is slow'')', pg_temp.v('mgr')));
+  r2 := pg_temp.api('{}', format('select support_issue_add(%L, ''x'')', 'not-a-token'));
+  r3 := pg_temp.api('{}', format('select support_issue_add(%L, ''   '')', pg_temp.v('mgr')));
+  k  := r ->> 'key';
+  insert into events_pilot (event_id, stage, action, payload, occurred_at, event_hash)
+  values (gen_random_uuid(), 'system', 'problem_report', '{"screen":"legs","summary":"selftest: printer stuck","note":"paper"}', now()::text, 'selftest-' || gen_random_uuid());
+  rep := _plant_report();
+  ok := pg_temp.ok(r) and k ~ '^L[0-9]+$' and r2 ->> 'error' = 'unauthorized' and r3 ->> 'error' = 'bad_value'
+        and exists (select 1 from jsonb_array_elements(rep -> 'issues') x where x ->> 'key' = k and x ->> 'source' = 'leader')
+        and exists (select 1 from jsonb_array_elements(rep -> 'issues') x where x ->> 'source' = 'station' and x ->> 'screen' = 'legs' and x ->> 'message' like 'paper · selftest%')
+        and jsonb_typeof(rep -> 'usage') = 'array'
+        and exists (select 1 from jsonb_array_elements(rep -> 'usage') x where x ->> 'day' = _board_business_date()::text)
+        and not (rep::text like '%' || pg_temp.v('mgr_code') || '%');
+  perform pg_temp.rec('v10.38 support center: the team leader''s report and a station''s problem report travel in the plant report (with the daily totals, no codes); an empty / unauthorized report is refused', ok,
+    concat_ws(' | ', r::text, r2::text, r3::text, left((rep -> 'usage')::text, 120)));
+  -- the center's answer (kept by report-to-center.sh) is shown to the team leader; what the maker changed is listed
+  insert into plant_state (key, value) values ('supportTickets', jsonb_build_array(jsonb_build_object('key', k, 'status', 'working', 'reply', 'on it'))::text)
+    on conflict (key) do update set value = excluded.value, updated_at = now();
+  insert into admin_audit (who, role, action, target, detail) values ('selftest maker', 'manufacturer', 'settings', 'settings_pilot', '{"x":1}');
+  r  := pg_temp.api('{}', format('select support_tickets(%L)', pg_temp.v('mgr')));
+  r2 := pg_temp.api('{}', format('select maker_changes(%L)', pg_temp.v('mgr')));
+  r3 := pg_temp.api('{}', format('select maker_changes(%L)', 'not-a-token'));
+  r4 := pg_temp.api(pg_temp.dev('SL1'), format('select support_tickets(%L)', 'not-a-token'));
+  ok := pg_temp.ok(r) and exists (select 1 from jsonb_array_elements(r -> 'issues') x where x ->> 'key' = k and x ->> 'status' = 'working' and x ->> 'reply' = 'on it')
+        and pg_temp.ok(r2) and exists (select 1 from jsonb_array_elements(r2 -> 'rows') x where x ->> 'who' = 'selftest maker')
+        and r3 ->> 'error' = 'unauthorized' and r4 ->> 'error' = 'unauthorized';
+  perform pg_temp.rec('v10.38 support center: the ticket status / reply comes back to the team leader; the team leader sees what the manufacturer changed; others cannot', ok,
+    concat_ws(' | ', left(r::text, 160), left(r2::text, 120), r3::text, r4::text));
+end $$;
+$gt78$;
     v_step := 'the ACTIVE security surface against the expected manifest';
     execute $gt70$
 -- ── the ACTIVE security surface against the expected manifest ───────────────
@@ -3307,7 +3343,7 @@ begin
                 'eso_change(integer,text,text,bigint)', 'eso_change(integer,text,text,bigint,uuid)', 'event_append(jsonb)',
                 'lung_drawing_get(integer)', 'lung_drawing_set(integer,bigint,text)', 'manager_add(text,text,text)',
                 'manager_add_owner(text,text,text)', 'manager_deactivate(text,uuid)', 'manager_list(text)', 'manager_login(text)',
-                'manager_logout(text)', 'manager_session_check(text)', 'leader_recovery_code_new(text)', 'leader_recovery_status(text)', 'leader_device_replace(text,text)', 'plant_server_status(text)', 'animal_card(text,date,integer)', 'seal_set(text,text,text)', 'seals_get(text,bigint)', 'hold_set(integer,text,text,text,bigint,uuid)', 'hold_resolve(bigint,text,uuid)', 'nikur_scan(integer,text,integer,bigint,uuid)', 'nikur_board()', 'nikur_hold(integer,bigint,text,uuid)', 'nikur_day_close(text,bigint,text)', 'board_flags(text)', 'change_ack(text,bigint)', 'manufacturer_set_billing(text,boolean,numeric,text,text)',
+                'manager_logout(text)', 'manager_session_check(text)', 'leader_recovery_code_new(text)', 'leader_recovery_status(text)', 'leader_device_replace(text,text)', 'plant_server_status(text)', 'animal_card(text,date,integer)', 'seal_set(text,text,text)', 'seals_get(text,bigint)', 'hold_set(integer,text,text,text,bigint,uuid)', 'hold_resolve(bigint,text,uuid)', 'nikur_scan(integer,text,integer,bigint,uuid)', 'nikur_board()', 'nikur_hold(integer,bigint,text,uuid)', 'nikur_day_close(text,bigint,text)', 'support_issue_add(text,text)', 'support_tickets(text)', 'maker_changes(text)', 'board_flags(text)', 'change_ack(text,bigint)', 'manufacturer_set_billing(text,boolean,numeric,text,text)',
                 'outer_open(integer,bigint,boolean,text)', 'outer_open(integer,bigint,boolean,text,uuid)', 'plant_status_snapshot()', 'plant_setup_needed()',
                 'push_settings(jsonb,text,text,text)', 'request_daily_rollover()', 'reset_daily_board(text,text)', 'security_summary(text)',
                 'processing_board(text)', 'carry_push(bigint,jsonb,uuid)', 'carry_claim(bigint,integer,text,uuid)',

@@ -240,7 +240,7 @@ create or replace function sc_notify_set(p_token text, p_settings jsonb) returns
 language plpgsql security definer set search_path = public, extensions, pg_temp as $$
 declare w text := _sc_staff(p_token); ch text; v jsonb := '{}'::jsonb; e jsonb;
 begin
-  if w is null then return jsonb_build_object('ok', false, 'error', 'unauthorized'); end if;
+  if w is null or not _sc_can(p_token, 'plants_write') then return jsonb_build_object('ok', false, 'error', 'unauthorized'); end if;   -- v10.38: admin / support
   foreach ch in array array['email', 'sms', 'whatsapp'] loop
     e := coalesce(p_settings -> ch, '{}'::jsonb);
     if jsonb_typeof(e -> 'to') is distinct from 'array' and e ? 'to' then return jsonb_build_object('ok', false, 'error', 'bad_value'); end if;
@@ -264,7 +264,7 @@ create or replace function sc_release_set(p_token text, p_version text, p_app_ur
 language plpgsql security definer set search_path = public, extensions, pg_temp as $$
 declare w text := _sc_staff(p_token);
 begin
-  if w is null then return jsonb_build_object('ok', false, 'error', 'unauthorized'); end if;
+  if w is null or not _sc_can(p_token, 'plants_write') then return jsonb_build_object('ok', false, 'error', 'unauthorized'); end if;   -- v10.38: admin / support
   if p_version !~ '^[a-z][0-9][0-9A-Za-z._-]{0,18}$' or p_app_url !~ '^https://' or p_app_sha256 !~ '^[0-9a-f]{64}$'
      or (p_sql_url is not null and (p_sql_url !~ '^https://' or coalesce(p_sql_sha256, '') !~ '^[0-9a-f]{64}$')) then
     return jsonb_build_object('ok', false, 'error', 'bad_value');
@@ -282,7 +282,7 @@ create or replace function sc_command_add(p_token text, p_code text, p_cmd text)
 language plpgsql security definer set search_path = public, extensions, pg_temp as $$
 declare w text := _sc_staff(p_token); v_id bigint;
 begin
-  if w is null then return jsonb_build_object('ok', false, 'error', 'unauthorized'); end if;
+  if w is null or not _sc_can(p_token, 'plants_write') then return jsonb_build_object('ok', false, 'error', 'unauthorized'); end if;   -- v10.38: admin / support
   if p_cmd not in ('restart_standby', 'reload_tablets', 'update_now', 'run_nightly_check') then return jsonb_build_object('ok', false, 'error', 'bad_value'); end if;
   if not exists (select 1 from sc_plants where code = p_code) then return jsonb_build_object('ok', false, 'error', 'bad_id'); end if;
   insert into sc_commands (code, cmd, created_by) values (p_code, p_cmd, w) returning id into v_id;
@@ -306,6 +306,376 @@ begin
 end $$;
 revoke execute on function _sc_check_silent() from public, anon, authenticated;
 
+-- ══════════════════════════════════════════════════════════════════════════════
+-- v10.38 (owner): THE MANUFACTURER CENTER — staff roles, tickets, usage and billing
+--   roles: admin (everything, staff, rates) · support (plants, tickets, commands, updates) ·
+--          finance (billing only) · viewer (sees everything, changes nothing). Every action is audited.
+--   tickets: every problem report of every plant (the ⚠ on a screen, the team leader's "report to support"),
+--            status new / working / closed, who handles it, notes; the plant sees the status.
+--   usage:   each plant sends ONLY a daily total (animals, kg) — no numbers, no rulings, no names.
+--   billing: per plant — by kg, by animal or a fixed monthly sum (+ a monthly minimum); paid / not paid.
+-- ══════════════════════════════════════════════════════════════════════════════
+alter table sc_staff add column if not exists role text not null default 'admin';
+alter table sc_staff drop constraint if exists sc_staff_role_ok;
+alter table sc_staff add constraint sc_staff_role_ok check (role in ('admin', 'support', 'finance', 'viewer'));
+
+create table if not exists sc_tickets (
+  code text not null references sc_plants(code) on delete cascade,
+  key text not null check (key ~ '^[A-Za-z0-9:_-]{1,40}$'),
+  at timestamptz not null,
+  source text not null check (source in ('station', 'leader')),
+  screen text, message text not null,
+  status text not null default 'new' check (status in ('new', 'working', 'closed')),
+  assignee text, notes jsonb not null default '[]'::jsonb,
+  updated_at timestamptz not null default now(),
+  primary key (code, key));
+create table if not exists sc_usage (
+  code text not null references sc_plants(code) on delete cascade,
+  day date not null, animals integer not null default 0 check (animals between 0 and 100000),
+  kg numeric not null default 0 check (kg >= 0 and kg < 100000000),
+  updated_at timestamptz not null default now(),
+  primary key (code, day));
+create table if not exists sc_billing (
+  code text primary key references sc_plants(code) on delete cascade,
+  mode text not null default 'kg' check (mode in ('kg', 'animal', 'monthly')),
+  rate numeric not null default 0 check (rate >= 0 and rate < 1000000),
+  monthly_min numeric not null default 0 check (monthly_min >= 0 and monthly_min < 100000000),
+  currency text not null default '₪' check (length(currency) between 1 and 5),
+  updated_at timestamptz not null default now(), updated_by text);
+create table if not exists sc_paid (
+  code text not null references sc_plants(code) on delete cascade,
+  month text not null check (month ~ '^[0-9]{4}-[0-9]{2}$'),
+  paid boolean not null default false, at timestamptz not null default now(), by text,
+  primary key (code, month));
+do $$ declare t text; begin
+  foreach t in array array['sc_tickets','sc_usage','sc_billing','sc_paid'] loop
+    execute format('alter table %I enable row level security', t);
+    execute format('revoke all on %I from public, anon, authenticated', t);
+  end loop;
+end $$;
+
+-- the staff member's role (null = not logged in)
+create or replace function _sc_role(p_token text) returns text
+language sql stable security definer set search_path = public, extensions, pg_temp as $$
+  select s.role from sc_sessions x join sc_staff s on s.id = x.staff_id
+   where p_token is not null and x.token = p_token and x.expires_at > now() and s.active limit 1;
+$$;
+revoke execute on function _sc_role(text) from public, anon, authenticated;
+-- may this role do this? plants (see plants / tickets) · plants_write (commands, updates, alerts, tickets) ·
+-- plant_add · billing (see) · billing_write · staff
+create or replace function _sc_can(p_token text, p_what text) returns boolean
+language sql stable security definer set search_path = public, extensions, pg_temp as $$
+  select coalesce(case p_what
+    when 'plants'        then _sc_role(p_token) in ('admin', 'support', 'viewer')
+    when 'plants_write'  then _sc_role(p_token) in ('admin', 'support')
+    when 'plant_add'     then _sc_role(p_token) = 'admin'
+    when 'billing'       then _sc_role(p_token) in ('admin', 'finance', 'viewer')
+    when 'billing_write' then _sc_role(p_token) in ('admin', 'finance')
+    when 'staff'         then _sc_role(p_token) = 'admin'
+  end, false);
+$$;
+revoke execute on function _sc_can(text, text) from public, anon, authenticated;
+
+-- the plant's report also carries its problem reports and its daily totals; the answer carries the
+-- status of its tickets (what the team leader sees)
+create or replace function _sc_take_report_extras(p_code text, p_report jsonb) returns jsonb
+language plpgsql security definer set search_path = public, extensions, pg_temp as $$
+declare x jsonb;
+begin
+  for x in select e from jsonb_array_elements(case when jsonb_typeof(p_report -> 'issues') = 'array' then p_report -> 'issues' else '[]'::jsonb end) e limit 300 loop
+    continue when coalesce(x ->> 'key', '') !~ '^[A-Za-z0-9:_-]{1,40}$' or coalesce(trim(x ->> 'message'), '') = '';
+    insert into sc_tickets (code, key, at, source, screen, message)
+    values (p_code, x ->> 'key', coalesce((x ->> 'at')::timestamptz, now()),
+            case when x ->> 'source' = 'leader' then 'leader' else 'station' end, left(x ->> 'screen', 40), left(x ->> 'message', 1000))
+    on conflict (code, key) do nothing;
+  end loop;
+  for x in select e from jsonb_array_elements(case when jsonb_typeof(p_report -> 'usage') = 'array' then p_report -> 'usage' else '[]'::jsonb end) e limit 60 loop
+    continue when coalesce(x ->> 'day', '') !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$';
+    insert into sc_usage (code, day, animals, kg)
+    values (p_code, (x ->> 'day')::date, least(greatest(coalesce((x ->> 'animals')::int, 0), 0), 100000), least(greatest(coalesce((x ->> 'kg')::numeric, 0), 0), 99999999))
+    on conflict (code, day) do update set animals = excluded.animals, kg = excluded.kg, updated_at = now();
+  end loop;
+  return coalesce((select jsonb_agg(jsonb_build_object('key', t.key, 'status', t.status, 'at', t.updated_at, 'reply', left(t.notes -> -1 ->> 'text', 300)) order by t.at desc)
+                     from (select * from sc_tickets where code = p_code and at > now() - interval '30 days' order by at desc limit 100) t), '[]'::jsonb);
+end $$;
+revoke execute on function _sc_take_report_extras(text, jsonb) from public, anon, authenticated;
+
+create or replace function sc_report(p_code text, p_secret text, p_report jsonb) returns jsonb
+language plpgsql security definer set search_path = public, extensions, pg_temp as $$
+declare p sc_plants; old sc_status; lv record; v_cmds jsonb; r sc_release; c text; v_tickets jsonb;
+begin
+  select * into p from sc_plants where code = p_code;
+  if p.code is null or p_secret is null or crypt(p_secret, p.secret_hash) <> p.secret_hash then
+    return jsonb_build_object('ok', false, 'error', 'unauthorized');
+  end if;
+  if jsonb_typeof(p_report) <> 'object' or length(p_report::text) > 400000 then
+    return jsonb_build_object('ok', false, 'error', 'bad_report');
+  end if;
+  select * into old from sc_status where code = p_code for update;
+  select * into lv from _sc_level(p_report);
+  insert into sc_status (code, level, problems, report, app_version, working, reported_at)
+  values (p_code, lv.level, lv.problems, p_report - 'issues' - 'usage', left(p_report ->> 'appVersion', 20), (p_report ->> 'working')::boolean, now())
+  on conflict (code) do update set level = excluded.level, problems = excluded.problems, report = excluded.report,
+    app_version = excluded.app_version, working = excluded.working, reported_at = now();
+  for c in select jsonb_array_elements_text(lv.problems) loop
+    if old.code is null or not (coalesce(old.problems, '[]'::jsonb) ? c) then
+      insert into sc_alerts (code, level, text)
+      values (p_code, case when c in ('chain_broken', 'standby_down', 'ups_on_battery', 'ups_low_battery', 'nightly_check_problems',
+                                      'nightly_check_missing', 'backup_stale') then 'bad' else 'warn' end, c);
+    end if;
+  end loop;
+  update sc_alerts set resolved_at = now() where code = p_code and resolved_at is null and not (lv.problems ? text) and text <> 'no_report';
+  update sc_alerts set resolved_at = now() where code = p_code and resolved_at is null and text = 'no_report';
+  v_tickets := _sc_take_report_extras(p_code, p_report);
+  select coalesce(jsonb_agg(jsonb_build_object('id', id, 'cmd', cmd) order by id), '[]'::jsonb) into v_cmds
+    from sc_commands where code = p_code and delivered_at is null;
+  update sc_commands set delivered_at = now() where code = p_code and delivered_at is null;
+  select * into r from sc_release where id = 1;
+  return jsonb_build_object('ok', true, 'level', lv.level, 'commands', v_cmds, 'tickets', v_tickets,
+    'release', case when r.version is not null then jsonb_build_object('version', r.version, 'appUrl', r.app_url, 'appSha256', r.app_sha256,
+                                                                      'sqlUrl', r.sql_url, 'sqlSha256', r.sql_sha256) end);
+end $$;
+revoke execute on function sc_report(text, text, jsonb) from public;
+grant execute on function sc_report(text, text, jsonb) to anon, authenticated;
+
+-- the login says the role (the page shows only what the role may see)
+create or replace function sc_login(p_code text) returns jsonb
+language plpgsql security definer set search_path = public, extensions, pg_temp as $$
+declare s sc_staff; v_tok text; v_ip text := coalesce(nullif(current_setting('request.headers', true), '')::json ->> 'x-forwarded-for', 'local');
+begin
+  delete from sc_login_attempts where at < now() - interval '1 day';
+  if (select count(*) from sc_login_attempts where not ok and at > now() - interval '15 minutes') >= 10 then
+    return jsonb_build_object('ok', false, 'error', 'rate_limited');
+  end if;
+  select * into s from sc_staff where active and p_code is not null and crypt(p_code, code_hash) = code_hash limit 1;
+  if s.id is null then
+    insert into sc_login_attempts (ip, ok) values (v_ip, false); perform pg_sleep(0.5);
+    return jsonb_build_object('ok', false, 'error', 'code_invalid');
+  end if;
+  insert into sc_sessions (staff_id) values (s.id) returning token into v_tok;
+  insert into sc_audit (who, action) values (s.name, 'login');
+  return jsonb_build_object('ok', true, 'token', v_tok, 'name', s.name, 'role', s.role);
+end $$;
+revoke execute on function sc_login(text) from public;
+grant execute on function sc_login(text) to anon, authenticated;
+
+create or replace function sc_whoami(p_token text) returns jsonb
+language sql stable security definer set search_path = public, extensions, pg_temp as $$
+  select case when _sc_staff(p_token) is null then jsonb_build_object('ok', false, 'error', 'unauthorized')
+              else jsonb_build_object('ok', true, 'name', _sc_staff(p_token), 'role', _sc_role(p_token)) end;
+$$;
+revoke execute on function sc_whoami(text) from public;
+grant execute on function sc_whoami(text) to anon, authenticated;
+
+-- the existing screens, now by role
+create or replace function sc_overview(p_token text) returns jsonb
+language plpgsql security definer set search_path = public, extensions, pg_temp as $$
+declare r sc_release;
+begin
+  if not _sc_can(p_token, 'plants') then return jsonb_build_object('ok', false, 'error', 'unauthorized'); end if;
+  select * into r from sc_release where id = 1;
+  return jsonb_build_object('ok', true, 'release', r.version, 'plants', coalesce((
+    select jsonb_agg(jsonb_build_object('code', p.code, 'name', p.name,
+             'level', case when s.reported_at is null or s.reported_at < now() - interval '15 minutes' then 'bad' else s.level end,
+             'problems', case when s.reported_at is null or s.reported_at < now() - interval '15 minutes' then '["no_report"]'::jsonb else s.problems end,
+             'appVersion', s.app_version, 'working', s.working, 'reportedAt', s.reported_at,
+             'openAlerts', (select count(*) from sc_alerts a where a.code = p.code and a.resolved_at is null),
+             'openTickets', (select count(*) from sc_tickets t where t.code = p.code and t.status <> 'closed'))
+           order by case when s.reported_at is null or s.reported_at < now() - interval '15 minutes' or s.level = 'bad' then 0
+                         when s.level = 'warn' then 1 else 2 end, p.code)
+      from sc_plants p left join sc_status s on s.code = p.code), '[]'::jsonb));
+end $$;
+revoke execute on function sc_overview(text) from public;
+grant execute on function sc_overview(text) to anon, authenticated;
+
+-- one month's bill of one plant
+create or replace function _sc_bill(p_code text, p_month text) returns jsonb
+language plpgsql stable security definer set search_path = public, extensions, pg_temp as $$
+declare b sc_billing; v_an int; v_kg numeric; v_amt numeric; d0 date := (p_month || '-01')::date;
+begin
+  select * into b from sc_billing where code = p_code;
+  select coalesce(sum(animals), 0), coalesce(sum(kg), 0) into v_an, v_kg from sc_usage
+   where code = p_code and day >= d0 and day < (d0 + interval '1 month')::date;
+  v_amt := case coalesce(b.mode, 'kg') when 'kg' then v_kg * coalesce(b.rate, 0) when 'animal' then v_an * coalesce(b.rate, 0) else coalesce(b.rate, 0) end;
+  v_amt := round(greatest(v_amt, coalesce(b.monthly_min, 0)), 2);
+  return jsonb_build_object('code', p_code, 'month', p_month, 'animals', v_an, 'kg', round(v_kg, 1),
+    'mode', coalesce(b.mode, 'kg'), 'rate', coalesce(b.rate, 0), 'monthlyMin', coalesce(b.monthly_min, 0), 'currency', coalesce(b.currency, '₪'),
+    'amount', v_amt, 'paid', coalesce((select paid from sc_paid where code = p_code and month = p_month), false));
+end $$;
+revoke execute on function _sc_bill(text, text) from public, anon, authenticated;
+
+create or replace function sc_plant(p_token text, p_code text) returns jsonb
+language plpgsql security definer set search_path = public, extensions, pg_temp as $$
+declare p sc_plants; s sc_status;
+begin
+  if not _sc_can(p_token, 'plants') then return jsonb_build_object('ok', false, 'error', 'unauthorized'); end if;
+  select * into p from sc_plants where code = p_code;
+  if p.code is null then return jsonb_build_object('ok', false, 'error', 'bad_id'); end if;
+  select * into s from sc_status where code = p_code;
+  return jsonb_build_object('ok', true, 'code', p.code, 'name', p.name, 'level', s.level, 'problems', s.problems,
+    'report', s.report, 'reportedAt', s.reported_at,
+    'alerts', coalesce((select jsonb_agg(to_jsonb(a) - 'sent' order by a.id desc) from (select * from sc_alerts where code = p_code order by id desc limit 30) a), '[]'::jsonb),
+    'commands', coalesce((select jsonb_agg(to_jsonb(c) order by c.id desc) from (select * from sc_commands where code = p_code order by id desc limit 10) c), '[]'::jsonb),
+    'openTickets', (select count(*) from sc_tickets t where t.code = p_code and t.status <> 'closed'),
+    'bill', case when _sc_can(p_token, 'billing') then _sc_bill(p_code, to_char(now(), 'YYYY-MM')) end);
+end $$;
+revoke execute on function sc_plant(text, text) from public;
+grant execute on function sc_plant(text, text) to anon, authenticated;
+
+create or replace function sc_plant_add(p_token text, p_code text, p_name text) returns jsonb
+language plpgsql security definer set search_path = public, extensions, pg_temp as $$
+declare w text := _sc_staff(p_token); v_secret text := encode(gen_random_bytes(18), 'hex');
+begin
+  if not _sc_can(p_token, 'plant_add') then return jsonb_build_object('ok', false, 'error', 'unauthorized'); end if;
+  if p_code is null or p_code !~ '^[0-9]{3,8}$' or coalesce(trim(p_name), '') = '' then return jsonb_build_object('ok', false, 'error', 'bad_value'); end if;
+  if exists (select 1 from sc_plants where code = p_code) then return jsonb_build_object('ok', false, 'error', 'code_taken'); end if;
+  insert into sc_plants (code, name, secret_hash) values (p_code, left(trim(p_name), 60), crypt(v_secret, gen_salt('bf', 8)));
+  insert into sc_audit (who, action, detail) values (w, 'plant_add', jsonb_build_object('code', p_code, 'name', p_name));
+  return jsonb_build_object('ok', true, 'code', p_code, 'secret', v_secret);
+end $$;
+revoke execute on function sc_plant_add(text, text, text) from public;
+grant execute on function sc_plant_add(text, text, text) to anon, authenticated;
+
+create or replace function sc_notify_get(p_token text) returns jsonb
+language plpgsql security definer set search_path = public, extensions, pg_temp as $$
+begin
+  if not _sc_can(p_token, 'plants') then return jsonb_build_object('ok', false, 'error', 'unauthorized'); end if;
+  return jsonb_build_object('ok', true, 'settings', (select settings from sc_notify where id = 1));
+end $$;
+revoke execute on function sc_notify_get(text) from public;
+grant execute on function sc_notify_get(text) to anon, authenticated;
+
+-- the writes of the support center: admin / support only (finance and viewer get 'unauthorized')
+
+-- tickets
+create or replace function sc_tickets(p_token text, p_status text default null) returns jsonb
+language plpgsql security definer set search_path = public, extensions, pg_temp as $$
+begin
+  if not _sc_can(p_token, 'plants') then return jsonb_build_object('ok', false, 'error', 'unauthorized'); end if;
+  return jsonb_build_object('ok', true, 'tickets', coalesce((select jsonb_agg(jsonb_build_object('code', t.code, 'plant', p.name, 'key', t.key, 'at', t.at,
+           'source', t.source, 'screen', t.screen, 'message', t.message, 'status', t.status, 'assignee', t.assignee, 'notes', t.notes, 'updatedAt', t.updated_at)
+           order by case t.status when 'new' then 0 when 'working' then 1 else 2 end, t.at desc)
+      from (select * from sc_tickets where (p_status is null or status = p_status) and (status <> 'closed' or updated_at > now() - interval '30 days')
+             order by at desc limit 500) t join sc_plants p on p.code = t.code), '[]'::jsonb));
+end $$;
+revoke execute on function sc_tickets(text, text) from public;
+grant execute on function sc_tickets(text, text) to anon, authenticated;
+
+create or replace function sc_ticket_set(p_token text, p_code text, p_key text, p_status text default null, p_note text default null, p_assignee text default null) returns jsonb
+language plpgsql security definer set search_path = public, extensions, pg_temp as $$
+declare w text := _sc_staff(p_token); t sc_tickets;
+begin
+  if not _sc_can(p_token, 'plants_write') then return jsonb_build_object('ok', false, 'error', 'unauthorized'); end if;
+  if p_status is not null and p_status not in ('new', 'working', 'closed') then return jsonb_build_object('ok', false, 'error', 'bad_value'); end if;
+  select * into t from sc_tickets where code = p_code and key = p_key for update;
+  if t.code is null then return jsonb_build_object('ok', false, 'error', 'bad_id'); end if;
+  update sc_tickets set status = coalesce(p_status, status),
+         assignee = coalesce(nullif(left(trim(p_assignee), 60), ''), case when p_status = 'working' and assignee is null then w else assignee end),
+         notes = case when coalesce(trim(p_note), '') = '' then notes else notes || jsonb_build_array(jsonb_build_object('at', now(), 'by', w, 'text', left(trim(p_note), 1000))) end,
+         updated_at = now()
+   where code = p_code and key = p_key;
+  insert into sc_audit (who, action, detail) values (w, 'ticket', jsonb_build_object('code', p_code, 'key', p_key, 'status', p_status, 'note', left(p_note, 200)));
+  return jsonb_build_object('ok', true);
+end $$;
+revoke execute on function sc_ticket_set(text, text, text, text, text, text) from public;
+grant execute on function sc_ticket_set(text, text, text, text, text, text) to anon, authenticated;
+
+-- billing
+create or replace function sc_billing(p_token text, p_month text default null) returns jsonb
+language plpgsql security definer set search_path = public, extensions, pg_temp as $$
+declare v_m text := coalesce(p_month, to_char(now(), 'YYYY-MM'));
+begin
+  if not _sc_can(p_token, 'billing') then return jsonb_build_object('ok', false, 'error', 'unauthorized'); end if;
+  if v_m !~ '^[0-9]{4}-[0-9]{2}$' then return jsonb_build_object('ok', false, 'error', 'bad_value'); end if;
+  return jsonb_build_object('ok', true, 'month', v_m, 'rows', coalesce((select jsonb_agg(_sc_bill(p.code, v_m) || jsonb_build_object('name', p.name) order by p.code) from sc_plants p), '[]'::jsonb));
+end $$;
+revoke execute on function sc_billing(text, text) from public;
+grant execute on function sc_billing(text, text) to anon, authenticated;
+
+create or replace function sc_billing_set(p_token text, p_code text, p_mode text, p_rate numeric, p_monthly_min numeric default 0, p_currency text default '₪') returns jsonb
+language plpgsql security definer set search_path = public, extensions, pg_temp as $$
+declare w text := _sc_staff(p_token);
+begin
+  if not _sc_can(p_token, 'billing_write') then return jsonb_build_object('ok', false, 'error', 'unauthorized'); end if;
+  if p_mode not in ('kg', 'animal', 'monthly') or p_rate is null or p_rate < 0 or p_rate >= 1000000
+     or coalesce(p_monthly_min, 0) < 0 or coalesce(p_monthly_min, 0) >= 100000000 or coalesce(length(p_currency), 0) not between 1 and 5 then
+    return jsonb_build_object('ok', false, 'error', 'bad_value');
+  end if;
+  if not exists (select 1 from sc_plants where code = p_code) then return jsonb_build_object('ok', false, 'error', 'bad_id'); end if;
+  insert into sc_billing (code, mode, rate, monthly_min, currency, updated_at, updated_by)
+  values (p_code, p_mode, p_rate, coalesce(p_monthly_min, 0), p_currency, now(), w)
+  on conflict (code) do update set mode = excluded.mode, rate = excluded.rate, monthly_min = excluded.monthly_min,
+                                   currency = excluded.currency, updated_at = now(), updated_by = w;
+  insert into sc_audit (who, action, detail) values (w, 'billing_set', jsonb_build_object('code', p_code, 'mode', p_mode, 'rate', p_rate, 'min', p_monthly_min, 'currency', p_currency));
+  return jsonb_build_object('ok', true);
+end $$;
+revoke execute on function sc_billing_set(text, text, text, numeric, numeric, text) from public;
+grant execute on function sc_billing_set(text, text, text, numeric, numeric, text) to anon, authenticated;
+
+create or replace function sc_paid_set(p_token text, p_code text, p_month text, p_paid boolean) returns jsonb
+language plpgsql security definer set search_path = public, extensions, pg_temp as $$
+declare w text := _sc_staff(p_token);
+begin
+  if not _sc_can(p_token, 'billing_write') then return jsonb_build_object('ok', false, 'error', 'unauthorized'); end if;
+  if p_month !~ '^[0-9]{4}-[0-9]{2}$' or p_paid is null then return jsonb_build_object('ok', false, 'error', 'bad_value'); end if;
+  if not exists (select 1 from sc_plants where code = p_code) then return jsonb_build_object('ok', false, 'error', 'bad_id'); end if;
+  insert into sc_paid (code, month, paid, at, by) values (p_code, p_month, p_paid, now(), w)
+  on conflict (code, month) do update set paid = excluded.paid, at = now(), by = w;
+  insert into sc_audit (who, action, detail) values (w, 'paid_set', jsonb_build_object('code', p_code, 'month', p_month, 'paid', p_paid));
+  return jsonb_build_object('ok', true);
+end $$;
+revoke execute on function sc_paid_set(text, text, text, boolean) from public;
+grant execute on function sc_paid_set(text, text, text, boolean) to anon, authenticated;
+
+-- staff (admin only)
+create or replace function sc_staff_list(p_token text) returns jsonb
+language plpgsql security definer set search_path = public, extensions, pg_temp as $$
+begin
+  if not _sc_can(p_token, 'staff') then return jsonb_build_object('ok', false, 'error', 'unauthorized'); end if;
+  return jsonb_build_object('ok', true, 'staff', coalesce((select jsonb_agg(jsonb_build_object('id', id, 'name', name, 'role', role, 'active', active, 'createdAt', created_at) order by created_at) from sc_staff), '[]'::jsonb),
+    'audit', coalesce((select jsonb_agg(to_jsonb(a) order by a.id desc) from (select * from sc_audit order by id desc limit 100) a), '[]'::jsonb));
+end $$;
+revoke execute on function sc_staff_list(text) from public;
+grant execute on function sc_staff_list(text) to anon, authenticated;
+
+create or replace function sc_staff_add(p_token text, p_name text, p_code text, p_role text) returns jsonb
+language plpgsql security definer set search_path = public, extensions, pg_temp as $$
+declare w text := _sc_staff(p_token); v_id uuid;
+begin
+  if not _sc_can(p_token, 'staff') then return jsonb_build_object('ok', false, 'error', 'unauthorized'); end if;
+  if coalesce(trim(p_name), '') = '' or length(p_name) > 60 or p_role not in ('admin', 'support', 'finance', 'viewer') then
+    return jsonb_build_object('ok', false, 'error', 'bad_value');
+  end if;
+  if p_code is null or length(p_code) < 10 then return jsonb_build_object('ok', false, 'error', 'code_too_short'); end if;
+  if exists (select 1 from sc_staff where active and crypt(p_code, code_hash) = code_hash) then return jsonb_build_object('ok', false, 'error', 'code_taken'); end if;
+  insert into sc_staff (name, code_hash, role) values (trim(p_name), crypt(p_code, gen_salt('bf', 8)), p_role) returning id into v_id;
+  insert into sc_audit (who, action, detail) values (w, 'staff_add', jsonb_build_object('name', trim(p_name), 'role', p_role));
+  return jsonb_build_object('ok', true, 'id', v_id);
+end $$;
+revoke execute on function sc_staff_add(text, text, text, text) from public;
+grant execute on function sc_staff_add(text, text, text, text) to anon, authenticated;
+
+create or replace function sc_staff_set(p_token text, p_id uuid, p_role text default null, p_active boolean default null) returns jsonb
+language plpgsql security definer set search_path = public, extensions, pg_temp as $$
+declare w text := _sc_staff(p_token); s sc_staff;
+begin
+  if not _sc_can(p_token, 'staff') then return jsonb_build_object('ok', false, 'error', 'unauthorized'); end if;
+  if p_role is not null and p_role not in ('admin', 'support', 'finance', 'viewer') then return jsonb_build_object('ok', false, 'error', 'bad_value'); end if;
+  select * into s from sc_staff where id = p_id for update;
+  if s.id is null then return jsonb_build_object('ok', false, 'error', 'bad_id'); end if;
+  -- the last active admin stays an active admin (nobody locks the center out)
+  if s.role = 'admin' and s.active and (coalesce(p_role, 'admin') <> 'admin' or p_active is false)
+     and (select count(*) from sc_staff where role = 'admin' and active) <= 1 then
+    return jsonb_build_object('ok', false, 'error', 'last_admin');
+  end if;
+  update sc_staff set role = coalesce(p_role, role), active = coalesce(p_active, active) where id = p_id;
+  if p_active is false then delete from sc_sessions where staff_id = p_id; end if;
+  insert into sc_audit (who, action, detail) values (w, 'staff_set', jsonb_build_object('name', s.name, 'role', p_role, 'active', p_active));
+  return jsonb_build_object('ok', true);
+end $$;
+revoke execute on function sc_staff_set(text, uuid, text, boolean) from public;
+grant execute on function sc_staff_set(text, uuid, text, boolean) to anon, authenticated;
+
 -- the first staff member (run once by the manufacturer in the SQL editor):
---   insert into sc_staff (name, code_hash) values ('Support 1', crypt('<a long code>', gen_salt('bf', 8)));
+--   insert into sc_staff (name, code_hash, role) values ('Admin 1', crypt('<a long code>', gen_salt('bf', 8)), 'admin');
 notify pgrst, 'reload schema';

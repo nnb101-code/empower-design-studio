@@ -18,6 +18,34 @@ This pack is the CURRENT state. Review these files only.
 | `test-mode-on.sql` / `test-mode-off.sql` | The owner's SQL-only test switch. |
 | `plant-server/` | Plant resilience kit (bash, runs as root on the plant servers, NOT in the database): standby server, floating address, UPS, nightly checked backup. Guide: `PLANT-RESILIENCE-HE.md`. |
 
+## Added in v10.38 — the manufacturer center (central project + plant 02 §39 + app)
+- **Central (`support-center/central-setup.sql`):** staff roles `admin` / `support` / `finance` / `viewer` (`_sc_can`); every write checks the role; the last admin cannot be demoted / disabled. New tables `sc_tickets`, `sc_usage`, `sc_billing`, `sc_paid` (RLS on, no grants). `sc_report` takes `issues` (→ tickets, once per key) and `usage` (daily animals / kg, upsert) out of the report and returns each ticket's status + last reply. Billing per plant: by kg, by animal, or a fixed monthly sum, with a monthly minimum. Self-test: 21/21.
+- **Plant (02 §39):** `support_issues` + `support_issue_add` (team leader / owner, max 30 an hour), `support_tickets` (the center's answer, kept by `report-to-center.sh` in `plant_state.supportTickets`), `maker_changes` (admin_audit rows of role `manufacturer`), `_plant_usage`, `_plant_issues`; `_plant_report` now also sends them. Still no rulings, no animal numbers, no codes.
+- **App:** the team leader's "report to support" goes to the plant server (not the licence server); a station's problem report travels as its `problem_report` event; the issues tab lists the requests with status / reply, and "what the manufacturer changed".
+- **Page (`support-center/index.html`):** tabs by role — plants, tickets, billing (edit + CSV), staff (+ audit), updates & settings.
+
+## Round 22 — v10.38 after the owner's tests (server 02 §37–§38 + app)
+
+**Owner's rules (new):**
+- The day ALWAYS resets: the daily rollover runs at its hour (no waiting for work or unfinished animals); the team leader's manual reset needs no reason (the unfinished numbers are audited). A day kept by an older version (animals_carry) is closed into its archive row at every reset and once at install (`_proc_close_kept_days`).
+- The plant's system (sticker counts, screens, where the sorting is) is set at the start and does not change mid-day. What may change mid-day: taking a part or not. Closing rule: what was already done goes on to the end (legs that got stickers are still sorted when legs are off; pieces printed before a part is closed still go into the nikur), nothing new is taken.
+- Every piece taken from a kosher animal gets a kosher sticker after the ruling — also one that had a number sticker before (liver at the head). `_products_error`: a part with `nikur` ≠ none needs `m ≥ 1` and `post` in parts / stamps / legs. The old tail rule ("head OR stamps") is gone.
+- The nikur is usually the next day (after the cooler). A piece sticker carries its board day (`|B:<board epoch>`); `nikur_scan(p_epoch)` = the sticker's board. `animal_pieces` records what was printed for each animal (trigger `zz_animal_pieces_track` when stamped / parts_scanned / legs_sorted turn true, with the list of that moment). `_nikur_day_rows` reads the animal of that day (today, a kept board, or the archive of the last 45 days). `nikur_hold` puts the nikur's "?" / USDA on any day; the nikur's holds stay open over the daily reset; other holds closed by a reset ('board_closed') still hold the meat. `nikur_day_close` (team leader, reason, audited). `nikur_board` lists the waiting days.
+- USDA at the nikur is put only by the nikur itself (same place).
+
+**From the round-21 report:** A2 (`_legs_slot_error`: with two screens the legs slot never writes head stickers, also with legs off; sorting with legs off allowed), A3 (`nikur_scan` locks today's animal row `for share`), early answers of `nikur_scan` kept with `_cmd_put`.
+
+**After the round-22 report:** the daily reset keeps in the archive also a number with an open hold (e.g. the shochet's "?" before slaughter); the team-leader check refuses when the server library is missing (code window, try again). (The round-22 report was made on an outdated schema snapshot — the pack script dumped an old database; fixed.)
+
+**App:** team-leader screen opens only after `manager_session_check` says ok (an expired login goes to the first page + code window); fixed "reset the day now" button; open earlier day shown on the first page; esophagus shows the shochet's nevela/shot; reconnect at once when the tab comes back; one name per screen + "Welcome, <worker>"; manufacturer banner on every screen while repair access is open; technical tools (system check, AI, error log) only for the manufacturer, station problem reports also go to the manufacturer's support (`report_support_issue`); head / legs as two entries before inner, "head" naming when legs are not taken; settings categories coloured; summaries: pie of your choice with weighted joining, kilo / pound.
+
+**Self-test:** 162/162 (2 new for the manufacturer center: problem reports + daily totals in the plant report; ticket status back + "what the maker changed"). Before: 160 (3 new: closing a part mid-day; the nikur by the sticker's day + "?" over the reset + the waiting board; closing a nikur day). 3 old tests changed to the owner's new rules (always reset, manual reset without reason, legs-off sorting).
+
+## Changed in v10.38 (app only, labels) — breeds, cattle only
+
+- "Cattle types" is now "Breeds" everywhere (settings list, summaries, search, focus filter), in Hebrew (זני בקר / זן בהמה), English and Spanish (Razas).
+- The plant works with cattle only: the old cattle / sheep / mixed choice (no buttons left on screen) was removed from the code, with its translations, and the "animal type: cattle" line under the daily target is gone. No server change.
+
 ## Added in v10.38 (server 02 + app) — stage 2 of the cuts list, and the two nikur screens
 
 **The owner's rules:** a kosher sticker, a sorting, a stamp — always after the ruling. Every cut is on / off, in the area the plant chose. Every kosher piece goes into the nikur (every kashrut status, chalak and not chalak); never a treif, nevela, held or unruled one.

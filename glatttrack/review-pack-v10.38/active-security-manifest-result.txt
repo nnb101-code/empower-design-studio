@@ -1,9 +1,9 @@
 == 1. plant state =======================================================
     key     |     value     |          updated_at           
 ------------+---------------+-------------------------------
- boardEpoch | 1792100887138 | 2026-10-15 21:48:07.137711+00
- schemaStep | 46            | 2026-10-15 21:48:08.448718+00
- testMode   | off           | 2026-10-15 21:48:07.800728+00
+ boardEpoch | 1792105149584 | 2026-10-15 22:59:09.583755+00
+ schemaStep | 46            | 2026-10-15 22:59:10.96668+00
+ testMode   | off           | 2026-10-15 22:59:10.30818+00
 (3 rows)
 
 == 2. functions (public, gt_rls) ========================================
@@ -42,6 +42,7 @@
  public | leader_recovery_status(text)                                                       | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
  public | lung_drawing_get(integer)                                                          | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
  public | lung_drawing_set(integer,bigint,text)                                              | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
+ public | maker_changes(text)                                                                | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
  public | manager_add(text,text,text)                                                        | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
  public | manager_add_owner(text,text,text)                                                  | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
  public | manager_deactivate(text,uuid)                                                      | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
@@ -76,6 +77,8 @@
  public | support_access_set(text,integer,text)                                              | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
  public | support_diagnostics(text)                                                          | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
  public | support_force_reload(text,text)                                                    | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
+ public | support_issue_add(text,text)                                                       | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
+ public | support_tickets(text)                                                              | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
  public | system_health(text)                                                                | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
  public | verify_event_chain()                                                               | function | t                | public, extensions, pg_temp | postgres | t    | t             | t           | f
  public | worker_code_set(text,text,text,text)                                               | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
@@ -182,8 +185,10 @@
  public | _outer_status_known(text)                                                          | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _parts_expected()                                                                  | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _parts_print_block(bigint,integer,boolean,boolean,boolean,boolean,integer,integer) | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _plant_issues()                                                                    | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _plant_report()                                                                    | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _plant_state_test_mode_trg()                                                       | trigger  | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _plant_usage()                                                                     | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _printed_as_key(animals_pilot)                                                     | function | f                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _proc_board_json(bigint)                                                           | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _proc_board_lock(bigint)                                                           | function | f                | public, extensions, pg_temp | postgres | f    | f             | f           | f
@@ -247,7 +252,7 @@
  public | leader_account_remove(text)                                                        | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | leader_device_recovery(text)                                                       | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | manufacturer_set_code(text,text)                                                   | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
-(238 rows)
+(243 rows)
 
 == 2b. API surface: functions the app roles can run ======================
                        callable_by_app                       | security_definer 
@@ -285,6 +290,7 @@
  leader_recovery_status(text)                                | t
  lung_drawing_get(integer)                                   | t
  lung_drawing_set(integer,bigint,text)                       | t
+ maker_changes(text)                                         | t
  manager_add(text,text,text)                                 | t
  manager_add_owner(text,text,text)                           | t
  manager_deactivate(text,uuid)                               | t
@@ -319,13 +325,15 @@
  support_access_set(text,integer,text)                       | t
  support_diagnostics(text)                                   | t
  support_force_reload(text,text)                             | t
+ support_issue_add(text,text)                                | t
+ support_tickets(text)                                       | t
  system_health(text)                                         | t
  verify_event_chain()                                        | t
  worker_code_set(text,text,text,text)                        | t
  worker_login(text,text,text)                                | t
  worker_logout(text)                                         | t
  worker_session_check()                                      | t
-(73 rows)
+(76 rows)
 
 == 3. triggers on the key tables ========================================
         table        |               trigger               |               function                |                 fires                 |  state  | security_definer 
@@ -402,10 +410,11 @@
  revoked_device_writes   | t      | f          |        0
  settings_pilot          | t      | f          |        1
  source_farms            | t      | f          |        2
+ support_issues          | t      | f          |        0
  system_flags            | t      | f          |        0
  worker_codes            | t      | f          |        0
  worker_sessions         | t      | f          |        0
-(41 rows)
+(42 rows)
 
           table          |            policy            |  cmd   | permissive |        roles         |                                                                    using_expr                                                                     |                          check_expr                           
 -------------------------+------------------------------+--------+------------+----------------------+---------------------------------------------------------------------------------------------------------------------------------------------------+---------------------------------------------------------------
@@ -466,7 +475,8 @@
  login_attempts_id_seq       | f          | f
  piece_scans_id_seq          | f          | f
  rate_events_id_seq          | f          | f
-(9 rows)
+ support_issues_id_seq       | f          | f
+(10 rows)
 
 == 6. schema rights =====================================================
    schema   | anon_usage | anon_create | authenticated_create 

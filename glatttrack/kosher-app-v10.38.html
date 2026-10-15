@@ -1909,9 +1909,13 @@ const LUNG_B64="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICA
       <div id="mgrProblemsList" style="font-size:11px;color:var(--muted);max-height:100px;overflow-y:auto;margin-bottom:8px;" data-empty="mgrProblemsNone">אין בעיות פתוחות</div>
       <button class="owner-hide maker-hide" onclick="mgrReportSupportIssue()" style="width:100%;padding:10px;border-radius:8px;background:rgba(212,168,67,.15);border:1px solid var(--gold);color:var(--gold);font-weight:700;font-size:14px;cursor:pointer;margin-bottom:6px;">📨 דווח על תקלה לתמיכה הטכנית של היצרן</button>
       <div style="font-size:11px;color:var(--muted);line-height:1.5;">דיווחים מהמסכים נשלחים גם לתמיכה הטכנית של היצרן. היצרן מטפל בתקלות.</div>
+      <div id="gtSupTickets" style="margin-top:8px;"></div>
       <button class="owner-hide gt-tech" onclick="mgrAiAnalyzeProblems()" data-t="mgrAiBtn"
         style="width:100%;padding:9px;border-radius:8px;background:rgba(155,111,255,.15);border:1px solid var(--purple);color:var(--purple);font-weight:700;font-size:13px;cursor:pointer;">AI — נתח ותקן בעיות</button>
     </div>
+
+    <div class="mgr-sec owner-hide maker-hide">🔧 מה היצרן שינה</div>
+    <div class="mgr-card owner-hide maker-hide"><div id="gtMakerChanges" style="font-size:12px;color:var(--muted);line-height:1.7;max-height:220px;overflow-y:auto;">—</div></div>
 
     <div class="mgr-sec" style="display:flex;align-items:center;justify-content:space-between;">
       <span>הדפסות חוזרות</span>
@@ -6610,8 +6614,8 @@ function _reportProblemSend(screenName){ // called after the confirm window (rep
     });
     window._gtProblemNote='';
     KS.updateSettings({problemReports:probs.slice(-200)});
-    // v10.38 (owner): every problem goes to the manufacturer's technical support (customer service) too
-    try{ _gtSendToMaker('['+String(screenName||'')+'] '+String(probs[probs.length-1].summary||''), 'warning'); }catch(e){}
+    // v10.38 (owner): every problem goes to the manufacturer's technical support too — the event below travels
+    // in the plant server's report to the support center (plant-server/report-to-center.sh) and becomes a ticket there
     // v10.37: also an append-only event — the settings copy can be overwritten by another station's report
     // at the same moment, and a supervisor screen does not send settings at all; the event always arrives
     try{ KS.recordOwnEvent && KS.recordOwnEvent('problem_report', { screen: String(screenName||''), summary: String(diag.summary||'').slice(0,500), note: String(probs[probs.length-1].note||'').slice(0,500) }, null); }catch(e){}   // v10.37: only the newest 200 (they travel inside the settings)
@@ -10612,7 +10616,7 @@ function mgrTab(tab){
   if(tab==='monitor'){mgrUpdateMonitor(); try{ mgrRenderHealth(); gtHealthRefresh(); }catch(e){} try{ gtTodayArrange(); gtTodayRender(); }catch(e){}}
   if(tab==='reports'){mgrDrawCharts();}
   if(tab==='summaries'){mgrUpdateSummaries();}
-  if(tab==='log'){mgrUpdateLog();}
+  if(tab==='log'){mgrUpdateLog(); gtSupportRefresh();}
   if(tab==='settings'){mgrSyncUI();
     if(_mgrPanelVisible('mgrScreensToggle') && typeof mgrRenderStationsPanel==='function') mgrRenderStationsPanel();
     // the Screens sub-tab is what opens first — fill its weight-control card too
@@ -16634,20 +16638,53 @@ async function _gtSendToMaker(message, severity){
        return !error; }catch(e){ return false; }
 }
 async function mgrReportSupportIssue(){
-  const s = KS.getSettings();
-  if(!s.license || !s.license.apiKey){ alert(L('האפליקציה עוד לא הופעלה — אין לאן לשלוח דיווח.','Not activated yet — nothing to report to.','Aún no está activada — no hay adónde enviar el reporte.')); return; }
-  const central = _getCentralClient();
-  if(!central){ alert(L('החיבור לשרת המרכזי עוד לא הוגדר. פנה ליצרן.','Central server connection not configured yet. Contact the manufacturer.','La conexión al servidor central aún no está configurada. Contacte al fabricante.')); return; }
-  const message = prompt(L('תאר את הבעיה (נשלח ליצרן):','Describe the problem (sent to the manufacturer):','Describa el problema (se envía al fabricante):'));
+  if(!window.sb){ ATalert(L('אין חיבור לשרת המפעל — נסה שוב.','No connection to the plant server — try again.','Sin conexión al servidor de la planta — intente de nuevo.')); return; }
+  const message = prompt(L('תאר את התקלה (נשלח לתמיכה הטכנית של היצרן):','Describe the problem (sent to the manufacturer\'s technical support):','Describa el problema (se envía al soporte técnico del fabricante):'));
   if(!message || !message.trim()) return;
   try{
-    const { error } = await central.rpc('report_support_issue', {
-      p_api_key: s.license.apiKey, p_severity: 'info',
-      p_message: message.trim(), p_device_id: localStorage.getItem('ks_device_id') || null,
-    });
-    if(error){ alert(L('השליחה נכשלה: ','Failed to send: ','No se pudo enviar: ') + error.message); return; }
-    alert(L('✅ נשלח ליצרן.','✅ Sent to the manufacturer.','✅ Enviado al fabricante.'));
-  }catch(e){ alert(L('השליחה נכשלה: ','Failed to send: ','No se pudo enviar: ') + e.message); }
+    const r = await window.sb.rpc('support_issue_add', { p_token: KS.getManagerToken(), p_message: message.trim() });
+    const x = r.data || {};
+    if(r.error || !x.ok){ ATalert(gtErrText(r.error || x.error || 'server_error')); return; }
+    ATalert(L('✅ נשלח לתמיכה הטכנית של היצרן. התשובה תופיע כאן.','✅ Sent to the manufacturer\'s technical support. The answer will show here.','✅ Enviado al soporte técnico del fabricante. La respuesta aparecerá aquí.'));
+  }catch(e){ ATalert(gtErrText(e)); }
+  gtSupportRefresh();
+}
+// v10.38 (owner): the reports sent to the manufacturer + their status / answer, and what the manufacturer changed here
+const GT_SUP_SCR = { slaughter:['שחיטה','Slaughter','Matanza'], esophagus:['וושט','Esophagus','Esófago'], legs:['רגליים / ראש','Legs / head','Patas / cabeza'], inner:['פנים','Inner','Interior'],
+  outer:['חוץ','Outer','Exterior'], parts:['חלקים','Parts','Partes'], stamps:['חותמות','Stamps','Sellos'], display:['ספירה','Display','Pantalla'], nikur:['ניקור','Nikur','Nikur'],
+  cooler:['קולר','Cooler','Cámara'], salting:['מליחה','Salting','Salado'], shipping:['שילוח','Shipping','Envío'] };
+const GT_MAKER_ACT = { settings:['שינה הגדרות','Changed settings','Cambió la configuración'], billing:['שינה חיוב','Changed billing','Cambió la facturación'],
+  daily_reset:['איפוס יומי','Daily reset','Reinicio diario'], worker_code_set:['שינה קוד עובד','Changed a worker code','Cambió un código'],
+  processing_day_close:['סגר יום עיבוד','Closed a processing day','Cerró un día'], nikur_day_close:['סגר יום בניקור','Closed a nikur day','Cerró un día de nikur'] };
+const GT_SUP_ST = { new:['🟡','נשלח','Sent','Enviado'], working:['🔵','בטיפול','Being handled','En proceso'], closed:['🟢','טופל','Handled','Resuelto'] };
+async function gtSupportRefresh(){
+  const tEl=document.getElementById('gtSupTickets'), mEl=document.getElementById('gtMakerChanges');
+  if(!window.sb || !KS.getManagerToken || !KS.getManagerToken()) return;
+  const fmt=t=>{ try{ return new Date(t).toLocaleString(lang==='en'?'en-GB':(lang==='es'?'es':'he-IL'),{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}); }catch(e){ return ''; } };
+  try{
+    const r=await window.sb.rpc('support_tickets',{p_token:KS.getManagerToken()}); const x=r.data||{};
+    if(tEl && x.ok){
+      const rows=(x.issues||[]).slice(0,30);
+      tEl.innerHTML = rows.length ? '<div style="font-size:12px;font-weight:700;color:var(--gold);margin-bottom:4px;">'+L('פניות לתמיכה (30 יום)','Support requests (30 days)','Solicitudes de soporte (30 días)')+'</div>'
+        + rows.map(i=>{ const st=GT_SUP_ST[i.status]||['⚪','ממתין לשליחה','Waiting to be sent','Pendiente de envío'];
+            return '<div style="border-top:1px solid var(--border);padding:5px 0;font-size:12px;">'
+              +'<div style="display:flex;justify-content:space-between;gap:6px;"><span>'+st[0]+' <b>'+escapeHtml(L(st[1],st[2],st[3]))+'</b>'
+              +(i.source==='station'?' · '+escapeHtml(L('מסך','Screen','Pantalla'))+' '+escapeHtml(GT_SUP_SCR[i.screen]?L(...GT_SUP_SCR[i.screen]):(i.screen||'')):' · '+escapeHtml(L('ראש צוות','Team leader','Jefe de equipo')))+'</span>'
+              +'<span style="color:var(--muted);direction:ltr;">'+escapeHtml(fmt(i.at))+'</span></div>'
+              +'<div style="color:var(--text);">'+escapeHtml(String(i.message||'').slice(0,200))+'</div>'
+              +(i.reply?'<div style="color:var(--green);">↩ '+escapeHtml(L('היצרן: ','Manufacturer: ','Fabricante: '))+escapeHtml(i.reply)+'</div>':'')+'</div>'; }).join('')
+        : '';
+    }
+  }catch(e){}
+  try{
+    const r=await window.sb.rpc('maker_changes',{p_token:KS.getManagerToken()}); const x=r.data||{};
+    if(mEl && x.ok){
+      const rows=(x.rows||[]).slice(0,100);
+      mEl.innerHTML = rows.length ? rows.map(a=>'<div style="border-top:1px solid var(--border);padding:3px 0;"><span style="direction:ltr;display:inline-block;">'+escapeHtml(fmt(a.at))+'</span> · <b style="color:var(--text);">'
+          +escapeHtml(a.who||L('היצרן','Manufacturer','Fabricante'))+'</b> · '+escapeHtml(GT_MAKER_ACT[a.action]?L(...GT_MAKER_ACT[a.action]):(a.action||''))+'</div>').join('')
+        : L('היצרן לא שינה דבר במפעל.','The manufacturer changed nothing at this plant.','El fabricante no cambió nada en esta planta.');
+    }
+  }catch(e){}
 }
 
 /** Periodic report to the central server — heartbeat + today's usage.
