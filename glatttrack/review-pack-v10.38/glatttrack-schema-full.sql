@@ -12125,6 +12125,7 @@ notify pgrst, 'reload schema';
 -- ============================================================================
 -- ============================================================================
 -- ============================================================================
+-- ============================================================================
 -- GlattTrack — step 46: stage order on the server, each station its own stage,
 -- kashrut configuration locks, and processing that continues over several days
 -- ============================================================================
@@ -18981,6 +18982,90 @@ begin
 end $$;
 revoke execute on function reset_daily_board(text, text) from public;
 grant execute on function reset_daily_board(text, text) to anon, authenticated;
+
+-- v10.38 (round 22): the daily reset keeps in the archive every number with an open hold too
+create or replace function _do_board_reset(p_reason text, p_business_date date) returns void
+language plpgsql security definer set search_path = public, extensions, pg_temp as $$
+declare v_epoch bigint := (extract(epoch from clock_timestamp()) * 1000)::bigint;
+        v_old_epoch bigint := _board_epoch();
+        v_day date := coalesce(p_business_date, _board_business_date());
+        v_board bigint; v_carry boolean := false; st text;
+begin
+  insert into daily_board_archive (business_date, reason, animals_count, board, statuses)
+  select v_day, p_reason, count(*), coalesce(jsonb_agg(to_jsonb(a) order by a.id), '[]'::jsonb),
+         jsonb_build_object('customStatuses', coalesce(_gt_settings() -> 'customStatuses', '[]'::jsonb),
+                            'disabledStatuses', coalesce(_gt_settings() -> 'disabledStatuses', '[]'::jsonb),
+                            'kosher', to_jsonb(_kosher_statuses()))
+    from animals_pilot a
+   where a.slaughter is not null or a.inner_status is not null or a.outer_status is not null
+      -- v10.38 (round 22): also a number with an open "?" / USDA (e.g. the shochet's "?" before slaughter) — kept in the archive
+      or exists (select 1 from animal_holds h where h.animal_id = a.id and h.resolved_at is null
+                   and h.board_epoch = coalesce(a.board_epoch, v_old_epoch))
+  returning id into v_board;
+
+  -- v10.35 (owner): NO kept day for legs / parts / stamps — an animal goes to the next day only with its
+  -- final kashrut marks. The rollover waits for them (_board_unfinished); the team leader's emergency
+  -- reset (with a written reason, audited) archives the day as it is. (animals_carry stays only to finish
+  -- days kept by an older version; it is not filled any more.)
+  v_carry := false;
+  if v_carry then
+    insert into animals_carry          -- by column name (v10.33: columns added later sit after board_id)
+    select (jsonb_populate_record(null::animals_carry,
+              to_jsonb(a) || jsonb_build_object('board_id', v_board, 'slaughter_day', v_day))).*
+      from animals_pilot a where a.slaughter is not null;
+  end if;
+  if v_old_epoch is not null then
+    update animal_holds set resolved_at = now(), resolution = 'board_closed'
+     where board_epoch = v_old_epoch and resolved_at is null
+       and (not v_carry or not exists (select 1 from animals_carry c where c.board_id = v_board and c.id = animal_holds.animal_id));
+  end if;
+  perform _proc_finalize(null);
+
+  perform set_config('gt.reset_in_progress', 'true', true);
+  perform set_config('app.device_admin', 'on', true);
+
+  insert into plant_state (key, value) values ('boardEpoch', v_epoch::text)
+    on conflict (key) do update set value = excluded.value, updated_at = now();
+
+  update animals_pilot set
+    slaughter = null, slaughtered_by = null, slaughter_time = null, slaughter_by_device = null,
+    legs_stickers = false, head_stickers = false,
+    maw = null, rumen = null,
+    inner_status = null, inner_by = null, inner_time = null, inner_by_device = null,
+    not_chalak_inner = false, not_chalak_outer = false,
+    outer_status = null, outer_by = null, outer_time = null, outer_by_device = null, nc_plain = false,
+    parts_scanned = false, tongue_sticker = false, cheek_sticker = false,
+    weight_right = null, weight_left = null,
+    weight_stage2 = null, weight_stage3 = null,
+    weight_right_skipped = false, weight_left_skipped = false,
+    weight_stage2_skipped = false, weight_stage3_skipped = false,
+    eso_checked = false, eso_result = null, eso_prev_slaughter = null, eso_by_device = null,
+    legs_sorted = false,
+    stamped = false, stamped_as = null,
+    parts_print_count = 0, parts_printed_as = null,
+    board_epoch = v_epoch,
+    updated_at = clock_timestamp()
+  where true;
+
+  delete from device_stage_cursor where true;
+  update devices_pilot set cursor_slaughter = null, cursor_inner = null, cursor_outer = null, cursor_eso = null
+   where cursor_slaughter is not null or cursor_inner is not null or cursor_outer is not null or cursor_eso is not null;
+
+  perform set_config('gt.reset_in_progress', 'false', true);
+  perform set_config('app.device_admin', '', true);
+
+  insert into settings_pilot (id, settings, device_id, updated_at)
+  values (1, jsonb_build_object('lastServerResetAt', now()::text, 'lastServerResetReason', p_reason,
+                                'boardEpoch', v_epoch, 'dailyIntake', '[]'::jsonb, 'activeUserByRole', '{}'::jsonb),
+          'server', now())
+  on conflict (id) do update
+    set settings = coalesce(settings_pilot.settings, '{}'::jsonb)
+                   || jsonb_build_object('lastServerResetAt', now()::text, 'lastServerResetReason', p_reason,
+                                         'boardEpoch', v_epoch, 'dailyIntake', '[]'::jsonb, 'activeUserByRole', '{}'::jsonb),
+        device_id = 'server',
+        updated_at = now();
+end $$;
+revoke execute on function _do_board_reset(text, date) from public, anon, authenticated;
 
 -- once, now: a day an older version kept open goes back to its archive row
 select _proc_close_kept_days('closed at install (v10.38)');

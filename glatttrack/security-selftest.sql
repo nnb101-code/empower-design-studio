@@ -3197,6 +3197,11 @@ begin
         and exists (select 1 from admin_audit where action = 'nikur_day_close');
   perform pg_temp.rec('v10.38 a day closed at the nikur (team leader only, with a reason, audited): its pieces are refused and it leaves the list', ok,
     concat_ws(' | ', r::text, r2::text, r3::text, left(r4::text, 80)));
+  -- (round 22) a number with an open "?" of the shochet (not slaughtered yet) is kept in the archive at the reset
+  r  := pg_temp.api(pg_temp.dev('SL1'), 'select hold_set(890, ''slaughter'', ''question'')');
+  perform pg_temp.api('{}', format('select reset_daily_board(%L, ''selftest: archive the open ?'')', pg_temp.v('mgr')));
+  ok := pg_temp.ok(r) and (select board from daily_board_archive order by id desc limit 1) @> '[{"id":890}]'::jsonb;
+  perform pg_temp.rec('v10.38 round 22: the daily reset keeps a number with an open "?" in the archive (also before slaughter)', ok, left(r::text, 120));
   update settings_pilot set settings = s0 where id = 1;
 end $$;
 $gt77$;

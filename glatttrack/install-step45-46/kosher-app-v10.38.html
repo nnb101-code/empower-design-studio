@@ -15874,7 +15874,7 @@ let _gtLeaderCheckBusy=false;
 async function _gtLeaderSessionOk(){
   const tok=KS.getManagerToken && KS.getManagerToken(); if(!tok) return false;
   for(let i=0;i<60 && !window.sb;i++) await new Promise(r=>setTimeout(r,100));   // just opened: the server library is still loading
-  if(!window.sb) return true;                                   // no server library: the network lock decides
+  if(!window.sb) return false;                                  // (round 22) no server library: no team-leader screen — the code window, and try again
   // v10.38 (owner): ONLY a clear "yes" from the server opens the team-leader screen — no answer = the code first
   for(let i=0;i<3;i++){
     try{

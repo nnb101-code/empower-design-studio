@@ -29,9 +29,11 @@ This pack is the CURRENT state. Review these files only.
 
 **From the round-21 report:** A2 (`_legs_slot_error`: with two screens the legs slot never writes head stickers, also with legs off; sorting with legs off allowed), A3 (`nikur_scan` locks today's animal row `for share`), early answers of `nikur_scan` kept with `_cmd_put`.
 
+**After the round-22 report:** the daily reset keeps in the archive also a number with an open hold (e.g. the shochet's "?" before slaughter); the team-leader check refuses when the server library is missing (code window, try again). (The round-22 report was made on an outdated schema snapshot — the pack script dumped an old database; fixed.)
+
 **App:** team-leader screen opens only after `manager_session_check` says ok (an expired login goes to the first page + code window); fixed "reset the day now" button; open earlier day shown on the first page; esophagus shows the shochet's nevela/shot; reconnect at once when the tab comes back; one name per screen + "Welcome, <worker>"; manufacturer banner on every screen while repair access is open; technical tools (system check, AI, error log) only for the manufacturer, station problem reports also go to the manufacturer's support (`report_support_issue`); head / legs as two entries before inner, "head" naming when legs are not taken; settings categories coloured; summaries: pie of your choice with weighted joining, kilo / pound.
 
-**Self-test:** 159/159 (3 new: closing a part mid-day; the nikur by the sticker's day + "?" over the reset + the waiting board; closing a nikur day). 3 old tests changed to the owner's new rules (always reset, manual reset without reason, legs-off sorting).
+**Self-test:** 160/160 (3 new: closing a part mid-day; the nikur by the sticker's day + "?" over the reset + the waiting board; closing a nikur day). 3 old tests changed to the owner's new rules (always reset, manual reset without reason, legs-off sorting).
 
 ## Changed in v10.38 (app only, labels) — breeds, cattle only
 

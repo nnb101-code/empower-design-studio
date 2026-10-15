@@ -17,13 +17,13 @@
 (3) כלל הסגירה: האם legs_sorted כשהרגליים כבויות פותח מסלול למיון בהמה בלי מדבקות רגליים או מהמסך הלא נכון? האם _legs_slot_error עדיין נכון בכל המצבים?
 (4) _products_error החדש: האם יש רשימה שעוברת ושוברת את הניקור או את ספירת המדבקות?
 (5) באפליקציה: בדיקת הכניסה של ראש הצוות (_gtLeaderSessionOk), החיבור מחדש בחזרה לטאב (_gtNetResume), ומסך הניקור (nkScan עם B:).
-בדיקת האבטחה: 159/159 (מסד נקי מ-glatttrack-schema-full.sql + הרצה שנייה של 02).
+בדיקת האבטחה: 160/160 (מסד נקי מ-glatttrack-schema-full.sql + הרצה שנייה של 02).
 
 Please review this pack according to README-REVIEW.md.
 
 Rules for the review:
 1. Audit the ACTIVE state in active-schema-snapshot.sql (one definition per function). Do not audit older step files or the history inside glatttrack-schema-full.sql as if it were active.
-2. Use SECURITY-MANIFEST.md and security-selftest-result.txt (159/159) to see what is already enforced and tested. Before reporting a vulnerability, check whether a self-test already covers it; if it does, say so and explain why you still think it is exploitable (with the exact function name and line from the snapshot).
+2. Use SECURITY-MANIFEST.md and security-selftest-result.txt (160/160) to see what is already enforced and tested. Before reporting a vulnerability, check whether a self-test already covers it; if it does, say so and explain why you still think it is exploitable (with the exact function name and line from the snapshot).
 3. Separate your findings into:
    A. Real, exploitable problems (with a concrete attack: which role, which call, which parameters, what wrong result).
    B. Defense-in-depth improvements (not exploitable today).

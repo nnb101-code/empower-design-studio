@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict BMJTKLGgzh7hpkYTUGbAoZcWzpsbhKoznF0WEcSTpm3zGctoDW1L7OGZ9izYAD0
+\restrict MRlKRTrRb4fgMC58JkTud9o80X8lpWwI1l9FJxo0KXmW4UDxc2FjW8xxy8BKGPT
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -1470,6 +1470,9 @@ begin
                             'kosher', to_jsonb(_kosher_statuses()))
     from animals_pilot a
    where a.slaughter is not null or a.inner_status is not null or a.outer_status is not null
+      -- v10.38 (round 22): also a number with an open "?" / USDA (e.g. the shochet's "?" before slaughter) — kept in the archive
+      or exists (select 1 from animal_holds h where h.animal_id = a.id and h.resolved_at is null
+                   and h.board_epoch = coalesce(a.board_epoch, v_old_epoch))
   returning id into v_board;
 
   -- v10.35 (owner): NO kept day for legs / parts / stamps — an animal goes to the next day only with its
@@ -12207,5 +12210,5 @@ GRANT ALL ON TABLE public.system_flags TO service_role;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict BMJTKLGgzh7hpkYTUGbAoZcWzpsbhKoznF0WEcSTpm3zGctoDW1L7OGZ9izYAD0
+\unrestrict MRlKRTrRb4fgMC58JkTud9o80X8lpWwI1l9FJxo0KXmW4UDxc2FjW8xxy8BKGPT
 
