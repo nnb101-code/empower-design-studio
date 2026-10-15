@@ -1,39 +1,29 @@
 מצורפת חבילת הבדיקה העדכנית של GlattTrack (אפליקציה v10.38, שרת שלב 46).
-זה סבב עשרים ואחד. חדש (README: "Added in v10.38 ... stage 2 ... nikur", "Added in v10.38 ... cuts list" ו-"Changed in v10.37"): (1) רשימת חלקי פנים וחוץ (products) ומספרי המדבקות שהשרת מחשב ממנה; (2) מיון רגליים במסך הרגליים או בחלקים הקטנים — שלב חדש legs_sort ב-_stage_allowed, ב-_animals_merge, claim_animal_stage, carry_push, carry_claim, _animals_stage_guard ו-_animals_hold_guard; (3) שני מסכי ניקור — piece_scans, nikur_scan, nikur_board, ו-USDA בניקור (hold_set, _device_write_allowed); (4) שלושה תיקוני שרת של v10.37. בדוק במיוחד: האם מכשיר שאינו תחנת המיון של המפעל יכול לסמן legs_sorted בדרך כלשהי; האם nikur_scan יכול לרשום חתיכה טרפה / נבלה / מעוכבת / בלי פסיקה, או לרשום ממסך הניקור השני; האם פתיחת הכתיבה לטאבלט ניקור (_device_write_allowed) פותחת לו דרך לכתוב פסיקות, מדבקות או הגדרות; ומי יכול לקרוא את piece_scans.
-קודם תקרא את README-REVIEW.md, החלק "Added in v10.38 (server 02 + app) — stage 2 ... nikur", ואחריו שאר חלקי v10.38 ו-v10.37, ומטה.
+זה סבב עשרים ושניים. קודם תקרא ב-README-REVIEW.md את החלק "Round 22", ואחריו שאר חלקי v10.38 ומטה.
 
 הכללים של בעל המערכת (המצב הנוכחי):
-- סדר הקו: שחיטה ← וושט ← רגליים ← ראש (אם מפוצל) ← פנים ← חוץ ← חותמות / חלקים.
-- מספר מופיע במסך רק אחרי שעבר את המסך הקודם. חוץ מנבלה, ירוי, "?" ו-USDA — אלה מופיעים בכל המסכים.
-- בודק הפנים עובד רק אחרי מדבקות הראש (כולל ריאה ובית הכוסות). מדבקות רגליים לבד לא מספיקות.
-- מספר שהגיע לתחנה הבאה שייך לה: התחנה הקודמת לא משנה את הפסיקה שלה. הוושט יכול להפוך "תקין" ל-"?" עד שהודפסו רגליים/ראש.
-- USDA: כל מסך חוץ משחיטה יכול לסמן; כתוב מאיזה מסך; רק אותו מסך משחרר או פוסל. USDA אחד לבהמה שלמה בכל פעם. חצאים רק בחוץ/חותמות.
-- פיצול רגליים/ראש (אופציה): טאבלט רגליים 0 = רגליים, 1 = ראש. ראש רק אחרי מדבקות רגליים. לראש מדפסת וסורק משלו.
-- כיבוי מסך זמני: וושט, רגליים, חלקים קטנים. הראש אף פעם לא מדולג. רגליים כבוי: אם לא מפוצל המסך הופך לראש בלבד; אם מפוצל, הראש לוקח ישר מהוושט. החזרה: legsFromIdx.
-- מיון רגליים: רק במסך הרגליים, אף פעם לא כשהרגליים כבוי, ואף פעם לא למספר בלי מדבקות רגליים.
-- ארבעה מסכי משגיח חדשים (קולר, מנקר, מליחה, שיפינג): צימוד, רשימת עובדים וכניסה; תצוגה בלבד, בלי שום כתיבה.
-- עיבוד של יום קודם: בהמה עוברת ליום הבא רק עם כל סימני הכשרות הסופיים (פסיקה, רגליים וראש, חלקים, חותמות). אין יום שמור לרגליים / חלקים / חותמות. עבודה על יום קודם — רק בקולר, בתחילת הפירוק ובהכשרה (מסכים עתידיים).
-- "לא חלק" הוא סימון עד פסיקת החוץ, לא סטטוס, ולא קשור לרבנות. בהמה "לא חלק" (שחיטה / בית הכוסות) מקבלת רק סטטוס מקבוצת "לא חלק" (ncStatuses) או טרף. בהמה שרק נשלחה למסך B יכולה לקבל כל סטטוס. כש"לא חלק" כבוי, אף סטטוס "לא חלק" לא נפסק. שני מסכי חוץ: משולב, או מסך B רק ל"לא חלק".
-- אין סטטוס "לא כשר". יש רק טרף, וגם נבלה וירוי. כל סטטוס של המפעל הוא סטטוס כשרות. במסכי העבודה רק "טרף" / "נבלה" ("ירוי" רק במסך השחיטה).
-- נעילת חוץ: 2 דקות לטאבלט שמת. סריקת ברקוד בפנים ובחוץ פותחת בדיוק את המספר הסרוק.
+- סדר הקו: שחיטה ← וושט ← ראש / רגליים ← פנים ← חוץ ← חותמות / חלקים קטנים ← ניקור.
+- היום מתאפס תמיד בשעה שנקבעה. אין יום תקוע, ואין יום ישן שתופס מסכים. איפוס ידני של ראש צוות — בלי סיבה (המספרים שלא הסתיימו נרשמים).
+- "הסיסטם של המפעל" (כמות מדבקות, מסכים, מקום המיון) נקבע בהתחלה ולא משתנה באמצע. באמצע יום משתנה רק: לוקחים / לא לוקחים חלק.
+- כלל סגירה: סוגרים מסך / חלק — מה שכבר נעשה ממשיך עד הסוף (רגליים שקיבלו מדבקות ממוינות; חתיכות שהודפסו נכנסות לניקור), ומעכשיו לא לוקחים.
+- כל חתיכה שנלקחת מבהמה כשרה מקבלת מדבקת כשרות אחרי הפסיקה, גם אם קיבלה קודם מדבקת מספר (כבד).
+- ניקור: ברוב המפעלים למחרת / יומיים אחרי, אחרי הקולר. החתיכה נבדקת לפי היום שעל המדבקה. USDA בניקור שמים רק במסך הניקור.
+- USDA: כל מסך חוץ משחיטה; רק המסך שסימן משחרר. "?" של הניקור נשאר גם אחרי איפוס היום.
+- "לא חלק" הוא סימון עד פסיקת החוץ. אין סטטוס "לא כשר" — רק טרף, נבלה, ירוי.
 
 בדוק במיוחד:
-(00000) סטטוסי כשרות: האם בהמה "לא חלק" יכולה לקבל סטטוס שאינו ב-ncStatuses באיזשהו מסלול (claim_animal_stage, animal_push, carry_push, תיקון)? האם אפשר לפסוק סטטוס "לא חלק" כש"לא חלק" כבוי (חוץ מבהמה שכבר סומנה)? האם שינוי ncStatuses / notChalakEnabled / customStatuses / removedDefaults באמצע היום יכול להפוך בהמה שכבר הודפסו לה מדבקות או חותמות ל"לא מוכנה" (או להפך)? האם אפשר למחוק סטטוס שבהמה נושאת היום (גם ביום קודם)? האם ה-DO blocks בטוחים להרצה חוזרת ועל מפעל עם נתונים (ובמיוחד: האם הניקוי של removed:true יכול למחוק סטטוס פעיל)? האם מפעל חדש (removedDefaults = כל המובנים) יכול לעבוד?
-(0000) תפקידי cooler / nikur / salting / shipping: האם יש מסלול כתיבה כלשהו (animal_push, carry_push, claim_animal_stage, carry_claim, hold_set, hold_resolve, record_event, settings) שהם יכולים להשתמש בו? מיון: האם legs_sorted נחסם בכל המסלולים (legsPaused, טאבלט ראש, בלי legs_stickers)?
-(000) _legs_slot_error: האם יש עוד מסלול שבו טאבלט ראש כותב legs_stickers או טאבלט רגליים כותב head_stickers בזמן פיצול (animal_push, carry_push, claim_animal_stage, החלפת מכשיר / device_pair)? האם הכלל שובר את מצב "רגליים כבוי"?
-(00) _legs_required + legsPaused/legsFromIdx/legsFromReset: האם כיבוי/הדלקה של רגליים (או שינוי ההגדרות) יכול לאפשר בדיקת פנים או ראש בלי המדבקות הנדרשות? האם device_pair עם אינדקס 1 לרגליים פותח משהו מעבר למסך ראש?
-(0) A1–A4: האם התיקונים סוגרים את הבעיה (נעילת usda_held_elsewhere, nc_plain מבוטל, in_progress→confirmed, server_error כפול)?
-(1) hold_set בלי בדיקת אזור: מי יכול לשחרר USDA של מסך אחר? האם reopened_question של הוושט יכול לעקוף את נעילת התחנה הבאה?
-(2) _stage_order_error('inner') עם head_stickers: האם יש מסלול כתיבה של פסיקת פנים לפני מדבקות ראש (claim, animal_push, carry_push, המסך המשותף)?
-(3) באפליקציה: _pushAnswer, הסדר במסך ראש מפוצל, כיבוי מסך — האם יכול להיתקע תור או לאבד שינוי תקין?
-(4) הנקודות הפתוחות B1, B2, B5, B6 מהסבב הקודם, ו-_hold_caller_error, _parts_print_block, _correction_check, מצב בדיקה.
-בדיקת האבטחה: 156/156 (מסד נקי מ-glatttrack-schema-full.sql + הרצה שנייה של 02).
+(1) האיפוס התמידי: האם request_daily_rollover / reset_daily_board / _proc_close_kept_days יכולים לאבד נתון כשרות (פסיקה, החזקה פתוחה) בלי שנשאר בארכיון? האם החזרת holds של הניקור אחרי האיפוס (resolved_at = now()) יכולה לפתוח מחדש החזקה לא נכונה?
+(2) ניקור לפי יום: האם אפשר להכניס חתיכה של יום אחר / בהמה אחרת עם p_epoch מזויף? האם _nikur_day_rows יכול להחזיר בהמה לא נכונה (אותו מספר, יום אחר, ארכיון כפול)? האם animal_pieces יכול להירשם בלי שהודפסה מדבקה (מסלולים: animal_push, claim, carry_push)? האם nikur_hold / nikur_day_close / nikur_board פתוחים למי שלא צריך?
+(3) כלל הסגירה: האם legs_sorted כשהרגליים כבויות פותח מסלול למיון בהמה בלי מדבקות רגליים או מהמסך הלא נכון? האם _legs_slot_error עדיין נכון בכל המצבים?
+(4) _products_error החדש: האם יש רשימה שעוברת ושוברת את הניקור או את ספירת המדבקות?
+(5) באפליקציה: בדיקת הכניסה של ראש הצוות (_gtLeaderSessionOk), החיבור מחדש בחזרה לטאב (_gtNetResume), ומסך הניקור (nkScan עם B:).
+בדיקת האבטחה: 159/159 (מסד נקי מ-glatttrack-schema-full.sql + הרצה שנייה של 02).
 
 Please review this pack according to README-REVIEW.md.
 
 Rules for the review:
 1. Audit the ACTIVE state in active-schema-snapshot.sql (one definition per function). Do not audit older step files or the history inside glatttrack-schema-full.sql as if it were active.
-2. Use SECURITY-MANIFEST.md and security-selftest-result.txt (156/156) to see what is already enforced and tested. Before reporting a vulnerability, check whether a self-test already covers it; if it does, say so and explain why you still think it is exploitable (with the exact function name and line from the snapshot).
+2. Use SECURITY-MANIFEST.md and security-selftest-result.txt (159/159) to see what is already enforced and tested. Before reporting a vulnerability, check whether a self-test already covers it; if it does, say so and explain why you still think it is exploitable (with the exact function name and line from the snapshot).
 3. Separate your findings into:
    A. Real, exploitable problems (with a concrete attack: which role, which call, which parameters, what wrong result).
    B. Defense-in-depth improvements (not exploitable today).
