@@ -10539,7 +10539,7 @@ function gtTodayArrange(){
     if(!document.getElementById('gtPauseCard')){ const pc=document.createElement('div'); pc.id='gtPauseCard'; pc.className='mgr-card'; pc.setAttribute('data-no-i18n',''); pc.style.marginBottom='12px'; pane.appendChild(pc); }
     // v10.38 (owner): a fixed daily-reset button on the first page (for now — while the plant tests the system)
     if(!document.getElementById('gtResetNowCard')){ const rc=document.createElement('div'); rc.id='gtResetNowCard'; rc.className='owner-hide maker-hide'; rc.setAttribute('data-no-i18n',''); rc.style.marginBottom='12px';
-      rc.innerHTML='<button onclick="gtManualResetNow()" style="width:100%;padding:13px;border-radius:10px;background:rgba(224,48,48,.14);border:2px solid #E03030;color:#FF6B6B;font-size:16px;font-weight:800;cursor:pointer;"></button>';
+      rc.innerHTML='<button onclick="gtManualResetNow()" style="width:100%;padding:13px;border-radius:10px;background:rgba(224,48,48,.14);border:2px solid #E03030;color:#FF6B6B;font-size:16px;font-weight:800;cursor:pointer;">'+escapeHtml(L('🔄 איפוס יום עכשיו','🔄 Reset the day now','🔄 Reiniciar el día ahora'))+'</button>';
       pane.appendChild(rc); }
     const att=document.createElement('div'); att.id='gtTodayAtt'; att.setAttribute('data-no-i18n','');
     document.getElementById('gtToday_ov').append(sum, att);
@@ -15698,12 +15698,18 @@ async function _gtLeaderSessionOk(){
   const tok=KS.getManagerToken && KS.getManagerToken(); if(!tok) return false;
   for(let i=0;i<60 && !window.sb;i++) await new Promise(r=>setTimeout(r,100));   // just opened: the server library is still loading
   if(!window.sb) return true;                                   // no server library: the network lock decides
-  try{
-    const r=await _withTimeout(window.sb.rpc('manager_session_check',{p_token:tok}),8000);
-    if(r.error || !r.data) return true;                         // no clear answer (older server / network): keep
-    if(r.data.ok===false){ KS.setManagerToken(null,null); try{ _clearLeaderStash(); }catch(e){} return false; }
-    return true;
-  }catch(e){ return true; }
+  // v10.38 (owner): ONLY a clear "yes" from the server opens the team-leader screen — no answer = the code first
+  for(let i=0;i<3;i++){
+    try{
+      const r=await _withTimeout(window.sb.rpc('manager_session_check',{p_token:tok}),6000);
+      if(r && !r.error && r.data){
+        if(r.data.ok===true && (!r.data.role || r.data.role==='manager' || r.data.role==='owner')) return true;
+        KS.setManagerToken(null,null); try{ _clearLeaderStash(); }catch(e){} return false;
+      }
+    }catch(e){}
+    await new Promise(r=>setTimeout(r,800));
+  }
+  return false;
 }
 async function _gtLeaderEnterChecked(){
   if(_gtLeaderCheckBusy) return; _gtLeaderCheckBusy=true;
@@ -17396,10 +17402,12 @@ async function _gtSessionGone(){
     if(r.error || !r.data || r.data.ok!==false) return;          // no clear answer: leave it
     KS.setManagerToken(null,null); _clearLeaderStash();
     window._gtHealth=null; _gtHealthStatusRow();
-    if(document.getElementById('scManager')?.classList.contains('active')){ goTo('scNav'); _checkLogin('manager','scManagerLogin'); }
-    alert(L('הכניסה של ראש הצוות כבר לא בתוקף (פג הזמן, או שהשרת עודכן). היכנס שוב עם הקוד.',
-              'The team leader login is no longer valid (it expired, or the server was updated). Log in again with your code.',
-              'El acceso del jefe de equipo ya no es válido (caducó o se actualizó el servidor). Entre de nuevo con su código.'));
+    // v10.38 (owner): back to the first page, and the code window there (with the reason in it) — never a message on the inner page
+    if(document.getElementById('scManager')?.classList.contains('active')) goTo('scNav');
+    _checkLogin('manager','scManagerLogin');
+    setTimeout(()=>{ try{ const e=document.getElementById('loginError');
+      const m=L('הכניסה הקודמת פגה — הכנס שוב את הקוד.','The previous login expired — enter the code again.','El acceso anterior caducó — introduzca el código otra vez.');
+      if(e){ e.textContent=m; e.style.color='var(--amber)'; e.style.display='block'; } else KS.notice(m); }catch(x){} }, 50);
   }catch(e){} finally{ _gtSessionGoneBusy=false; }
 }
 function mgrRenderHealth(){
