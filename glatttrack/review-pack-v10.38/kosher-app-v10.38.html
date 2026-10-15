@@ -397,6 +397,8 @@ button[onclick^="mgrRemoveCattleType("],button[onclick^="mgrRemoveDevice("]{min-
 .tb-user{font-size:12px;}
 /* problem report kept away from the ✕ (log-out) button */
 .tb-right .icon-btn[onclick^="reportProblem"]{order:-1;margin-inline-end:10px;}
+/* v10.38 (owner): one name per screen — the big title says it (the legs screen's own label is not shown twice) */
+#lgRoleLbl{display:none!important;}
 /* v10.38 (owner): categories and sub-categories big, bold and each in its own colour */
 #gtSetGroups details.gt-grp{border-inline-start:6px solid var(--gc,var(--gold));border-radius:14px;}
 #gtSetGroups details.gt-grp>summary{font-size:20px!important;font-weight:900!important;padding:16px 14px!important;background:color-mix(in srgb,var(--gc,#D4A843) 16%,transparent);}
@@ -429,7 +431,7 @@ body:not(.gt-maker) .gt-tech{display:none !important;}
   :is(#scSlaughter,#scEsophagus,#scLegs,#scInner,#scOuter,#scParts,#scStamps) .topbar{flex-wrap:wrap;row-gap:2px;}
   :is(#scSlaughter,#scEsophagus,#scLegs,#scInner,#scOuter,#scParts,#scStamps) .topbar .tb-mid{order:5;flex:1 1 100%;flex-direction:row;justify-content:center;gap:10px;font-size:11px;}
   .tb-right{margin-inline-start:auto;}
-  .tb-user{font-size:0;padding:4px 7px;max-width:36vw;}
+  .tb-user{padding:4px 7px;max-width:46vw;}
   html[data-lang="en"] .tb-user,html[data-lang="es"] .tb-user{direction:ltr;}
   .tb-user strong{font-size:12px;}
   .tb-right .online-dot{display:none;}
@@ -15753,6 +15755,23 @@ function _gtScreenTitleUpdate(){
   if(el.textContent!==t) el.textContent=t;
 }
 setInterval(_gtScreenTitleUpdate, 1000);
+// v10.38 (owner): no second name for the screen at the top — the screen's name is already there. The box says
+// "Welcome, <worker>" (in the screen's language) when a worker is logged in, and is hidden when not.
+const _GT_SCR_ROLES={scSlaughter:['slaughter'],scEsophagus:['esophagus','eso'],scLegs:['legs'],scInner:['inspector','inner'],scOuter:['inspector','outer'],
+  scParts:['parts'],scStamps:['stamps','stamped']};
+function _gtWelcomeUpdate(){
+  const a=document.querySelector('.screen.active'); if(!a) return;
+  const box=a.querySelector('.topbar .tb-user'); if(!box) return;
+  let roles=_GT_SCR_ROLES[a.id]; if(a.id==='scSup'){ try{ roles=[supRole]; }catch(e){} }
+  if(!roles) return;
+  let name=null; try{ for(const r of roles){ name=activeUserName(r,null); if(name) break; } }catch(e){}
+  if(!name){ if(box.style.display!=='none') box.style.display='none'; return; }
+  const t=L('ברוך הבא, ','Welcome, ','Bienvenido, ')+name;
+  if(box.style.display==='none') box.style.display='';
+  if(box.getAttribute('data-gtw')!==t){ box.setAttribute('data-gtw',t); box.setAttribute('data-no-i18n','');
+    box.innerHTML='<span style="font-size:13px;color:var(--muted);">'+escapeHtml(L('ברוך הבא, ','Welcome, ','Bienvenido, '))+'</span><strong>'+escapeHtml(name)+'</strong>'; }
+}
+setInterval(_gtWelcomeUpdate, 1000);
 // the legs login card says "head" when the plant does not take legs (v10.38, owner)
 setInterval(()=>{ try{ const t=document.getElementById('tLgTitle'); if(!t) return;
   const v = KS.getSettings().legsMode===false ? L('משגיח ראש','Head supervisor','Supervisor de cabeza') : (T[lang].lgTitle||'משגיח רגלים / ראש');
