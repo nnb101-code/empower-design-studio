@@ -9862,6 +9862,11 @@ function gtCollect(from, to){
     return out;
   });
 }
+// v10.38 (owner): the summaries in kilos or pounds — the team leader picks (weights are kept in kg)
+function _gtLbOn(){ try{ return KS.getSettings().summaryUnit==='lb'; }catch(e){ return false; } }
+function gtW(kg){ const v=Number(kg)||0; return _gtLbOn() ? v*2.20462262 : v; }
+function gtWU(){ return _gtLbOn() ? 'lb' : L('ק״ג','kg','kg'); }
+function gtSetSummaryUnit(u){ KS.updateSettings({summaryUnit: u==='lb'?'lb':'kg'}); try{ gtAnRender(); }catch(e){} try{ gtRenderWeightTables(); }catch(e){} }
 function gtStatsOf(daysList){
   const acc = _freshPeriodAcc(); acc.days = 0;
   daysList.forEach(d => { acc.days++; _accumulateAnimalStats(acc, d.animals, d.intake); });
@@ -9927,6 +9932,88 @@ function gtAnChips(){
     `<button class="gt-chip${_gtAnCmp.prev ? ' on' : ''}" onclick="gtAnToggleCmp('prev')">${L('מול התקופה הקודמת', 'vs previous period', 'vs período anterior')}</button>` +
     `<button class="gt-chip${_gtAnCmp.year ? ' on' : ''}" onclick="gtAnToggleCmp('year')">${L('מול אותה תקופה אשתקד', 'vs same period last year', 'vs mismo período del año pasado')}</button>`;
   const cg = document.getElementById('anCustomGo'); if(cg) cg.textContent = L('הצג', 'Show', 'Mostrar');
+  // v10.38 (owner): kilo or pound for every weight in the summaries
+  let u=document.getElementById('anUnit'); if(!u){ u=document.createElement('div'); u.id='anUnit'; u.className='gt-chips'; u.style.marginTop='4px'; const c=document.getElementById('anCompare'); if(c) c.parentNode.insertBefore(u, c.nextSibling); }
+  u.innerHTML = `<span class="gt-hint" style="align-self:center;margin:0 4px 0 0;">${L('משקל ב:', 'Weight in:', 'Peso en:')}</span>`
+    + `<button class="gt-chip${!_gtLbOn() ? ' on' : ''}" onclick="gtSetSummaryUnit('kg')">${L('קילו (ק״ג)', 'Kilo (kg)', 'Kilo (kg)')}</button>`
+    + `<button class="gt-chip${_gtLbOn() ? ' on' : ''}" onclick="gtSetSummaryUnit('lb')">${L('פאונד (lb)', 'Pound (lb)', 'Libra (lb)')}</button>`;
+}
+// ── v10.38 (owner): the pie of your choice ──
+var _gtPie={by:'result', m:'n', groups:[], sel:{}};
+const _GT_PIE_COLORS=['#2F8FFF','#28C76F','#E8B84A','#B48CFF','#FF9F43','#34D1D1','#FF6B9A','#8BC34A','#FFD54A','#7E8AA2','#C0392B','#00BFA5'];
+function _gtPieKeyName(k){
+  if(_gtPie.by!=='result') return k;
+  return ({nevela:L('נבלה','Nevela','Nevelá'), shot:L('ירוי','Shot','Baleado'), treif:L('טרף','Treif','Treif'), pending:L('ממתין לפסיקה','Waiting for a ruling','Esperando dictamen')})[k]
+    || (typeof statusDisplayName==='function' ? (statusDisplayName(k)||k) : k);
+}
+function _gtPieKeyColor(k, i){
+  if(_gtPie.by==='result'){ const fixed={nevela:'#8B1E1E', shot:'#8A8F98', treif:'#E03030', pending:'#5B6B85'}; if(fixed[k]) return fixed[k];
+    try{ const st=getAllStatuses().find(x=>x.key===k); if(st && st.color) return st.color; }catch(e){} }
+  return _GT_PIE_COLORS[i % _GT_PIE_COLORS.length];
+}
+function _gtPieRaw(){
+  const days=(window._gtAnData&&window._gtAnData.cur)||[], by=_gtPie.by, out={};
+  days.forEach(d=>{ let run=0; const ranges=(d.intake||[]).map(r=>{ const f=run; run+=Number(r.qty)||0; return {farm:r.farm,type:r.type,from:f,to:run}; });
+    (d.animals||[]).forEach((x,idx)=>{ if(!x||!x.slaughter) return;
+      let key;
+      if(by==='result') key = x.slaughter==='nevela'?'nevela' : x.slaughter==='shot'?'shot' : (x.innerStatus==='treif'||x.outerStatus==='treif')?'treif' : (x.outerStatus||'pending');
+      else if(by==='farm'||by==='type'){ const rg=ranges.find(r=>idx>=r.from && idx<r.to); key=(rg && (by==='farm'?rg.farm:rg.type)) || L('לא הוזן','Not entered','Sin dato'); }
+      else if(by==='shochet') key = x.slaughteredBy || L('לא ידוע','Unknown','Desconocido');
+      else key = x.outerBy || L('לא ידוע','Unknown','Desconocido');
+      const w=_gtWeightOf(x), o=out[key]=out[key]||{n:0,kg:0,wn:0}; o.n++; if(w.w){ o.kg+=w.kg; o.wn++; } }); });
+  return out;
+}
+function _gtPieSlices(){
+  const raw=_gtPieRaw(), used={}, slices=[];
+  (_gtPie.groups||[]).forEach(g=>{ const o={key:'g:'+g.name, name:g.name, keys:g.keys.slice(), n:0, kg:0, wn:0, group:true};
+    g.keys.forEach(k=>{ const r=raw[k]; if(!r) return; used[k]=1; o.n+=r.n; o.kg+=r.kg; o.wn+=r.wn; }); if(o.n) slices.push(o); });
+  Object.keys(raw).forEach(k=>{ if(!used[k]) slices.push({key:k, name:_gtPieKeyName(k), keys:[k], n:raw[k].n, kg:raw[k].kg, wn:raw[k].wn}); });
+  slices.sort((a,b)=>(_gtPie.m==='kg'?b.kg-a.kg:b.n-a.n));
+  slices.forEach((x,i)=>{ x.color = x.group ? _GT_PIE_COLORS[(i+3)%_GT_PIE_COLORS.length] : _gtPieKeyColor(x.key, i); });
+  return slices;
+}
+function _gtCssColor(c){ const m=/^var\((--[a-z0-9-]+)\)$/i.exec(String(c||'')); if(!m) return c; try{ return getComputedStyle(document.documentElement).getPropertyValue(m[1]).trim()||'#888'; }catch(e){ return '#888'; } }
+function gtPieSet(k,v){ _gtPie[k]=v; if(k==='by'){ _gtPie.groups=[]; _gtPie.sel={}; } gtPieRender(); }
+function gtPieToggle(key){ _gtPie.sel[key]=!_gtPie.sel[key]; gtPieRender(); }
+function gtPieJoin(){
+  const sl=_gtPieSlices().filter(x=>_gtPie.sel[x.key]); if(sl.length<2){ KS.notice(L('מסמנים לפחות שני חלקים','Mark at least two slices','Marque al menos dos porciones')); return; }
+  const def=sl.map(x=>x.name).join(' + ');
+  const name=(prompt(L('שם לחלק המחובר:','Name for the joined slice:','Nombre de la porción unida:'), def)||'').trim(); if(!name) return;
+  const keys=[]; sl.forEach(x=>x.keys.forEach(k=>keys.push(k)));
+  _gtPie.groups=(_gtPie.groups||[]).filter(g=>!sl.some(x=>x.group && x.name===g.name)).concat([{name, keys}]); _gtPie.sel={}; gtPieRender();
+}
+function gtPieClear(){ _gtPie.groups=[]; _gtPie.sel={}; gtPieRender(); }
+function gtPieRender(){
+  const box=document.getElementById('gtPieBox'); if(!box) return;
+  const E=escapeHtml, chip=(on,t,fn)=>`<button class="gt-chip${on?' on':''}" onclick="${fn}">${E(t)}</button>`;
+  const sl=_gtPieSlices(), byKg=_gtPie.m==='kg';
+  const tot=sl.reduce((a,x)=>a+(byKg?x.kg:x.n),0);
+  let h=`<div class="gt-chips" style="margin-bottom:6px;"><span class="gt-hint" style="align-self:center;">${E(L('לפי:','By:','Por:'))}</span>`
+    +chip(_gtPie.by==='result',L('תוצאה','Result','Resultado'),"gtPieSet('by','result')")+chip(_gtPie.by==='farm',L('משק','Farm','Granja'),"gtPieSet('by','farm')")
+    +chip(_gtPie.by==='type',L('זן','Breed','Raza'),"gtPieSet('by','type')")+chip(_gtPie.by==='shochet',L('שוחט','Shochet','Shojet'),"gtPieSet('by','shochet')")
+    +chip(_gtPie.by==='inspector',L('בודק חוץ','Outer inspector','Inspector externo'),"gtPieSet('by','inspector')")+`</div>`
+    +`<div class="gt-chips" style="margin-bottom:10px;"><span class="gt-hint" style="align-self:center;">${E(L('מודדים:','Measure:','Medida:'))}</span>`
+    +chip(!byKg,L('מספר בהמות','Number of animals','Número de animales'),"gtPieSet('m','n')")+chip(byKg,L('משקל','Weight','Peso')+' ('+gtWU()+')',"gtPieSet('m','kg')")+`</div>`;
+  h+=`<div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start;"><canvas id="gtPieCanvas" width="260" height="260" style="width:220px;height:220px;flex-shrink:0;"></canvas><div style="flex:1;min-width:240px;">`;
+  if(!sl.length) h+=`<div class="gt-hint">${E(L('אין נתונים בתקופה הזו.','No data in this period.','Sin datos en este período.'))}</div>`;
+  else h+=`<table class="gt-tbl"><tr><th></th><th></th><th>${E(L('בהמות','Animals','Animales'))}</th><th>%</th><th>${E(L('משקל','Weight','Peso'))} (${E(gtWU())})</th><th>${E(L('ממוצע','Average','Promedio'))}</th></tr>`
+    +sl.map(x=>{ const v=byKg?x.kg:x.n; return `<tr><td><input type="checkbox" ${_gtPie.sel[x.key]?'checked':''} onclick="gtPieToggle('${E(x.key).replace(/'/g,'&#39;')}')"></td>`
+      +`<td style="text-align:start;"><span style="color:${_safeColor(x.color)};">●</span> ${x.group?'🔗 ':''}${E(x.name)}</td><td>${_gtNum(x.n)}</td><td>${tot?_gtNum(v/tot*100,1)+'%':'—'}</td>`
+      +`<td>${x.kg?_gtNum(gtW(x.kg)):'—'}</td><td>${x.wn?_gtNum(gtW(x.kg/x.wn),1):'—'}</td></tr>`; }).join('')
+    +(()=>{ const n=sl.reduce((a,x)=>a+x.n,0), kg=sl.reduce((a,x)=>a+x.kg,0), wn=sl.reduce((a,x)=>a+x.wn,0);
+        return `<tr style="font-weight:800;"><td></td><td style="text-align:start;">${E(L('סה״כ','Total','Total'))}</td><td>${_gtNum(n)}</td><td>100%</td><td>${kg?_gtNum(gtW(kg)):'—'}</td><td>${wn?_gtNum(gtW(kg/wn),1):'—'}</td></tr>`; })()
+    +`</table>`
+    +`<div class="gt-row" style="margin-top:8px;gap:6px;flex-wrap:wrap;"><button class="gt-chip on" onclick="gtPieJoin()">🔗 ${E(L('חבר את המסומנים לחלק אחד','Join the marked into one slice','Unir las marcadas'))}</button>`
+    +((_gtPie.groups||[]).length?`<button class="gt-chip" onclick="gtPieClear()">${E(L('בטל חיבורים','Undo the joins','Deshacer uniones'))}</button>`:'')+`</div>`
+    +`<div class="gt-hint" style="margin-top:4px;">${E(L('הממוצע של חלק מחובר הוא משוקלל — לפי כל הבהמות שנשקלו בו.','The average of a joined slice is weighted — over all the animals weighed in it.','El promedio de una porción unida es ponderado.'))}</div>`;
+  h+=`</div></div>`;
+  box.innerHTML=h;
+  const c=document.getElementById('gtPieCanvas'); if(!c) return;
+  const ctx=c.getContext('2d'), cx=130, cy=130, r=118; ctx.clearRect(0,0,260,260);
+  if(tot>0){ let ang=-Math.PI/2; sl.forEach(x=>{ const v=byKg?x.kg:x.n; if(!v) return; const seg=v/tot*Math.PI*2; ctx.beginPath(); ctx.moveTo(cx,cy); ctx.arc(cx,cy,r,ang,ang+seg); ctx.closePath(); ctx.fillStyle=_gtCssColor(x.color); ctx.fill();
+      if(seg>0.28){ const mid=ang+seg/2; ctx.fillStyle='#fff'; ctx.font='bold 15px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(Math.round(v/tot*100)+'%', cx+Math.cos(mid)*r*0.66, cy+Math.sin(mid)*r*0.66); }
+      ang+=seg; }); }
+  else { ctx.fillStyle='#1F2D45'; ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.fill(); }
 }
 var _gtAnSeq = 0, _gtAnOpen = {};
 function gtAnRender(){
@@ -9948,6 +10035,7 @@ function gtAnRender(){
     else window._gtAnRetry = 0;
     window._gtAnData = { cur: res[0], cmps: cmps.map((c, i) => ({ l: c.l, days: res[i + 1] })) };
     body.innerHTML = gtAnHtml(cur, K, C);
+    try{ gtPieRender(); }catch(e){ console.warn('pie', e); }
     try{ gtFocusRender(); }catch(e){ console.warn('focus', e); }
     try{ gtAddExportButtons(body); }catch(e){}
     body.querySelectorAll('details[data-k]').forEach(d => { const k = d.getAttribute('data-k'); if(_gtAnOpen[k]) d.open = true; });
@@ -9965,10 +10053,13 @@ function gtAnHtml(acc, K, C){
     kpi(pct(K.treifPct), L('טרף', 'Treif', 'Treif'), 'var(--red-light)', dl(K.treifPct, k => k.treifPct, { points: true, goodUp: false })) +
     kpi(pct(K.nevelaPct), L('נבלה', 'Nevela', 'Nevelá') + ' · ' + _gtNum(K.nevela), 'var(--red-light)', dl(K.nevelaPct, k => k.nevelaPct, { points: true, goodUp: false })) +
     kpi(pct(K.shotPct), L('ירוי', 'Shot', 'Baleado') + ' · ' + _gtNum(K.shot), '#A8AEB8', dl(K.shotPct, k => k.shotPct, { points: true, goodUp: false })) +
-    kpi(_gtNum(K.kg) + ' ' + L('ק״ג', 'kg', 'kg'), L('משקל', 'Weight', 'Peso') + ' · ' + _gtNum(K.weighed) + ' ' + L('נשקלו', 'weighed', 'pesados'), 'var(--blue)', dl(K.kg, k => k.kg, {})) +
+    kpi(_gtNum(gtW(K.kg)) + ' ' + gtWU(), L('משקל', 'Weight', 'Peso') + ' · ' + _gtNum(K.weighed) + ' ' + L('נשקלו', 'weighed', 'pesados'), 'var(--blue)', dl(K.kg, k => k.kg, {})) +
     (K.price ? kpi(escapeHtml(gtMoney(K.cur, K.charge, 0)), L('חיוב', 'Charge', 'Cargo'), 'var(--gold)', dl(K.charge, k => k.charge, {})) : '') +
     '</div>';
   const sec = (k, title, sum, inner) => `<details class="gt-acc" data-k="${k}"><summary><span class="gt-acc-t">${title}</span><span class="gt-acc-s">${sum}</span></summary><div class="gt-acc-b">${inner}</div></details>`;
+  // 0. v10.38 (owner): a pie of your choice — by what, count or weight, and slices joined together (weighted)
+  h += sec('pie', '🥧 ' + L('עוגה ושקלול — לפי בחירה', 'Pie and combining — your choice', 'Gráfico y combinación — a elección'),
+    L('בוחרים לפי מה, ומחברים כמה חלקים ביחד', 'Pick what by, and join slices together', 'Elija por qué y una porciones'), '<div id="gtPieBox"></div>');
   // 1. kashrut results
   const st = getAllStatuses(), nm = key => { const s = st.find(x => x.key === key); return s ? (lang === 'he' ? s.he : lang === 'es' ? (s.es || s.en) : s.en) : statusDisplayName(key); };
   const col = key => { const s = st.find(x => x.key === key); return s ? s.color : 'var(--gold)'; };
@@ -10001,10 +10092,10 @@ function gtAnHtml(acc, K, C){
   // 3–6. by farm / type / farm × type / outer inspector
   const bsum = b => { const e = Object.entries(b || {}).sort((x, y) => y[1].total - x[1].total); return e.length ? escapeHtml(e[0][0]) + ' · ' + _gtNum(e[0][1].total) + (e.length > 1 ? ' (+' + (e.length - 1) + ')' : '') : '—'; };
   const more = b => `<details style="margin-top:10px;"><summary style="font-size:12px;color:var(--muted);cursor:pointer;">${L('פירוט הדרגות', 'Grades in detail', 'Detalle de grados')}</summary><div style="margin-top:8px;">${_renderBucketBreakdown(b)}</div></details>`;
-  h += sec('focus', '🔎 ' + L('השוואה: אותו משק, אותו סוג, לפי תאריך', 'Compare: same farm, same type, by date', 'Comparar: misma granja y tipo, por fecha'), L('בוחרים משק וסוג', 'pick a farm and a type', 'elegir granja y tipo'), '<div id="gtFocus"></div>');
+  h += sec('focus', '🔎 ' + L('השוואה: אותו משק, אותו זן, לפי תאריך', 'Compare: same farm, same breed, by date', 'Comparar: misma granja y raza, por fecha'), L('בוחרים משק וזן', 'pick a farm and a breed', 'elegir granja y raza'), '<div id="gtFocus"></div>');
   h += sec('farm', '🏡 ' + L('דירוג משקים — כשרות ומשקל', 'Farms ranked — kashrut and weight', 'Granjas — kashrut y peso'), bsum(acc.byFarm), gtRankTable(acc.byFarm, 'farm') + more(acc.byFarm));
   h += sec('type', '🐂 ' + L('לפי זן בהמה — כשרות ומשקל', 'By breed — kashrut and weight', 'Por raza — kashrut y peso'), bsum(acc.byType), gtRankTable(acc.byType, 'type') + more(acc.byType));
-  h += sec('farmtype', '🔀 ' + L('משק × סוג — כשרות ומשקל', 'Farm × type — kashrut and weight', 'Granja × tipo — kashrut y peso'), bsum(acc.byFarmType), gtRankTable(acc.byFarmType, 'farmtype') + more(acc.byFarmType));
+  h += sec('farmtype', '🔀 ' + L('משק × זן — כשרות ומשקל', 'Farm × breed — kashrut and weight', 'Granja × raza — kashrut y peso'), bsum(acc.byFarmType), gtRankTable(acc.byFarmType, 'farmtype') + more(acc.byFarmType));
   h += sec('inspector', '🧑‍⚖️ ' + L('לפי בודק חוץ', 'By outer inspector', 'Por inspector externo'), bsum(acc.byOuterInspector), _renderBucketBreakdown(acc.byOuterInspector));
   // 7. by worker
   const wl = (o, title) => { const e = Object.entries(o || {}).sort((a, b) => b[1] - a[1]); return `<div style="font-size:12px;color:var(--gold);font-weight:700;margin:8px 0 2px;">${title}</div>` + (e.length ? e.map(([n, v]) => `<div class="gt-row"><span>${escapeHtml(n)}</span><b>${_gtNum(v)}</b></div>`).join('') : '<div class="gt-hint">—</div>'); };
@@ -10012,10 +10103,10 @@ function gtAnHtml(acc, K, C){
   h += sec('workers', '👷 ' + L('לפי עובד', 'By worker', 'Por trabajador'), wsum + ' ' + L('שמות', 'names', 'nombres'), gtWorkerTables(acc.workerStats || {}));
   // 8. weight and charge
   const W = acc.weights;
-  h += sec('weight', '⚖️ ' + (K.price ? L('משקל וחיוב', 'Weight and charge', 'Peso y cargo') : L('משקל', 'Weight', 'Peso')), _gtNum(K.kg) + ' ' + L('ק״ג', 'kg', 'kg') + (K.price ? ' · ' + escapeHtml(gtMoney(K.cur, K.charge, 0)) : ''),
+  h += sec('weight', '⚖️ ' + (K.price ? L('משקל וחיוב', 'Weight and charge', 'Peso y cargo') : L('משקל', 'Weight', 'Peso')), _gtNum(gtW(K.kg)) + ' ' + gtWU() + (K.price ? ' · ' + escapeHtml(gtMoney(K.cur, K.charge, 0)) : ''),
     `<table class="gt-tbl"><tr><th></th><th>${L('התקופה', 'Period', 'Período')}</th>${C.map(c => `<th>${escapeHtml(c.l)}</th>`).join('')}</tr>
      <tr><td>${L('בהמות שנשקלו', 'Animals weighed', 'Animales pesados')}</td><td>${_gtNum(K.weighed)}</td>${C.map(c => `<td>${_gtNum(c.K.weighed)}</td>`).join('')}</tr>
-     <tr><td>${L('סה״כ ק״ג', 'Total kg', 'Total kg')}</td><td>${_gtNum(K.kg)}</td>${C.map(c => `<td>${_gtNum(c.K.kg)} ${gtDelta(K.kg, c.K.kg, {})}</td>`).join('')}</tr>
+     <tr><td>${L('סה״כ ', 'Total ', 'Total ') + gtWU()}</td><td>${_gtNum(gtW(K.kg))}</td>${C.map(c => `<td>${_gtNum(gtW(c.K.kg))} ${gtDelta(K.kg, c.K.kg, {})}</td>`).join('')}</tr>
      <tr><td>${L('ממוצע לבהמה', 'Average per animal', 'Promedio por animal')}</td><td>${W.nFull ? _gtNum(W.sumFull / W.nFull, 1) : '—'}</td>${C.map(c => `<td>${c.acc.weights.nFull ? _gtNum(c.acc.weights.sumFull / c.acc.weights.nFull, 1) : '—'}</td>`).join('')}</tr>
      ${K.price ? `<tr><td>${L('חיוב', 'Charge', 'Cargo')} (${escapeHtml(gtMoney(K.cur, K.price, 2))}/${L('ק״ג', 'kg', 'kg')})</td><td><b style="color:var(--gold);">${escapeHtml(gtMoney(K.cur, K.charge, 0))}</b></td>${C.map(c => `<td>${escapeHtml(gtMoney(K.cur, c.K.charge, 0))} ${gtDelta(K.charge, c.K.charge, {})}</td>`).join('')}</tr>` : ''}
      </table><div style="margin-top:12px;" id="mgrWeightTableA"></div>`);
@@ -10046,14 +10137,14 @@ function gtRankTable(bucket, id){
     if(r[k] === best(k, !up)) return ' style="color:var(--red-light);font-weight:800;"'; return ''; };
   const p = v => v == null ? '—' : _gtNum(v, 1) + '%';
   const cols = [['name', L('שם', 'Name', 'Nombre')], ['n', L('בהמות', 'Animals', 'Animales')], ['glatt', 'גלאט'], ['kosher', 'כשר'],
-                ['treif', 'טרף'], ['nevela', L('נבלה', 'Nevela', 'Nevelá')], ['shot', L('ירוי', 'Shot', 'Baleado')], ['avg', L('ממוצע ק״ג', 'Avg kg', 'Prom. kg')], ['kg', L('סה״כ ק״ג', 'Total kg', 'Total kg')]];
+                ['treif', 'טרף'], ['nevela', L('נבלה', 'Nevela', 'Nevelá')], ['shot', L('ירוי', 'Shot', 'Baleado')], ['avg', L('ממוצע ', 'Avg ', 'Prom. ') + gtWU()], ['kg', L('סה״כ ק״ג', 'Total kg', 'Total kg')]];
   const sortHint = '<span style="font-size:9px;opacity:.6;">⇅</span>';
   rows.sort((a, b) => b.n - a.n);
   return `<div style="overflow-x:auto;"><table class="gt-tbl gt-rank gt-tight" id="gtRank_${id}"><tr>${cols.map(([k, l], i) => `<th style="cursor:pointer;white-space:nowrap;" onclick="gtSortTbl('gtRank_${id}', ${i})">${l} ${sortHint}</th>`).join('')}</tr>` +
     rows.map(r => `<tr${r.n < _GT_MIN_N ? ' style="opacity:.6;"' : ''}><td style="text-align:start;font-weight:700;" data-v="${escapeHtml(r.name)}">${escapeHtml(r.name)}</td><td data-v="${r.n}">${_gtNum(r.n)}</td>` +
       `<td data-v="${r.glatt ?? -1}"${mark(r, 'glatt', true)}>${p(r.glatt)}</td><td data-v="${r.kosher ?? -1}"${mark(r, 'kosher', true)}>${p(r.kosher)}</td>` +
       `<td data-v="${r.treif ?? -1}"${mark(r, 'treif', false)}>${p(r.treif)}</td><td data-v="${r.nevela ?? -1}"${mark(r, 'nevela', false)}>${p(r.nevela)}</td><td data-v="${r.shot ?? -1}"${mark(r, 'shot', false)}>${p(r.shot)}</td>` +
-      `<td data-v="${r.avg ?? -1}"${mark(r, 'avg', true)}>${r.avg == null ? '—' : _gtNum(r.avg, 1)}</td><td data-v="${r.kg}">${r.kg ? _gtNum(r.kg) : '—'}</td></tr>`).join('') +
+      `<td data-v="${r.avg ?? -1}"${mark(r, 'avg', true)}>${r.avg == null ? '—' : _gtNum(gtW(r.avg), 1)}</td><td data-v="${r.kg}">${r.kg ? _gtNum(gtW(r.kg)) : '—'}</td></tr>`).join('') +
     `</table></div><div class="gt-hint" style="margin-top:6px;">${L('ירוק = הכי טוב, אדום = הכי חלש (רק כשיש לפחות ' + _GT_MIN_N + ' בהמות). ממוצע ק״ג = בהמות ששתי החצאים שלהן נשקלו. לחיצה על כותרת ממיינת.',
       'Green = best, red = weakest (only with at least ' + _GT_MIN_N + ' animals). Avg kg = animals with both halves weighed. Tap a header to sort.', 'Verde = mejor, rojo = más débil. Toque un encabezado para ordenar.')}</div>`;
 }
@@ -10098,7 +10189,7 @@ function gtFocusRender(){
     const pc = v => v == null ? '—' : _gtNum(v, 1) + '%';
     return `<tr><td style="text-align:start;white-space:nowrap;">${label}</td><td>${_gtNum(K.total)}</td><td>${pc(K.glattPct)}${R ? '<br>' + gtDelta(K.glattPct, R.glattPct, { points: true, goodUp: true }) : ''}</td>` +
       `<td>${pc(K.treifPct)}${R ? '<br>' + gtDelta(K.treifPct, R.treifPct, { points: true, goodUp: false }) : ''}</td><td>${_gtNum(K.nev)}</td>` +
-      `<td>${avg == null ? '—' : _gtNum(avg, 1)}${R && avg != null && ravg != null ? '<br>' + gtDelta(avg, ravg, {}) : ''}</td><td>${K.kg ? _gtNum(K.kg) : '—'}</td></tr>`; };
+      `<td>${avg == null ? '—' : _gtNum(gtW(avg), 1)}${R && avg != null && ravg != null ? '<br>' + gtDelta(avg, ravg, {}) : ''}</td><td>${K.kg ? _gtNum(gtW(K.kg)) : '—'}</td></tr>`; };
   const head = `<tr><th style="text-align:start;">${L('תאריך', 'Date', 'Fecha')}</th><th>${L('בהמות', 'Animals', 'Animales')}</th><th>${'גלאט'}</th><th>${'טרף'}</th><th>${L('נבלה/ירוי', 'Nevela/shot', 'Nevelá')}</th><th>${L('ממוצע ק״ג', 'Avg kg', 'Prom. kg')}</th><th>${L('סה״כ ק״ג', 'Total kg', 'Total kg')}</th></tr>`;
   const days = D.cur.slice().sort((a, b) => a.date < b.date ? -1 : 1).filter(d => stat([d]).total > 0);
   const total = stat(D.cur);
@@ -10205,7 +10296,7 @@ function gtSearchCard(j, det){
     row(L('שחיטה', 'Slaughter', 'Faena'), escapeHtml(sl + (x.slaughteredBy ? ' · ' + x.slaughteredBy : '') + (x.slaughterTime ? ' · ' + t(x.slaughterTime) : ''))) +
     row(L('בדיקת פנים', 'Inner check', 'Interior'), x.innerStatus ? escapeHtml(({ confirmed: L('תקין', 'OK', 'OK'), treif: 'טרף', in_progress: L('בבדיקה', 'In progress', 'En curso') })[x.innerStatus] || x.innerStatus) + (x.innerBy ? ' · ' + escapeHtml(x.innerBy) : '') + (x.innerTime ? ' · ' + t(x.innerTime) : '') : '') +
     row(L('בדיקת חוץ', 'Outer check', 'Exterior'), x.outerStatus ? escapeHtml(nm(x.outerStatus)) + (x.outerBy ? ' · ' + escapeHtml(x.outerBy) : '') + (x.outerTime ? ' · ' + t(x.outerTime) : '') : '') +
-    row(L('משקל', 'Weight', 'Peso'), kg.w ? _gtNum(kg.kg, 1) + ' ' + L('ק״ג', 'kg', 'kg') : '') +
+    row(L('משקל', 'Weight', 'Peso'), kg.w ? _gtNum(gtW(kg.kg), 1) + ' ' + gtWU() : '') +
     `<div style="font-size:12px;color:var(--gold);font-weight:700;margin:10px 0 4px;">${L('כל מה שקרה למספר הזה', 'Everything that happened to this number', 'Historial')}</div><div id="srEv${j}" class="gt-hint">${L('טוען…', 'Loading…', 'Cargando…')}</div>`;
   if(!window.sb) return;
   const from = new Date(r.d.date + 'T00:00:00'), to = r.d.at ? new Date(new Date(r.d.at).getTime() + 60000) : new Date();
@@ -13722,8 +13813,8 @@ function gtRenderWeightTables(){
   const fmt=n=>Number(n).toLocaleString(lang==='he'?'he-IL':lang==='es'?'es':'en-US',{maximumFractionDigits:1});
   const waiting=!_gtWT.days && window.sb;
   const html=`<div style="font-size:14px;font-weight:700;color:var(--gold);margin-bottom:6px;">⚖️ ${bill?L('משקל וחיוב','Weight and charge','Peso y cargo'):L('משקל','Weight','Peso')}</div>
-    <table style="width:100%;border-collapse:collapse;"><tr><th style="${th}"></th><th style="${th}">${L('נשקלו','Weighed','Pesados')}</th><th style="${th}">${L('ק״ג','kg','kg')}</th>${bill?`<th style="${th}">${L('חיוב','Charge','Cargo')}</th>`:''}</tr>
-    ${rows.map(r=>`<tr><td style="${td}text-align:start;font-weight:700;">${lbl[r.per]}</td><td style="${td}">${r.n}</td><td style="${td}">${fmt(r.kg)}</td>${bill?`<td style="${td}color:var(--gold);font-weight:700;">${escapeHtml(gtMoney(b.currency||'\u20aa', r.kg*price, 1))}</td>`:''}</tr>`).join('')}
+    <table style="width:100%;border-collapse:collapse;"><tr><th style="${th}"></th><th style="${th}">${L('נשקלו','Weighed','Pesados')}</th><th style="${th}">${gtWU()}</th>${bill?`<th style="${th}">${L('חיוב','Charge','Cargo')}</th>`:''}</tr>
+    ${rows.map(r=>`<tr><td style="${td}text-align:start;font-weight:700;">${lbl[r.per]}</td><td style="${td}">${r.n}</td><td style="${td}">${fmt(gtW(r.kg))}</td>${bill?`<td style="${td}color:var(--gold);font-weight:700;">${escapeHtml(gtMoney(b.currency||'\u20aa', r.kg*price, 1))}</td>`:''}</tr>`).join('')}
     </table>
     <div style="font-size:10px;color:var(--muted);margin-top:6px;">${bill?L('מחיר לק״ג: ','Price per kg: ','Precio por kg: ')+escapeHtml(gtMoney(b.currency||'\u20aa', price, 2))+' · ':''}${L('משקל = צד ימין + צד שמאל. ימים קודמים מהשרת','Weight = right + left side. Earlier days from the server','Peso = lado derecho + izquierdo. Días anteriores del servidor')}${waiting?' · '+L('טוען…','loading…','cargando…'):''}</div>`;
   els.forEach(e=>e.innerHTML=html);
@@ -13782,7 +13873,7 @@ function gtPlantRender(){
     ${tile(L('נשחטו','Slaughtered','Faenados')+(n.target>0?' / '+n.target:''), n.count, 'var(--green)')}
     ${tile(L('נבלה / ירוי','Nevela / shot','Nevelá / baleado'), n.nev, 'var(--red-light)')}
     ${tile(L('בשעה האחרונה','Last hour','Última hora'), n.rate, 'var(--blue)')}
-    ${tile(L('נשקלו','Weighed','Pesados'), weighed.length+' · '+Math.round(kg).toLocaleString()+' '+L('ק״ג','kg','kg'), 'var(--gold)')}
+    ${tile(L('נשקלו','Weighed','Pesados'), weighed.length+' · '+Math.round(gtW(kg)).toLocaleString()+' '+gtWU(), 'var(--gold)')}
   </div>`;
   const cards=_gtPlantStations().map(st=>{
     let last=-1, lastT=0, done=0, wait=0;
@@ -15765,11 +15856,12 @@ function _gtWelcomeUpdate(){
   let roles=_GT_SCR_ROLES[a.id]; if(a.id==='scSup'){ try{ roles=[supRole]; }catch(e){} }
   if(!roles) return;
   let name=null; try{ for(const r of roles){ name=activeUserName(r,null); if(name) break; } }catch(e){}
-  if(!name){ if(box.style.display!=='none') box.style.display='none'; return; }
-  const t=L('ברוך הבא, ','Welcome, ','Bienvenido, ')+name;
+  // (owner) no name → just "Welcome", in the screen's language
+  const t=name ? L('ברוך הבא, ','Welcome, ','Bienvenido, ')+name : L('ברוך הבא','Welcome','Bienvenido');
   if(box.style.display==='none') box.style.display='';
   if(box.getAttribute('data-gtw')!==t){ box.setAttribute('data-gtw',t); box.setAttribute('data-no-i18n','');
-    box.innerHTML='<span style="font-size:13px;color:var(--muted);">'+escapeHtml(L('ברוך הבא, ','Welcome, ','Bienvenido, '))+'</span><strong>'+escapeHtml(name)+'</strong>'; }
+    box.innerHTML = name ? '<span style="font-size:13px;color:var(--muted);">'+escapeHtml(L('ברוך הבא, ','Welcome, ','Bienvenido, '))+'</span><strong>'+escapeHtml(name)+'</strong>'
+                         : '<span style="font-size:13px;color:var(--gold2);font-weight:700;">'+escapeHtml(L('ברוך הבא','Welcome','Bienvenido'))+'</span>'; }
 }
 setInterval(_gtWelcomeUpdate, 1000);
 // the legs login card says "head" when the plant does not take legs (v10.38, owner)
