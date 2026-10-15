@@ -397,6 +397,9 @@ button[onclick^="mgrRemoveCattleType("],button[onclick^="mgrRemoveDevice("]{min-
 .tb-user{font-size:12px;}
 /* problem report kept away from the ✕ (log-out) button */
 .tb-right .icon-btn[onclick^="reportProblem"]{order:-1;margin-inline-end:10px;}
+/* v10.38 (owner): on a computer / big tablet the date and time are readable */
+@media (min-width:768px){ .tb-mid{font-size:15px;} .tb-mid .heb{font-size:15px;} #mgrHeb,#mgrTime{font-size:15px !important;} .gt-scr-name{font-size:24px !important;} }
+@media (min-width:1200px){ .tb-mid{font-size:17px;} .tb-mid .heb{font-size:17px;} }
 /* narrow phones: two rows — buttons on top, date/time line below; the
    "Welcome:" word is dropped (the worker name stays) */
 @media (max-width:600px){
@@ -1661,9 +1664,10 @@ const LUNG_B64="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICA
         <div class="mgr-sec" id="mgrRecoveryTitle">קוד שחזור לראש הצוות</div>
         <div class="mgr-card" id="mgrRecoveryCard"></div>
         <div class="mgr-sec owner-hide">גיבוי ושחזור</div>
-        <div class="mgr-card owner-hide" style="display:flex;gap:8px;">
+        <div class="mgr-card owner-hide" style="display:flex;gap:8px;flex-wrap:wrap;">
           <button onclick="mgrBackupNow()" style="flex:1;padding:9px;border-radius:8px;background:rgba(40,199,111,.15);border:1px solid var(--green);color:var(--green);font-weight:700;font-size:13px;cursor:pointer;">💾 גיבוי עכשיו</button>
           <button class="maker-hide" onclick="mgrRestorePrompt()" style="flex:1;padding:9px;border-radius:8px;background:rgba(240,160,48,.15);border:1px solid var(--amber);color:var(--amber);font-weight:700;font-size:13px;cursor:pointer;">📂 שחזור מגיבוי</button>
+          <button onclick="mgrShowBackups()" style="flex:1;padding:9px;border-radius:8px;background:rgba(212,168,67,.12);border:1px solid var(--gold);color:var(--gold);font-weight:700;font-size:13px;cursor:pointer;">📦 גיבויים אוטומטיים</button>
         </div>
 
         <div class="mgr-sec">רישוי</div>
@@ -1766,12 +1770,11 @@ const LUNG_B64="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICA
           </div>
         </div>
 
-        <!-- Automatic daily rollover (manual reset removed — see mgrSetAutoReset above) -->
-        <div class="mgr-card">
-          <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:6px;">🔒 איפוס יום — אוטומטי בלבד</div>
-          <div style="font-size:12px;color:var(--muted);line-height:1.6;">היום מתאפס אוטומטית בשעה שהוגדרה למעלה, ורק אחרי שגיבוי הצליח. אין כפתור איפוס ידני באפליקציה — זה נמנע בכוונה כדי שיום עבודה לא יימחק בטעות.</div>
-          <button onclick="mgrShowBackups()" style="width:100%;margin-top:10px;padding:9px;border-radius:8px;background:rgba(212,168,67,.12);border:1px solid var(--gold);color:var(--gold);font-size:12px;font-weight:700;cursor:pointer;">📦 גיבויים אוטומטיים — צפייה ושחזור</button>
-          <button id="gtTestResetBtn" onclick="gtTestResetNow()" style="display:none;width:100%;margin-top:8px;padding:10px;border-radius:8px;background:rgba(224,48,48,.12);border:1px solid #E03030;color:#FF6B6B;font-size:13px;font-weight:700;cursor:pointer;">🧪 איפוס יום עכשיו — רק במצב בדיקה</button>
+        <!-- v10.38 (owner): the day resets by itself at the set hour; the team leader can also reset it by hand -->
+        <div class="mgr-card owner-hide maker-hide">
+          <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:6px;">🔄 איפוס יום</div>
+          <div style="font-size:12px;color:var(--muted);line-height:1.6;">היום מתאפס לבד בשעה שהוגדרה למעלה, אחרי גיבוי. בהמה שעוד לא קיבלה את כל הסימנים עוצרת את האיפוס — הרשימה מופיעה בלשונית "היום". איפוס ידני: עם אישור, ואם יש בהמות שלא הסתיימו — עם סיבה שנרשמת.</div>
+          <button id="gtManualResetBtn" onclick="gtManualResetNow()" style="width:100%;margin-top:10px;padding:11px;border-radius:8px;background:rgba(224,48,48,.12);border:1px solid #E03030;color:#FF6B6B;font-size:14px;font-weight:700;cursor:pointer;">🔄 איפוס יום ידני</button>
         </div>
 
       </div><!-- end ss-system -->
@@ -4891,6 +4894,7 @@ const KS = (function(){
     weightSideDone,
     weightStageDone,
     setManagerToken,
+    catchUp: ()=>_sbCatchUp(),
     getManagerToken,
     getManagerRole,
     getManagerTokenExpiry,
@@ -6453,6 +6457,7 @@ const savedPages=(()=>{
 })();
 function _savePages(){try{localStorage.setItem('ks_pages',JSON.stringify(savedPages));}catch(e){}}
 function goTo(id){
+  setTimeout(()=>{ try{ _gtScreenTitleUpdate(); }catch(e){} }, 0);   // v10.38: the screen's name at the top
   if(/^sc(Slaughter|Esophagus|Legs|Inner|Outer|Parts|Stamps)Login$/.test(id) && typeof _gtWorkerLogout==='function') _gtWorkerLogout();   // worker logout (step41)
   // A device that isn't paired to a station (and has no manager logged in on
   // it) never gets the home menu — it shows its pairing code instead.
@@ -6460,7 +6465,8 @@ function goTo(id){
   // v10.5: on the team leader's own device the leader screen IS the home screen
   // (owner / manufacturer too: their screen is the same one, view only).
   // The menu of station cards opens only in the owner's single-phone test mode.
-  if(id==="scNav" && typeof _gtLeaderHome==='function' && _gtLeaderHome()) id="scManager";
+  // v10.38 (owner): only after the server confirmed the login — never the inner page on an old login
+  if(id==="scNav" && typeof _gtLeaderHome==='function' && _gtLeaderHome()){ setTimeout(()=>{ try{ _gtLeaderEnterChecked(); }catch(e){} }, 0); }
   // Save current page for whatever screen is active
   const cur=document.querySelector(".screen.active");
   if(cur){
@@ -6898,6 +6904,7 @@ function _confirmLogin(role,loginScreenId){
       KS.setManagerToken(data.token, data.expires_at, data.role);
       if(data.registerLeaderDevice) _gtSelfPairLeader(data.token, data.name);   // step 46: the plant's first team-leader device
       try{ setTimeout(()=>KS.syncNow(), 50); }catch(e){}
+      try{ setTimeout(()=>{ gtProcRefresh(); }, 400); }catch(e){}   // v10.38: an open earlier day shows at once
       name = data.name || 'ראש צוות';
       if(data.role==='manufacturer' && _makerLoginFromLeader){ _makerLoginFromLeader=false; _cancelLogin(); goTo('scMaker'); makerRender(); return; }
       _makerLoginFromLeader=false;
@@ -7328,6 +7335,15 @@ function _makerTick(){
 }
 setInterval(_makerTick, 1000);
 function _supportAccessOpen(){ const u=KS.getSettings().supportAccessUntil; return !!u && Date.parse(u) > Date.now(); }
+// v10.38 (owner): while the manufacturer may change things, EVERY screen of the plant says so — never silently
+setInterval(()=>{
+  try{
+    if(_supportAccessOpen()){
+      const u=new Date(KS.getSettings().supportAccessUntil), hm=String(u.getHours()).padStart(2,'0')+':'+String(u.getMinutes()).padStart(2,'0');
+      window.gtStatusSet('makerOpen', L('🏭 היצרן מחובר עם גישת תיקון — הוא יכול לשנות הגדרות עד ','🏭 The manufacturer has repair access — settings can be changed until ','🏭 El fabricante tiene acceso de reparación — puede cambiar ajustes hasta ')+hm, {color:'amber'});
+    } else if(window.gtStatusHas && window.gtStatusHas('makerOpen')) window.gtStatusClear('makerOpen');
+  }catch(e){}
+}, 3000);
 // manufacturer without the plant's repair permission = view only (like an owner)
 function _makerViewOnly(){ return _isMakerSession() && !_supportAccessOpen(); }
 function _isMakerSession(){ return !!(typeof KS!=='undefined' && KS.getManagerRole && KS.getManagerRole()==='manufacturer'); }
@@ -7908,7 +7924,7 @@ function esoRenderGrid(){
     i=>{
       const x=a[i];
       if(x.esoChecked&&x.esoResult==='nevela')return"nevela";   // failed HERE — show it
-      if(x.slaughter==='nevela'||x.slaughter==='shot')return"empty";
+      if(x.slaughter==='nevela'||x.slaughter==='shot')return"nevela";   // v10.38 (owner): the shochet's nevela / shot shows here too
       if(x.slaughter!=='slaughtered'&&x.slaughter!=='notChalak')return"empty";
       // notChalak keeps its yellow color before AND after the check.
       const nc=(x.slaughter==='notChalak');
@@ -7919,7 +7935,7 @@ function esoRenderGrid(){
     i=>{
       const x=a[i];
       if(x.esoChecked&&x.esoResult==='nevela')return t.slN||'נבלה';
-      if(x.slaughter==='nevela'||x.slaughter==='shot')return"";
+      if(x.slaughter==='nevela'||x.slaughter==='shot')return t.slN||'נבלה';   // (only the slaughter screen says ירוי)
       if(x.slaughter!=='slaughtered'&&x.slaughter!=='notChalak')return"";
       const ncL=lang==='he'?'לא חלק':lang==='es'?'No Jalak':'Non-Chalak';
       if(x.esoChecked){
@@ -10043,8 +10059,9 @@ function gtFocusRender(){
 
 // ── SEARCH ──
 var _gtSrch = { on: { number: true }, rows: [] };
+// v10.38 (owner): search by farm / breed removed — not needed
 const _GT_SRCH = [['number', '#', 'מספר בהמה', 'Animal number', 'Número'], ['date', '📅', 'תאריך', 'Date', 'Fecha'], ['range', '📆', 'טווח תאריכים', 'Date range', 'Rango'],
-                  ['farm', '🏡', 'משק', 'Farm', 'Granja'], ['type', '🐂', 'זן בהמה', 'Breed', 'Raza'], ['status', '✅', 'פסיקה', 'Ruling', 'Dictamen'], ['worker', '👷', 'עובד / בודק', 'Worker / inspector', 'Trabajador']];
+                  ['status', '✅', 'פסיקה', 'Ruling', 'Dictamen'], ['worker', '👷', 'עובד / בודק', 'Worker / inspector', 'Trabajador']];
 function gtSearchInit(){
   const he = lang === 'he', es = lang === 'es';
   document.getElementById('srchTitle').textContent = L('מה מחפשים?', 'What are you looking for?', '¿Qué busca?');
@@ -10331,7 +10348,7 @@ function gtSettingsBuild(){
   root.appendChild(sb);
   root.appendChild(host);
   // v10.34: the daily-reset card sat under "small parts — average weight"; it belongs to "daily reset & archive"
-  try{ const card = document.getElementById('gtTestResetBtn').closest('.mgr-card');
+  try{ const card = document.getElementById('gtManualResetBtn').closest('.mgr-card');
        const sec = [...host.querySelectorAll('details.gt-acc-in')].find(d => /איפוס יומי וארכיון|Daily reset|Reinicio diario/.test(d.querySelector('summary').textContent||''));
        if(card && sec) sec.querySelector('.gt-acc-b').appendChild(card); }catch(e){}
   gtSettingsLabels();
@@ -10347,6 +10364,16 @@ function gtSettingsBuild(){
 // v10.34 (owner): in test mode only — start a new day now (backup first, as the automatic reset does)
 // (the server's test mode + a team leader logged in — not the "all stations on this device" switch)
 function _gtTestResetAllowed(){ return (window._gtServerTestMode===true || !!(window._gtTestInfo && window._gtTestInfo.on)) && !!(KS.getManagerToken && KS.getManagerToken()) && KS.getManagerRole()==='manager'; }
+// v10.38 (owner): the team leader's manual reset is back — confirmed; unfinished animals need a written reason
+async function gtManualResetNow(){
+  if(!(KS.getManagerToken && KS.getManagerToken()) || KS.getManagerRole()!=='manager'){ KS.notice(L('רק ראש צוות.','Team leader only.','Solo el jefe de equipo.')); return; }
+  if(!(await _gtLeaderSessionOk())){ goTo('scNav'); _checkLogin('manager','scManagerLogin'); return; }
+  if(!confirm(L('לאפס את היום עכשיו? המספרים מתחילים מחדש (קודם נשמר גיבוי, והיום נשמר בארכיון).','Reset the day now? The numbers start again (a backup is saved first, and the day goes to the archive).','¿Reiniciar el día ahora? Los números empiezan de nuevo (antes se guarda una copia y el día va al archivo).'))) return;
+  try{ localStorage.removeItem('glatttrack_daily_reset_lock_v2'); }catch(e){}
+  const ok = await ksRunProtectedDailyReset('manual-reset');
+  KS.notice(ok ? L('היום אופס.','The day was reset.','El día fue reiniciado.') : L('האיפוס לא בוצע: ','Not reset: ','No se reinició: ') + (_lastResetFailureReason || ''));
+  try{ gtProcRefresh(); }catch(e){}
+}
 async function gtTestResetNow(){
   if(!_gtTestResetAllowed()){ KS.notice(L('רק במצב בדיקה.','Test mode only.','Solo en modo de prueba.')); return; }
   if(!confirm(L('לאפס את היום עכשיו? כל המספרים מתחילים מחדש (קודם נשמר גיבוי).','Reset the day now? All numbers start again (a backup is saved first).','¿Reiniciar el día ahora? Todos los números empiezan de nuevo (antes se guarda una copia).'))) return;
@@ -10354,7 +10381,6 @@ async function gtTestResetNow(){
   const ok = await ksRunProtectedDailyReset('test-reset');
   KS.notice(ok ? L('היום אופס.','The day was reset.','El día fue reiniciado.') : L('האיפוס לא בוצע: ','Not reset: ','No se reinició: ') + (_lastResetFailureReason || ''));
 }
-setInterval(() => { try{ const b = document.getElementById('gtTestResetBtn'); if(b) b.style.display = _gtTestResetAllowed() ? 'block' : 'none'; }catch(e){} }, 2000);
 function gtSetSearch(q){
   const res = document.getElementById('gtSetSearchRes'); if(!res) return;
   q = String(q || '').trim().toLowerCase();
@@ -10498,8 +10524,8 @@ function updateMgr(){
 // v10.32 (owner): the team leader's Today tab in three — Overview (opens first) · Tracking · System.
 // Too much on one page hides everything; system health is not on the first page.
 var _gtTodaySub='ov';
-const GT_TODAY_PANES={ ov:['gtSetupGuide','gtPauseCard','gtTodaySum','@mgrSecLive','mgrMonitor','@mgrSecProgress','mgrProgress','gtTodayAtt'],
-                       tr:['gtOpenCard','mgrProc','todayIntakeAcc'], sys:['mgrHealth','gtTestHome'] };
+const GT_TODAY_PANES={ ov:['mgrProc','gtSetupGuide','gtPauseCard','gtTodaySum','@mgrSecLive','mgrMonitor','@mgrSecProgress','mgrProgress','gtTodayAtt'],
+                       tr:['gtOpenCard','todayIntakeAcc'], sys:['mgrHealth','gtTestHome'] };
 function _gtTodayEl(id){ return id[0]==='@' ? document.querySelector('#mgr-monitor .mgr-sec[data-t="'+id.slice(1)+'"]') : document.getElementById(id); }
 function gtTodayArrange(){
   const pane=document.getElementById('mgr-monitor'); if(!pane) return;
@@ -15633,6 +15659,64 @@ function _gtLeaderHome(){
     return !(typeof _gtTestModeOn==='function' && _gtTestModeOn());
   }catch(e){ return false; }
 }
+// v10.38 (owner): every work screen says which screen it is, big, at the top (וושט / רגליים / ראש …)
+function _gtScreenTitleText(id){
+  switch(id){
+    case 'scSlaughter': return L('שחיטה','Slaughter','Faena');
+    case 'scEsophagus': return L('וושט','Esophagus','Esófago');
+    case 'scLegs': { let r='both'; try{ r=_lgRole(); }catch(e){}
+      return r==='legs' ? L('רגליים','Legs','Patas') : r==='head' ? L('ראש','Head','Cabeza') : r==='paused' ? L('רגליים — כבוי','Legs — off','Patas — apagado') : L('רגליים וראש','Legs & head','Patas y cabeza'); }
+    case 'scInner': return L('בדיקת פנים','Inner check','Revisión interna');
+    case 'scOuter': return L('בדיקת חוץ','Outer check','Revisión externa');
+    case 'scParts': return L('חלקים קטנים','Small parts','Partes pequeñas');
+    case 'scStamps': return L('חותמות ושקילה','Stamps & weighing','Sellos y pesaje');
+    case 'scSup': try{ if(supRole==='nikur') return _nkTitle(); const g=GT_SUP_SCREENS[supRole]; return g ? L(g.n[0],g.n[1],g.n[2]) : ''; }catch(e){ return ''; }
+  }
+  return '';
+}
+function _gtScreenTitleUpdate(){
+  const a=document.querySelector('.screen.active'); if(!a) return;
+  const mid=a.querySelector('.topbar .tb-mid'); if(!mid) return;
+  const t=_gtScreenTitleText(a.id);
+  let el=mid.querySelector('.gt-scr-name');
+  if(!t){ if(el) el.remove(); return; }
+  if(!el){ el=document.createElement('div'); el.className='gt-scr-name'; el.setAttribute('data-no-i18n','');
+           el.style.cssText='font-size:20px;font-weight:900;color:var(--gold);line-height:1.1;white-space:nowrap;';
+           mid.insertBefore(el, mid.firstChild); }
+  if(el.textContent!==t) el.textContent=t;
+}
+setInterval(_gtScreenTitleUpdate, 1000);
+// v10.38 (owner): a team-leader login the server no longer accepts never opens the team-leader screen —
+// the server is asked FIRST; until it answers, the home screen stays (no inner page, no alert half a minute later)
+let _gtLeaderCheckBusy=false;
+async function _gtLeaderSessionOk(){
+  const tok=KS.getManagerToken && KS.getManagerToken(); if(!tok) return false;
+  for(let i=0;i<60 && !window.sb;i++) await new Promise(r=>setTimeout(r,100));   // just opened: the server library is still loading
+  if(!window.sb) return true;                                   // no server library: the network lock decides
+  try{
+    const r=await _withTimeout(window.sb.rpc('manager_session_check',{p_token:tok}),8000);
+    if(r.error || !r.data) return true;                         // no clear answer (older server / network): keep
+    if(r.data.ok===false){ KS.setManagerToken(null,null); try{ _clearLeaderStash(); }catch(e){} return false; }
+    return true;
+  }catch(e){ return true; }
+}
+async function _gtLeaderEnterChecked(){
+  if(_gtLeaderCheckBusy) return; _gtLeaderCheckBusy=true;
+  try{
+    const ok=await _gtLeaderSessionOk();
+    const a=document.querySelector('.screen.active');
+    if(ok){ if(!a || a.id==='scNav') goTo('scManager'); }
+    else { if(a && a.id==='scManager') goTo('scNav'); _checkLogin('manager','scManagerLogin'); }
+  } finally { _gtLeaderCheckBusy=false; }
+}
+// back to the tab / app after a while: the same check before the team-leader screen is used again
+document.addEventListener('visibilitychange', ()=>{
+  if(document.visibilityState!=='visible') return;
+  const a=document.querySelector('.screen.active');
+  if(a && a.id==='scManager' && KS.getManagerToken && KS.getManagerToken() && !(typeof _isMakerSession==='function' && _isMakerSession())){
+    _gtLeaderSessionOk().then(ok=>{ if(!ok){ goTo('scNav'); _checkLogin('manager','scManagerLogin'); } });
+  }
+});
 function _gtIsLeaderDevice(){ try{ return localStorage.getItem('gt_leader_device')==='1'; }catch(e){ return false; } }
 function _needsPairing(){
   if(_kioskLoadLocal()) return false;                   // already locked to a station
@@ -16108,6 +16192,7 @@ function _gtNetLockShow(on, why){
 ['keydown','keypress','keyup'].forEach(ev=>window.addEventListener(ev, e=>{ if(window._gtNetLocked){ e.stopImmediatePropagation(); e.preventDefault(); } }, true));
 function _gtNetTick(){
   const now = Date.now();
+  if(typeof document!=='undefined' && document.visibilityState==='hidden') return;   // v10.38: not judged in the background
   const okAt = window._gtNetOkAt || 0, failAt = window._gtNetFailAt || 0;
   const offline = (typeof navigator !== 'undefined' && navigator.onLine === false);
   if(offline){ if(!_gtOfflineSince) _gtOfflineSince = now; } else _gtOfflineSince = 0;
@@ -16141,6 +16226,21 @@ function _gtNetTick(){
 }
 window._gtBootAt = Date.now();
 setInterval(_gtNetTick, 2000);
+// v10.38 (owner): back to this tab / app after another one — the browser slowed this page down meanwhile, so
+// what it saw in the background says nothing about the server. Ask the server at once (fresh grace), take
+// what changed, and reconnect the live updates now instead of waiting for the library's own retry.
+function _gtNetResume(){
+  window._gtNetOkAt = Math.max(window._gtNetOkAt||0, Date.now());   // a fresh 15 s, not the background silence
+  window._gtNetFailAt = 0; _gtNetPinging = false;
+  _gtNetPing();
+  try{ if(window.sb && window.sb.realtime && typeof window.sb.realtime.isConnected==='function' && !window.sb.realtime.isConnected()) window.sb.realtime.connect(); }catch(e){}
+  try{ if(typeof KS!=='undefined' && KS.catchUp) KS.catchUp(); }catch(e){}
+  try{ if(typeof KS!=='undefined' && KS.syncNow) setTimeout(()=>KS.syncNow(), 300); }catch(e){}
+  setTimeout(_gtNetTick, 1500);
+}
+document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible') _gtNetResume(); });
+window.addEventListener('pageshow', e=>{ if(e.persisted) _gtNetResume(); });
+window.addEventListener('focus', ()=>{ if(Date.now()-(window._gtNetOkAt||0) > 6000) _gtNetResume(); });
 window.addEventListener('offline', _gtNetTick); window.addEventListener('online', _gtNetTick);
 
 /** Renders the "מכשירים" panel inside מסך ראש צוות: every registered device,
@@ -16729,7 +16829,7 @@ applyLang();
   if(location.hash==='#counter'){ goTo('scCounter'); return; }   // read-only big-screen counter
   const active=document.querySelector(".screen.active");
   if(active && active.id==='scNav' && _needsPairing()) goTo('scPair');
-  else if(active && active.id==='scNav' && _gtLeaderHome()) goTo('scManager');
+  else if(active && active.id==='scNav' && _gtLeaderHome()) _gtLeaderEnterChecked();
 })();
 // Re-apply all settings-driven UI shortly after load, so functions enabled in a
 // previous session (esophagus, notChalak, screen split, etc.) appear immediately
@@ -17406,8 +17506,10 @@ function _gtProcStationName(st){ return ({legs:L('רגליים','Legs','Patas'),
 function mgrRenderProc(){
   const el=document.getElementById('mgrProc'); if(!el) return;
   const p=window._gtProc;
-  if(!p || !p.ok){ el.style.display='none'; return; }
-  el.style.display='';
+  // v10.38 (owner): on the first page, and only when something waits — an earlier day still open, or a day
+  // that did not reset — in red, with what to do
+  if(!p || !p.ok || (!(p.boards||[]).length && !p.rolloverWaitingSince)){ el.style.display='none'; return; }
+  el.style.display=''; el.style.border='2px solid var(--red)';
   const E=escapeHtml, canClose=(KS.getManagerRole && KS.getManagerRole()==='manager');
   const fmt=d=>{ const x=String(d||'').split('-'); return x.length===3 ? x[2]+'/'+x[1]+'/'+x[0] : String(d||''); };
   let x='<div class="mgr-sec" style="margin-top:0;">'+E(L('ימי שחיטה בעיבוד','Slaughter days in processing','Días de faena en procesamiento'))+'</div>';
@@ -17422,12 +17524,16 @@ function mgrRenderProc(){
       const done=closed[st]!=null || !(pend[st]>0);
       let t=E(_gtProcStationName(st))+': '+(closed[st]!=null ? E(L('נסגר','closed','cerrado')) : done ? '✓' : E(String(pend[st])));
       if(cur) t='<b>'+t+'</b>';
-      if(canClose && cur && !done) t+=' <button onclick="mgrProcClose('+Number(b.id)+',\''+st+'\')">'+E(L('סגור','Close','Cerrar'))+'</button>';
+      if(canClose && cur && !done) t+=' <button onclick="mgrProcClose('+Number(b.id)+',\''+st+'\')" style="padding:6px 14px;border-radius:7px;border:1px solid #E03030;background:rgba(224,48,48,.15);color:#FF6B6B;font-weight:700;font-size:13px;cursor:pointer;">'+E(L('סגור','Close','Cerrar'))+'</button>';
       return t;
     }).join(' · ');
     x+='<div class="gt-hrow"><span>📅 '+E(fmt(b.day))+'</span><span>'+parts+'</span></div>';
   });
-  if(p.rolloverWaitingSince) x+='<div class="gt-hrow"><span>⚠ '+E(_gtHealthCodeText('rollover_waiting'))+'</span><span></span></div>';
+  if((p.boards||[]).length) x+='<div style="font-size:13px;color:#FF6B6B;font-weight:700;margin-top:6px;">'+E(L('כל עוד יום ישן פתוח, המסכים של התחנה הזו עובדים עליו ולא על היום. כשמה שנשאר לא יעובד — "סגור".','While an earlier day is open, that station\'s screens work on it, not on today. When what is left will not be processed — "Close".','Mientras un día anterior esté abierto, las pantallas de esa estación trabajan en él. Si lo que queda no se procesará — "Cerrar".'))+'</div>';
+  if(p.rolloverWaitingSince){
+    x+='<div class="gt-hrow"><span>⚠ '+E(L('היום לא התאפס: יש בהמות שעוד לא קיבלו את כל הסימנים (פסיקה / רגליים וראש / חלקים / חותמות).','The day did not reset: some animals do not have all their marks yet (ruling / legs and head / parts / stamps).','El día no se reinició: hay animales sin todas sus marcas.'))+'</span><span></span></div>';
+    if(canClose) x+='<button onclick="gtManualResetNow()" style="width:100%;margin-top:8px;padding:10px;border-radius:8px;background:rgba(224,48,48,.12);border:1px solid #E03030;color:#FF6B6B;font-size:14px;font-weight:700;cursor:pointer;">'+E(L('🔄 איפוס יום ידני (יופיעו המספרים, ותתבקש סיבה)','🔄 Manual day reset (the numbers are shown, and a reason is asked)','🔄 Reinicio manual (se muestran los números y se pide un motivo)'))+'</button>';
+  }
   x+='<div style="font-size:11px;color:var(--muted);margin-top:6px;">'+E(L('כל תחנה עובדת על היום הישן ביותר שלה (מודגש), בלי דילוג. "סגור" — רק כשמה שנשאר לא יעובד בתחנה הזו.','Each station works on its oldest day (bold), no skipping. "Close" — only when what is left will not be processed at that station.','Cada estación trabaja en su día más antiguo (negrita), sin saltos. "Cerrar" — solo si lo que queda no se procesará en esa estación.'))+'</div>';
   el.innerHTML=x;
 }
