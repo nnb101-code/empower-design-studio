@@ -12127,6 +12127,7 @@ notify pgrst, 'reload schema';
 -- ============================================================================
 -- ============================================================================
 -- ============================================================================
+-- ============================================================================
 -- GlattTrack — step 46: stage order on the server, each station its own stage,
 -- kashrut configuration locks, and processing that continues over several days
 -- ============================================================================
@@ -19484,6 +19485,7 @@ create table if not exists support_issues (
   who text, message text not null check (length(message) between 1 and 1000));
 alter table support_issues enable row level security;
 revoke all on table support_issues from public, anon, authenticated;
+revoke all on sequence support_issues_id_seq from public, anon, authenticated;   -- Supabase opens new sequences to the app by default
 
 create or replace function support_issue_add(p_token text, p_message text) returns jsonb
 language plpgsql security definer set search_path = public, extensions, pg_temp as $$
