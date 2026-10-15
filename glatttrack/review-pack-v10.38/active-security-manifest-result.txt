@@ -1,9 +1,9 @@
 == 1. plant state =======================================================
     key     |     value     |          updated_at           
 ------------+---------------+-------------------------------
- boardEpoch | 1792092086984 | 2026-10-15 19:21:26.983593+00
- schemaStep | 46            | 2026-10-15 19:21:28.425074+00
- testMode   | off           | 2026-10-15 19:21:27.655839+00
+ boardEpoch | 1792094844931 | 2026-10-15 20:07:24.931236+00
+ schemaStep | 46            | 2026-10-15 20:07:26.342891+00
+ testMode   | off           | 2026-10-15 20:07:25.608195+00
 (3 rows)
 
 == 2. functions (public, gt_rls) ========================================
@@ -51,6 +51,8 @@
  public | manager_session_check(text)                                                        | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
  public | manufacturer_set_billing(text,boolean,numeric,text,text)                           | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
  public | nikur_board()                                                                      | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
+ public | nikur_day_close(text,bigint,text)                                                  | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
+ public | nikur_hold(integer,bigint,text,uuid)                                               | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
  public | nikur_scan(integer,text,integer,bigint,uuid)                                       | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
  public | outer_open(integer,bigint,boolean,text)                                            | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
  public | outer_open(integer,bigint,boolean,text,uuid)                                       | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
@@ -82,6 +84,7 @@
  public | worker_session_check()                                                             | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
  public | _acting_device()                                                                   | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _admin_audit(text,text,text,jsonb)                                                 | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _animal_pieces_track()                                                             | trigger  | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _animals_close_questions()                                                         | trigger  | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _animals_hold_guard()                                                              | trigger  | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _animals_merge()                                                                   | trigger  | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
@@ -171,6 +174,8 @@
  public | _nc_outer_allowed()                                                                | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _nc_outer_value_ok(animals_pilot,text)                                             | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _nc_statuses()                                                                     | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _nikur_day_date(bigint)                                                            | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _nikur_day_rows(bigint)                                                            | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _nikur_refusal(animals_pilot,jsonb,bigint)                                         | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _no_device_error()                                                                 | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _note_revoked_write(text)                                                          | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
@@ -190,6 +195,7 @@
  public | _proc_pending(text,animals_pilot,boolean)                                          | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _proc_station_of_group(text)                                                       | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _proc_stations()                                                                   | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _product_def(text)                                                                 | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _products_counts(jsonb)                                                            | function | f                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _products_error(jsonb)                                                             | function | f                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _push_is_correction(jsonb)                                                         | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
@@ -241,7 +247,7 @@
  public | leader_account_remove(text)                                                        | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | leader_device_recovery(text)                                                       | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | manufacturer_set_code(text,text)                                                   | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
-(232 rows)
+(238 rows)
 
 == 2b. API surface: functions the app roles can run ======================
                        callable_by_app                       | security_definer 
@@ -288,6 +294,8 @@
  manager_session_check(text)                                 | t
  manufacturer_set_billing(text,boolean,numeric,text,text)    | t
  nikur_board()                                               | t
+ nikur_day_close(text,bigint,text)                           | t
+ nikur_hold(integer,bigint,text,uuid)                        | t
  nikur_scan(integer,text,integer,bigint,uuid)                | t
  outer_open(integer,bigint,boolean,text)                     | t
  outer_open(integer,bigint,boolean,text,uuid)                | t
@@ -317,7 +325,7 @@
  worker_login(text,text,text)                                | t
  worker_logout(text)                                         | t
  worker_session_check()                                      | t
-(71 rows)
+(73 rows)
 
 == 3. triggers on the key tables ========================================
         table        |               trigger               |               function                |                 fires                 |  state  | security_definer 
@@ -329,6 +337,7 @@
  animals_pilot       | b_animals_stage_guard               | _animals_stage_guard                  | BEFORE UPDATE ROW                     | enabled | t
  animals_pilot       | trg_animals_pilot_advance_cursor    | animals_pilot_advance_cursor          | AFTER INSERT/UPDATE ROW               | enabled | t
  animals_pilot       | trg_animals_pilot_guard_corrections | animals_pilot_guard_corrections       | BEFORE UPDATE ROW                     | enabled | t
+ animals_pilot       | zz_animal_pieces_track              | _animal_pieces_track                  | AFTER INSERT/UPDATE ROW               | enabled | t
  animals_pilot       | zz_device_write_guard               | _device_write_guard                   | BEFORE INSERT/UPDATE/DELETE STATEMENT | enabled | t
  animals_pilot       | zzz_nc_outer_guard                  | _animals_nc_outer_guard               | BEFORE INSERT/UPDATE ROW              | enabled | t
  animals_pilot       | zzz_outer_open_guard                | _animals_outer_open_guard             | BEFORE INSERT/UPDATE ROW              | enabled | t
@@ -350,7 +359,7 @@
  plant_state         | zz_test_mode_audit                  | _plant_state_test_mode_trg            | AFTER INSERT/UPDATE ROW               | enabled | t
  settings_pilot      | zz_settings_hash_worker_codes       | _settings_hash_worker_codes           | BEFORE INSERT/UPDATE ROW              | enabled | t
  settings_pilot      | zz_worker_lists_saved               | _worker_lists_saved                   | AFTER UPDATE ROW                      | enabled | t
-(28 rows)
+(29 rows)
 
 == 4. row security and policies =========================================
           table          | rls_on | rls_forced | policies 
@@ -358,6 +367,7 @@
  admin_audit             | t      | f          |        0
  animal_changes          | t      | f          |        0
  animal_holds            | t      | f          |        0
+ animal_pieces           | t      | f          |        0
  animals                 | t      | f          |        2
  animals_carry           | t      | f          |        0
  animals_pilot           | t      | f          |        1
@@ -376,6 +386,7 @@
  login_attempts          | t      | f          |        0
  lung_drawings           | t      | f          |        0
  manager_sessions        | t      | f          |        0
+ nikur_days_closed       | t      | f          |        0
  outer_status_pilot      | t      | f          |        0
  pairing_requests        | t      | f          |        0
  piece_scans             | t      | f          |        0
@@ -394,7 +405,7 @@
  system_flags            | t      | f          |        0
  worker_codes            | t      | f          |        0
  worker_sessions         | t      | f          |        0
-(39 rows)
+(41 rows)
 
           table          |            policy            |  cmd   | permissive |        roles         |                                                                    using_expr                                                                     |                          check_expr                           
 -------------------------+------------------------------+--------+------------+----------------------+---------------------------------------------------------------------------------------------------------------------------------------------------+---------------------------------------------------------------

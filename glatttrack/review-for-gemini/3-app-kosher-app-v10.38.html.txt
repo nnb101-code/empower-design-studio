@@ -397,6 +397,27 @@ button[onclick^="mgrRemoveCattleType("],button[onclick^="mgrRemoveDevice("]{min-
 .tb-user{font-size:12px;}
 /* problem report kept away from the ✕ (log-out) button */
 .tb-right .icon-btn[onclick^="reportProblem"]{order:-1;margin-inline-end:10px;}
+/* v10.38 (owner): categories and sub-categories big, bold and each in its own colour */
+#gtSetGroups details.gt-grp{border-inline-start:6px solid var(--gc,var(--gold));border-radius:14px;}
+#gtSetGroups details.gt-grp>summary{font-size:20px!important;font-weight:900!important;padding:16px 14px!important;background:color-mix(in srgb,var(--gc,#D4A843) 16%,transparent);}
+#gtSetGroups details.gt-grp>summary .gt-acc-t{color:var(--gc,var(--gold));font-size:20px;font-weight:900;}
+#gtSetGroups details.gt-grp>summary .gt-acc-s{font-size:12px;opacity:.75;}
+#gtSetGroups details.gt-acc-in{border-inline-start:4px solid var(--gc,var(--gold));}
+#gtSetGroups details.gt-acc-in>summary{font-size:16px!important;font-weight:800!important;padding:12px!important;background:color-mix(in srgb,var(--gc,#D4A843) 8%,transparent);}
+#gtSetGroups details.gt-acc-in>summary .mgr-sec{font-size:16px!important;font-weight:800!important;color:var(--gc,var(--text))!important;}
+#gtSetGroups details.gt-grp[data-g="devices"]{--gc:#4FA3FF;}
+#gtSetGroups details.gt-grp[data-g="users"]{--gc:#3DD68C;}
+#gtSetGroups details.gt-grp[data-g="kashrut"]{--gc:#E8B84A;}
+#gtSetGroups details.gt-grp[data-g="stations"]{--gc:#B48CFF;}
+#gtSetGroups details.gt-grp[data-g="printing"]{--gc:#FF9F43;}
+#gtSetGroups details.gt-grp[data-g="daily"]{--gc:#34D1D1;}
+#gtSetGroups details.gt-grp[data-g="system"]{--gc:#FF6B6B;}
+/* the team leader's main tabs: bigger, each in its colour */
+#scManager .mgr-tab{font-size:16px!important;font-weight:800!important;padding:12px 14px!important;}
+#scManager .mgr-tab#tab-monitor{color:#E8B84A;} #scManager .mgr-tab#tab-search{color:#4FA3FF;} #scManager .mgr-tab#tab-analysis{color:#3DD68C;}
+#scManager .mgr-tab#tab-settings{color:#B48CFF;} #scManager .mgr-tab#tab-log{color:#FF9F43;}
+#scManager .mgr-tab.active{border-bottom-width:4px!important;background:rgba(255,255,255,.06);}
+#scManager .mgr-sec{font-size:17px;font-weight:800;}
 /* v10.38 (owner): technical tools (system check, AI, error log) — the manufacturer's, not the team leader's */
 body:not(.gt-maker) .gt-tech{display:none !important;}
 /* v10.38 (owner): on a computer / big tablet the date and time are readable */

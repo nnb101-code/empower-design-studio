@@ -1057,17 +1057,22 @@ begin
   perform set_config('gt.reset_in_progress', 'true', true);
   update settings_pilot set settings = settings || '{"legsPaused":true}'::jsonb where id = 1;
   perform set_config('gt.reset_in_progress', 'false', true);
-  r4 := pg_temp.api(pg_temp.dev('LEGS'), pg_temp.q_claim(889, 'legs', 'true', '', ''));           -- legs switched off
-  ok := ok and not pg_temp.claimed(r4) and r4 ->> 'reason' = 'legs_off' and not coalesce((pg_temp.ar(889)).legs_sorted, false);
+  -- v10.38 (owner): legs switched off — the legs that already got stickers are still sorted (what was done goes to the end)
+  r4 := pg_temp.api(pg_temp.dev('LEGS'), pg_temp.q_claim(889, 'legs', 'true', '', ''));
+  ok := ok and pg_temp.claimed(r4) and (pg_temp.ar(889)).legs_sorted;
+  -- v10.38 (review A2): two screens, legs off — the legs slot still never prints the head (the head screen does)
+  perform set_config('gt.reset_in_progress', 'true', true);
+  update animals_pilot set slaughter = 'slaughtered', slaughter_time = 1, eso_checked = true, eso_result = 'ok', head_stickers = false where id = 888;
+  perform set_config('gt.reset_in_progress', 'false', true);
+  r5 := pg_temp.api(pg_temp.dev('LEGS'), pg_temp.q_push(888, '{"head_stickers":true}'));
+  ok := ok and r5 ->> 'error' = 'out_of_order' and not coalesce((pg_temp.ar(888)).head_stickers, false);
   perform set_config('gt.reset_in_progress', 'true', true);
   update settings_pilot set settings = settings - 'legsPaused' where id = 1;
   perform set_config('gt.reset_in_progress', 'false', true);
-  r5 := pg_temp.api(pg_temp.dev('LEGS'), pg_temp.q_claim(889, 'legs', 'true', '', ''));           -- the legs screen, legs on
-  ok := ok and pg_temp.claimed(r5) and (pg_temp.ar(889)).legs_sorted;
   perform set_config('gt.reset_in_progress', 'true', true);
   update settings_pilot set settings = settings - 'legsHeadSplit' where id = 1;
   perform set_config('gt.reset_in_progress', 'false', true);
-  perform pg_temp.rec('v10.34 legs / head on two screens: the head slot never prints leg stickers, the legs slot never prints the head while the head screen works, slot 1 is refused when the screens are not split; v10.35 sorting only on the legs screen, never while legs is off, never a number without leg stickers', ok,
+  perform pg_temp.rec('v10.34 legs / head on two screens: the head slot never prints leg stickers, the legs slot never prints the head (v10.38: also with the legs off), slot 1 is refused when the screens are not split; sorting only on the legs screen, never a number without leg stickers; v10.38 legs off — what got stickers is still sorted', ok,
     concat_ws(' | ', r ->> 'error', r2 ->> 'error', r3 ->> 'error', r4 ->> 'error', r5 ->> 'error'));
   -- v10.35: the four supervisor screens (cooler / nikur / salting / shipping) are paired tablets with NO write rights yet
   ok := true;
@@ -2997,12 +3002,13 @@ begin
       jsonb_set(pr, '{0,post}', '"cooler"'),
       (select jsonb_agg(case when x ->> 'pre' = 'head' then jsonb_set(x, '{on}', 'false') else x end) from jsonb_array_elements(pr) x),
       jsonb_set(pr, '{0,id}', '"Tongue!"'), jsonb_set(pr, '{0,price}', '5'), jsonb_set(pr, '{0,avg}', '-1'),
-      jsonb_set(jsonb_set(pr, '{6,m}', '1'), '{6,post}', '"stamps"')] loop   -- (the tail: head sticker and stamps sticker — not both)
+      jsonb_set(jsonb_set(pr, '{0,nikur}', '"small"'), '{0,m}', '0'),          -- v10.38 (owner): a part going to the nikur without a kosher sticker
+      jsonb_set(jsonb_set(jsonb_set(pr, '{3,nikur}', '"big"'), '{3,m}', '1'), '{3,post}', '"none"')] loop   -- … or with no area that prints it
     r := pg_temp.api(pg_temp.mgr(), format('select push_settings(%L::jsonb, ''x'', %L)', jsonb_build_object('products', b), pg_temp.v('mgr')));
     if r ->> 'error' is distinct from 'bad_settings' then bad := bad || left(r::text, 80); end if;
   end loop;
   ok := ok and cardinality(bad) = 0 and (_gt_settings() ->> 'headStickerCount')::int = 8;
-  perform pg_temp.rec('v10.38 products list: head / legs sticker counts derived on the server (a hand-typed count does not win); only the team leader changes it; bad lists refused (legs off, duplicate, unknown area, no head sticker, bad id / field / weight, a tail sticker both at the head and at the stamps)', ok,
+  perform pg_temp.rec('v10.38 products list: head / legs sticker counts derived on the server (a hand-typed count does not win); only the team leader changes it; bad lists refused (legs off, duplicate, unknown area, no head sticker, bad id / field / weight, a nikur part without a kosher sticker)', ok,
     concat_ws(' | ', left(r2::text, 60), left(r3::text, 60), left(r4::text, 80), array_to_string(bad, ' ; '), _gt_settings() ->> 'headStickerCount'));
 end $$;
 $gt74$;
@@ -3098,7 +3104,7 @@ begin
   r4 := pg_temp.api(pg_temp.dev('NIK'),  format('select nikur_scan(870, ''sides'', 7, %s)', pg_temp.ep()));
   r5 := pg_temp.api(pg_temp.dev('NIK'),  format('select nikur_scan(870, ''hanger'', 1, %s)', pg_temp.ep()));
   ok := ok and r ->> 'reason' = 'treif' and r2 ->> 'reason' = 'no_ruling' and r3 ->> 'reason' = 'not_glatt' and pg_temp.ok(r6)
-        and r4 ->> 'error' = 'bad_value' and r5 ->> 'error' = 'unknown_part'
+        and r4 ->> 'reason' = 'not_printed' and r5 ->> 'error' = 'unknown_part'   -- (v10.38: a piece that was not printed for this animal)
         and not exists (select 1 from piece_scans where board_epoch = pg_temp.ep() and animal_id in (871, 872))
         and exists (select 1 from events_pilot where stage = 'nikur' and action = 'piece_refused' and animal_no = 872);
   -- USDA at the nikur: only its whole animal; it stops the nikur until the nikur releases it
@@ -3123,9 +3129,77 @@ begin
   ok := ok and pg_temp.ok(r) and r2 ->> 'reason' = 'held' and pg_temp.ok(r3) and pg_temp.ok(r4);
   update settings_pilot set settings = s0 where id = 1;
   perform pg_temp.rec('v10.38 nikur: a kosher piece is scanned in once, on its own nikur screen only; treif / unruled / Inside Skirt of glatt / unknown refused and recorded; a nikur USDA hold / "?" stops it until the nikur releases / answers it; each nikur tablet sees its own pieces', ok,
-    concat_ws(' | ', left(r::text, 60), left(r2::text, 80), left(r3::text, 60), left(r4::text, 60), left(r5::text, 60), left(r6::text, 60), left(r7::text, 80), left(r8::text, 60)));
+    concat_ws(' | ', left(r::text, 60), r2 ->> 'reason', left(r3::text, 60), r4 ->> 'error', r4 ->> 'reason', left(r5::text, 60), left(r6::text, 60), left(r7::text, 80), left(r8::text, 60)));
 end $$;
 $gt76$;
+    v_step := 'v10.38 stage 2: the nikur after the cooler, a part closed mid-day';
+    execute $gt77$
+-- ── v10.38 stage 2 (owner): the nikur the next day (the day in the QR), a part closed mid-day, the nikur's holds ──
+do $$
+declare r jsonb; r2 jsonb; r3 jsonb; r4 jsonb; r5 jsonb; r6 jsonb; ok boolean; s0 jsonb; e0 bigint; e1 bigint; h bigint; d jsonb;
+  pr jsonb := '[{"id":"tongue","he":"לשון","on":true,"pre":"head","n":1,"post":"parts","m":1,"nikur":"small","builtin":true},
+                {"id":"cheeks","he":"לחיים","on":true,"pre":"head","n":2,"post":"parts","m":2,"nikur":"small","builtin":true},
+                {"id":"sides","he":"צדדים","on":true,"pre":"head","n":2,"post":"stamps","m":6,"nikur":"big","builtin":true},
+                {"id":"lung","he":"ריאה","on":true,"pre":"head","n":1,"post":"none","m":0,"nikur":"none","builtin":true},
+                {"id":"legs","he":"רגליים","on":true,"pre":"legs","n":2,"post":"legs","m":0,"nikur":"none","builtin":true},
+                {"id":"tail","he":"זנב","on":true,"pre":"none","n":0,"post":"stamps","m":1,"nikur":"small","builtin":true},
+                {"id":"liver","he":"כבד","on":true,"pre":"head","n":1,"post":"parts","m":1,"nikur":"small","builtin":true}]';
+begin
+  select settings into s0 from settings_pilot where id = 1;
+  perform pg_temp.api('{}', format('select reset_daily_board(%L, ''selftest'')', pg_temp.v('mgr')));
+  perform pg_temp.api(pg_temp.mgr(), format('select push_settings(%L::jsonb, ''x'', %L)', jsonb_build_object('products', pr), pg_temp.v('mgr')));
+  -- day A: 880 stamped with the tail on; then the tail is closed; 881 stamped after that (no tail)
+  perform pg_temp.prep(880, 'outer'); perform pg_temp.prep(881, 'outer');
+  perform set_config('gt.reset_in_progress', 'true', true);
+  update animals_pilot set stamped = true, parts_scanned = true where id = 880;
+  perform set_config('gt.reset_in_progress', 'false', true);
+  perform pg_temp.api(pg_temp.mgr(), format('select push_settings(%L::jsonb, ''x'', %L)', jsonb_build_object('products', jsonb_set(pr, '{5,on}', 'false')), pg_temp.v('mgr')));
+  perform set_config('gt.reset_in_progress', 'true', true);
+  update animals_pilot set stamped = true, parts_scanned = true where id = 881;
+  perform set_config('gt.reset_in_progress', 'false', true);
+  e0 := _board_epoch();
+  r  := pg_temp.api(pg_temp.dev('NIKS'), format('select nikur_scan(880, ''tail'', 1, %s)', e0));      -- printed before the close: goes in
+  r2 := pg_temp.api(pg_temp.dev('NIKS'), format('select nikur_scan(881, ''tail'', 1, %s)', e0));      -- not taken after the close
+  r3 := pg_temp.api(pg_temp.dev('NIKS'), format('select nikur_scan(880, ''liver'', 1, %s)', e0));     -- the liver: its kosher sticker (small parts)
+  ok := pg_temp.ok(r) and r2 ->> 'reason' = 'not_printed' and pg_temp.ok(r3)
+        and exists (select 1 from animal_pieces where board_epoch = e0 and animal_id = 880 and product = 'tail')
+        and not exists (select 1 from animal_pieces where board_epoch = e0 and animal_id = 881 and product = 'tail');
+  perform pg_temp.rec('v10.38 closing a part mid-day: a piece printed before still goes into the nikur; after the close it is not taken (not expected, refused)', ok,
+    concat_ws(' | ', left(r::text, 80), left(r2::text, 80), left(r3::text, 80)));
+
+  -- a "?" of the nikur on day A; the day is reset; the nikur works on day A the next day
+  r  := pg_temp.api(pg_temp.dev('NIK'), format('select nikur_hold(881, %s, ''question'')', e0));
+  h  := (r #>> '{hold,id}')::bigint;
+  perform pg_temp.api('{}', format('select reset_daily_board(%L, ''selftest: next day'')', pg_temp.v('mgr')));
+  e1 := _board_epoch();
+  -- day B: number 880 again, slaughtered, not stamped
+  perform pg_temp.prep(880, 'outer');
+  r2 := pg_temp.api(pg_temp.dev('NIK'), format('select nikur_scan(880, ''sides'', 2, %s)', e0));      -- day A's 880 (stamped)
+  r3 := pg_temp.api(pg_temp.dev('NIK'), format('select nikur_scan(880, ''sides'', 2, %s)', e1));      -- day B's 880: nothing printed
+  r4 := pg_temp.api(pg_temp.dev('NIK'), format('select nikur_scan(881, ''sides'', 1, %s)', e0));      -- day A's 881: the "?" still holds it
+  r5 := pg_temp.api(pg_temp.dev('NIK'), format('select hold_resolve(%s, ''answered'')', h));
+  r6 := pg_temp.api(pg_temp.dev('NIK'), format('select nikur_scan(881, ''sides'', 1, %s)', e0));
+  d  := pg_temp.api(pg_temp.dev('NIK'), 'select nikur_board()');
+  ok := pg_temp.ok(r) and e1 > e0 and pg_temp.ok(r2) and r3 ->> 'reason' = 'not_printed' and r4 ->> 'reason' = 'held'
+        and pg_temp.ok(r5) and pg_temp.ok(r6)
+        and exists (select 1 from jsonb_array_elements(d -> 'days') x where (x ->> 'epoch')::bigint = e0 and (x ->> 'in')::int = 2 and (x ->> 'expected')::int = 12);
+  perform pg_temp.rec('v10.38 nikur after the cooler: a piece is scanned with ITS day (yesterday''s 880 is not today''s 880); the nikur''s "?" stays over the daily reset; the board lists the day still waiting', ok,
+    concat_ws(' | ', left(r::text, 60), left(r2::text, 80), left(r3::text, 80), left(r4::text, 80), left(r6::text, 60), left((d -> 'days')::text, 160)));
+
+  -- the team leader closes day A at the nikur: a reason is needed; then its pieces are refused, and it leaves the board
+  r  := pg_temp.api('{}', format('select nikur_day_close(%L, %s)', pg_temp.v('mgr'), e0));
+  r2 := pg_temp.api(pg_temp.dev('NIK'), format('select nikur_day_close(%L, %s, ''x'')', 'not-a-token', e0));
+  r3 := pg_temp.api('{}', format('select nikur_day_close(%L, %s, ''selftest: day A sold without nikur'')', pg_temp.v('mgr'), e0));
+  r4 := pg_temp.api(pg_temp.dev('NIK'), format('select nikur_scan(880, ''sides'', 3, %s)', e0));
+  d  := pg_temp.api(pg_temp.dev('NIK'), 'select nikur_board()');
+  ok := r ->> 'error' = 'reason_required' and r2 ->> 'error' = 'unauthorized' and pg_temp.ok(r3) and r4 ->> 'reason' = 'day_closed'
+        and not exists (select 1 from jsonb_array_elements(d -> 'days') x where (x ->> 'epoch')::bigint = e0)
+        and exists (select 1 from admin_audit where action = 'nikur_day_close');
+  perform pg_temp.rec('v10.38 a day closed at the nikur (team leader only, with a reason, audited): its pieces are refused and it leaves the list', ok,
+    concat_ws(' | ', r::text, r2::text, r3::text, left(r4::text, 80)));
+  update settings_pilot set settings = s0 where id = 1;
+end $$;
+$gt77$;
     v_step := 'the ACTIVE security surface against the expected manifest';
     execute $gt70$
 -- ── the ACTIVE security surface against the expected manifest ───────────────
@@ -3228,7 +3302,7 @@ begin
                 'eso_change(integer,text,text,bigint)', 'eso_change(integer,text,text,bigint,uuid)', 'event_append(jsonb)',
                 'lung_drawing_get(integer)', 'lung_drawing_set(integer,bigint,text)', 'manager_add(text,text,text)',
                 'manager_add_owner(text,text,text)', 'manager_deactivate(text,uuid)', 'manager_list(text)', 'manager_login(text)',
-                'manager_logout(text)', 'manager_session_check(text)', 'leader_recovery_code_new(text)', 'leader_recovery_status(text)', 'leader_device_replace(text,text)', 'plant_server_status(text)', 'animal_card(text,date,integer)', 'seal_set(text,text,text)', 'seals_get(text,bigint)', 'hold_set(integer,text,text,text,bigint,uuid)', 'hold_resolve(bigint,text,uuid)', 'nikur_scan(integer,text,integer,bigint,uuid)', 'nikur_board()', 'board_flags(text)', 'change_ack(text,bigint)', 'manufacturer_set_billing(text,boolean,numeric,text,text)',
+                'manager_logout(text)', 'manager_session_check(text)', 'leader_recovery_code_new(text)', 'leader_recovery_status(text)', 'leader_device_replace(text,text)', 'plant_server_status(text)', 'animal_card(text,date,integer)', 'seal_set(text,text,text)', 'seals_get(text,bigint)', 'hold_set(integer,text,text,text,bigint,uuid)', 'hold_resolve(bigint,text,uuid)', 'nikur_scan(integer,text,integer,bigint,uuid)', 'nikur_board()', 'nikur_hold(integer,bigint,text,uuid)', 'nikur_day_close(text,bigint,text)', 'board_flags(text)', 'change_ack(text,bigint)', 'manufacturer_set_billing(text,boolean,numeric,text,text)',
                 'outer_open(integer,bigint,boolean,text)', 'outer_open(integer,bigint,boolean,text,uuid)', 'plant_status_snapshot()', 'plant_setup_needed()',
                 'push_settings(jsonb,text,text,text)', 'request_daily_rollover()', 'reset_daily_board(text,text)', 'security_summary(text)',
                 'processing_board(text)', 'carry_push(bigint,jsonb,uuid)', 'carry_claim(bigint,integer,text,uuid)',
