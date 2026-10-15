@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict P1bQOIOdqXXzji51QJjcYVCzrV0Vg1TaycAIi8XhwoAIdxYlfkcEVmrLbYEkG3f
+\restrict BMJTKLGgzh7hpkYTUGbAoZcWzpsbhKoznF0WEcSTpm3zGctoDW1L7OGZ9izYAD0
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -147,6 +147,42 @@ end $$;
 
 
 ALTER FUNCTION public._admin_audit(p_token text, p_action text, p_target text, p_detail jsonb) OWNER TO postgres;
+
+--
+-- Name: _animal_pieces_track(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public._animal_pieces_track() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $$
+declare x jsonb; v_m int; v_done boolean; v_ep bigint;
+begin
+  if new.slaughter is null then return null; end if;                -- (the daily reset clears the marks: nothing is recorded then)
+  v_ep := coalesce(new.board_epoch, _board_epoch());
+  if v_ep is null then return null; end if;
+  for x in select e from jsonb_array_elements(case when jsonb_typeof(_gt_settings() -> 'products') = 'array'
+                                                   then _gt_settings() -> 'products' else '[]'::jsonb end) e loop
+    continue when not coalesce((x ->> 'on')::boolean, false) or coalesce(x ->> 'nikur', 'none') not in ('big', 'small');
+    v_m := coalesce((x ->> 'm')::int, 0);
+    continue when v_m < 1;
+    -- (a part not taken from a glatt animal is still recorded: the ruling may change after printing — the scan decides)
+    v_done := case x ->> 'post'
+                when 'stamps' then coalesce(new.stamped, false) and (tg_op = 'INSERT' or not coalesce(old.stamped, false))
+                when 'parts'  then coalesce(new.parts_scanned, false) and (tg_op = 'INSERT' or not coalesce(old.parts_scanned, false))
+                when 'legs'   then coalesce(new.legs_sorted, false) and (tg_op = 'INSERT' or not coalesce(old.legs_sorted, false))
+                else false end;
+    if v_done then
+      insert into animal_pieces (board_epoch, animal_id, product, cnt, screen)
+      values (v_ep, new.id, x ->> 'id', least(v_m, 20), x ->> 'nikur')
+      on conflict (board_epoch, animal_id, product) do nothing;
+    end if;
+  end loop;
+  return null;
+end $$;
+
+
+ALTER FUNCTION public._animal_pieces_track() OWNER TO postgres;
 
 --
 -- Name: _animals_close_questions(); Type: FUNCTION; Schema: public; Owner: postgres
@@ -2219,16 +2255,15 @@ begin
   if not (coalesce(p_legs, false) or coalesce(p_head, false) or coalesce(p_sorted, false)) then return null; end if;
   if not _is_api_request() or _request_is_service_role() then return null; end if;
   s := _gt_settings();
-  -- v10.35 (owner): sorting is for the legs — the legs screen switched off → no sorting at all (any screen)
-  if coalesce(p_sorted, false) and _gt_flag(s, 'legsPaused', false) then return 'legs_off'; end if;
+  -- v10.38 (owner): legs switched off → the sorting of legs that already got stickers goes on
   select d.assigned_role, coalesce(d.assigned_index, 0) into v_role, v_idx
     from devices_pilot d where d.id = _current_device_id() and coalesce(d.device_status, 'active') <> 'retired';
   if v_role is distinct from 'legs' then return null; end if;
   v_split := _gt_flag(s, 'legsHeadSplit', false) and _gt_flag(s, 'legsMode', true);
   if v_idx = 1 then
-    if not v_split or coalesce(p_legs, false) or coalesce(p_sorted, false) then return 'wrong_screen'; end if;   -- v10.35: no sorting on the head screen
-  elsif v_split and coalesce(p_head, false) and not _gt_flag(s, 'legsPaused', false) then
-    return 'wrong_screen';
+    if not v_split or coalesce(p_legs, false) or coalesce(p_sorted, false) then return 'wrong_screen'; end if;   -- no sorting on the head screen
+  elsif v_split and coalesce(p_head, false) then
+    return 'wrong_screen';                       -- v10.38 (review A2): two screens — the head is the head screen's, also with the legs off
   end if;
   return null;
 end $$;
@@ -2244,7 +2279,7 @@ CREATE FUNCTION public._legs_sort_pending(a public.animals_pilot) RETURNS boolea
     LANGUAGE sql STABLE SECURITY DEFINER
     SET search_path TO 'public', 'extensions', 'pg_temp'
     AS $$
-  select _gt_flag(_gt_settings(), 'legsSortEnabled', false) and not _gt_flag(_gt_settings(), 'legsPaused', false)
+  select _gt_flag(_gt_settings(), 'legsSortEnabled', false)
          and coalesce(a.legs_stickers, false) and _kosher_ready(a) and not coalesce(a.legs_sorted, false);
 $$;
 
@@ -2536,6 +2571,54 @@ $$;
 ALTER FUNCTION public._nc_statuses() OWNER TO postgres;
 
 --
+-- Name: _nikur_day_date(bigint); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public._nikur_day_date(p_ep bigint) RETURNS date
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $$
+declare v date; tz text := coalesce(nullif(_gt_settings() ->> 'plantTimezone', ''), 'UTC');
+begin
+  if p_ep = _board_epoch() then return _board_business_date(); end if;
+  if not exists (select 1 from pg_timezone_names where name = tz) then tz := 'UTC'; end if;
+  select d.business_date into v from daily_board_archive d
+   where d.archived_at > now() - interval '45 days' and d.board @> jsonb_build_array(jsonb_build_object('board_epoch', p_ep))
+   order by d.id desc limit 1;
+  return coalesce(v, (to_timestamp(p_ep / 1000.0) at time zone tz)::date);
+end $$;
+
+
+ALTER FUNCTION public._nikur_day_date(p_ep bigint) OWNER TO postgres;
+
+--
+-- Name: _nikur_day_rows(bigint); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public._nikur_day_rows(p_ep bigint) RETURNS SETOF public.animals_pilot
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $$
+declare v_arch bigint;
+begin
+  if p_ep is null then return; end if;
+  if p_ep = _board_epoch() then return query select * from animals_pilot; return; end if;
+  if exists (select 1 from animals_carry where board_epoch = p_ep) then
+    return query select (_carry_row(c)).* from animals_carry c where c.board_epoch = p_ep; return;
+  end if;
+  select d.id into v_arch from daily_board_archive d
+   where d.archived_at > now() - interval '45 days' and d.board @> jsonb_build_array(jsonb_build_object('board_epoch', p_ep))
+   order by d.id desc limit 1;
+  if v_arch is null then return; end if;
+  return query select (jsonb_populate_record(null::animals_pilot, e)).*
+                 from daily_board_archive d, jsonb_array_elements(d.board) e
+                where d.id = v_arch and (e ->> 'board_epoch')::bigint = p_ep;
+end $$;
+
+
+ALTER FUNCTION public._nikur_day_rows(p_ep bigint) OWNER TO postgres;
+
+--
 -- Name: _nikur_refusal(public.animals_pilot, jsonb, bigint); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -2549,14 +2632,12 @@ begin
   if a.inner_status = 'treif' or a.outer_status = 'treif' then return 'treif'; end if;
   if not _kosher_ready(a) then return 'no_ruling'; end if;
   if exists (select 1 from animal_holds h where h.board_epoch = p_ep and h.animal_id = a.id
-               and ((h.kind = 'usda' and (h.resolved_at is null or h.resolution = 'condemned'))
-                    or (h.kind = 'question' and h.resolved_at is null))) then
+               and h.kind in ('usda', 'question')
+               and (h.resolved_at is null or h.resolution = 'condemned'
+                    or (h.resolution = 'board_closed' and h.station <> 'nikur'))) then
     return 'held';
   end if;
-  if coalesce((x ->> 'notGlatt')::boolean, false) and a.outer_status = 'glatt' then return 'not_glatt'; end if;
-  -- the piece got its kosher sticker in its area (the scanned sticker was really printed)
-  if x ->> 'post' = 'stamps' and not coalesce(a.stamped, false) then return 'not_printed'; end if;
-  if x ->> 'post' = 'parts' and not coalesce(a.parts_scanned, false) then return 'not_printed'; end if;
+  if x is not null and coalesce((x ->> 'notGlatt')::boolean, false) and a.outer_status = 'glatt' then return 'not_glatt'; end if;
   return null;
 end $$;
 
@@ -2970,6 +3051,22 @@ $$;
 ALTER FUNCTION public._proc_stations() OWNER TO postgres;
 
 --
+-- Name: _product_def(text); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public._product_def(p_id text) RETURNS jsonb
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $$
+  select coalesce((select e from jsonb_array_elements(case when jsonb_typeof(_gt_settings() -> 'products') = 'array'
+                                                          then _gt_settings() -> 'products' else '[]'::jsonb end) e
+                    where e ->> 'id' = p_id limit 1), '{}'::jsonb);
+$$;
+
+
+ALTER FUNCTION public._product_def(p_id text) OWNER TO postgres;
+
+--
 -- Name: _products_counts(jsonb); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -3036,9 +3133,12 @@ begin
       if x ->> 'post' not in ('legs', 'parts') then return 'the legs are sorted on the legs screen or with the small parts'; end if;
       legs_on := true;
     end if;
-    -- (owner) the tail gets its sticker once: on the head screen or at the stamps
-    if v_id = 'tail' and x ->> 'pre' <> 'none' and coalesce((x ->> 'n')::int, 0) > 0 and coalesce((x ->> 'm')::int, 0) > 0 then
-      return 'the tail gets its sticker on the head screen or at the stamps, not both';
+    -- v10.38 (owner): every piece taken from a kosher animal gets a KOSHER sticker after the ruling — also one
+    -- that already got a number sticker (barcode) before it (the liver at the head, the tail …). A part that
+    -- goes to the nikur therefore has its kosher stickers in an area that prints them (parts / stamps / legs).
+    if (x ->> 'on')::boolean and coalesce(x ->> 'nikur', 'none') <> 'none'
+       and (coalesce((x ->> 'm')::int, 0) < 1 or x ->> 'post' not in ('parts', 'stamps', 'legs')) then
+      return 'product ' || v_id || ': a part that goes to the nikur gets a kosher sticker (small parts / stamps / legs)';
     end if;
     if (x ->> 'on')::boolean and x ->> 'pre' = 'head' then head := head + (x ->> 'n')::int; end if;
   end loop;
@@ -6494,7 +6594,8 @@ CREATE FUNCTION public.nikur_board() RETURNS jsonb
     LANGUAGE plpgsql STABLE SECURITY DEFINER
     SET search_path TO 'public', 'extensions', 'pg_temp'
     AS $$
-declare v_dev text; v_screen text; v_ep bigint := _board_epoch(); v_tok text := _request_headers() ->> 'x-manager-token';
+declare v_dev text; v_screen text; v_cur bigint := _board_epoch(); v_tok text := _request_headers() ->> 'x-manager-token';
+        v_days jsonb := '[]'::jsonb; ep bigint; v_exp int; v_in int; v_miss jsonb;
 begin
   if v_tok is not null and _manager_session_valid(v_tok) and coalesce(_session_role(v_tok), '') <> 'manufacturer' then
     v_screen := null;
@@ -6504,14 +6605,110 @@ begin
       from devices_pilot where id = v_dev and assigned_role = 'nikur' and coalesce(device_status, 'active') <> 'retired';
     if v_screen is null then return jsonb_build_object('ok', false, 'error', 'wrong_station'); end if;
   end if;
-  return jsonb_build_object('ok', true, 'boardEpoch', v_ep, 'screen', v_screen,
-    'pieces', coalesce((select jsonb_agg(jsonb_build_object('n', s.animal_id + 1, 'p', s.product, 'i', s.piece, 's', s.screen,
+  for ep in select distinct p.board_epoch from animal_pieces p
+             where (v_screen is null or p.screen = v_screen) and p.at > now() - interval '45 days'
+               and not exists (select 1 from nikur_days_closed z where z.board_epoch = p.board_epoch)
+             order by 1 loop
+    with want as (select p.animal_id, p.product, g.i
+                    from animal_pieces p join _nikur_day_rows(ep) r on r.id = p.animal_id
+                    cross join lateral generate_series(1, p.cnt) g(i)
+                   where p.board_epoch = ep and (v_screen is null or p.screen = v_screen)
+                     and _nikur_refusal(r, _product_def(p.product), ep) is null),
+         got as (select s.animal_id, s.product, s.piece from piece_scans s where s.board_epoch = ep)
+    select count(*)::int,
+           count(*) filter (where exists (select 1 from got where got.animal_id = w.animal_id and got.product = w.product and got.piece = w.i))::int,
+           coalesce(jsonb_agg(jsonb_build_object('n', w.animal_id + 1, 'p', w.product, 'i', w.i) order by w.animal_id, w.product, w.i)
+                      filter (where not exists (select 1 from got where got.animal_id = w.animal_id and got.product = w.product and got.piece = w.i))
+                    , '[]'::jsonb)
+      into v_exp, v_in, v_miss
+      from want w;
+    -- a day leaves the list when everything of it is in (today stays while work goes on)
+    continue when v_exp = 0 or (v_in >= v_exp and ep <> v_cur);
+    v_days := v_days || jsonb_build_object('epoch', ep, 'day', _nikur_day_date(ep), 'today', ep = v_cur,
+                                           'expected', v_exp, 'in', v_in, 'missing', (select coalesce(jsonb_agg(m), '[]'::jsonb) from (select m from jsonb_array_elements(v_miss) m limit 300) q));
+  end loop;
+  return jsonb_build_object('ok', true, 'boardEpoch', v_cur, 'screen', v_screen, 'days', v_days,
+    'todayIn', (select count(*) from piece_scans s where (v_screen is null or s.screen = v_screen) and s.at >= date_trunc('day', now())),
+    'pieces', coalesce((select jsonb_agg(jsonb_build_object('n', s.animal_id + 1, 'p', s.product, 'i', s.piece, 's', s.screen, 'e', s.board_epoch,
                                                             'at', s.at, 'by', s.worker) order by s.at)
-                          from piece_scans s where s.board_epoch = v_ep and (v_screen is null or s.screen = v_screen)), '[]'::jsonb));
+                          from piece_scans s where s.board_epoch = v_cur and (v_screen is null or s.screen = v_screen)), '[]'::jsonb),
+    'holds', coalesce((select jsonb_agg(jsonb_build_object('id', h.id, 'n', h.animal_id + 1, 'kind', h.kind, 'epoch', h.board_epoch,
+                                                           'day', _nikur_day_date(h.board_epoch), 'resolution', h.resolution, 'at', h.created_at) order by h.created_at)
+                         from animal_holds h where h.station = 'nikur' and (h.resolved_at is null or h.resolution = 'condemned')
+                           and h.created_at > now() - interval '45 days'), '[]'::jsonb));
 end $$;
 
 
 ALTER FUNCTION public.nikur_board() OWNER TO postgres;
+
+--
+-- Name: nikur_day_close(text, bigint, text); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.nikur_day_close(p_token text, p_epoch bigint, p_reason text DEFAULT NULL::text) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $$
+begin
+  if not _manager_session_valid(p_token) or coalesce(_session_role(p_token), 'manager') not in ('manager') then
+    return jsonb_build_object('ok', false, 'error', 'unauthorized');
+  end if;
+  if p_epoch is null then return jsonb_build_object('ok', false, 'error', 'bad_value'); end if;
+  if not _reason_ok(p_reason) then return jsonb_build_object('ok', false, 'error', 'reason_required'); end if;
+  insert into nikur_days_closed (board_epoch, closed_by, reason)
+  values (p_epoch, coalesce(_session_name(p_token), 'manager'), left(trim(p_reason), 200))
+  on conflict (board_epoch) do nothing;
+  perform _admin_audit(p_token, 'nikur_day_close', 'nikur_days_closed', jsonb_build_object('board', p_epoch, 'reason', left(trim(p_reason), 200)));
+  return jsonb_build_object('ok', true);
+end $$;
+
+
+ALTER FUNCTION public.nikur_day_close(p_token text, p_epoch bigint, p_reason text) OWNER TO postgres;
+
+--
+-- Name: nikur_hold(integer, bigint, text, uuid); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.nikur_hold(p_id integer, p_epoch bigint, p_kind text, p_command_id uuid DEFAULT NULL::uuid) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $$
+declare v_dev text; v_res jsonb; v_err text; v_ep bigint; a animals_pilot; v_id bigint; v_actor text;
+begin
+  if p_id is null or p_id < 0 or p_id > 999 then return jsonb_build_object('ok', false, 'error', 'bad_id'); end if;
+  if p_kind is null or p_kind not in ('question', 'usda') then return jsonb_build_object('ok', false, 'error', 'bad_value'); end if;
+  v_dev := _call_device(null);
+  if v_dev is null then return jsonb_build_object('ok', false, 'error', _no_device_error()); end if;
+  v_err := _hold_caller_error('nikur');
+  if v_err is not null then return jsonb_build_object('ok', false, 'error', v_err); end if;
+  v_res := _cmd_get(p_command_id, v_dev, 'nikur_hold');
+  if v_res is not null then return v_res; end if;
+  perform _board_write_lock();
+  v_ep := coalesce(p_epoch, _board_epoch());
+  if v_ep = _board_epoch() then select * into a from animals_pilot where id = p_id for update;
+  else select * into a from _nikur_day_rows(v_ep) r where r.id = p_id limit 1; end if;
+  if a.id is null or a.slaughter is null then
+    v_res := jsonb_build_object('ok', false, 'error', 'bad_id');
+    perform _cmd_put(p_command_id, v_dev, 'nikur_hold', v_res); return v_res;
+  end if;
+  v_actor := _derive_actor('nikur', null);
+  insert into animal_holds (board_epoch, animal_id, station, kind, part, created_by, created_by_device)
+  values (v_ep, p_id, 'nikur', p_kind, 'whole', v_actor, v_dev)
+  on conflict (board_epoch, animal_id, station, kind, part) where resolved_at is null do nothing
+  returning id into v_id;
+  if v_id is null then
+    select id into v_id from animal_holds where board_epoch = v_ep and animal_id = p_id and station = 'nikur'
+       and kind = p_kind and part = 'whole' and resolved_at is null;
+  else
+    perform _gt_event(p_id + 1, 'nikur', 'hold_set', jsonb_build_object('kind', p_kind, 'part', 'whole', 'hold', v_id, 'board', v_ep), v_actor, v_dev);
+  end if;
+  v_res := jsonb_build_object('ok', true, 'hold', (select to_jsonb(h) from animal_holds h where h.id = v_id));
+  perform _cmd_put(p_command_id, v_dev, 'nikur_hold', v_res);
+  return v_res;
+end $$;
+
+
+ALTER FUNCTION public.nikur_hold(p_id integer, p_epoch bigint, p_kind text, p_command_id uuid) OWNER TO postgres;
 
 --
 -- Name: nikur_scan(integer, text, integer, bigint, uuid); Type: FUNCTION; Schema: public; Owner: postgres
@@ -6521,7 +6718,7 @@ CREATE FUNCTION public.nikur_scan(p_id integer, p_product text, p_piece integer,
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public', 'extensions', 'pg_temp'
     AS $_$
-declare v_dev text; v_res jsonb; v_err text; v_ep bigint; x jsonb; v_screen text; v_m int; a animals_pilot;
+declare v_dev text; v_res jsonb; v_err text; v_ep bigint; v_cur bigint; x jsonb; v_screen text; v_cnt int; a animals_pilot;
         v_actor text; v_new bigint; v_piece int := coalesce(p_piece, 1);
 begin
   if p_id is null or p_id < 0 or p_id > 999 then return jsonb_build_object('ok', false, 'error', 'bad_id'); end if;
@@ -6535,28 +6732,49 @@ begin
   v_res := _cmd_get(p_command_id, v_dev, 'nikur_scan');
   if v_res is not null then return v_res; end if;
   perform _board_write_lock();
-  v_ep := _board_epoch();
-  if v_ep is not null and (p_epoch is null or p_epoch < v_ep) then
-    return jsonb_build_object('ok', false, 'error', 'stale_board', 'boardEpoch', v_ep);
+  v_cur := _board_epoch();
+  v_ep := coalesce(p_epoch, v_cur);
+  -- (every early answer is kept for this command too — review)
+  if v_cur is not null and v_ep > v_cur then
+    v_res := jsonb_build_object('ok', false, 'error', 'stale_board', 'boardEpoch', v_cur);
+    perform _cmd_put(p_command_id, v_dev, 'nikur_scan', v_res); return v_res;
   end if;
+  if exists (select 1 from nikur_days_closed where board_epoch = v_ep) then
+    v_res := jsonb_build_object('ok', false, 'error', 'refused', 'reason', 'day_closed');
+    perform _cmd_put(p_command_id, v_dev, 'nikur_scan', v_res); return v_res;
+  end if;
+  -- the part as the plant has it (also a part closed since: what was printed still goes in)
   select e into x from jsonb_array_elements(case when jsonb_typeof(_gt_settings() -> 'products') = 'array'
                                                  then _gt_settings() -> 'products' else '[]'::jsonb end) e
-   where e ->> 'id' = p_product and coalesce((e ->> 'on')::boolean, false) limit 1;
-  if x is null then return jsonb_build_object('ok', false, 'error', 'unknown_part'); end if;
+   where e ->> 'id' = p_product limit 1;
+  if x is null then
+    v_res := jsonb_build_object('ok', false, 'error', 'unknown_part');
+    perform _cmd_put(p_command_id, v_dev, 'nikur_scan', v_res); return v_res;
+  end if;
   select case when coalesce(assigned_index, 0) % 2 = 1 then 'small' else 'big' end into v_screen
     from devices_pilot where id = v_dev and assigned_role = 'nikur';
   v_screen := coalesce(v_screen, case when coalesce(x ->> 'nikur', 'none') = 'small' then 'small' else 'big' end);   -- (test mode: the team leader)
   if coalesce(x ->> 'nikur', 'none') <> v_screen then
-    return jsonb_build_object('ok', false, 'error', 'wrong_screen', 'nikur', x ->> 'nikur');
+    v_res := jsonb_build_object('ok', false, 'error', 'wrong_screen', 'nikur', x ->> 'nikur');
+    perform _cmd_put(p_command_id, v_dev, 'nikur_scan', v_res); return v_res;
   end if;
-  v_m := greatest(coalesce((x ->> 'm')::int, 0), 1);
-  if v_piece > v_m then return jsonb_build_object('ok', false, 'error', 'bad_value'); end if;
-  select * into a from animals_pilot where id = p_id;
+  -- the animal of that day — today's row locked against a ruling / hold at the same moment (review A3)
+  if v_ep = v_cur then
+    select * into a from animals_pilot where id = p_id for share;
+  else
+    select * into a from _nikur_day_rows(v_ep) r where r.id = p_id limit 1;
+  end if;
   v_actor := _derive_actor('nikur', null);
   v_err := _nikur_refusal(a, x, v_ep);
+  if v_err is null then
+    select cnt into v_cnt from animal_pieces where board_epoch = v_ep and animal_id = p_id and product = p_product;
+    if v_cnt is null then v_err := 'not_printed';              -- no kosher sticker was printed for this part of this animal
+    elsif v_piece > v_cnt then v_err := 'not_printed'; end if;
+  end if;
   if v_err is not null then
-    perform _gt_event(p_id + 1, 'nikur', 'piece_refused', jsonb_build_object('part', p_product, 'piece', v_piece, 'reason', v_err), v_actor, v_dev);
-    v_res := jsonb_build_object('ok', false, 'error', 'refused', 'reason', v_err, 'status', a.outer_status, 'slaughter', a.slaughter);
+    perform _gt_event(p_id + 1, 'nikur', 'piece_refused', jsonb_build_object('part', p_product, 'piece', v_piece, 'reason', v_err, 'board', v_ep), v_actor, v_dev);
+    v_res := jsonb_build_object('ok', false, 'error', 'refused', 'reason', v_err, 'status', a.outer_status, 'slaughter', a.slaughter,
+                                'day', _nikur_day_date(v_ep));
     perform _cmd_put(p_command_id, v_dev, 'nikur_scan', v_res);
     return v_res;
   end if;
@@ -6565,10 +6783,10 @@ begin
   on conflict (board_epoch, animal_id, product, piece) do nothing
   returning id into v_new;
   if v_new is not null then
-    perform _gt_event(p_id + 1, 'nikur', 'piece_in', jsonb_build_object('part', p_product, 'piece', v_piece, 'screen', v_screen), v_actor, v_dev);
+    perform _gt_event(p_id + 1, 'nikur', 'piece_in', jsonb_build_object('part', p_product, 'piece', v_piece, 'screen', v_screen, 'board', v_ep), v_actor, v_dev);
   end if;
-  v_res := jsonb_build_object('ok', true, 'duplicate', v_new is null, 'status', a.outer_status,
-                              'today', (select count(*) from piece_scans where board_epoch = v_ep and screen = v_screen));
+  v_res := jsonb_build_object('ok', true, 'duplicate', v_new is null, 'status', a.outer_status, 'day', _nikur_day_date(v_ep),
+                              'today', (select count(*) from piece_scans where screen = v_screen and at >= date_trunc('day', now())));
   perform _cmd_put(p_command_id, v_dev, 'nikur_scan', v_res);
   return v_res;
 end $_$;
@@ -7056,6 +7274,8 @@ begin
   v_unfinished := _board_unfinished();
   perform _do_board_reset('daily-rollover', null);
   v_kept := _proc_close_kept_days('closed by the daily rollover');
+  update animal_holds set resolved_at = null, resolution = null
+   where station = 'nikur' and resolution = 'board_closed' and resolved_at = now();   -- v10.38: the nikur's holds stay (the meat is in the cooler)
   update plant_state set value = today::text, updated_at = now() where key = 'lastRolloverDate';
   delete from plant_state where key = 'rolloverWaitingSince';
   return jsonb_build_object('ok', true, 'done', true, 'status', 'rolled_over', 'plantDate', today, 'timezone', tz,
@@ -7086,10 +7306,14 @@ begin
       select id from animals_pilot
        where slaughter in ('slaughtered', 'notChalak') and inner_status is distinct from 'treif' and outer_status is null
       union
+      select id from animals_pilot a where a.slaughter is null and _slaughter_q_open(a)      -- (v10.37) the shochet's open "?"
+      union
       select * from _board_proc_unfinished_ids()) x;
   end if;
   perform _do_board_reset('manual', null);
   v_kept := _proc_close_kept_days('closed by the team leader''s reset');
+  update animal_holds set resolved_at = null, resolution = null
+   where station = 'nikur' and resolution = 'board_closed' and resolved_at = now();   -- v10.38: the nikur's holds stay (the meat is in the cooler)
   tz := coalesce(nullif(_gt_settings() ->> 'plantTimezone', ''), 'UTC');
   if not exists (select 1 from pg_timezone_names where name = tz) then tz := 'UTC'; end if;
   insert into plant_state (key, value) values ('lastRolloverDate', ((now() at time zone tz)::date)::text)
@@ -7795,6 +8019,26 @@ ALTER SEQUENCE public.animal_holds_id_seq OWNED BY public.animal_holds.id;
 
 
 --
+-- Name: animal_pieces; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.animal_pieces (
+    board_epoch bigint NOT NULL,
+    animal_id integer NOT NULL,
+    product text NOT NULL,
+    cnt integer NOT NULL,
+    screen text NOT NULL,
+    at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT animal_pieces_animal_id_check CHECK (((animal_id >= 0) AND (animal_id <= 999))),
+    CONSTRAINT animal_pieces_cnt_check CHECK (((cnt >= 1) AND (cnt <= 20))),
+    CONSTRAINT animal_pieces_product_check CHECK ((product ~ '^[a-z][a-z0-9_]{0,40}$'::text)),
+    CONSTRAINT animal_pieces_screen_check CHECK ((screen = ANY (ARRAY['big'::text, 'small'::text])))
+);
+
+
+ALTER TABLE public.animal_pieces OWNER TO postgres;
+
+--
 -- Name: animals; Type: TABLE; Schema: public; Owner: postgres
 --
 
@@ -8180,6 +8424,20 @@ CREATE TABLE public.manager_sessions (
 
 
 ALTER TABLE public.manager_sessions OWNER TO postgres;
+
+--
+-- Name: nikur_days_closed; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.nikur_days_closed (
+    board_epoch bigint NOT NULL,
+    closed_at timestamp with time zone DEFAULT now() NOT NULL,
+    closed_by text,
+    reason text NOT NULL
+);
+
+
+ALTER TABLE public.nikur_days_closed OWNER TO postgres;
 
 --
 -- Name: outer_status_pilot; Type: TABLE; Schema: public; Owner: postgres
@@ -8587,6 +8845,14 @@ ALTER TABLE ONLY public.animal_holds
 
 
 --
+-- Name: animal_pieces animal_pieces_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.animal_pieces
+    ADD CONSTRAINT animal_pieces_pkey PRIMARY KEY (board_epoch, animal_id, product);
+
+
+--
 -- Name: animals animals_batch_id_seq_number_key; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -8779,6 +9045,14 @@ ALTER TABLE ONLY public.manager_sessions
 
 
 --
+-- Name: nikur_days_closed nikur_days_closed_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.nikur_days_closed
+    ADD CONSTRAINT nikur_days_closed_pkey PRIMARY KEY (board_epoch);
+
+
+--
 -- Name: outer_status_pilot outer_status_pilot_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -8948,6 +9222,13 @@ CREATE INDEX animal_holds_board_idx ON public.animal_holds USING btree (board_ep
 --
 
 CREATE UNIQUE INDEX animal_holds_open_uq ON public.animal_holds USING btree (board_epoch, animal_id, station, kind, part) WHERE (resolved_at IS NULL);
+
+
+--
+-- Name: animal_pieces_screen; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX animal_pieces_screen ON public.animal_pieces USING btree (screen, board_epoch);
 
 
 --
@@ -9186,6 +9467,13 @@ CREATE TRIGGER trg_animals_pilot_advance_cursor AFTER INSERT OR UPDATE ON public
 --
 
 CREATE TRIGGER trg_animals_pilot_guard_corrections BEFORE UPDATE ON public.animals_pilot FOR EACH ROW EXECUTE FUNCTION public.animals_pilot_guard_corrections();
+
+
+--
+-- Name: animals_pilot zz_animal_pieces_track; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE TRIGGER zz_animal_pieces_track AFTER INSERT OR UPDATE ON public.animals_pilot FOR EACH ROW EXECUTE FUNCTION public._animal_pieces_track();
 
 
 --
@@ -9497,6 +9785,12 @@ ALTER TABLE public.animal_changes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.animal_holds ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: animal_pieces; Type: ROW SECURITY; Schema: public; Owner: postgres
+--
+
+ALTER TABLE public.animal_pieces ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: animals; Type: ROW SECURITY; Schema: public; Owner: postgres
 --
 
@@ -9666,6 +9960,12 @@ ALTER TABLE public.lung_drawings ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE public.manager_sessions ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: nikur_days_closed; Type: ROW SECURITY; Schema: public; Owner: postgres
+--
+
+ALTER TABLE public.nikur_days_closed ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: outer_status_pilot; Type: ROW SECURITY; Schema: public; Owner: postgres
@@ -9938,6 +10238,13 @@ REVOKE ALL ON FUNCTION public._acting_device() FROM PUBLIC;
 --
 
 REVOKE ALL ON FUNCTION public._admin_audit(p_token text, p_action text, p_target text, p_detail jsonb) FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION _animal_pieces_track(); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public._animal_pieces_track() FROM PUBLIC;
 
 
 --
@@ -10583,6 +10890,20 @@ REVOKE ALL ON FUNCTION public._nc_statuses() FROM PUBLIC;
 
 
 --
+-- Name: FUNCTION _nikur_day_date(p_ep bigint); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public._nikur_day_date(p_ep bigint) FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION _nikur_day_rows(p_ep bigint); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public._nikur_day_rows(p_ep bigint) FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION _nikur_refusal(a public.animals_pilot, x jsonb, p_ep bigint); Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -10713,6 +11034,13 @@ REVOKE ALL ON FUNCTION public._proc_station_of_group(p_group text) FROM PUBLIC;
 --
 
 REVOKE ALL ON FUNCTION public._proc_stations() FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION _product_def(p_id text); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public._product_def(p_id text) FROM PUBLIC;
 
 
 --
@@ -11435,6 +11763,24 @@ GRANT ALL ON FUNCTION public.nikur_board() TO authenticated;
 
 
 --
+-- Name: FUNCTION nikur_day_close(p_token text, p_epoch bigint, p_reason text); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public.nikur_day_close(p_token text, p_epoch bigint, p_reason text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.nikur_day_close(p_token text, p_epoch bigint, p_reason text) TO anon;
+GRANT ALL ON FUNCTION public.nikur_day_close(p_token text, p_epoch bigint, p_reason text) TO authenticated;
+
+
+--
+-- Name: FUNCTION nikur_hold(p_id integer, p_epoch bigint, p_kind text, p_command_id uuid); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public.nikur_hold(p_id integer, p_epoch bigint, p_kind text, p_command_id uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.nikur_hold(p_id integer, p_epoch bigint, p_kind text, p_command_id uuid) TO anon;
+GRANT ALL ON FUNCTION public.nikur_hold(p_id integer, p_epoch bigint, p_kind text, p_command_id uuid) TO authenticated;
+
+
+--
 -- Name: FUNCTION nikur_scan(p_id integer, p_product text, p_piece integer, p_epoch bigint, p_command_id uuid); Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -11861,5 +12207,5 @@ GRANT ALL ON TABLE public.system_flags TO service_role;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict P1bQOIOdqXXzji51QJjcYVCzrV0Vg1TaycAIi8XhwoAIdxYlfkcEVmrLbYEkG3f
+\unrestrict BMJTKLGgzh7hpkYTUGbAoZcWzpsbhKoznF0WEcSTpm3zGctoDW1L7OGZ9izYAD0
 
