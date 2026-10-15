@@ -2058,19 +2058,16 @@ begin
   insert into plant_state (key, value) values ('lastRolloverDate', ((now() at time zone 'UTC')::date - 1)::text)
     on conflict (key) do update set value = excluded.value;
   e0 := _board_epoch();
-  r  := pg_temp.api('{}', 'select request_daily_rollover()');
-  r2 := pg_temp.api('{}', format('select reset_daily_board(%L)', pg_temp.v('mgr')));
-  ok := r ->> 'status' = 'waiting_unfinished' and (r ->> 'unfinished')::int = 1 and _board_epoch() = e0
-        and r2 ->> 'error' = 'unfinished_animals' and r2 -> 'numbers' = '[988]'::jsonb;
+  -- v10.38 (owner): the day always changes at its hour — no waiting for unfinished animals
   n0 := (select count(*) from daily_board_archive);
-  r3 := pg_temp.api('{}', format('select reset_daily_board(%L, ''end of day A — 987 sold unstamped'')', pg_temp.v('mgr')));
+  r  := pg_temp.api('{}', 'select request_daily_rollover()');
   r4 := pg_temp.api(pg_temp.dev('PARTS'), 'select processing_board()');
-  ok := ok and pg_temp.ok(r3) and _board_epoch() > e0 and not exists (select 1 from animals_carry)
+  ok := r ->> 'status' = 'rolled_over' and (r ->> 'unfinished')::int = 1 and _board_epoch() > e0
+        and not exists (select 1 from animals_carry)
         and (select count(*) from daily_board_archive) = n0 + 1 and (pg_temp.ar(987)).slaughter is null
-        and (r4 -> 'board') = 'null'::jsonb
-        and exists (select 1 from admin_audit where action = 'daily_reset' and detail -> 'unfinishedNumbers' = '[988]'::jsonb);
-  perform pg_temp.rec('v10.35 days: an animal goes to the next day only with all its marks — the rollover waits for parts / stamps, the team leader''s reset needs a written reason, nothing is kept for legs / parts / stamps', ok,
-    concat_ws(' | ', r::text, r2::text, left(r3::text, 80), left(r4::text, 80)));
+        and (r4 -> 'board') = 'null'::jsonb;
+  perform pg_temp.rec('v10.38 days: the daily rollover always runs at its hour (unfinished animals are counted, not waited for); nothing is kept for legs / parts / stamps', ok,
+    concat_ws(' | ', r::text, left(r4::text, 80)));
 
   -- a day kept by an older version is still finished safely (only processing columns, only the right station)
   perform pg_temp.prep(987, 'outer');
@@ -2099,24 +2096,27 @@ $gt58$;
     execute $gt59$
 -- ── step 46: the daily rollover never empties a board in the middle of work ──
 do $$
-declare rr jsonb; ok boolean; e0 bigint;
+declare rr jsonb; ok boolean; e0 bigint; e1 bigint;
 begin
   perform pg_temp.api('{}', format('select reset_daily_board(%L, ''selftest'')', pg_temp.v('mgr')));
   delete from animals_carry;
   insert into plant_state (key, value) values ('lastRolloverDate', ((now() at time zone 'UTC')::date - 1)::text)
     on conflict (key) do update set value = excluded.value;
   perform pg_temp.prep(991, 'slaughter');                       -- slaughtered an hour ago, lungs not checked
+  perform pg_temp.api(pg_temp.dev('SL1'), pg_temp.q_claim(992, 'slaughter', 'shot', '', ''));   -- work a minute ago
+  -- an earlier day kept by an older version: closed by the rollover too
+  insert into daily_board_archive (business_date, reason, animals_count, board, statuses)
+  values (current_date - 3, 'selftest: kept by an older version', 1, '[]'::jsonb, '{}'::jsonb) returning id into e1;
+  insert into animals_carry
+  select (jsonb_populate_record(null::animals_carry, to_jsonb(a) || jsonb_build_object('board_id', e1, 'slaughter_day', current_date - 3))).*
+    from animals_pilot a where a.id = 991;
   e0 := _board_epoch();
   rr := pg_temp.api('{}', 'select request_daily_rollover()');
-  ok := rr ->> 'status' = 'waiting_unfinished' and (rr ->> 'unfinished')::int = 1 and _board_epoch() = e0
-        and (pg_temp.ar(991)).slaughter = 'slaughtered'
-        and (select system_health(pg_temp.v('mgr'))) -> 'attention' ? 'rollover_waiting';
-  -- ruling in the last 20 minutes: wait, however late it is
-  perform pg_temp.api(pg_temp.dev('SL1'), pg_temp.q_claim(992, 'slaughter', 'shot', '', ''));
-  perform pg_temp.prep(991, 'outer');
-  rr := pg_temp.api('{}', 'select request_daily_rollover()');
-  ok := ok and rr ->> 'status' = 'busy' and _board_epoch() = e0;
-  perform pg_temp.rec('step 46 rollover: never during work, never with a slaughtered animal short of its last ruling (health: rollover_waiting)', ok, rr::text);
+  ok := rr ->> 'status' = 'rolled_over' and _board_epoch() > e0 and (pg_temp.ar(991)).slaughter is null
+        and not exists (select 1 from animals_carry)
+        and (select board from daily_board_archive where id = e1) @> '[{"id":991}]'::jsonb
+        and not ((select system_health(pg_temp.v('mgr'))) -> 'attention' ? 'rollover_waiting');
+  perform pg_temp.rec('v10.38 rollover: always at its hour — during work and with a slaughtered animal short of its ruling; an older kept day is closed into its archive row', ok, rr::text);
   update settings_pilot set settings = pg_temp.v('settings_before_46')::jsonb where id = 1;
 end $$;
 $gt59$;
@@ -2131,17 +2131,12 @@ begin
   delete from animals_carry;
   perform pg_temp.prep(993, 'inner'); perform pg_temp.prep(994, 'slaughter'); perform pg_temp.prep(995, 'outer');
   e0 := _board_epoch();
+  -- v10.38 (owner): the team leader's reset always goes through, no reason needed; the numbers are audited
   r  := pg_temp.api('{}', format('select reset_daily_board(%L)', pg_temp.v('mgr')));
-  r2 := pg_temp.api('{}', format('select reset_daily_board(%L, ''  '')', pg_temp.v('mgr')));
-  ok := r ->> 'error' = 'unfinished_animals' and r -> 'numbers' @> '[994, 995]'::jsonb   -- (v10.35: + 996, ruled but parts / stamps not done)
-        and r2 ->> 'error' = 'unfinished_animals' and _board_epoch() = e0
-        and (pg_temp.ar(993)).inner_status = 'confirmed' and (pg_temp.ar(994)).slaughter = 'slaughtered';
-  r  := pg_temp.api('{}', format('select reset_daily_board(%L, ''carcasses 994/995 condemned'')', pg_temp.v('mgr')));
-  ok := ok and pg_temp.ok(r) and _board_epoch() > e0 and (pg_temp.ar(993)).slaughter is null
-        and exists (select 1 from admin_audit where action = 'daily_reset' and detail ->> 'reason' = 'carcasses 994/995 condemned'
-                                                and detail -> 'unfinishedNumbers' @> '[994, 995]'::jsonb);
-  perform pg_temp.rec('step 46 manual reset: stops while slaughtered animals lack their last ruling (numbers given); only with a written reason, audited', ok,
-    concat_ws(' | ', r::text, r2::text));
+  ok := pg_temp.ok(r) and r -> 'unfinishedNumbers' @> '[994, 995]'::jsonb and _board_epoch() > e0
+        and (pg_temp.ar(993)).slaughter is null
+        and exists (select 1 from admin_audit where action = 'daily_reset' and detail -> 'unfinishedNumbers' @> '[994, 995]'::jsonb);
+  perform pg_temp.rec('v10.38 manual reset: always goes through without a reason; the unfinished numbers are audited', ok, r::text);
 
   -- a worker code left as plain text in the settings (written past the trigger) no longer logs in
   select settings into s0 from settings_pilot where id = 1;
@@ -2946,7 +2941,7 @@ begin
   -- 2. the reset list of unfinished numbers names the shochet's open "?" too
   r  := pg_temp.api(pg_temp.dev('SL1'), 'select hold_set(862, ''slaughter'', ''question'')');
   r2 := pg_temp.api('{}', format('select reset_daily_board(%L)', pg_temp.v('mgr')));
-  ok := pg_temp.ok(r) and r2 ->> 'error' = 'unfinished_animals' and r2 -> 'numbers' @> '[863]'::jsonb;
+  ok := pg_temp.ok(r) and pg_temp.ok(r2) and r2 -> 'unfinishedNumbers' @> '[863]'::jsonb;   -- (v10.38: the reset goes through; the numbers are listed)
   perform pg_temp.api(pg_temp.dev('SL1'), pg_temp.q_claim(862, 'slaughter', 'nevela', '', ''));   -- (closes the "?")
   perform pg_temp.rec('v10.37 the manual reset lists the number with the shochet''s open "?" (it was counted, not listed)', ok,
     concat_ws(' | ', left(r::text, 60), r2::text));

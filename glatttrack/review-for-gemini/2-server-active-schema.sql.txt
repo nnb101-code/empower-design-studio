@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict xzJGcvLjMjcMfTHHJD3dh3C2wfyTCWbq2ZP10eCtBZcYfLNHxnfEY4eD94aNL9n
+\restrict C2pepEEE0ESmTVmNr0BKa68RdBrXMrgRDLmjsP79hjNAXAyWabjemddFeSg31ER
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -2813,6 +2813,37 @@ end $$;
 
 
 ALTER FUNCTION public._proc_caller_station(p_station text) OWNER TO postgres;
+
+--
+-- Name: _proc_close_kept_days(text); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public._proc_close_kept_days(p_reason text) RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $$
+declare b record; n int := 0;
+begin
+  for b in select distinct board_id from animals_carry order by board_id loop
+    perform _proc_board_lock(b.board_id);
+    continue when not exists (select 1 from animals_carry where board_id = b.board_id);
+    update daily_board_archive d
+       set board = coalesce((select jsonb_agg(to_jsonb(c) - 'board_id' - 'slaughter_day' order by c.id)
+                               from animals_carry c where c.board_id = b.board_id), d.board),
+           reason = left(coalesce(d.reason, '') || ' | ' || coalesce(p_reason, 'closed'), 400)
+     where d.id = b.board_id;
+    update animal_holds h set resolved_at = now(), resolution = 'board_closed'
+     where h.resolved_at is null
+       and exists (select 1 from animals_carry c where c.board_id = b.board_id and c.board_epoch = h.board_epoch and c.id = h.animal_id);
+    delete from animals_carry where board_id = b.board_id;
+    delete from processing_day_closed where board_id = b.board_id;
+    n := n + 1;
+  end loop;
+  return n;
+end $$;
+
+
+ALTER FUNCTION public._proc_close_kept_days(p_reason text) OWNER TO postgres;
 
 --
 -- Name: _proc_finalize(bigint); Type: FUNCTION; Schema: public; Owner: postgres
@@ -6994,8 +7025,7 @@ CREATE FUNCTION public.request_daily_rollover() RETURNS jsonb
     SET search_path TO 'public', 'extensions', 'pg_temp'
     AS $$
 declare
-  s jsonb; tz text; rt time; local_now timestamp; today date; last_date text;
-  v_last_activity timestamptz; v_unfinished int;
+  s jsonb; tz text; rt time; local_now timestamp; today date; last_date text; v_unfinished int; v_kept int;
 begin
   perform pg_advisory_xact_lock(hashtext('glatttrack_daily_rollover'));
 
@@ -7022,27 +7052,14 @@ begin
   if local_now::time < rt then
     return jsonb_build_object('ok', true, 'done', false, 'status', 'not_yet', 'plantDate', today, 'timezone', tz, 'resetTime', rt);
   end if;
-
-  -- work still going on (a ruling in the last 20 minutes)? wait — step 46: however long it takes
-  select max(to_timestamp(greatest(coalesce(slaughter_time,0), coalesce(inner_time,0), coalesce(outer_time,0)) / 1000.0))
-    into v_last_activity from animals_pilot
-   where slaughter_time is not null or inner_time is not null or outer_time is not null;
-  if v_last_activity is not null and v_last_activity > now() - interval '20 minutes' then
-    return jsonb_build_object('ok', true, 'done', false, 'status', 'busy', 'plantDate', today, 'timezone', tz);
-  end if;
-  -- step 46: a slaughtered animal without its last ruling is never wiped by the clock
+  -- v10.38 (owner): no waiting — the day changes at its hour (what was not finished stays in the archive)
   v_unfinished := _board_unfinished();
-  if v_unfinished > 0 then
-    insert into plant_state (key, value) values ('rolloverWaitingSince', now()::text)
-      on conflict (key) do nothing;
-    return jsonb_build_object('ok', true, 'done', false, 'status', 'waiting_unfinished', 'unfinished', v_unfinished,
-                              'plantDate', today, 'timezone', tz);
-  end if;
-
   perform _do_board_reset('daily-rollover', null);
+  v_kept := _proc_close_kept_days('closed by the daily rollover');
   update plant_state set value = today::text, updated_at = now() where key = 'lastRolloverDate';
   delete from plant_state where key = 'rolloverWaitingSince';
-  return jsonb_build_object('ok', true, 'done', true, 'status', 'rolled_over', 'plantDate', today, 'timezone', tz);
+  return jsonb_build_object('ok', true, 'done', true, 'status', 'rolled_over', 'plantDate', today, 'timezone', tz,
+                            'unfinished', v_unfinished, 'keptDaysClosed', v_kept);
 end $$;
 
 
@@ -7056,39 +7073,34 @@ CREATE FUNCTION public.reset_daily_board(p_token text, p_reason text DEFAULT NUL
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public', 'extensions', 'pg_temp'
     AS $$
-declare tz text; v_unfinished int; v_carried int; v_numbers jsonb;
+declare tz text; v_unfinished int; v_kept int; v_numbers jsonb;
 begin
   if not _manager_session_valid(p_token) or coalesce(_session_role(p_token), 'manager') = 'manufacturer' then
     return jsonb_build_object('ok', false, 'error', 'unauthorized');
   end if;
   perform pg_advisory_xact_lock(hashtext('glatttrack_daily_rollover'));
+  -- v10.38 (owner): the team leader's reset always goes through; the numbers not finished are only recorded
   v_unfinished := _board_unfinished();
-  -- an emergency tool: slaughtered animals without their last ruling would leave the
-  -- screens for good — stop, say which, and go on only with a written reason
   if v_unfinished > 0 then
     select coalesce(jsonb_agg(id + 1 order by id), '[]'::jsonb) into v_numbers from (
       select id from animals_pilot
        where slaughter in ('slaughtered', 'notChalak') and inner_status is distinct from 'treif' and outer_status is null
       union
-      select id from animals_pilot a where a.slaughter is null and _slaughter_q_open(a)   -- v10.37: the shochet's open "?" too (counted, but was not listed)
-      union
-      select * from _board_proc_unfinished_ids()) x;          -- v10.35: also legs / parts / stamps not done
-    if not _reason_ok(p_reason) then
-      return jsonb_build_object('ok', false, 'error', 'unfinished_animals', 'unfinished', v_unfinished, 'numbers', v_numbers);
-    end if;
+      select * from _board_proc_unfinished_ids()) x;
   end if;
   perform _do_board_reset('manual', null);
+  v_kept := _proc_close_kept_days('closed by the team leader''s reset');
   tz := coalesce(nullif(_gt_settings() ->> 'plantTimezone', ''), 'UTC');
   if not exists (select 1 from pg_timezone_names where name = tz) then tz := 'UTC'; end if;
   insert into plant_state (key, value) values ('lastRolloverDate', ((now() at time zone tz)::date)::text)
     on conflict (key) do update set value = excluded.value, updated_at = now();
   delete from plant_state where key = 'rolloverWaitingSince';
-  select count(distinct board_id) into v_carried from animals_carry;
   perform _admin_audit(p_token, 'daily_reset', 'animals_pilot',
                        jsonb_build_object('reason', left(trim(coalesce(p_reason, '')), 200),
                                           'unfinished', v_unfinished, 'unfinishedNumbers', coalesce(v_numbers, '[]'::jsonb),
-                                          'openProcessingBoards', v_carried));
-  return jsonb_build_object('ok', true, 'unfinished', v_unfinished, 'openProcessingBoards', v_carried);
+                                          'keptDaysClosed', v_kept));
+  return jsonb_build_object('ok', true, 'unfinished', v_unfinished, 'unfinishedNumbers', coalesce(v_numbers, '[]'::jsonb),
+                            'keptDaysClosed', v_kept);
 end $$;
 
 
@@ -10662,6 +10674,13 @@ REVOKE ALL ON FUNCTION public._proc_caller_station(p_station text) FROM PUBLIC;
 
 
 --
+-- Name: FUNCTION _proc_close_kept_days(p_reason text); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public._proc_close_kept_days(p_reason text) FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION _proc_finalize(p_board bigint); Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -11842,5 +11861,5 @@ GRANT ALL ON TABLE public.system_flags TO service_role;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict xzJGcvLjMjcMfTHHJD3dh3C2wfyTCWbq2ZP10eCtBZcYfLNHxnfEY4eD94aNL9n
+\unrestrict C2pepEEE0ESmTVmNr0BKa68RdBrXMrgRDLmjsP79hjNAXAyWabjemddFeSg31ER
 

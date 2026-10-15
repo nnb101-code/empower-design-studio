@@ -12117,6 +12117,9 @@ notify pgrst, 'reload schema';
 -- ============================================================================
 -- ============================================================================
 -- ============================================================================
+-- ============================================================================
+-- ============================================================================
+-- ============================================================================
 -- GlattTrack — step 46: stage order on the server, each station its own stage,
 -- kashrut configuration locks, and processing that continues over several days
 -- ============================================================================
@@ -18861,6 +18864,118 @@ begin
 end $$;
 revoke execute on function nikur_board() from public;
 grant execute on function nikur_board() to anon, authenticated;
+
+-- ── §37 v10.38 (owner): the day ALWAYS resets — nothing waits, nothing stays stuck ──────────
+-- (the owner) every day everything slaughtered goes through the whole process the same day; a day that
+-- does not reset, or an earlier day that keeps the screens, does not exist in a plant. So:
+--   • the daily rollover runs at its hour — it no longer waits for work in progress or unfinished animals;
+--   • the team leader's manual reset needs no reason (the unfinished numbers are still written in the audit);
+--   • a day kept by an older version (animals_carry) is closed into its archive row at every reset — and
+--     once now, at install — so no station is taken back to an old day.
+create or replace function _proc_close_kept_days(p_reason text) returns integer
+language plpgsql security definer set search_path = public, extensions, pg_temp as $$
+declare b record; n int := 0;
+begin
+  for b in select distinct board_id from animals_carry order by board_id loop
+    perform _proc_board_lock(b.board_id);
+    continue when not exists (select 1 from animals_carry where board_id = b.board_id);
+    update daily_board_archive d
+       set board = coalesce((select jsonb_agg(to_jsonb(c) - 'board_id' - 'slaughter_day' order by c.id)
+                               from animals_carry c where c.board_id = b.board_id), d.board),
+           reason = left(coalesce(d.reason, '') || ' | ' || coalesce(p_reason, 'closed'), 400)
+     where d.id = b.board_id;
+    update animal_holds h set resolved_at = now(), resolution = 'board_closed'
+     where h.resolved_at is null
+       and exists (select 1 from animals_carry c where c.board_id = b.board_id and c.board_epoch = h.board_epoch and c.id = h.animal_id);
+    delete from animals_carry where board_id = b.board_id;
+    delete from processing_day_closed where board_id = b.board_id;
+    n := n + 1;
+  end loop;
+  return n;
+end $$;
+revoke execute on function _proc_close_kept_days(text) from public, anon, authenticated;
+
+create or replace function request_daily_rollover() returns jsonb
+language plpgsql security definer set search_path = public, extensions, pg_temp as $$
+declare
+  s jsonb; tz text; rt time; local_now timestamp; today date; last_date text; v_unfinished int; v_kept int;
+begin
+  perform pg_advisory_xact_lock(hashtext('glatttrack_daily_rollover'));
+
+  select settings into s from settings_pilot where id = 1;
+  tz := coalesce(nullif(s ->> 'plantTimezone', ''), 'UTC');
+  if not exists (select 1 from pg_timezone_names where name = tz) then tz := 'UTC'; end if;
+  begin
+    rt := coalesce(nullif(s ->> 'autoResetTime', ''), '00:00')::time;
+  exception when others then rt := '00:00'::time;
+  end;
+  local_now := now() at time zone tz;
+  today := local_now::date;
+
+  select value into last_date from plant_state where key = 'lastRolloverDate';
+  if last_date is null then
+    insert into plant_state (key, value) values ('lastRolloverDate', today::text)
+      on conflict (key) do update set value = excluded.value, updated_at = now();
+    return jsonb_build_object('ok', true, 'done', false, 'status', 'initialized', 'plantDate', today, 'timezone', tz);
+  end if;
+  if last_date = today::text then
+    delete from plant_state where key = 'rolloverWaitingSince';
+    return jsonb_build_object('ok', true, 'done', false, 'status', 'already', 'plantDate', today, 'timezone', tz);
+  end if;
+  if local_now::time < rt then
+    return jsonb_build_object('ok', true, 'done', false, 'status', 'not_yet', 'plantDate', today, 'timezone', tz, 'resetTime', rt);
+  end if;
+  -- v10.38 (owner): no waiting — the day changes at its hour (what was not finished stays in the archive)
+  v_unfinished := _board_unfinished();
+  perform _do_board_reset('daily-rollover', null);
+  v_kept := _proc_close_kept_days('closed by the daily rollover');
+  update plant_state set value = today::text, updated_at = now() where key = 'lastRolloverDate';
+  delete from plant_state where key = 'rolloverWaitingSince';
+  return jsonb_build_object('ok', true, 'done', true, 'status', 'rolled_over', 'plantDate', today, 'timezone', tz,
+                            'unfinished', v_unfinished, 'keptDaysClosed', v_kept);
+end $$;
+revoke execute on function request_daily_rollover() from public;
+grant execute on function request_daily_rollover() to anon, authenticated;
+
+create or replace function reset_daily_board(p_token text, p_reason text default null) returns jsonb
+language plpgsql security definer set search_path = public, extensions, pg_temp as $$
+declare tz text; v_unfinished int; v_kept int; v_numbers jsonb;
+begin
+  if not _manager_session_valid(p_token) or coalesce(_session_role(p_token), 'manager') = 'manufacturer' then
+    return jsonb_build_object('ok', false, 'error', 'unauthorized');
+  end if;
+  perform pg_advisory_xact_lock(hashtext('glatttrack_daily_rollover'));
+  -- v10.38 (owner): the team leader's reset always goes through; the numbers not finished are only recorded
+  v_unfinished := _board_unfinished();
+  if v_unfinished > 0 then
+    select coalesce(jsonb_agg(id + 1 order by id), '[]'::jsonb) into v_numbers from (
+      select id from animals_pilot
+       where slaughter in ('slaughtered', 'notChalak') and inner_status is distinct from 'treif' and outer_status is null
+      union
+      select id from animals_pilot a where a.slaughter is null and _slaughter_q_open(a)      -- (v10.37) the shochet's open "?"
+      union
+      select * from _board_proc_unfinished_ids()) x;
+  end if;
+  perform _do_board_reset('manual', null);
+  v_kept := _proc_close_kept_days('closed by the team leader''s reset');
+  tz := coalesce(nullif(_gt_settings() ->> 'plantTimezone', ''), 'UTC');
+  if not exists (select 1 from pg_timezone_names where name = tz) then tz := 'UTC'; end if;
+  insert into plant_state (key, value) values ('lastRolloverDate', ((now() at time zone tz)::date)::text)
+    on conflict (key) do update set value = excluded.value, updated_at = now();
+  delete from plant_state where key = 'rolloverWaitingSince';
+  perform _admin_audit(p_token, 'daily_reset', 'animals_pilot',
+                       jsonb_build_object('reason', left(trim(coalesce(p_reason, '')), 200),
+                                          'unfinished', v_unfinished, 'unfinishedNumbers', coalesce(v_numbers, '[]'::jsonb),
+                                          'keptDaysClosed', v_kept));
+  return jsonb_build_object('ok', true, 'unfinished', v_unfinished, 'unfinishedNumbers', coalesce(v_numbers, '[]'::jsonb),
+                            'keptDaysClosed', v_kept);
+end $$;
+revoke execute on function reset_daily_board(text, text) from public;
+grant execute on function reset_daily_board(text, text) to anon, authenticated;
+
+-- once, now: a day an older version kept open goes back to its archive row
+select _proc_close_kept_days('closed at install (v10.38)');
+delete from plant_state where key = 'rolloverWaitingSince';
 
 -- ── self-check ──────────────────────────────────────────────────────────────
 do $$
