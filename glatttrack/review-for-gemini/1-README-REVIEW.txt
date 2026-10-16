@@ -18,6 +18,12 @@ This pack is the CURRENT state. Review these files only.
 | `test-mode-on.sql` / `test-mode-off.sql` | The owner's SQL-only test switch. |
 | `plant-server/` | Plant resilience kit (bash, runs as root on the plant servers, NOT in the database): standby server, floating address, UPS, nightly checked backup. Guide: `PLANT-RESILIENCE-HE.md`. |
 
+## Round 23 — our own deep review of the server files (16.10), fixed
+- **Print relay:** a job is taken first (`status = 'sending'`) — a restart never sends it twice; a job not taken within 20 s is failed, never printed later (the station already told the worker it was not printed; the app waits up to 24 s for the final answer).
+- **Index** `events_pilot_problem_reports` (the issues list and the plant report read only the problem reports).
+- **Support center:** a month that does not exist (2026-13) is refused instead of crashing `_sc_bill`; the login lock is per address (+ a high total limit) — one person typing wrong codes no longer locks the whole team; old sessions / closed tickets / old totals are cleaned. Self-test 23/23.
+- **Upgrade tested:** from the version installed at the plant (162 checks) to this one, with Supabase-like default privileges, and 02 run twice — 164/164.
+
 ## Added in v10.38 — real sticker printing, "?" next to every USDA, "Rabbi", the weight check (owner, 16.10)
 - **Until now the stations only showed "printing".** Now `gtStickerCanvas` draws the sticker (same data as the screen sticker, `_gtStickerData`), `gtZplFromCanvas` makes ZPL (^GFA), `gtPrintStickers` sends it: a network printer through the plant server (02 §40 `print_job_add` → `plant-server/print-relay.sh` → IP:9100), a BLE printer, or Android's print screen. Hooked into `showPrintPopup`, `showPartsPrint`, `stampsShowPrint`.
 - **Server rule:** only a paired device; only a printer on the plant's printer list; only a plant-network address (10/8, 172.16/12, 192.168/16) on a label port (9100–9102, 6101) — `_printer_addr_ok`, and the same regex in the relay script. The printer list is a station setting, so this rule is what keeps the server from sending anywhere else.
