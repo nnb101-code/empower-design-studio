@@ -1,0 +1,16 @@
+const { chromium } = require('/opt/node22/lib/node_modules/playwright'); const {open}=require('./explore.js');
+const {execSync}=require('child_process'); const q=s=>execSync(`psql -h /tmp -p 5433 -U postgres -d gtapp -At`,{input:s}).toString().trim();
+const W=(p,ms)=>p.waitForTimeout(ms); const srv=()=>q("select string_agg(id||':'||coalesce(legs_stickers,false)||'/'||coalesce(head_stickers,false),' ' order by id) from animals_pilot where id<3");
+(async()=>{ const b=await chromium.launch({executablePath:'/opt/pw-browsers/chromium'});
+ const L=await open(b,'legs'); await W(L.p,2000);
+ await L.p.evaluate(()=>{ lgInstance=0; _lgTitle(); lgRenderGrid(); lgTap(0); }); await W(L.p,3000);
+ console.log('1) legs slot 0 prints legs #1        ->', srv());
+ await L.p.evaluate(()=>{ lgInstance=1; _lgTitle(); lgRenderGrid(); lgTap(0); }); await W(L.p,3500);
+ console.log('2) slot 0 pretends head on #1        ->', srv());
+ await L.p.evaluate(()=>{ lgInstance=0; _lgTitle(); lgRenderGrid(); lgTap(1); }); await W(L.p,3500);
+ console.log('3) slot 0 legs #2 (queue not stuck)  ->', srv(), '| queue:', await L.p.evaluate(()=>{try{return JSON.stringify(KS._pendingCount?KS._pendingCount():'?')}catch(e){return '?'}}));
+ q("update devices_pilot set assigned_index=1 where id='demo_legs'");
+ await L.p.evaluate(()=>{ lgInstance=1; _lgTitle(); lgRenderGrid(); lgTap(0); }); await W(L.p,3500);
+ console.log('4) real head slot 1 prints head #1   ->', srv());
+ q("update devices_pilot set assigned_index=0 where id='demo_legs'");
+ await L.ctx.close(); await b.close(); })();

@@ -1,0 +1,10 @@
+const { chromium } = require('/opt/node22/lib/node_modules/playwright'); const {open}=require('./explore.js');
+const W=(p,ms)=>p.waitForTimeout(ms); const cell=n=>`.screen.active .num-cell[data-idx="${n-1}"]`;
+(async()=>{ const b=await chromium.launch({executablePath:'/opt/pw-browsers/chromium'}); const x=await open(b,'outer'), p=x.p; await W(p,1500);
+ console.log('one outer screen, role:', await p.evaluate(()=>outRole(outInstance)));
+ await p.click(cell(1)); await W(p,1200);
+ console.log('#1 regular → buttons:', await p.evaluate(()=>[...document.querySelectorAll('#decModal .dec-btns button')].map(b=>b.innerText.trim()).join(' | ')));
+ await p.evaluate(()=>document.querySelectorAll('.overlay.open').forEach(o=>o.classList.remove('open'))); await p.evaluate(()=>{try{outCancelDec()}catch(e){}});
+ await p.evaluate(()=>{ outPendingDec=-1; }); await p.evaluate(()=>outOpenDec(1)); await W(p,1200);
+ console.log('#2 "לא חלק" (shochet) → buttons:', await p.evaluate(()=>[...document.querySelectorAll('#decModal .dec-btns button')].map(b=>b.innerText.trim()).join(' | ')));
+ await x.ctx.close(); await b.close(); })();

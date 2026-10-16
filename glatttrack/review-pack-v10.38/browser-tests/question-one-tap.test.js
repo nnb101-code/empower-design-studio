@@ -1,0 +1,20 @@
+const { chromium } = require('/opt/node22/lib/node_modules/playwright'); const {open}=require('./explore.js'); const {execFileSync}=require('child_process');
+const Q=q=>execFileSync('psql',['-h','/tmp','-p','5433','-U','postgres','-d','gtapp','-Atc',q]).toString().trim();
+const W=(p,ms)=>p.waitForTimeout(ms);
+const nextOf=p=>p.evaluate(()=>{const c=document.querySelector('.screen.active .num-cell.next, .screen.active .num-cell.next-nc');return c?+c.dataset.idx+1:-1;});
+(async()=>{ const b=await chromium.launch({executablePath:'/opt/pw-browsers/chromium'});
+ let x=await open(b,'esophagus'), p=x.p; p.on('pageerror',e=>console.log('ERR',e.message));
+ console.log('eso blinking before:', await nextOf(p));
+ await p.click('#scEsophagus .gt-tbq'); await W(p,2500);
+ console.log('after one tap: holds=', Q("select string_agg((animal_id+1)||':'||station,',') from animal_holds where resolved_at is null"), '| sheet open:', await p.evaluate(()=>!!document.querySelector('#gtSheet.open, #gtSheet[style*=flex]')), '| blinking now:', await nextOf(p));
+ const bb=await (await p.$('#scEsophagus .gt-tbq')).boundingBox(); await p.mouse.move(bb.x+bb.width/2,bb.y+bb.height/2); await p.mouse.down(); await W(p,900); await p.mouse.up(); await W(p,800);
+ console.log('long press → sheet:', await p.evaluate(()=>{const s=document.getElementById('gtSheet');return s?getComputedStyle(s).display+' '+(s.innerText.slice(0,40).replace(/\n/g,' ')):'none';}), '| holds=', Q("select count(*) from animal_holds where resolved_at is null"));
+ await x.ctx.close();
+ // rabbinate
+ Q(`update settings_pilot set settings = settings || '{"screenConfig":"1in2out","notChalakEnabled":true}'::jsonb`);
+ x=await open(b,'outer'); p=x.p; await p.evaluate(()=>{goTo('scNav');}); await W(p,400); await p.evaluate(()=>outLogin(1)); await W(p,2500);
+ console.log('rabbinate blinking:', await nextOf(p)); await p.click('#scOuter .gt-tbq'); await W(p,2500);
+ console.log('rabbinate after tap: holds=', Q("select string_agg((animal_id+1)||':'||station,',') from animal_holds where resolved_at is null and station='outer'"), '| cell:', await p.evaluate(()=>document.querySelector('#scOuter .num-cell[data-idx="7"]')?.className));
+ await p.screenshot({path:__dirname+'/shots/rab-q.png'});
+ Q(`update settings_pilot set settings = settings || '{"screenConfig":"1in1out","notChalakEnabled":false}'::jsonb`);
+ await x.ctx.close(); await b.close(); })();

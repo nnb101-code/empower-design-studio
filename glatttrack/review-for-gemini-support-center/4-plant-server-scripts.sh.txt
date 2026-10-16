@@ -1,0 +1,165 @@
+#!/bin/bash
+# GlattTrack — report to the manufacturer's support center (v10.36). Every 5 minutes (systemd timer
+# gt-report.timer). Sends the plant's health (_plant_report: no kashrut data, no names, no codes;
+# v10.38: + the problem reports and the daily totals for billing),
+# gets back the support center's commands and the current release, and carries them out:
+#   restart_standby · reload_tablets · run_nightly_check · update_now
+#   a new release → downloaded over https, sha256 checked, installed with update-app.sh (02 + the
+#   security self-test first; a release with a server part waits until nobody works).
+# Without internet nothing breaks: the plant works on; the support center shows "no report".
+. "$(dirname "$0")/gt-lib.sh"
+set +e
+D="$(cd "$(dirname "$0")" && pwd)"
+[ -n "${GT_CENTER_URL:-}" ] && [ -n "${GT_PLANT_CODE:-}" ] && [ -n "${GT_PLANT_SECRET:-}" ] || exit 0
+[ "$(gt_self_role)" = "primary" ] || exit 0
+# the old anon key (a JWT, eyJ...) also goes as Bearer; a new publishable key (sb_publishable_...) only as apikey
+AUTH=(); case "${GT_CENTER_KEY:-}" in eyJ*) AUTH=(-H "Authorization: Bearer $GT_CENTER_KEY");; esac
+RPC(){ curl -s -m 20 -X POST -H 'Content-Type: application/json' -H "apikey: $GT_CENTER_KEY" ${AUTH[@]+"${AUTH[@]}"} \
+            "$GT_CENTER_URL/rest/v1/rpc/$1" --data-binary @-; }
+J(){ "${GT_PSQL:-psql}" -X -q -t -A -h "$GT_PGHOST" -p "$GT_PG_PORT" -U "${GT_PGUSER:-postgres}" -d "$GT_DB" "$@"; }
+
+body="$(J -v code="$GT_PLANT_CODE" -v sec="$GT_PLANT_SECRET" <<'SQL'
+select jsonb_build_object('p_code', :'code', 'p_secret', :'sec', 'p_report', _plant_report());
+SQL
+)"
+resp="$(printf '%s' "$body" | RPC sc_report)"
+ok="$(J -v r="$resp" <<'SQL'
+select coalesce((nullif(:'r', '')::jsonb ->> 'ok')::boolean, false);
+SQL
+)"
+[ "$ok" = "t" ] || { gt_log "support center: no answer / refused: ${resp:0:200}"; exit 0; }
+gt_state centerReportAt "$(date -Is)"
+# v10.38: the tickets' status + the center's last reply → the team leader sees them (support_tickets)
+J -v r="$resp" >/dev/null <<'SQL'
+insert into plant_state (key, value)
+select 'supportTickets', coalesce(nullif(:'r', '')::jsonb -> 'tickets', '[]'::jsonb)::text
+on conflict (key) do update set value = excluded.value, updated_at = now();
+SQL
+
+done_cmd(){ printf '%s' "{\"p_code\":\"$GT_PLANT_CODE\",\"p_secret\":\"$GT_PLANT_SECRET\",\"p_id\":$1,\"p_result\":\"$2\"}" | RPC sc_command_done >/dev/null; }
+working(){ [ "$(J -c "select exists (select 1 from animals_pilot where updated_at > now() - interval '10 minutes')")" = "t" ]; }
+
+# the release: install when it is new (the app at once — tablets ask / wait themselves; a server part only when nobody works)
+install_release(){   # $1 = force (update_now)
+  local rel; rel="$(J -v r="$resp" <<'SQL'
+select concat_ws(' ', r ->> 'version', r ->> 'appUrl', r ->> 'appSha256', coalesce(r ->> 'sqlUrl', '-'), coalesce(r ->> 'sqlSha256', '-'))
+  from (select nullif(:'r', '')::jsonb -> 'release' as r) x where x.r is not null and x.r <> 'null'::jsonb;
+SQL
+)"
+  [ -n "$rel" ] || return 0
+  read -r V AURL ASHA SURL SSHA <<<"$rel"
+  local cur; cur="$(J -c "select value from plant_state where key = 'appVersion'")"
+  [ "$V" = "$cur" ] && [ "$1" != "force" ] && return 0
+  if [ "$SURL" != "-" ] && working && [ "$1" != "force" ]; then gt_log "release $V has a server part — waits until nobody works"; return 0; fi
+  local T; T="$(mktemp -d)"
+  curl -fsS -m 120 -o "$T/app.html" "$AURL" && [ "$(sha256sum "$T/app.html" | cut -d' ' -f1)" = "$ASHA" ] \
+    || { gt_log "release $V: the app file did not download or its sha256 is wrong — not installed"; gt_state lastUpdateError "download/sha256 $V"; rm -rf "$T"; return 1; }
+  if [ "$SURL" != "-" ]; then
+    curl -fsS -m 120 -o "$T/02.sql" "$SURL" && [ "$(sha256sum "$T/02.sql" | cut -d' ' -f1)" = "$SSHA" ] \
+      || { gt_log "release $V: the server file did not download or its sha256 is wrong — not installed"; gt_state lastUpdateError "download/sha256 $V"; rm -rf "$T"; return 1; }
+    bash "$D/update-app.sh" "$T/app.html" "$T/02.sql"; rc=$?
+  else bash "$D/update-app.sh" "$T/app.html"; rc=$?; fi
+  rm -rf "$T"
+  [ $rc -eq 0 ] && gt_state_del lastUpdateError || gt_state lastUpdateError "update-app.sh exit $rc ($V)"
+  return $rc
+}
+
+# the support center's commands (only these four)
+while read -r id cmd; do
+  [ -n "$id" ] || continue
+  case "$cmd" in
+    restart_standby)   if [ -n "${GT_STANDBY_RESTART_CMD:-}" ]; then eval "$GT_STANDBY_RESTART_CMD" >/dev/null 2>&1 && done_cmd "$id" "restarted" || done_cmd "$id" "failed"; else done_cmd "$id" "GT_STANDBY_RESTART_CMD not set"; fi ;;
+    reload_tablets)    J -c "update settings_pilot set settings = settings || jsonb_build_object('forceReloadAt', now()::text), updated_at = now(), device_id = 'server' where id = 1" >/dev/null && done_cmd "$id" "sent (tablets update when not in use)" ;;
+    run_nightly_check) bash "$D/nightly-check.sh" >/dev/null 2>&1; done_cmd "$id" "ran" ;;
+    update_now)        install_release force && done_cmd "$id" "installed" || done_cmd "$id" "failed — see the plant log" ;;
+  esac
+done < <(J -v r="$resp" <<'SQL'
+select (c ->> 'id') || ' ' || (c ->> 'cmd') from jsonb_array_elements(coalesce(nullif(:'r', '')::jsonb -> 'commands', '[]'::jsonb)) c;
+SQL
+)
+install_release
+exit 0
+
+#!/bin/bash
+# GlattTrack — update the plant server (v10.36, owner: no team-leader approval, never harming the work).
+#   update-app.sh <new-app.html> [<new-02.sql>]   install a new version
+#   update-app.sh --rollback                      back to the version before the last update
+# Order: the server first (02, then the security self-test 03 must PASS), and only then the app file
+# the tablets load. A tablet that finds the new file updates by itself when nobody works on it, or
+# asks "update now / later" (the app does that). If anything fails, nothing changes for the tablets.
+. "$(dirname "$0")/gt-lib.sh"
+set -u
+APP="${GT_APP_FILE:?set GT_APP_FILE in gt-plant.conf — the app file the web server serves}"
+PSQL(){ "${GT_PSQL:-psql}" -X -h "$GT_PGHOST" -p "$GT_PG_PORT" -U "${GT_PGUSER:-postgres}" -d "$GT_DB" "$@"; }
+say(){ echo "$*"; gt_log "update: $*"; }
+ver_of(){ grep -o "var GT_APP_VERSION='[a-z][0-9][^']*';" "$1" 2>/dev/null | head -1 | sed "s/.*='\(.*\)';/\1/"; }
+
+if [ "${1:-}" = "--rollback" ]; then
+  [ -f "$APP.prev" ] || { say "nothing to roll back to ($APP.prev missing)"; exit 1; }
+  cp -f "$APP.prev" "$APP.tmp" && mv -f "$APP.tmp" "$APP"
+  gt_state appVersion "$(ver_of "$APP")"; gt_state appUpdatedAt "$(date -Is)"
+  say "rolled back to $(ver_of "$APP") — the tablets go back by themselves"; exit 0
+fi
+
+NEW="${1:?usage: update-app.sh <new-app.html> [<new-02.sql>] | --rollback}"; SQL="${2:-}"
+[ -f "$NEW" ] || { say "file not found: $NEW"; exit 1; }
+NV="$(ver_of "$NEW")"; OV="$(ver_of "$APP")"
+[ -n "$NV" ] || { say "not a GlattTrack app file (no version inside): $NEW"; exit 1; }
+[ "$(gt_self_role)" = "primary" ] || { say "this is the backup server — update the main server"; exit 1; }
+
+# 1. the server part (re-runnable), then the security self-test must pass
+if [ -n "$SQL" ]; then
+  [ -f "$SQL" ] || { say "file not found: $SQL"; exit 1; }
+  PSQL -v ON_ERROR_STOP=1 -q -f "$SQL" >/dev/null 2>"/tmp/gt-update-02.err" || { say "02 FAILED — nothing changed for the tablets: $(tail -2 /tmp/gt-update-02.err)"; exit 2; }
+fi
+if [ -n "${GT_SELFTEST_SQL:-}" ] && [ -f "$GT_SELFTEST_SQL" ]; then
+  out="$(PSQL -q -f "$GT_SELFTEST_SQL" 2>&1)"
+  echo "$out" | grep -q 'PASSED — ' || { say "security self-test did NOT pass — the app was NOT updated (tablets stay on $OV)"; exit 3; }
+fi
+
+# 2. the app file: the old one kept for --rollback, the new one put in place in one step
+cp -f "$APP" "$APP.prev" 2>/dev/null || true
+cp -f "$NEW" "$APP.tmp" && mv -f "$APP.tmp" "$APP" || { say "could not write $APP"; exit 4; }
+gt_state appVersion "$NV"; gt_state appUpdatedAt "$(date -Is)"
+say "updated $OV → $NV (self-test passed). Tablets update by themselves; rollback: update-app.sh --rollback"
+
+#!/bin/bash
+# shared helpers for the GlattTrack plant-server tools (sourced, run as root or postgres)
+set -euo pipefail
+GT_CONF="${GT_CONF:-/etc/glatttrack/gt-plant.conf}"
+[ -f "$GT_CONF" ] || { echo "missing $GT_CONF" >&2; exit 2; }
+# shellcheck disable=SC1090
+. "$GT_CONF"
+GT_PGHOST="${GT_PGHOST:-/var/run/postgresql}"
+umask 077
+# the settings file holds passwords: readable by root only
+[ "$(id -u)" = "0" ] && chmod 600 "$GT_CONF" 2>/dev/null || true
+# refuse to run with an empty, sample or short password (review A6)
+gt_check_secrets(){
+  case "${GT_REPL_PASS:-}" in ""|change-me*|*CHANGE*) echo "ERROR: set GT_REPL_PASS in $GT_CONF (openssl rand -hex 24)" >&2; exit 2;; esac
+  [ "${#GT_REPL_PASS}" -ge 16 ] || { echo "ERROR: GT_REPL_PASS must be at least 16 characters" >&2; exit 2; }
+  case "${GT_VRRP_PASS:-}" in ""|gtplant1|change-me*|*CHANGE*) echo "ERROR: set GT_VRRP_PASS in $GT_CONF (8 random characters)" >&2; exit 2;; esac
+}
+gt_log(){ echo "$(date '+%F %T') [$(basename "$0")] $*" | tee -a "${GT_LOG:-/dev/null}" >&2; }
+# psql on THIS server as the database superuser (local socket)
+gt_psql(){ "${GT_PSQL:-psql}" -X -v ON_ERROR_STOP=1 -q -t -A -h "$GT_PGHOST" -p "$GT_PG_PORT" -U "${GT_PGUSER:-postgres}" -d "$GT_DB" "$@"; }
+# psql on the OTHER server (by its own address) as the replication user — only to ask what it is
+gt_peer_role(){
+  PGPASSWORD="$GT_REPL_PASS" PGCONNECT_TIMEOUT=3 "${GT_PSQL:-psql}" -X -q -t -A -h "$GT_PEER_IP" -p "${GT_PEER_PORT:-$GT_PG_PORT}" \
+    -U "$GT_REPL_USER" -d "$GT_DB" -c "select case when pg_is_in_recovery() then 'standby' else 'primary' end" 2>/dev/null || echo "down"
+}
+# timeline: goes up by one on every takeover — the server with the higher one is the true main server
+GT_TLI_SQL="select case when pg_is_in_recovery() then 0 else ('x'||substr(pg_walfile_name(pg_current_wal_lsn()),1,8))::bit(32)::int end"
+gt_peer_tli(){
+  PGPASSWORD="$GT_REPL_PASS" PGCONNECT_TIMEOUT=3 "${GT_PSQL:-psql}" -X -q -t -A -h "$GT_PEER_IP" -p "${GT_PEER_PORT:-$GT_PG_PORT}" \
+    -U "$GT_REPL_USER" -d "$GT_DB" -c "$GT_TLI_SQL" 2>/dev/null || echo 0
+}
+gt_self_tli(){ gt_psql -c "$GT_TLI_SQL" 2>/dev/null || echo 0; }
+# can this server see the plant network? (a server cut off from everything must not take over)
+gt_net_ok(){ [ -z "${GT_GATEWAY_IP:-}" ] && return 0; ping -c 2 -W 1 "$GT_GATEWAY_IP" >/dev/null 2>&1; }
+gt_pg_stop(){ eval "${GT_STOP_CMD:-systemctl stop postgresql}"; }
+gt_pg_start(){ eval "${GT_START_CMD:-systemctl start postgresql}"; }
+gt_self_role(){ gt_psql -c "select case when pg_is_in_recovery() then 'standby' else 'primary' end" 2>/dev/null || echo "down"; }
+# write a plant_state key (on the primary only — a standby is read-only)
+gt_state(){ gt_psql -c "insert into plant_state (key, value) values ('$1', \$v\$$2\$v\$) on conflict (key) do update set value = excluded.value, updated_at = now()"; }
+gt_state_del(){ gt_psql -c "delete from plant_state where key = '$1'"; }

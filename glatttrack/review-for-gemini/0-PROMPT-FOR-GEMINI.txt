@@ -1,0 +1,61 @@
+מצורפים 9 קבצים של מערכת GlattTrack (אפליקציה v10.38, שרת שלב 46) — מערכת לטאבלטים בבית שחיטה כשר:
+1-README-REVIEW.txt — הסבר, כללי העסק וכל השינויים לפי גרסאות.
+2-server-active-schema.sql.txt — המצב הפעיל של השרת (Postgres / Supabase): כל הפונקציות, הטריגרים וההרשאות. זה הקוד שצריך לבדוק.
+3-app-kosher-app-v10.38.html.txt — האפליקציה (קובץ HTML אחד עם JavaScript).
+4-security-selftest-result.txt — תוצאת בדיקת האבטחה האוטומטית (164/164).
+5-SECURITY-MANIFEST.txt — מה כבר נאכף בשרת.
+6-support-center-central-setup.sql.txt — מרכז השירות של היצרן (מסד נפרד): מפעלים, דיווחים, התראות, פקודות מרחוק, עדכונים.
+7-plant-server-report-and-update.sh.txt — הסקריפטים בשרת המפעל: דיווח למרכז, ביצוע פקודות, התקנת עדכון, והעברת מדבקות למדפסות (print-relay.sh).
+8-support-center-index.html.txt — הדף של מרכז השירות (תפקידים, תקלות, חיובים, צוות).
+9-support-center-selftest-result.txt — תוצאת הבדיקה של מרכז השירות (23/23).
+חדש בסבב הזה (README, מלמעלה): הדפסה אמיתית של מדבקות (02 סעיף 40, print_job_add, _printer_addr_ok, print-relay.sh, gtPrintStickers); "?" ליד כל USDA; משקל במצלמה עם בדיקת סבירות; מערכת היצרן (תפקידים, תקלות, חיובים — 02 סעיף 39 ו-6-support-center); ניקור אחרי הקולר לפי היום שעל המדבקה; היום מתאפס תמיד.
+קודם תקרא ב-README את החלקים של v10.38 מלמעלה. כללי בעל המערכת שהשתנו: היום מתאפס תמיד (אין יום שמור שתופס מסכים); בכל מסך יש "?" ו-USDA (בשחיטה רק "?").
+
+חשוב — איך לבדוק (בסבב הקודם הבדיקה הסתמכה על התיאור במסמכים ולא על הקוד):
+- אל תסתמך על מה שכתוב ב-README שנאכף. לכל כלל, מצא את הפונקציה ב-2-server-active-schema.sql.txt וקרא את הקוד שלה בפועל.
+- בסבב הקודם נמצאו ב-hold_set / hold_resolve / _animals_hold_guard / carry_push / _device_write_allowed / event_append / _pushAnswer באגים אמיתיים שהבדיקה סימנה כ"תקינים". הם תוקנו עכשיו (README: "Fixed after the deep code review"). בדוק שכל תיקון באמת סוגר את הבעיה, וחפש מסלולים נוספים דומים.
+- לכל ממצא תן: שם הפונקציה, שורות הקוד הרלוונטיות (ציטוט קצר), תרחיש קונקרטי (איזה טאבלט, איזו קריאה, אילו פרמטרים, מה התוצאה השגויה), ותיקון.
+- אם אינך בטוח — כתוב "לא בטוח" ולמה. אל תכתוב "תקין לחלוטין" על פונקציה שלא קראת.
+
+הכללים של בעל המערכת (המצב הנוכחי):
+- סדר הקו: שחיטה ← וושט ← רגליים ← ראש (אם מפוצל) ← פנים ← חוץ ← חותמות / חלקים.
+- מספר מופיע במסך רק אחרי שעבר את המסך הקודם. חוץ מנבלה, ירוי, "?" ו-USDA — אלה מופיעים בכל המסכים.
+- בודק הפנים עובד רק אחרי מדבקות הראש (כולל ריאה ובית הכוסות). מדבקות רגליים לבד לא מספיקות.
+- מספר שהגיע לתחנה הבאה שייך לה: התחנה הקודמת לא משנה את הפסיקה שלה. הוושט יכול להפוך "תקין" ל-"?" עד שהודפסו רגליים/ראש.
+- USDA: כל מסך חוץ משחיטה יכול לסמן; כתוב מאיזה מסך; רק אותו מסך משחרר או פוסל. USDA אחד לבהמה שלמה בכל פעם. חצאים רק בחוץ/חותמות.
+- פיצול רגליים/ראש (אופציה): טאבלט רגליים 0 = רגליים, 1 = ראש. ראש רק אחרי מדבקות רגליים. לראש מדפסת וסורק משלו.
+- כיבוי מסך זמני: וושט, רגליים, חלקים קטנים. הראש אף פעם לא מדולג. רגליים כבוי: אם לא מפוצל המסך הופך לראש בלבד; אם מפוצל, הראש לוקח ישר מהוושט. החזרה: legsFromIdx.
+- מיון רגליים: רק במסך הרגליים, אף פעם לא כשהרגליים כבוי, ואף פעם לא למספר בלי מדבקות רגליים.
+- ארבעה מסכי משגיח חדשים (קולר, מנקר, מליחה, שיפינג): צימוד, רשימת עובדים וכניסה; תצוגה בלבד, בלי שום כתיבה.
+- עיבוד של יום קודם: מותר רק אחרי שכל בהמה קיבלה חותמות וחלקים קטנים (סימני כשרות סופיים). אין מעבר ליום הבא של בהמה בלי סימני כשרות סופיים. עבודה על יום או יומיים קודמים — רק בקולר, בתחילת הפירוק או בהכשרה (מסכים עתידיים). אם הקוד מאפשר רגליים / חלקים / חותמות ביום שמור (animals_carry, carry_push, carry_claim) — דווח על זה כסטייה מהכלל.
+- "לא חלק" הוא סימון עד פסיקת החוץ, לא סטטוס, ולא קשור לרבנות. בהמה "לא חלק" (שחיטה / בית הכוסות) מקבלת רק סטטוס מקבוצת "לא חלק" (ncStatuses) או טרף. בהמה שרק נשלחה למסך B יכולה לקבל כל סטטוס. כש"לא חלק" כבוי, אף סטטוס "לא חלק" לא נפסק.
+- אין סטטוס "לא כשר". יש רק טרף, וגם נבלה וירוי. כל סטטוס של המפעל הוא סטטוס כשרות.
+- נעילת חוץ: 2 דקות לטאבלט שמת. סריקת ברקוד בפנים ובחוץ פותחת בדיוק את המספר הסרוק.
+
+בדוק במיוחד:
+(00000) סטטוסי כשרות: _nc_statuses, _nc_outer_value_ok, _nc_group_off, _kosher_statuses, _printed_as_key, הבדיקה של ncStatuses ב-push_settings, ו-_settings_value_error ל-statusNames / stickerHe / ncStatuses. שאלות: האם בהמה "לא חלק" יכולה לקבל סטטוס "חלק" באיזשהו מסלול (claim, animal_push, carry_push, תיקון)? האם אפשר לפסוק סטטוס "לא חלק" כש"לא חלק" כבוי? האם שינוי של ncStatuses או של notChalakEnabled באמצע היום יכול להפוך בהמה שכבר הודפסו לה מדבקות ל"לא מוכנה", או להפך? האם ה-migration (custom_rab, kosher:true) בטוח להרצה חוזרת?
+(0000) תפקידי cooler / nikur / salting / shipping: האם יש מסלול כתיבה כלשהו (animal_push, carry_push, claim_animal_stage, carry_claim, hold_set, hold_resolve, record_event, settings) שהם יכולים להשתמש בו? מיון: האם legs_sorted נחסם בכל המסלולים (legsPaused, טאבלט ראש, בלי legs_stickers)?
+(000) _legs_slot_error: האם יש עוד מסלול שבו טאבלט ראש כותב legs_stickers או טאבלט רגליים כותב head_stickers בזמן פיצול (animal_push, carry_push, claim_animal_stage, החלפת מכשיר / device_pair)? האם הכלל שובר את מצב "רגליים כבוי"?
+(00) _legs_required + legsPaused/legsFromIdx/legsFromReset: האם כיבוי/הדלקה של רגליים (או שינוי ההגדרות) יכול לאפשר בדיקת פנים או ראש בלי המדבקות הנדרשות? האם device_pair עם אינדקס 1 לרגליים פותח משהו מעבר למסך ראש?
+(0) A1–A4: האם התיקונים סוגרים את הבעיה (נעילת usda_held_elsewhere, nc_plain מבוטל, in_progress→confirmed, server_error כפול)?
+(1) hold_set בלי בדיקת אזור: מי יכול לשחרר USDA של מסך אחר? האם reopened_question של הוושט יכול לעקוף את נעילת התחנה הבאה?
+(2) _stage_order_error('inner') עם head_stickers: האם יש מסלול כתיבה של פסיקת פנים לפני מדבקות ראש (claim, animal_push, carry_push, המסך המשותף)?
+(3) באפליקציה: _pushAnswer, הסדר במסך ראש מפוצל, כיבוי מסך — האם יכול להיתקע תור או לאבד שינוי תקין?
+(4) הנקודות הפתוחות B1, B2, B5, B6 מהסבב הקודם, ו-_hold_caller_error, _parts_print_block, _correction_check, מצב בדיקה.
+בדיקת האבטחה: 156/156 (מסד נקי מ-glatttrack-schema-full.sql + הרצה שנייה של 02).
+
+Please review these files according to 1-README-REVIEW.txt.
+
+Rules for the review:
+1. Audit the ACTIVE state in 2-server-active-schema.sql.txt (one definition per function). 
+2. Use 5-SECURITY-MANIFEST.txt and 4-security-selftest-result.txt (156/156) to see what is already enforced and tested. Before reporting a vulnerability, check whether a self-test already covers it; if it does, say so and explain why you still think it is exploitable (with the exact function name and line from the snapshot).
+3. Look deeply: every SECURITY DEFINER function, every trigger, every path that writes (animal_push, carry_push, claim_animal_stage, carry_claim, hold_set, hold_resolve, event_append, push_settings), and in the app the sync queue (_pushAnswer, _carryPump, _claimNow). Number every finding.
+4. Separate your findings into:
+   A. Real, exploitable problems (with a concrete attack: which role, which call, which parameters, what wrong result).
+   B. Defense-in-depth improvements (not exploitable today).
+   C. Things that are already fine.
+5. For every A-finding give: the function name as it appears in the snapshot, the exact problem, and a minimal fix (SQL or JS) that keeps the existing function signatures.
+6. Check the business rules listed in 1-README-REVIEW.txt and in the owner rules above one by one against the code, and say for each: enforced on the server (where) / only in the app / not enforced.
+7. Do not propose rewriting the architecture. Do not invent tables, columns, roles or RPCs that are not in the snapshot.
+
+Answer in Hebrew, with code blocks in English.

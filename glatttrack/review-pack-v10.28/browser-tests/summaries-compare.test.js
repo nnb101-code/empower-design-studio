@@ -1,0 +1,28 @@
+const { chromium } = require('/opt/node22/lib/node_modules/playwright');
+(async()=>{
+  const browser=await chromium.launch({executablePath:'/opt/pw-browsers/chromium'});
+  const ctx=await browser.newContext({viewport:{width:430,height:900}, deviceScaleFactor:2});
+  await ctx.addInitScript(()=>{ if(!localStorage.getItem('i')){ localStorage.setItem('ks_lang_by_screen',JSON.stringify({scPair:'he',scNav:'he',scManager:'he'})); localStorage.setItem('i','1'); } });
+  const p=await ctx.newPage(); const errs=[]; p.on('pageerror',e=>errs.push(e.message)); p.on('dialog',d=>d.accept());
+  await p.goto('http://localhost:8080/'); await p.waitForTimeout(8000);
+  await p.evaluate(()=>{ document.querySelectorAll('.overlay.open').forEach(o=>o.classList.remove('open')); mgrEnter(); }); await p.waitForTimeout(1200);
+  await p.fill('#loginCodeInput','e2e-tl-code-7731'); await p.evaluate(()=>[...document.querySelectorAll('#loginModal button')].pop().click());
+  await p.waitForTimeout(7000);
+  await p.evaluate(()=>{ document.querySelectorAll('.overlay.open').forEach(o=>o.classList.remove('open')); try{gtWizardClose(true);}catch(e){} mgrTab('summaries'); });
+  await p.waitForTimeout(1000);
+  await p.evaluate(()=>{ document.getElementById('anFrom').value='2026-09-20'; document.getElementById('anTo').value='2026-10-07'; gtAnSetPeriod('custom'); _gtAnCmp.year=true; gtAnRender(); }); await p.waitForTimeout(8000);
+  await p.waitForTimeout(5000);
+  const shot=async(k,name)=>{ await p.evaluate(k=>{ document.querySelectorAll('#anBody details[data-k]').forEach(d=>d.open=(d.getAttribute('data-k')===k)); const d=document.querySelector('#anBody details[data-k="'+k+'"]'); d.scrollIntoView({block:'start'}); window.scrollBy(0,-60); }, k); await p.waitForTimeout(500); await p.screenshot({path:'first/'+name+'.png'}); };
+  await shot('farm','sum-farm');
+  await shot('farmtype','sum-farmtype');
+  const farm=await p.evaluate(()=>{ const s=document.getElementById('gtFF'); return [...s.options].map(o=>o.value).filter(Boolean); });
+  console.log('farms in the period:', farm.join(', '));
+  await p.evaluate(f=>{ _gtFocus.farm=f; gtFocusRender(); }, farm[0]||'');
+  await shot('focus','sum-focus');
+  console.log('focus table rows:', await p.evaluate(()=>[...document.querySelectorAll('#gtFocus tr')].map(r=>r.innerText.replace(/\s+/g,' ').trim()).slice(0,8).join('\n')));
+  await shot('workers','sum-workers');
+  await p.evaluate(()=>gtSortTbl('gtRank_farm', 6)); 
+  console.log('farm rows sorted by avg kg:', await p.evaluate(()=>[...document.querySelectorAll('#gtRank_farm tr')].slice(1).map(r=>r.children[0].innerText+' '+r.children[6].innerText).join(' | ')));
+  console.log('errors:', errs.join(' | ')||'none');
+  await browser.close();
+})();

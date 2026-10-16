@@ -1,0 +1,23 @@
+const { chromium } = require('/opt/node22/lib/node_modules/playwright'); const {open}=require('./explore.js');
+const {execSync}=require('child_process'); const q=s=>execSync(`psql -h /tmp -p 5433 -U postgres -d gtapp -At`,{input:s}).toString().trim();
+const W=(p,ms)=>p.waitForTimeout(ms);
+const btns=p=>p.evaluate(()=>[...document.querySelectorAll('#esoModal button')].filter(b=>b.offsetParent).map(b=>b.innerText.trim()).join(' | '));
+(async()=>{ const b=await chromium.launch({executablePath:'/opt/pw-browsers/chromium'}); const x=await open(b,'esophagus'), p=x.p; await W(p,2000);
+ await p.click('.screen.active .num-cell[data-idx="16"]'); await W(p,600);
+ console.log('#17 window:', await btns(p));
+ await p.click('#esoModal button:has-text("ביטול")'); await W(p,400);
+ console.log('after cancel open?', await p.evaluate(()=>document.getElementById('esoModal').style.display));
+ await p.click('.screen.active .num-cell[data-idx="16"]'); await W(p,600);
+ await p.click('#esoModal .gt-usda-dec'); await W(p,600);
+ console.log('sheet title:', await p.evaluate(()=>{const t=[...document.querySelectorAll('*')].find(e=>e.children.length===0&&/^USDA HOLD —/.test(e.textContent||''));return t?t.textContent:'?';}));
+ await p.click('#gtUsdaOk'); await W(p,3500);
+ console.log('cell 17:', await p.evaluate(()=>document.querySelector('.screen.active .num-cell[data-idx="16"]').innerText.replace(/\s+/g,' ')));
+ // ? from the change window on #14 (checked ok)
+ await p.evaluate(()=>{ try{ gtStatusClear('rule'); }catch(e){} });
+ await p.click('.screen.active .num-cell[data-idx="13"]'); await W(p,600);
+ await p.click('#esoWarnModal button:has-text("אשר שינוי")'); await W(p,500);
+ console.log('#14 change window:', await btns(p));
+ await p.click('#gtQEso'); await W(p,3500);
+ console.log('#14 server:', q("select eso_checked from animals_pilot where id=13"), '| cell:', await p.evaluate(()=>document.querySelector('.screen.active .num-cell[data-idx="13"]').innerText.replace(/\s+/g,' ')));
+ await p.screenshot({path:'shots/esow.png'});
+ await x.ctx.close(); await b.close(); })();

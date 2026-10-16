@@ -1,0 +1,17 @@
+מצורפת חבילת הבדיקה העדכנית של GlattTrack (אפליקציה v10.6, שרת שלב 46).
+קודם תקרא את README-REVIEW.md ואת STEP46-CHANGES.md.
+
+Please review this pack according to README-REVIEW.md.
+
+Rules for the review:
+1. Audit the ACTIVE state in active-schema-snapshot.sql (one definition per function). Do not audit older step files or the history inside glatttrack-schema-full.sql as if it were active.
+2. Use SECURITY-MANIFEST.md and security-selftest-result.txt (101/101) to see what is already enforced and tested. Before reporting a vulnerability, check whether a self-test already covers it; if it does, say so and explain why you still think it is exploitable (with the exact function name and line from the snapshot).
+3. Separate your findings into:
+   A. Real, exploitable problems (with a concrete attack: which role, which call, which parameters, what wrong result).
+   B. Defense-in-depth improvements (not exploitable today).
+   C. Things that are already fine.
+4. For every A-finding give: the function name as it appears in the snapshot, the exact problem, and a minimal fix (SQL or JS) that keeps the existing function signatures.
+5. Check the business rules listed in README-REVIEW.md one by one against the code, and say for each: enforced on the server (where) / only in the app / not enforced.
+6. Do not propose rewriting the architecture. Do not invent tables, columns, roles or RPCs that are not in the snapshot.
+
+Answer in Hebrew, with code blocks in English.

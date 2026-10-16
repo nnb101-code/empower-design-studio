@@ -1,0 +1,8 @@
+== v10.22
+has device key: true | logged in: false
+marks right after opening: glatt,mk
+marks 6 s later: none
+== v10.23
+has device key: true | logged in: false
+marks right after opening: glatt,mk
+marks 6 s later: glatt,mk

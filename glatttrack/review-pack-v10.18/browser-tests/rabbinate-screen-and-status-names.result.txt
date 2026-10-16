@@ -1,0 +1,11 @@
+A title: בודק חוץ — גלאט
+A #1 buttons: ["גלאט","בית יוסף","כשר","MK","טרף","↪ שליחה למסך רבנות"]
+confirm text: 
+server #1 after send: - nco=true
+B title: Outer inspector — Rabbinate
+B #1 (sent) buttons: ["רבנות כשר","רבנות חלק","טרף"]
+server #1: rabChalak
+B #3 (shochet NC) buttons: ["רבנות כשר","טרף"]
+server #3: kosher
+A grid (en): 1 | 2:גלאט | 3 | 4:MK
+A lang: en
