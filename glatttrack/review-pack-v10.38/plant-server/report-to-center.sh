@@ -12,7 +12,9 @@ set +e
 D="$(cd "$(dirname "$0")" && pwd)"
 [ -n "${GT_CENTER_URL:-}" ] && [ -n "${GT_PLANT_CODE:-}" ] && [ -n "${GT_PLANT_SECRET:-}" ] || exit 0
 [ "$(gt_self_role)" = "primary" ] || exit 0
-RPC(){ curl -s -m 20 -X POST -H 'Content-Type: application/json' -H "apikey: $GT_CENTER_KEY" -H "Authorization: Bearer $GT_CENTER_KEY" \
+# the old anon key (a JWT, eyJ...) also goes as Bearer; a new publishable key (sb_publishable_...) only as apikey
+AUTH=(); case "${GT_CENTER_KEY:-}" in eyJ*) AUTH=(-H "Authorization: Bearer $GT_CENTER_KEY");; esac
+RPC(){ curl -s -m 20 -X POST -H 'Content-Type: application/json' -H "apikey: $GT_CENTER_KEY" "${AUTH[@]}" \
             "$GT_CENTER_URL/rest/v1/rpc/$1" --data-binary @-; }
 J(){ "${GT_PSQL:-psql}" -X -q -t -A -h "$GT_PGHOST" -p "$GT_PG_PORT" -U "${GT_PGUSER:-postgres}" -d "$GT_DB" "$@"; }
 

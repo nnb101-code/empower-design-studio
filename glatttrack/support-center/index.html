@@ -54,7 +54,7 @@ const tx = c => TXT[c] || c;
 const ROLE = { slaughter:'שחיטה', esophagus:'וושט', legs:'רגליים', inner:'פנים', outer:'חוץ', parts:'חלקים', stamps:'חותמות', display:'ספירה', leader:'ראש צוות',
   cooler:'קולר', nikur:'מנקר', salting:'מליחה', shipping:'שיפינג' };
 async function raw(fn, args){
-  try{ const r = await fetch(SC.url + '/rest/v1/rpc/' + fn, { method:'POST', headers:{ 'Content-Type':'application/json', apikey:SC.anonKey, Authorization:'Bearer ' + SC.anonKey }, body: JSON.stringify(args || {}) });
+  try{ const r = await fetch(SC.url + '/rest/v1/rpc/' + fn, { method:'POST', headers:Object.assign({ 'Content-Type':'application/json', apikey:SC.anonKey }, /^eyJ/.test(SC.anonKey||'') ? { Authorization:'Bearer ' + SC.anonKey } : {}), body: JSON.stringify(args || {}) });
        return (await r.json()) || { ok:false, error:'network' }; }catch(e){ return { ok:false, error:'network' }; }
 }
 // "unauthorized" is either an expired session (→ the login) or a role that may not do this (→ stay, say so)
