@@ -1,5 +1,5 @@
 -- GlattTrack support center — self-test. Changes nothing (every change is undone inside it).
--- Expected last line: PASSED — N of N support-center checks (nothing was changed)
+-- Expected result (one row): PASSED — 21 of 21 support-center checks (nothing was changed)
 -- ONE statement (one DO block), no temporary table: the Supabase SQL Editor runs it like psql does
 -- (the same way as the plant's 03). Works on an empty center and on one that already has plants and staff.
 do $$
@@ -133,6 +133,16 @@ begin
     raise notice '%', '  ' || case when (x ->> 'ok')::boolean then 'PASS ' else 'FAIL ' end || (x ->> 'name') || coalesce('  :: ' || left(x ->> 'detail', 200), '');
   end loop;
   if n_all = 0 then raise exception 'support-center self-test did not run'; end if;
-  if n_bad > 0 then raise exception 'support-center self-test FAILED — % of % checks (nothing was changed)', n_bad, n_all; end if;
+  if n_bad > 0 then
+    raise exception 'support-center self-test FAILED — % of % checks: %  (nothing was changed)', n_bad, n_all,
+      (select string_agg(e ->> 'name', ' | ') from jsonb_array_elements(res) e where not (e ->> 'ok')::boolean);
+  end if;
   raise notice 'PASSED — % of % support-center checks (nothing was changed)', n_all, n_all;
+  if exists (select 1 from pg_prepared_statements where name = 'gt_sc_selftest_result') then deallocate gt_sc_selftest_result; end if;
+  execute format('prepare gt_sc_selftest_result as select %L::text', format('PASSED — %s of %s support-center checks (nothing was changed)', n_all, n_all));
 end $$;
+
+-- the result as one row (the Supabase SQL Editor shows no notices); PASSED only when the
+-- block above passed in this session — a failure is the ERROR above
+select coalesce((select substring(statement from $p$'(PASSED[^']*)'$p$) from pg_prepared_statements where name = 'gt_sc_selftest_result'),
+                'NOT PASSED — see the error above') as "GlattTrack support-center self-test";
