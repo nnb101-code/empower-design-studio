@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict dyNMMyJJelOKusHtc3lahsQL9KBZ2c2ijX7aGiAcUKgKJwZXfZfwuaaHfmqy6ww
+\restrict 0LSTzUBRTiOzJ87YaU05jgKVLuXjQfs6elPPbMMqfQfoe1s1XNgikrrf9z9vE4a
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -2874,6 +2874,21 @@ $$;
 
 
 ALTER FUNCTION public._printed_as_key(a public.animals_pilot) OWNER TO postgres;
+
+--
+-- Name: _printer_addr_ok(text); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public._printer_addr_ok(p text) RETURNS boolean
+    LANGUAGE sql IMMUTABLE
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $_$
+  select coalesce(p ~ '^(10\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}|172\.(1[6-9]|2[0-9]|3[01])\.[0-9]{1,3}\.[0-9]{1,3}|192\.168\.[0-9]{1,3}\.[0-9]{1,3}):(9100|9101|9102|6101)$'
+    and (select bool_and(x::int between 0 and 255) from unnest(string_to_array(split_part(p, ':', 1), '.')) x), false);
+$_$;
+
+
+ALTER FUNCTION public._printer_addr_ok(p text) OWNER TO postgres;
 
 --
 -- Name: _proc_board_json(bigint); Type: FUNCTION; Schema: public; Owner: postgres
@@ -7042,6 +7057,107 @@ end $_$;
 ALTER FUNCTION public.plant_status_snapshot() OWNER TO postgres;
 
 --
+-- Name: print_job_add(text, text, uuid); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.print_job_add(p_printer text, p_data text, p_command_id uuid DEFAULT NULL::uuid) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $_$
+declare v_dev text; v_res jsonb; v_id bigint;
+begin
+  v_dev := _call_device(null);
+  if v_dev is null then return jsonb_build_object('ok', false, 'error', _no_device_error()); end if;
+  v_res := _cmd_get(p_command_id, v_dev, 'print_job_add');
+  if v_res is not null then return v_res; end if;
+  if not _printer_addr_ok(p_printer)
+     or not exists (select 1 from jsonb_array_elements(case when jsonb_typeof(_gt_settings() -> 'printers') = 'array' then _gt_settings() -> 'printers' else '[]'::jsonb end) x
+                     where x ->> 'conn' = 'network' and (x ->> 'ip') || ':' || coalesce(nullif(x ->> 'port', ''), '9100') = p_printer) then
+    v_res := jsonb_build_object('ok', false, 'error', 'unknown_printer');
+    perform _cmd_put(p_command_id, v_dev, 'print_job_add', v_res); return v_res;
+  end if;
+  if p_data is null or length(p_data) = 0 or length(p_data) > 3000000 or p_data !~ '^[A-Za-z0-9+/=]+$' then
+    v_res := jsonb_build_object('ok', false, 'error', 'bad_value');
+    perform _cmd_put(p_command_id, v_dev, 'print_job_add', v_res); return v_res;
+  end if;
+  if (select count(*) from print_jobs where device_id = v_dev and at > now() - interval '1 minute') >= 120 then
+    return jsonb_build_object('ok', false, 'error', 'too_many');
+  end if;
+  insert into print_jobs (device_id, printer, data) values (v_dev, p_printer, p_data) returning id into v_id;
+  delete from print_jobs where at < now() - interval '2 days';
+  v_res := jsonb_build_object('ok', true, 'id', v_id);
+  perform _cmd_put(p_command_id, v_dev, 'print_job_add', v_res);
+  return v_res;
+end $_$;
+
+
+ALTER FUNCTION public.print_job_add(p_printer text, p_data text, p_command_id uuid) OWNER TO postgres;
+
+--
+-- Name: print_job_status(bigint); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.print_job_status(p_id bigint) RETURNS jsonb
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $$
+declare v_dev text; j print_jobs;
+begin
+  v_dev := _call_device(null);
+  if v_dev is null then return jsonb_build_object('ok', false, 'error', _no_device_error()); end if;
+  select * into j from print_jobs where id = p_id and device_id = v_dev;
+  if j.id is null then return jsonb_build_object('ok', false, 'error', 'bad_id'); end if;
+  return jsonb_build_object('ok', true, 'status', j.status, 'error', j.error, 'sentAt', j.sent_at);
+end $$;
+
+
+ALTER FUNCTION public.print_job_status(p_id bigint) OWNER TO postgres;
+
+--
+-- Name: printer_scan_request(text); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.printer_scan_request(p_token text) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $$
+begin
+  if not _manager_session_valid(p_token) or coalesce(_session_role(p_token), 'manager') not in ('manager', 'manufacturer') then
+    return jsonb_build_object('ok', false, 'error', 'unauthorized');
+  end if;
+  insert into plant_state (key, value) values ('printerScanRequestedAt', now()::text)
+    on conflict (key) do update set value = excluded.value, updated_at = now();
+  return jsonb_build_object('ok', true);
+end $$;
+
+
+ALTER FUNCTION public.printer_scan_request(p_token text) OWNER TO postgres;
+
+--
+-- Name: printers_found(text); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.printers_found(p_token text) RETURNS jsonb
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $$
+declare f jsonb;
+begin
+  if not _manager_session_valid(p_token) or coalesce(_session_role(p_token), 'manager') not in ('manager', 'manufacturer') then
+    return jsonb_build_object('ok', false, 'error', 'unauthorized');
+  end if;
+  begin f := (select value from plant_state where key = 'printersFound')::jsonb; exception when others then f := null; end;
+  return jsonb_build_object('ok', true,
+    'requestedAt', (select value from plant_state where key = 'printerScanRequestedAt'),
+    'at', f ->> 'at', 'relay', (select value from plant_state where key = 'printRelayAt'),
+    'printers', coalesce((select jsonb_agg(x) from jsonb_array_elements(case when jsonb_typeof(f -> 'printers') = 'array' then f -> 'printers' else '[]'::jsonb end) x
+                           where _printer_addr_ok((x ->> 'ip') || ':' || coalesce(x ->> 'port', '9100'))), '[]'::jsonb));
+end $$;
+
+
+ALTER FUNCTION public.printers_found(p_token text) OWNER TO postgres;
+
+--
 -- Name: processing_board(text); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -8695,6 +8811,39 @@ CREATE TABLE public.plants (
 ALTER TABLE public.plants OWNER TO postgres;
 
 --
+-- Name: print_jobs; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.print_jobs (
+    id bigint NOT NULL,
+    at timestamp with time zone DEFAULT now() NOT NULL,
+    device_id text,
+    printer text NOT NULL,
+    data text NOT NULL,
+    status text DEFAULT 'new'::text NOT NULL,
+    sent_at timestamp with time zone,
+    error text,
+    CONSTRAINT print_jobs_status_check CHECK ((status = ANY (ARRAY['new'::text, 'sent'::text, 'failed'::text])))
+);
+
+
+ALTER TABLE public.print_jobs OWNER TO postgres;
+
+--
+-- Name: print_jobs_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+ALTER TABLE public.print_jobs ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.print_jobs_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
 -- Name: problem_reports; Type: TABLE; Schema: public; Owner: postgres
 --
 
@@ -9262,6 +9411,14 @@ ALTER TABLE ONLY public.plants
 
 
 --
+-- Name: print_jobs print_jobs_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.print_jobs
+    ADD CONSTRAINT print_jobs_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: problem_reports problem_reports_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -9510,6 +9667,13 @@ CREATE INDEX pairing_requests_ip_at ON public.pairing_requests USING btree (ip, 
 --
 
 CREATE INDEX piece_scans_epoch ON public.piece_scans USING btree (board_epoch, screen);
+
+
+--
+-- Name: print_jobs_new; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX print_jobs_new ON public.print_jobs USING btree (id) WHERE (status = 'new'::text);
 
 
 --
@@ -10178,6 +10342,12 @@ ALTER TABLE public.plants ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "plants probe: no rows" ON public.plants FOR SELECT TO anon, authenticated USING (false);
 
+
+--
+-- Name: print_jobs; Type: ROW SECURITY; Schema: public; Owner: postgres
+--
+
+ALTER TABLE public.print_jobs ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: problem_reports; Type: ROW SECURITY; Schema: public; Owner: postgres
@@ -11156,6 +11326,13 @@ REVOKE ALL ON FUNCTION public._printed_as_key(a public.animals_pilot) FROM PUBLI
 
 
 --
+-- Name: FUNCTION _printer_addr_ok(p text); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public._printer_addr_ok(p text) FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION _proc_board_json(p_board bigint); Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -12032,6 +12209,42 @@ GRANT ALL ON FUNCTION public.plant_status_snapshot() TO authenticated;
 
 
 --
+-- Name: FUNCTION print_job_add(p_printer text, p_data text, p_command_id uuid); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public.print_job_add(p_printer text, p_data text, p_command_id uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.print_job_add(p_printer text, p_data text, p_command_id uuid) TO anon;
+GRANT ALL ON FUNCTION public.print_job_add(p_printer text, p_data text, p_command_id uuid) TO authenticated;
+
+
+--
+-- Name: FUNCTION print_job_status(p_id bigint); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public.print_job_status(p_id bigint) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.print_job_status(p_id bigint) TO anon;
+GRANT ALL ON FUNCTION public.print_job_status(p_id bigint) TO authenticated;
+
+
+--
+-- Name: FUNCTION printer_scan_request(p_token text); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public.printer_scan_request(p_token text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.printer_scan_request(p_token text) TO anon;
+GRANT ALL ON FUNCTION public.printer_scan_request(p_token text) TO authenticated;
+
+
+--
+-- Name: FUNCTION printers_found(p_token text); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public.printers_found(p_token text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.printers_found(p_token text) TO anon;
+GRANT ALL ON FUNCTION public.printers_found(p_token text) TO authenticated;
+
+
+--
 -- Name: FUNCTION processing_board(p_station text); Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -12423,5 +12636,5 @@ GRANT ALL ON TABLE public.system_flags TO service_role;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict dyNMMyJJelOKusHtc3lahsQL9KBZ2c2ijX7aGiAcUKgKJwZXfZfwuaaHfmqy6ww
+\unrestrict 0LSTzUBRTiOzJ87YaU05jgKVLuXjQfs6elPPbMMqfQfoe1s1XNgikrrf9z9vE4a
 

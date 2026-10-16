@@ -18,6 +18,13 @@ This pack is the CURRENT state. Review these files only.
 | `test-mode-on.sql` / `test-mode-off.sql` | The owner's SQL-only test switch. |
 | `plant-server/` | Plant resilience kit (bash, runs as root on the plant servers, NOT in the database): standby server, floating address, UPS, nightly checked backup. Guide: `PLANT-RESILIENCE-HE.md`. |
 
+## Added in v10.38 — real sticker printing, "?" next to every USDA, "Rabbi", the weight check (owner, 16.10)
+- **Until now the stations only showed "printing".** Now `gtStickerCanvas` draws the sticker (same data as the screen sticker, `_gtStickerData`), `gtZplFromCanvas` makes ZPL (^GFA), `gtPrintStickers` sends it: a network printer through the plant server (02 §40 `print_job_add` → `plant-server/print-relay.sh` → IP:9100), a BLE printer, or Android's print screen. Hooked into `showPrintPopup`, `showPartsPrint`, `stampsShowPrint`.
+- **Server rule:** only a paired device; only a printer on the plant's printer list; only a plant-network address (10/8, 172.16/12, 192.168/16) on a label port (9100–9102, 6101) — `_printer_addr_ok`, and the same regex in the relay script. The printer list is a station setting, so this rule is what keeps the server from sending anywhere else.
+- **Search:** `printer_scan_request` / `printers_found` (team leader); the relay scans the /24 of its own private addresses for port 9100 and asks `~HI` for the model.
+- **"?" next to every USDA** button (change and reprint windows had only USDA). **"Welcome, Rabbi …"** on every screen (`gtRabbiName`). **Weight OCR:** under 60% confidence or outside 40–600 kg → no reading.
+- Self-test: 164/164 (2 new). Browser: a fake printer got the labels and their QR decoded.
+
 ## Added in v10.38 — the manufacturer center (central project + plant 02 §39 + app)
 - **Central (`support-center/central-setup.sql`):** staff roles `admin` / `support` / `finance` / `viewer` (`_sc_can`); every write checks the role; the last admin cannot be demoted / disabled. New tables `sc_tickets`, `sc_usage`, `sc_billing`, `sc_paid` (RLS on, no grants). `sc_report` takes `issues` (→ tickets, once per key) and `usage` (daily animals / kg, upsert) out of the report and returns each ticket's status + last reply. Billing per plant: by kg, by animal, or a fixed monthly sum, with a monthly minimum. Self-test: 21/21.
 - **Plant (02 §39):** `support_issues` + `support_issue_add` (team leader / owner, max 30 an hour), `support_tickets` (the center's answer, kept by `report-to-center.sh` in `plant_state.supportTickets`), `maker_changes` (admin_audit rows of role `manufacturer`), `_plant_usage`, `_plant_issues`; `_plant_report` now also sends them. Still no rulings, no animal numbers, no codes.

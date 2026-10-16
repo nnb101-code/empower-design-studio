@@ -1144,6 +1144,7 @@ const LUNG_B64="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICA
   </style>
   <div class="topbar">
     <div class="globe-btn" onclick="cycleLang()" style="cursor:pointer;-webkit-tap-highlight-color:rgba(255,255,255,.2);">&#127760;<span class="glang" id="gl9">עב</span></div>
+    <div class="tb-user" id="mgrWelcome" data-no-i18n style="display:none;"></div>
     <div class="tb-mid"><span style="font-size:11px;color:var(--gold2)" id="mgrHeb"></span><span style="font-size:10px;color:var(--muted)" id="mgrTime"></span></div>
     <div class="icon-btn" id="mgrMakerBtn" onclick="goTo('scMaker');makerRender()" title="מסך יצרן" style="font-size:18px;display:none;">&#127981;</div>
     <div class="icon-btn" id="mgrMakerEnterBtn" onclick="mgrMakerLogin()" title="כניסת יצרן" style="font-size:12px;font-weight:700;white-space:nowrap;padding:0 8px;width:auto;color:var(--gold);">&#127981; יצרן</div>
@@ -1483,36 +1484,28 @@ const LUNG_B64="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICA
       <!-- Printing (הדפסה) — central print settings + live preview -->
       <div id="func-printing" style="display:none;">
         <div style="font-size:11px;color:var(--muted);background:rgba(212,168,67,.08);border:1px solid rgba(212,168,67,.25);border-radius:8px;padding:8px 10px;margin-bottom:12px;">
-          הגדרת חיבורים מוכנה לקראת המעבר לאפליקציה. כיום נשמרת התצורה; החיבור הפיזי יופעל בגרסת האפליקציה.
+          🖨 המדבקות מודפסות באמת במדפסת של כל מסך. מוסיפים מדפסת (חיפוש ברשת / Bluetooth / מסך ההדפסה / לפי כתובת), מדפיסים מדבקת ניסיון, ומשייכים אותה למסך ב"שיוך לכל מסך".
         </div>
 
         <!-- Printers -->
         <div class="mgr-sec">מדפסות</div>
         <div class="mgr-card">
           <div id="mgrPrintersList" style="margin-bottom:8px;"></div>
-          <div style="display:flex;gap:6px;flex-wrap:wrap;">
-            <input id="newDevName" list="printerBrands" type="text" placeholder="שם / דגם מדפסת" style="flex:1;min-width:90px;background:var(--panel2);border:1px solid var(--border);border-radius:7px;padding:8px;color:var(--text);font-size:13px;">
-            <datalist id="printerBrands">
-              <option value="Zebra ZD421"></option><option value="Zebra ZD230"></option>
-              <option value="Brother QL-820"></option><option value="Brother TD-4550"></option>
-              <option value="TSC TE244"></option><option value="TSC TTP-244"></option>
-              <option value="Honeywell PC42t"></option><option value="Godex G500"></option>
-              <option value="SATO CL4NX"></option><option value="Bixolon SLP-DX420"></option>
-            </datalist>
-            <select id="newDevConn" style="background:var(--panel2);border:1px solid var(--border);border-radius:7px;padding:8px;color:var(--text);font-size:13px;">
-              <option value="bluetooth">Bluetooth</option>
-              <option value="wifi">WiFi / רשת</option>
-              <option value="usb">USB</option>
-            </select>
-            <button onclick="mgrAddDevice('printer')" style="padding:8px 14px;border-radius:7px;border:none;background:var(--gold);color:#07090F;font-size:13px;font-weight:700;cursor:pointer;">הוסף</button>
-          </div>
-          <div style="font-size:10px;color:var(--muted);margin-top:5px;">התחל להקליד לבחירה מחברות ידועות, או הזן ידנית</div>
+          <datalist id="printerBrands">
+            <option value="Zebra ZD421"></option><option value="Zebra ZD230"></option>
+            <option value="Brother QL-820"></option><option value="Brother TD-4550"></option>
+            <option value="TSC TE244"></option><option value="TSC TTP-244"></option>
+            <option value="Honeywell PC42t"></option><option value="Godex G500"></option>
+            <option value="SATO CL4NX"></option><option value="Bixolon SLP-DX420"></option>
+          </datalist>
+          <div id="gtPrAddBox" data-no-i18n></div>
         </div>
 
         <!-- Scanners -->
         <div class="mgr-sec">סורקים</div>
         <div class="mgr-card">
           <div id="mgrScannersList" style="margin-bottom:8px;"></div>
+          <div id="gtScTestBox" data-no-i18n></div>
           <div style="display:flex;gap:6px;flex-wrap:wrap;">
             <input id="newScanName" list="scannerBrands" type="text" placeholder="שם / דגם סורק" style="flex:1;min-width:90px;background:var(--panel2);border:1px solid var(--border);border-radius:7px;padding:8px;color:var(--text);font-size:13px;">
             <datalist id="scannerBrands">
@@ -5286,7 +5279,7 @@ function gtAfterRelease(h){
   if(h.station==='parts' && ['cheek1','cheek2','tongue'].includes(h.part)){
     const a=KS.getAnimal(h.animal_id);
     if(a && ((a.partsPrintCount||0)>=gtPartsExpected() || a.partsScanned)){
-      try{ showPartsPrint(h.animal_id, a.outerStatus, false, {cheek1:1,cheek2:2,tongue:3}[h.part]);
+      try{ showPartsPrint(h.animal_id, a.outerStatus, false, {cheek1:1,cheek2:2,tongue:3}[h.part], h.part);
            _ppBreak(h.part==='tongue'?0:1, h.part==='tongue'?1:0);
            const sn=document.getElementById('ppPartsInfo'); if(sn){ sn.textContent=L('הודפס עכשיו: ','Printed now: ','Impreso ahora: ')+_gtL(GT_PART_NAME[h.part])+L(' (שוחרר מ-USDA)',' (released from USDA)',' (liberado de USDA)'); sn.style.color='#9BE7B0'; sn.style.fontWeight='800'; } }catch(e){}
       try{ _partsRecordPrinted(h.animal_id); }catch(e){}                    // v10.32: the server learns it is out now
@@ -5699,6 +5692,13 @@ function gtUsdaInChangeWindows(){
     b.style.cssText='display:block;width:100%;margin-top:12px;padding:12px;border-radius:12px;border:2px solid #B39DFF;background:#6A3FB5;color:#fff;font:800 17px Arial;cursor:pointer';
     b.textContent='USDA HOLD';
     b.onclick=()=>{ let i=-1; try{ i=getIdx(); }catch(e){} if(i>=0 && !_gtUsdaMine(st, i)){ _gtUsdaNotMine(i); return; } m.classList.remove('open'); gtUsdaStart(st, i); };
+    // v10.38 (owner): wherever there is USDA there is also "?" — every screen but slaughter, every window
+    const q=document.createElement('button'); q.className='gt-q-chg'; q.setAttribute('data-no-i18n',''); q.setAttribute('data-gt-q','');
+    q.style.cssText='display:block;width:100%;margin-top:12px;padding:12px;border-radius:12px;border:2px solid #FFE57F;background:#FFC400;color:#000;font:800 17px Arial;cursor:pointer';
+    q.onclick=async()=>{ let i=-1; try{ i=getIdx(); }catch(e){} if(i<0) return; m.classList.remove('open');
+      if(gtOwnQ(i, st)){ KS.notice(L('#'+(i+1)+' כבר מסומן "?".','#'+(i+1)+' is already marked "?".','#'+(i+1)+' ya está marcado "?".')); return; }
+      if(await gtHoldPut(i, st, 'question', 'whole')) KS.notice(L('#'+(i+1)+' סומן "?".','#'+(i+1)+' marked "?".','#'+(i+1)+' marcado "?".')); };
+    box.appendChild(q);
     box.appendChild(b);
   });
 }
@@ -5961,6 +5961,7 @@ function _safeImg(u){ u=String(u||''); return /^data:image\/(png|jpe?g|gif|webp|
 // 'stale-board'). gtErrCode gives the code, gtErrText the translated sentence
 // (anything unknown is shown as the server wrote it).
 var _GT_ERR = {
+  unknown_printer: ['המדפסת לא ברשימת המדפסות, או שהכתובת שלה לא ברשת המפעל (או לא ביציאה 9100)','The printer is not on the printer list, or its address is not on the plant network (or not port 9100)','La impresora no está en la lista o su dirección no está en la red de la planta'],
   // step 46
   setup_code_not_configured:['בשרת לא הוגדר קוד התקנה — מי שמתקין את השרת צריך להגדיר אותו (select _set_setup_code(...)).','No setup code was set on the server — whoever installs it must set one (select _set_setup_code(...)).','No hay código de instalación en el servidor — quien lo instala debe definirlo (select _set_setup_code(...)).'],
   unfinished_animals:['יש בהמות שעוד לא קיבלו את כל סימני הכשרות (פסיקה / רגליים וראש / חלקים / חותמות) — האיפוס נעצר.','Some animals do not have all their kashrut marks yet (ruling / legs and head / parts / stamps) — the reset stopped.','Hay animales sin todas sus marcas kosher (dictamen / patas y cabeza / partes / sellos) — el reinicio se detuvo.'],
@@ -6068,7 +6069,7 @@ function LK(key){
 // Spanish version in AT_DICT below. A NEW Hebrew message must be added there
 // too, or it will show in Hebrew.
 try{ localStorage.removeItem('ks_auto_translate_cache'); }catch(e){}
-const I18N_DOM={"הדפסה":["Print","Imprimir"],"🔊 צליל חזק בכל לחיצה על כפתור":["🔊 Loud sound on every button press","🔊 Sonido fuerte en cada pulsación"],"צליל שונה לכל כפתור (נשחט / לא חלק / נבלה / ירוי), בעוצמה המלאה של המכשיר — גם בכפתורים החיצוניים. לרמקול חיצוני: לחבר רמקול מוגבר לשקע האוזניות של הטאבלט או בבלוטוס.":["A different sound for each button (slaughtered / non-chalak / nevela / shot), at the device's full volume — also for the external buttons. For an external speaker: connect a powered speaker to the tablet's headphone jack or by Bluetooth.","Un sonido distinto para cada botón (faenado / no jalak / nevelá / baleado), al volumen máximo del dispositivo — también con los botones externos. Para un altavoz externo: conecte un altavoz amplificado a la salida de auriculares de la tableta o por Bluetooth."],"🚨 מנורה חיצונית (דרך ממסר ברשת)":["🚨 External light (network relay)","🚨 Luz externa (relé de red)"],"📢 צופר / רמקול חיצוני (דרך ממסר ברשת)":["📢 External siren / speaker (network relay)","📢 Sirena / altavoz externo (relé de red)"],"המנורה והצופר נדלקים יחד עם הצפצוף ונכבים כשלוחצים על הכפתור. הממסר מוגדר בשרת המפעל (tools/set-alarm-relay.sh).":["The light and siren switch on together with the beep and off when the button is pressed. The relay is set on the plant server (tools/set-alarm-relay.sh).","La luz y la sirena se encienden junto con el pitido y se apagan al presionar el botón. El relé se configura en el servidor de la planta (tools/set-alarm-relay.sh)."],"🧪 בדיקה (5 שניות)":["🧪 Test (5 seconds)","🧪 Prueba (5 segundos)"],"🚨 מנורה מהבהבת יחד עם הצפצוף":["🚨 Flashing light together with the beep","🚨 Luz intermitente junto con el pitido"],"המסך מהבהב באדום (גם במסך הספירה החיצוני) עד שלוחצים על הכפתור של הבהמה הבאה.":["The screen flashes red (also on the external counter screen) until the button for the next animal is pressed.","La pantalla parpadea en rojo (también en la pantalla de conteo externa) hasta que se presiona el botón del siguiente animal."],"לא חלק":["Non-Chalak","No Jalak"],"בקשת רישיון": ["License request", "Solicitud de licencia"], "מלא את הפרטים ונחזור אליך עם קוד הפעלה. אפשר להמשיך לעבוד באפליקציה גם בלי למלא עכשיו.": ["Fill in your details and we'll get back to you with an activation code. You can keep using the app without filling this in now.", "Complete sus datos y le responderemos con un código de activación. Puede seguir usando la aplicación sin completarlo ahora."], "שם איש קשר": ["Contact name", "Nombre de contacto"], "טלפון": ["Phone", "Teléfono"], "אימייל": ["Email", "Correo electrónico"], "שם המפעל": ["Plant name", "Nombre de la planta"], "מיקום המפעל": ["Plant location", "Ubicación de la planta"], "שלח בקשה": ["Send request", "Enviar solicitud"], "אמלא מאוחר יותר": ["Fill in later", "Completar más tarde"], "מחיר לק״ג": ["Price per kg", "Precio por kg"], "חיוב כולל": ["Total charge", "Cargo total"], "הערכות חלקים (לשונות, לחיים, Skirt steak, Hanger steak) יתווספו כאן לאחר בניית שלב פירוק החלקים והזנת נתונים מהמפעל.": ["Parts estimates (tongues, cheeks, skirt steak, hanger steak) will be added here once the parts-breakdown stage is built and the plant enters its data.", "Las estimaciones de partes (lenguas, cachetes, skirt steak, hanger steak) se agregarán aquí cuando se construya la etapa de despiece y la planta ingrese sus datos."],"🚪 התנתק":["🚪 Log out","🚪 Cerrar sesión"],"🏭 יצרן":["🏭 Maker","🏭 Fabricante"],"🚪 יציאה מיצרן":["🚪 Exit manufacturer","🚪 Salir fabricante"],"🚪 יציאה ממצב יצרן":["🚪 Exit manufacturer mode","🚪 Salir del modo fabricante"],"גישת יצרן לתיקון":["Manufacturer repair access","Acceso de reparación del fabricante"],"כפתורים חיצוניים — מסך שחיטה":["External buttons — slaughter screen", "Botones externos — pantalla de faena"],"מסך ספירה":["Counter screen", "Pantalla de conteo"],"מסך ספירה חיצוני":["External counter screen", "Pantalla de conteo externa"],"מסך מלא":["Full screen", "Pantalla completa"],"רישוי":["Licensing","Licencia"],"אין נתונים":["No data","Sin datos"],"אין בעיות פתוחות":["No open issues","Sin problemas abiertos"],"+ הוסף":["+ Add","+ Agregar"],"+ הוסף שוחט":["+ Add Shochet","+ Agregar Shojet"],"1 מדבקה":["1 sticker","1 etiqueta"],"2 מדבקות":["2 stickers","2 etiquetas"],"2 מסכים — 1 פנים + 1 חוץ":["2 screens — 1 inner + 1 outer","2 pantallas — 1 interna + 1 externa"],"3 מסכים — 1 פנים + 2 חוץ":["3 screens — 1 inner + 2 outer","3 pantallas — 1 interna + 2 externas"],"3 מסכים — 2 פנים + 1 חוץ":["3 screens — 2 inner + 1 outer","3 pantallas — 2 internas + 1 externa"],"4 מסכים — 2 פנים + 2 חוץ":["4 screens — 2 inner + 2 outer","4 pantallas — 2 internas + 2 externas"],"5 מדבקות כשרות":["5 kosher stickers","5 etiquetas kosher"],"5 מדבקות לבהמה":["5 stickers per animal","5 etiquetas por animal"],"AI — נתח ותקן בעיות":["AI — analyze and fix issues","AI — analizar y corregir problemas"],"OCR (קריאת משקל מודפס)":["OCR (read printed weight)","OCR (leer peso impreso)"],"QR קוד":["QR code","Código QR"],"Skirt חיצוני":["Outer Skirt","Skirt externo"],"Skirt פנימי":["Inner Skirt","Skirt interno"],"WiFi / רשת":["WiFi / Network","WiFi / Red"],"אושרו":["Approved","Aprobados"],"אחוזים":["Percentages","Porcentajes"],"אי אפשר לדלג!":["Cannot skip!","¡No se puede omitir!"],"אין בעיות פתוחות":["No open issues","Sin problemas abiertos"],"אין הדפסות חוזרות":["No reprints","Sin reimpresiones"],"אין נבלות בתקופה":["No Nevela in this period","Sin Nevelá en el período"],"אין שגיאות":["No errors","Sin errores"],"איפוס יומי אוטומטי":["Automatic daily reset","Reinicio diario automático"],"אישור לבודק חוץ":["Outer inspector approval","Aprobación de inspector externo"],"אנא סרוק את משקל הבהמה":["Please scan the animal's weight","Por favor escanee el peso del animal"],"ארכיון":["Archive","Archivo"],"אשר שינוי":["Confirm change","Confirmar cambio"],"ב\"י:":["B.Y.:","B.Y.:"],"בדוק מצב":["Check status","Verificar estado"],"בדיקות":["Checks","Controles"],"בדיקות פנים וחוץ":["Inner and outer checks","Controles internos y externos"],"בדיקת בית הכוסות":["Maw check","Control de cuajar"],"בדיקת וושט":["Esophagus check","Control de esófago"],"בדיקת כרסים":["Rumen check","Control de panza"],"בדיקת ריאות":["Lung check","Control de pulmones"],"בדיקת תקינות":["Health check","Verificación del sistema"],"בודק אחד עושה שתי העבודות":["One inspector does both jobs","Un inspector hace ambos trabajos"],"בודק חוץ":["Outer inspector","Inspector externo"],"בודק פנים":["Inner inspector","Inspector interno"],"בודק פנים אחד, שני בודקי חוץ (גלאט / כשר אם לא‑חלק פעיל)":["One inner inspector, two outer inspectors (Glatt / Kosher if non-Rabbinate Glatt active)","Un inspector interno, dos inspectores externos (Glatt / Kosher si no-Glatt Rabinato activo)"],"בודק פנים ובודק חוץ נפרדים":["Separate inner and outer inspectors","Inspector interno e inspector externo separados"],"בודקים":["Inspectors","Inspectores"],"בחר אילו שיטות זמינות למשגיח החותמות. כל מפעל שונה — הפעל את מה שמתאים.":["Choose which methods are available to the Stamps Mashgiach. Every plant is different — enable what fits.","Elija qué métodos están disponibles para el Mashguiaj de sellos. Cada planta es diferente — active lo que corresponda."],"ביטול":["Cancel","Cancelar"],"בית הכוסות":["Maw","Cuajar"],"בעלים — צפייה מרחוק":["Owner — remote view","Propietario — vista remota"],"בקר":["Cattle","Ganado"],"בקר לפי משק":["Cattle by farm","Ganado por granja"],"בקר לפי סוג":["Cattle by type","Ganado por tipo"],"בקרת משקל — ON/OFF נפרד לכל שלב":["Weight control — separate ON/OFF per stage","Control de peso — ON/OFF separado por etapa"],"ברוך הבא":["Welcome","Bienvenido"],"ברקוד":["Barcode","Código de barras"],"גודל:":["Size:","Tamaño:"],"גיבוי ושחזור":["Backup and Restore","Copia de seguridad y Restaurar"],"דווח בעיה":["Report issue","Reportar problema"],"דוח שקילה":["Weighing report","Reporte de pesaje"],"דוחות":["Reports","Reportes"],"דיווח בעיה":["Issue report","Reporte de problema"],"דלג (צד נפל/נפסל)":["Skip (side dropped/rejected)","Omitir (lado caído/descartado)"],"הברקוד במדבקות רבות מכיל מספר מזהה בלבד, לא משקל — לכן OCR לרוב נדרש. שאיבת OCR המלאה תופעל בגרסת האפליקציה.":["On many stickers the barcode contains only an ID number, not the weight — so OCR is usually required. Full OCR capture will be enabled in the app version.","En muchas etiquetas el código de barras contiene solo un número de identificación, no el peso — por eso normalmente se requiere OCR. La captura OCR completa se activará en la versión de la aplicación."],"הגדרות":["Settings","Ajustes"],"הגדרות הדפסה (מצב, כמויות, מדבקות) נמצאות בטאב \"הדפסה\".":["Print settings (mode, quantities, stickers) are in the \"Print\" tab.","Los ajustes de impresión (modo, cantidades, etiquetas) están en la pestaña \"Impresión\"."],"הגדרות קולר ואריזה — בקרוב.":["Cooler and packing settings — coming soon.","Ajustes de cámara fría y empaque — próximamente."],"הגדרת חיבורים מוכנה לקראת המעבר לאפליקציה. כיום נשמרת התצורה; החיבור הפיזי יופעל בגרסת האפליקציה.":["Connection setup is ready for the move to the app. For now the configuration is saved; the physical connection will be enabled in the app version.","La configuración de conexiones está lista para el paso a la aplicación. Por ahora se guarda la configuración; la conexión física se activará en la versión de la aplicación."],"הדפס שוב":["Print again","Imprimir de nuevo"],"הדפסה וסריקה":["Printing and scanning","Impresión y escaneo"],"הדפסה חוזרת":["Reprint","Reimpresión"],"הדפסה חוזרת — חותמות":["Reprint — Stamps","Reimpresión — Sellos"],"הדפסות חוזרות":["Reprints","Reimpresiones"],"הוסף":["Add","Agregar"],"הוסף שוחט":["Add Shochet","Agregar Shojet"],"היום":["Today","Hoy"],"היום מתאפס אוטומטית בשעה שהוגדרה למעלה, ורק אחרי שגיבוי הצליח. אין כפתור איפוס ידני באפליקציה — זה נמנע בכוונה כדי שיום עבודה לא יימחק בטעות.":["The day resets automatically at the time set above, and only after a successful backup. There is no manual reset button in the app — this is intentional so a work day is not deleted by mistake.","El día se reinicia automáticamente a la hora configurada arriba, y solo después de una copia de seguridad exitosa. No hay botón de reinicio manual en la aplicación — es intencional para que un día de trabajo no se borre por error."],"המסך מוכן לסריקה":["Screen ready to scan","Pantalla lista para escanear"],"המשך לסרוק":["Continue scanning","Continuar escaneando"],"הסרת סטטוס תסיר אותו מכל המסכים":["Removing a status will remove it from all screens","Eliminar un estado lo eliminará de todas las pantallas"],"הפעל חיוב לפי משקל":["Enable billing by weight","Activar facturación por peso"],"הצג QR קוד":["Show QR code","Mostrar código QR"],"הצג תאריך לועזי":["Show Gregorian date","Mostrar fecha gregoriana"],"הצג תאריך עברי":["Show Hebrew date","Mostrar fecha hebrea"],"התחל להקליד לבחירה מחברות ידועות, או הזן ידנית":["Start typing to pick from known companies, or enter manually","Empiece a escribir para elegir entre empresas conocidas, o ingrese manualmente"],"התקדמות יומית":["Daily progress","Progreso diario"],"זנב":["Tail","Cola"],"חבר":["Connect","Conectar"],"חודש":["Month","Mes"],"חותמו":["Stamped","Sellados"],"חותמות":["Stamps","Sellos"],"חיוב לפי משקל":["Billing by weight","Facturación por peso"],"חייבים ללכת לפי הסדר.":["Must follow the order.","Se debe seguir el orden."],"חיפוש בהמה":["Animal search","Buscar animal"],"חלונות צפים":["Floating windows","Ventanas flotantes"],"חלקים":["Parts","Partes"],"חלקים קטנים":["Small parts","Partes pequeñas"],"חלקים קטנים — משקל ממוצע":["Small parts — average weight","Partes pequeñas — peso promedio"],"חפש":["Search","Buscar"],"טופלו":["Handled","Atendidos"],"טרם נשקלו בהמות. השקילה מתבצעת במסך חותמות (צד ימין + שמאל).":["No animals weighed yet. Weighing is done on the Stamps screen (right + left side).","Aún no se pesaron animales. El pesaje se realiza en la pantalla de Sellos (lado derecho + izquierdo)."],"יומן":["Log","Registro"],"יומן שגיאות":["Error log","Registro de errores"],"יעד יומי":["Daily target","Meta diaria"],"יציאה":["Exit","Salir"],"יציאת ראש צוות":["Team leader exit","Salida del jefe de equipo"],"ירוי":["Shot","Baleado"],"כוון את הברקוד למצלמה":["Point the barcode at the camera","Apunte el código de barras a la cámara"],"כיבוי \"סריקה/מאזניים\" חוסם ברקוד/QR/OCR עבור השלב הזה. כיבוי \"הזנה ידנית\" חוסם הקלדה ידנית.":["Turning off \"Scan/Scale\" blocks barcode/QR/OCR for this stage. Turning off \"Manual entry\" blocks manual typing.","Desactivar \"Escaneo/Balanza\" bloquea código de barras/QR/OCR para esta etapa. Desactivar \"Ingreso manual\" bloquea la escritura manual."],"כל מכשיר שפתח את האפליקציה אי פעם: לאיזו תחנה הוא משויך, האם הוא מחובר עכשיו, ושינוי שם / השבתה של מכשיר תקול. שיוך לתחנה נעשה בטאב \"מסכים\".":["Every device that has ever opened the app: which station it is assigned to, whether it is connected now, and rename / disable a faulty device. Station assignment is done in the \"Screens\" tab.","Cada dispositivo que alguna vez abrió la aplicación: a qué estación está asignado, si está conectado ahora, y renombrar / desactivar un dispositivo defectuoso. La asignación a estación se hace en la pestaña \"Pantallas\"."],"כמות":["Quantity","Cantidad"],"כמות מדבקות":["Sticker quantity","Cantidad de etiquetas"],"כניסה למערכת":["Log in","Iniciar sesión"],"כפתור נוסף בשחיטה — בהמה בכשרות רבנות (לא ברמת חלק)":["Extra button in Slaughter — animal as Non-Chalak (not at Glatt level)","Botón adicional en Faena — animal como No Jalak (no a nivel Glatt)"],"כשרות לפי בודק חוץ":["Kashrut by outer inspector","Kashrut según inspector externo"],"כשרות לפי משק":["Kashrut by farm","Kashrut por granja"],"כשרות לפי משק × זן בהמה":["Kashrut by farm × breed","Kashrut por granja × raza"],"כשרות לפי זן בהמה":["Kashrut by breed","Kashrut por raza"],"לא הוזנו בהמות היום":["No animals entered today","No se ingresaron animales hoy"],"לא הוזנו משקים היום (הגדרות → מערכת → משקים)":["No farms entered today (Settings → System → Farms)","No se ingresaron granjas hoy (Ajustes → Sistema → Granjas)"],"לא כשר":["Not kosher","No kosher"],"לא כשר!":["Not kosher!","¡No kosher!"],"לחיים:":["Cheeks:","Cachetes:"],"לכל סטטוס: צבע, חותמת (סימן כשרות), הסרה/כיבוי. הבחירה נשמרת כברירת מחדל.":["For each status: color, stamp (kosher mark), remove/disable. The selection is saved as default.","Para cada estado: color, sello (marca kosher), eliminar/desactivar. La selección se guarda como predeterminada."],"ללא":["None","Ninguno"],"לפי משק (קליטה היום)":["By farm (today's intake)","Por granja (recepción de hoy)"],"לפי עובדים":["By workers","Por trabajadores"],"לשון":["Tongue","Lengua"],"לשון ולחיים":["Tongue and cheeks","Lengua y cachetes"],"לשון ולחיים — סריקת ברקוד":["Tongue and cheeks — barcode scan","Lengua y cachetes — escaneo de código de barras"],"לשון:":["Tongue:","Lengua:"],"מדבקה לדוגמה (כולל סימן כשרות אם הוגדר)":["Sample sticker (incl. kosher mark if set)","Etiqueta de ejemplo (incluye marca kosher si está configurada)"],"מדבקה לדוגמה (מספר 1, תאריך היום)":["Sample sticker (number 1, today's date)","Etiqueta de ejemplo (número 1, fecha de hoy)"],"מדבקות כשרות (חלקים)":["Kosher stickers (parts)","Etiquetas kosher (partes)"],"מדבקות ראש":["Head stickers","Etiquetas de cabeza"],"מדבקות ראשוניות":["Initial stickers","Etiquetas iniciales"],"מדבקות רגליים":["Leg stickers","Etiquetas de patas"],"מדפיס מדבקות":["Sticker printer","Impresora de etiquetas"],"מדפסות":["Printers","Impresoras"],"מדפסת מחוברת":["Printer connected","Impresora conectada"],"מוכן":["Ready","Listo"],"מופיעה ראשונה בחלון בית הכוסות":["Shown first in the Maw window","Aparece primero en la ventana de cuajar"],"מוצגת לבודק פנים — ברירת מחדל קיימת, ניתן להחליף":["Shown to the inner inspector — default provided, can be replaced","Se muestra al inspector interno — hay una predeterminada, se puede reemplazar"],"מותאם…":["Custom…","Personalizado…"],"מזער":["Minimize","Minimizar"],"מחובר לרשת":["Connected to network","Conectado a la red"],"מחיקה":["Delete","Eliminar"],"מחיר לק״ג:":["Price per kg:","Precio por kg:"],"מכשירים":["Devices","Dispositivos"],"מכשירים רשומים":["Registered devices","Dispositivos registrados"],"ממתינים":["Pending","Pendientes"],"מסור (חד)":["Sawtooth (sharp)","Sierra (aguda)"],"מסך 1 — פנים + חוץ יחד":["Screen 1 — inner + outer together","Pantalla 1 — interna + externa juntas"],"מסך בדיקת וושט":["Esophagus check screen","Pantalla de control de esófago"],"מסך חותמות — סריקה והחתמה לפי סטטוס כשרות. הפעלה/כיבוי במסך \"מסכים\".":["Stamps screen — scanning and stamping by kosher status. Enable/disable in the \"Screens\" screen.","Pantalla de sellos — escaneo y sellado según estado kosher. Activar/desactivar en la pantalla \"Pantallas\"."],"מסך חלקים קטנים — סריקת חלקים לפי סטטוס כשרות מבודק חוץ. הפעלה/כיבוי במסך \"מסכים\".":["Small parts screen — scanning parts by kosher status from the outer inspector. Enable/disable in the \"Screens\" screen.","Pantalla de partes pequeñas — escaneo de partes según estado kosher del inspector externo. Activar/desactivar en la pantalla \"Pantallas\"."],"מסך יצרן":["Manufacturer screen","Pantalla de fabricante"],"מסך ראש צוות":["Team leader screen","Pantalla de jefe de equipo"],"מסך שחיטה":["Slaughter screen","Pantalla de faena"],"מסכי עבודה":["Work screens","Pantallas de trabajo"],"מסכים":["Screens","Pantallas"],"מספר לא כשר!":["Number not kosher!","¡Número no kosher!"],"מספר...":["Number...","Número..."],"מערכת":["System","Sistema"],"מערכת ניהול שחיטה כשרה":["Kosher Slaughter Management System","Sistema de gestión de faena kosher"],"מערכת שחיטה כשרה":["Kosher Slaughter System","Sistema de faena kosher"],"מצב הדפסה — רגליים / ראש":["Print mode — Legs / Head","Modo de impresión — Patas / Cabeza"],"מצב כניסה ל":["Entry mode for","Modo de ingreso para"],"מצב מיון רגלים":["Leg sorting mode","Modo de clasificación de patas"],"מקבל משקל…":["Receiving weight…","Recibiendo peso…"],"מרובע (Sharp)":["Square (Sharp)","Cuadrada (Sharp)"],"משגיח":["Mashgiach","Mashguiaj"],"משגיח בודק וושט אחרי שחיטה — יכול לפסול לנבלה":["Mashgiach checks esophagus after slaughter — can reject as Nevela","El Mashguiaj controla el esófago después de la faena — puede descartar como Nevelá"],"משגיח חותמות":["Stamps Mashgiach","Mashguiaj de sellos"],"משגיח חלקים":["Parts Mashgiach","Mashguiaj de partes"],"משגיח חלקים קטנים":["Small parts Mashgiach","Mashguiaj de partes pequeñas"],"משגיח רגלים / ראש":["Legs / Head Mashgiach","Mashguiaj de patas / cabeza"],"משגיח — פסילת נבלה":["Mashgiach — Nevela rejection","Mashguiaj — descarte por Nevelá"],"משגיחים":["Mashgichim","Mashguijim"],"משולש (עמוק)":["Triangle (deep)","Triangular (profunda)"],"משקים וזני בקר":["Farms and breeds","Granjas y razas"],"משקל ממוצע ליחידה (כל מפעל מזין את שלו). Skirt פנימי נלקח בכשר/רבנות כשר, ובגלאט לא — אפשר לעקוף ידנית.":["Average weight per unit (each plant enters its own). Inner Skirt is taken in Kosher/Rabbinate Kosher, not in Glatt — can be overridden manually.","Peso promedio por unidad (cada planta ingresa el suyo). El Skirt interno se toma en Kosher/Kosher Rabinato, y en Glatt no — se puede modificar manualmente."],"משתמשים":["Users","Usuarios"],"נבלה":["Nevela","Nevelá"],"ניהול":["Management","Gestión"],"ניטור":["Monitor","Monitoreo"],"ניטור חי":["Live monitor","Monitoreo en vivo"],"ניקוי":["Cleanup","Limpieza"],"נלקח בכשר/רבנות כשר (בגלאט אוטומטית לא)":["Taken in Kosher/Rabbinate Kosher (automatically not in Glatt)","Se toma en Kosher/Kosher Rabinato (en Glatt automáticamente no)"],"נסגר אוטומטית...":["Closing automatically...","Cerrando automáticamente..."],"נפסל":["Rejected","Descartado"],"נקה":["Clear","Limpiar"],"נשחט":["Slaughtered","Faenado"],"נשחט / נבלה / ירוי":["Slaughtered / Nevela / Shot","Faenado / Nevelá / Baleado"],"סגור":["Close","Cerrar"],"סה״כ":["Total","Total"],"זן בקר חדש":["New breed","Nueva raza"],"סוג:":["Type:","Tipo:"],"זני בקר":["Breeds","Razas"],"סורק מוכן":["Scanner ready","Escáner listo"],"סורקים":["Scanners","Escáneres"],"\"לא חלק\" ושליחה למסך רבנות":["\"לא חלק\" and sending to the rabbinate screen","\"לא חלק\" y envío a la pantalla del rabinato"],"סטטוסי כשרות וסימנים":["Kosher statuses and marks","Estados kosher y marcas"],"סיכום תוצאות":["Results summary","Resumen de resultados"],"סיכומים":["Summaries","Resúmenes"],"סינוס (רך)":["Sine (soft)","Senoidal (suave)"],"סנכרון פעיל":["Sync active","Sincronización activa"],"סרוק QR של הבהמה":["Scan the animal's QR","Escanee el QR del animal"],"סרוק ברקוד או לחץ על מספר":["Scan barcode or tap a number","Escanee el código de barras o toque un número"],"סרוק רגל למיון כשרות":["Scan leg for kosher sorting","Escanee la pata para clasificación kosher"],"סריקה אחת = 5 מדבקות כשרות":["One scan = 5 kosher stickers","Un escaneo = 5 etiquetas kosher"],"סריקת QR ← 5 מדבקות כשרות":["QR scan ← 5 kosher stickers","Escaneo QR ← 5 etiquetas kosher"],"סריקת משקל":["Weight scan","Escaneo de peso"],"סריקת רגליים לפי כשרות (אחרי בדיקת חוץ)":["Leg scanning by kashrut (after outer check)","Escaneo de patas según kashrut (después del control externo)"],"עוצמת קול:":["Volume:","Volumen:"],"עט":["Pen","Bolígrafo"],"עמוד 1 | 1–50":["Page 1 | 1–50","Página 1 | 1–50"],"פונקציות":["Functions","Funciones"],"פילוח נבלות":["Nevela breakdown","Desglose de Nevelá"],"פילוח נבלות (שחיטה / ירייה)":["Nevela breakdown (Slaughter / Shot)","Desglose de Nevelá (Faena / Baleado)"],"פסוק סטטוס כשרות סופי":["Final kosher status ruling","Dictamen final de estado kosher"],"פתח לעריכה":["Open for editing","Abrir para editar"],"ציפצוף אחרי:":["Beep after:","Pitido después de:"],"ציפצוף שחיטה":["Slaughter beep","Pitido de faena"],"צלם משקל":["Capture weight","Capturar peso"],"קבלת בהמות היום":["Animal intake today","Recepción de animales hoy"],"קבלת בהמות יומית":["Daily animal intake","Recepción diaria de animales"],"קוד (אופציונלי)":["Code (optional)","Código (opcional)"],"קוד בלבד":["Code only","Solo código"],"קולר":["Cooler","Cámara fría"],"קולר / אריזה":["Cooler / Packing","Cámara fría / Empaque"],"ק״ג":["kg","kg"],"ראש":["Head","Cabeza"],"ראש בלבד":["Head only","Solo cabeza"],"ראש צוות":["Team leader","Jefe de equipo"],"רבנות (אופציות מתקדמות)":["Rabbinate (advanced options)","Rabinato (opciones avanzadas)"],"רגל":["Leg","Pata"],"רגלים":["Legs","Patas"],"רגלים + ראש":["Legs + Head","Patas + Cabeza"],"רגלים / ראש":["Legs / Head","Patas / Cabeza"],"רענן את כל הטאבלטים":["Refresh all tablets","Actualizar todas las tabletas"],"רשימת משקים":["Farm list","Lista de granjas"],"שבוע":["Week","Semana"],"שגיאה":["Error","Error"],"שוחט":["Shochet","Shojet"],"שוחטים":["Shochtim","Shojtim"],"שחיטה":["Slaughter","Faena"],"שחיטה לפי שעה":["Slaughter per hour","Faena por hora"],"שיוך לכל מסך":["Assignment per screen","Asignación por pantalla"],"שיטות קליטת משקל (חותמות)":["Weight intake methods (Stamps)","Métodos de captura de peso (Sellos)"],"שינוי בדיקת פנים":["Change inner check","Cambiar control interno"],"שינוי סטטוס":["Change status","Cambiar estado"],"שינוי סטטוס בודק חוץ":["Change outer inspector status","Cambiar estado de inspector externo"],"שינוי תוצאת וושט":["Change esophagus result","Cambiar resultado de esófago"],"שלב 1 — משקל ראשוני (חותמות)":["Stage 1 — initial weight (Stamps)","Etapa 1 — peso inicial (Sellos)"],"שלב 2 — משקל לאחר הפרדה":["Stage 2 — weight after separation","Etapa 2 — peso después de la separación"],"שלב 3 — משקל משלוח":["Stage 3 — shipping weight","Etapa 3 — peso de envío"],"שליטה מלאה, הגדרות, סיכומים, הרשאות":["Full control, settings, summaries, permissions","Control total, ajustes, resúmenes, permisos"],"שם":["Name","Nombre"],"שם + קוד":["Name + code","Nombre + código"],"שם / דגם מדפסת":["Printer name / model","Nombre / modelo de impresora"],"שם / דגם סורק":["Scanner name / model","Nombre / modelo de escáner"],"שם בלבד":["Name only","Solo nombre"],"שם חלק חדש":["New part name","Nombre de nueva parte"],"שם משק חדש":["New farm name","Nombre de nueva granja"],"שמור":["Save","Guardar"],"שמירת ימים:":["Keep days:","Días a conservar:"],"שנה":["Year","Año"],"שני בודקי פנים, בודק חוץ אחד":["Two inner inspectors, one outer inspector","Dos inspectores internos, un inspector externo"],"שני בודקים לכל תפקיד (חוץ: גלאט / כשר אם לא‑חלק פעיל)":["Two inspectors per role (outer: Glatt / Kosher if non-Rabbinate Glatt active)","Dos inspectores por rol (externo: Glatt / Kosher si no-Glatt Rabinato activo)"],"שניות ללא פעילות":["Seconds of inactivity","Segundos de inactividad"],"שעה:":["Time:","Hora:"],"תדר הצליל:":["Tone frequency:","Frecuencia del tono:"],"תוכן המדבקה":["Sticker content","Contenido de la etiqueta"],"תחנות — צימוד מכשירים":["Stations — Device pairing","Estaciones — Emparejamiento de dispositivos"],"תמונת ריאה לבדיקה":["Lung image for inspection","Imagen de pulmón para control"],"תמיכה טכנית":["Technical support","Soporte técnico"],"תצוגה מקדימה — מדבקת כשרות":["Preview — kosher sticker","Vista previa — etiqueta kosher"],"תצוגה מקדימה — מדבקת רגלים / ראש":["Preview — Legs / Head sticker","Vista previa — etiqueta de Patas / Cabeza"],"תצורת מסכים — פנים/חוץ:":["Screen configuration — inner/outer:","Configuración de pantallas — interna/externa:"],"תקין":["OK","OK"],"תרשים שחיטה כללי":["General slaughter chart","Gráfico general de faena"],"תרשים תוצאות כשרות":["Kosher results chart","Gráfico de resultados kosher"],"↩ חזור לברירת מחדל":["↩ Restore default","↩ Volver a predeterminado"],"⚖️ סריקה/מאזניים":["⚖️ Scan/Scale","⚖️ Escaneo/Balanza"],"✍️ הזנה ידנית":["✍️ Manual entry","✍️ Ingreso manual"],"✓ כשר — מיין לארגז המתאים":["✓ Kosher — sort into the matching bin","✓ Kosher — clasificar en el cajón correspondiente"],"⬆ העלה תמונת ריאה":["⬆ Upload lung image","⬆ Subir imagen de pulmón"],"💾 גיבוי עכשיו":["💾 Backup now","💾 Copia de seguridad ahora"],"📂 שחזור מגיבוי":["📂 Restore from backup","📂 Restaurar desde copia de seguridad"],"📦 גיבויים אוטומטיים — צפייה ושחזור":["📦 Automatic backups — view and restore","📦 Copias de seguridad automáticas — ver y restaurar"],"📷 מיון":["📷 Sort","📷 Clasificar"],"🔄 הדפסה חוזרת — נרשם בדוח":["🔄 Reprint — logged in report","🔄 Reimpresión — queda en el reporte"],"🔊 שמע לדוגמה":["🔊 Sample sound","🔊 Sonido de ejemplo"],"🔒 איפוס יום — אוטומטי בלבד":["🔒 Day reset — automatic only","🔒 Reinicio del día — solo automático"],"🔧 החלפת מכשיר תקול":["🔧 Replace faulty device","🔧 Reemplazar dispositivo defectuoso"],"🖨️ הדפסה":["🖨️ Print","🖨️ Impresión"],"🩺 בדוק את המערכת עכשיו":["🩺 Check the system now","🩺 Verificar el sistema ahora"]};
+const I18N_DOM={"🖨 המדבקות מודפסות באמת במדפסת של כל מסך. מוסיפים מדפסת (חיפוש ברשת / Bluetooth / מסך ההדפסה / לפי כתובת), מדפיסים מדבקת ניסיון, ומשייכים אותה למסך ב\"שיוך לכל מסך\".":["🖨 Stickers really print on each screen's printer. Add a printer (network search / Bluetooth / print screen / by address), print a test sticker, and give it to a screen in \"Assign to each screen\".","🖨 Las etiquetas se imprimen en la impresora de cada pantalla. Agregue una impresora, imprima una prueba y asígnela a una pantalla."],"הדפסה":["Print","Imprimir"],"🔊 צליל חזק בכל לחיצה על כפתור":["🔊 Loud sound on every button press","🔊 Sonido fuerte en cada pulsación"],"צליל שונה לכל כפתור (נשחט / לא חלק / נבלה / ירוי), בעוצמה המלאה של המכשיר — גם בכפתורים החיצוניים. לרמקול חיצוני: לחבר רמקול מוגבר לשקע האוזניות של הטאבלט או בבלוטוס.":["A different sound for each button (slaughtered / non-chalak / nevela / shot), at the device's full volume — also for the external buttons. For an external speaker: connect a powered speaker to the tablet's headphone jack or by Bluetooth.","Un sonido distinto para cada botón (faenado / no jalak / nevelá / baleado), al volumen máximo del dispositivo — también con los botones externos. Para un altavoz externo: conecte un altavoz amplificado a la salida de auriculares de la tableta o por Bluetooth."],"🚨 מנורה חיצונית (דרך ממסר ברשת)":["🚨 External light (network relay)","🚨 Luz externa (relé de red)"],"📢 צופר / רמקול חיצוני (דרך ממסר ברשת)":["📢 External siren / speaker (network relay)","📢 Sirena / altavoz externo (relé de red)"],"המנורה והצופר נדלקים יחד עם הצפצוף ונכבים כשלוחצים על הכפתור. הממסר מוגדר בשרת המפעל (tools/set-alarm-relay.sh).":["The light and siren switch on together with the beep and off when the button is pressed. The relay is set on the plant server (tools/set-alarm-relay.sh).","La luz y la sirena se encienden junto con el pitido y se apagan al presionar el botón. El relé se configura en el servidor de la planta (tools/set-alarm-relay.sh)."],"🧪 בדיקה (5 שניות)":["🧪 Test (5 seconds)","🧪 Prueba (5 segundos)"],"🚨 מנורה מהבהבת יחד עם הצפצוף":["🚨 Flashing light together with the beep","🚨 Luz intermitente junto con el pitido"],"המסך מהבהב באדום (גם במסך הספירה החיצוני) עד שלוחצים על הכפתור של הבהמה הבאה.":["The screen flashes red (also on the external counter screen) until the button for the next animal is pressed.","La pantalla parpadea en rojo (también en la pantalla de conteo externa) hasta que se presiona el botón del siguiente animal."],"לא חלק":["Non-Chalak","No Jalak"],"בקשת רישיון": ["License request", "Solicitud de licencia"], "מלא את הפרטים ונחזור אליך עם קוד הפעלה. אפשר להמשיך לעבוד באפליקציה גם בלי למלא עכשיו.": ["Fill in your details and we'll get back to you with an activation code. You can keep using the app without filling this in now.", "Complete sus datos y le responderemos con un código de activación. Puede seguir usando la aplicación sin completarlo ahora."], "שם איש קשר": ["Contact name", "Nombre de contacto"], "טלפון": ["Phone", "Teléfono"], "אימייל": ["Email", "Correo electrónico"], "שם המפעל": ["Plant name", "Nombre de la planta"], "מיקום המפעל": ["Plant location", "Ubicación de la planta"], "שלח בקשה": ["Send request", "Enviar solicitud"], "אמלא מאוחר יותר": ["Fill in later", "Completar más tarde"], "מחיר לק״ג": ["Price per kg", "Precio por kg"], "חיוב כולל": ["Total charge", "Cargo total"], "הערכות חלקים (לשונות, לחיים, Skirt steak, Hanger steak) יתווספו כאן לאחר בניית שלב פירוק החלקים והזנת נתונים מהמפעל.": ["Parts estimates (tongues, cheeks, skirt steak, hanger steak) will be added here once the parts-breakdown stage is built and the plant enters its data.", "Las estimaciones de partes (lenguas, cachetes, skirt steak, hanger steak) se agregarán aquí cuando se construya la etapa de despiece y la planta ingrese sus datos."],"🚪 התנתק":["🚪 Log out","🚪 Cerrar sesión"],"🏭 יצרן":["🏭 Maker","🏭 Fabricante"],"🚪 יציאה מיצרן":["🚪 Exit manufacturer","🚪 Salir fabricante"],"🚪 יציאה ממצב יצרן":["🚪 Exit manufacturer mode","🚪 Salir del modo fabricante"],"גישת יצרן לתיקון":["Manufacturer repair access","Acceso de reparación del fabricante"],"כפתורים חיצוניים — מסך שחיטה":["External buttons — slaughter screen", "Botones externos — pantalla de faena"],"מסך ספירה":["Counter screen", "Pantalla de conteo"],"מסך ספירה חיצוני":["External counter screen", "Pantalla de conteo externa"],"מסך מלא":["Full screen", "Pantalla completa"],"רישוי":["Licensing","Licencia"],"אין נתונים":["No data","Sin datos"],"אין בעיות פתוחות":["No open issues","Sin problemas abiertos"],"+ הוסף":["+ Add","+ Agregar"],"+ הוסף שוחט":["+ Add Shochet","+ Agregar Shojet"],"1 מדבקה":["1 sticker","1 etiqueta"],"2 מדבקות":["2 stickers","2 etiquetas"],"2 מסכים — 1 פנים + 1 חוץ":["2 screens — 1 inner + 1 outer","2 pantallas — 1 interna + 1 externa"],"3 מסכים — 1 פנים + 2 חוץ":["3 screens — 1 inner + 2 outer","3 pantallas — 1 interna + 2 externas"],"3 מסכים — 2 פנים + 1 חוץ":["3 screens — 2 inner + 1 outer","3 pantallas — 2 internas + 1 externa"],"4 מסכים — 2 פנים + 2 חוץ":["4 screens — 2 inner + 2 outer","4 pantallas — 2 internas + 2 externas"],"5 מדבקות כשרות":["5 kosher stickers","5 etiquetas kosher"],"5 מדבקות לבהמה":["5 stickers per animal","5 etiquetas por animal"],"AI — נתח ותקן בעיות":["AI — analyze and fix issues","AI — analizar y corregir problemas"],"OCR (קריאת משקל מודפס)":["OCR (read printed weight)","OCR (leer peso impreso)"],"QR קוד":["QR code","Código QR"],"Skirt חיצוני":["Outer Skirt","Skirt externo"],"Skirt פנימי":["Inner Skirt","Skirt interno"],"WiFi / רשת":["WiFi / Network","WiFi / Red"],"אושרו":["Approved","Aprobados"],"אחוזים":["Percentages","Porcentajes"],"אי אפשר לדלג!":["Cannot skip!","¡No se puede omitir!"],"אין בעיות פתוחות":["No open issues","Sin problemas abiertos"],"אין הדפסות חוזרות":["No reprints","Sin reimpresiones"],"אין נבלות בתקופה":["No Nevela in this period","Sin Nevelá en el período"],"אין שגיאות":["No errors","Sin errores"],"איפוס יומי אוטומטי":["Automatic daily reset","Reinicio diario automático"],"אישור לבודק חוץ":["Outer inspector approval","Aprobación de inspector externo"],"אנא סרוק את משקל הבהמה":["Please scan the animal's weight","Por favor escanee el peso del animal"],"ארכיון":["Archive","Archivo"],"אשר שינוי":["Confirm change","Confirmar cambio"],"ב\"י:":["B.Y.:","B.Y.:"],"בדוק מצב":["Check status","Verificar estado"],"בדיקות":["Checks","Controles"],"בדיקות פנים וחוץ":["Inner and outer checks","Controles internos y externos"],"בדיקת בית הכוסות":["Maw check","Control de cuajar"],"בדיקת וושט":["Esophagus check","Control de esófago"],"בדיקת כרסים":["Rumen check","Control de panza"],"בדיקת ריאות":["Lung check","Control de pulmones"],"בדיקת תקינות":["Health check","Verificación del sistema"],"בודק אחד עושה שתי העבודות":["One inspector does both jobs","Un inspector hace ambos trabajos"],"בודק חוץ":["Outer inspector","Inspector externo"],"בודק פנים":["Inner inspector","Inspector interno"],"בודק פנים אחד, שני בודקי חוץ (גלאט / כשר אם לא‑חלק פעיל)":["One inner inspector, two outer inspectors (Glatt / Kosher if non-Rabbinate Glatt active)","Un inspector interno, dos inspectores externos (Glatt / Kosher si no-Glatt Rabinato activo)"],"בודק פנים ובודק חוץ נפרדים":["Separate inner and outer inspectors","Inspector interno e inspector externo separados"],"בודקים":["Inspectors","Inspectores"],"בחר אילו שיטות זמינות למשגיח החותמות. כל מפעל שונה — הפעל את מה שמתאים.":["Choose which methods are available to the Stamps Mashgiach. Every plant is different — enable what fits.","Elija qué métodos están disponibles para el Mashguiaj de sellos. Cada planta es diferente — active lo que corresponda."],"ביטול":["Cancel","Cancelar"],"בית הכוסות":["Maw","Cuajar"],"בעלים — צפייה מרחוק":["Owner — remote view","Propietario — vista remota"],"בקר":["Cattle","Ganado"],"בקר לפי משק":["Cattle by farm","Ganado por granja"],"בקר לפי סוג":["Cattle by type","Ganado por tipo"],"בקרת משקל — ON/OFF נפרד לכל שלב":["Weight control — separate ON/OFF per stage","Control de peso — ON/OFF separado por etapa"],"ברוך הבא":["Welcome","Bienvenido"],"ברקוד":["Barcode","Código de barras"],"גודל:":["Size:","Tamaño:"],"גיבוי ושחזור":["Backup and Restore","Copia de seguridad y Restaurar"],"דווח בעיה":["Report issue","Reportar problema"],"דוח שקילה":["Weighing report","Reporte de pesaje"],"דוחות":["Reports","Reportes"],"דיווח בעיה":["Issue report","Reporte de problema"],"דלג (צד נפל/נפסל)":["Skip (side dropped/rejected)","Omitir (lado caído/descartado)"],"הברקוד במדבקות רבות מכיל מספר מזהה בלבד, לא משקל — לכן OCR לרוב נדרש. שאיבת OCR המלאה תופעל בגרסת האפליקציה.":["On many stickers the barcode contains only an ID number, not the weight — so OCR is usually required. Full OCR capture will be enabled in the app version.","En muchas etiquetas el código de barras contiene solo un número de identificación, no el peso — por eso normalmente se requiere OCR. La captura OCR completa se activará en la versión de la aplicación."],"הגדרות":["Settings","Ajustes"],"הגדרות הדפסה (מצב, כמויות, מדבקות) נמצאות בטאב \"הדפסה\".":["Print settings (mode, quantities, stickers) are in the \"Print\" tab.","Los ajustes de impresión (modo, cantidades, etiquetas) están en la pestaña \"Impresión\"."],"הגדרות קולר ואריזה — בקרוב.":["Cooler and packing settings — coming soon.","Ajustes de cámara fría y empaque — próximamente."],"הגדרת חיבורים מוכנה לקראת המעבר לאפליקציה. כיום נשמרת התצורה; החיבור הפיזי יופעל בגרסת האפליקציה.":["Connection setup is ready for the move to the app. For now the configuration is saved; the physical connection will be enabled in the app version.","La configuración de conexiones está lista para el paso a la aplicación. Por ahora se guarda la configuración; la conexión física se activará en la versión de la aplicación."],"הדפס שוב":["Print again","Imprimir de nuevo"],"הדפסה וסריקה":["Printing and scanning","Impresión y escaneo"],"הדפסה חוזרת":["Reprint","Reimpresión"],"הדפסה חוזרת — חותמות":["Reprint — Stamps","Reimpresión — Sellos"],"הדפסות חוזרות":["Reprints","Reimpresiones"],"הוסף":["Add","Agregar"],"הוסף שוחט":["Add Shochet","Agregar Shojet"],"היום":["Today","Hoy"],"היום מתאפס אוטומטית בשעה שהוגדרה למעלה, ורק אחרי שגיבוי הצליח. אין כפתור איפוס ידני באפליקציה — זה נמנע בכוונה כדי שיום עבודה לא יימחק בטעות.":["The day resets automatically at the time set above, and only after a successful backup. There is no manual reset button in the app — this is intentional so a work day is not deleted by mistake.","El día se reinicia automáticamente a la hora configurada arriba, y solo después de una copia de seguridad exitosa. No hay botón de reinicio manual en la aplicación — es intencional para que un día de trabajo no se borre por error."],"המסך מוכן לסריקה":["Screen ready to scan","Pantalla lista para escanear"],"המשך לסרוק":["Continue scanning","Continuar escaneando"],"הסרת סטטוס תסיר אותו מכל המסכים":["Removing a status will remove it from all screens","Eliminar un estado lo eliminará de todas las pantallas"],"הפעל חיוב לפי משקל":["Enable billing by weight","Activar facturación por peso"],"הצג QR קוד":["Show QR code","Mostrar código QR"],"הצג תאריך לועזי":["Show Gregorian date","Mostrar fecha gregoriana"],"הצג תאריך עברי":["Show Hebrew date","Mostrar fecha hebrea"],"התחל להקליד לבחירה מחברות ידועות, או הזן ידנית":["Start typing to pick from known companies, or enter manually","Empiece a escribir para elegir entre empresas conocidas, o ingrese manualmente"],"התקדמות יומית":["Daily progress","Progreso diario"],"זנב":["Tail","Cola"],"חבר":["Connect","Conectar"],"חודש":["Month","Mes"],"חותמו":["Stamped","Sellados"],"חותמות":["Stamps","Sellos"],"חיוב לפי משקל":["Billing by weight","Facturación por peso"],"חייבים ללכת לפי הסדר.":["Must follow the order.","Se debe seguir el orden."],"חיפוש בהמה":["Animal search","Buscar animal"],"חלונות צפים":["Floating windows","Ventanas flotantes"],"חלקים":["Parts","Partes"],"חלקים קטנים":["Small parts","Partes pequeñas"],"חלקים קטנים — משקל ממוצע":["Small parts — average weight","Partes pequeñas — peso promedio"],"חפש":["Search","Buscar"],"טופלו":["Handled","Atendidos"],"טרם נשקלו בהמות. השקילה מתבצעת במסך חותמות (צד ימין + שמאל).":["No animals weighed yet. Weighing is done on the Stamps screen (right + left side).","Aún no se pesaron animales. El pesaje se realiza en la pantalla de Sellos (lado derecho + izquierdo)."],"יומן":["Log","Registro"],"יומן שגיאות":["Error log","Registro de errores"],"יעד יומי":["Daily target","Meta diaria"],"יציאה":["Exit","Salir"],"יציאת ראש צוות":["Team leader exit","Salida del jefe de equipo"],"ירוי":["Shot","Baleado"],"כוון את הברקוד למצלמה":["Point the barcode at the camera","Apunte el código de barras a la cámara"],"כיבוי \"סריקה/מאזניים\" חוסם ברקוד/QR/OCR עבור השלב הזה. כיבוי \"הזנה ידנית\" חוסם הקלדה ידנית.":["Turning off \"Scan/Scale\" blocks barcode/QR/OCR for this stage. Turning off \"Manual entry\" blocks manual typing.","Desactivar \"Escaneo/Balanza\" bloquea código de barras/QR/OCR para esta etapa. Desactivar \"Ingreso manual\" bloquea la escritura manual."],"כל מכשיר שפתח את האפליקציה אי פעם: לאיזו תחנה הוא משויך, האם הוא מחובר עכשיו, ושינוי שם / השבתה של מכשיר תקול. שיוך לתחנה נעשה בטאב \"מסכים\".":["Every device that has ever opened the app: which station it is assigned to, whether it is connected now, and rename / disable a faulty device. Station assignment is done in the \"Screens\" tab.","Cada dispositivo que alguna vez abrió la aplicación: a qué estación está asignado, si está conectado ahora, y renombrar / desactivar un dispositivo defectuoso. La asignación a estación se hace en la pestaña \"Pantallas\"."],"כמות":["Quantity","Cantidad"],"כמות מדבקות":["Sticker quantity","Cantidad de etiquetas"],"כניסה למערכת":["Log in","Iniciar sesión"],"כפתור נוסף בשחיטה — בהמה בכשרות רבנות (לא ברמת חלק)":["Extra button in Slaughter — animal as Non-Chalak (not at Glatt level)","Botón adicional en Faena — animal como No Jalak (no a nivel Glatt)"],"כשרות לפי בודק חוץ":["Kashrut by outer inspector","Kashrut según inspector externo"],"כשרות לפי משק":["Kashrut by farm","Kashrut por granja"],"כשרות לפי משק × זן בהמה":["Kashrut by farm × breed","Kashrut por granja × raza"],"כשרות לפי זן בהמה":["Kashrut by breed","Kashrut por raza"],"לא הוזנו בהמות היום":["No animals entered today","No se ingresaron animales hoy"],"לא הוזנו משקים היום (הגדרות → מערכת → משקים)":["No farms entered today (Settings → System → Farms)","No se ingresaron granjas hoy (Ajustes → Sistema → Granjas)"],"לא כשר":["Not kosher","No kosher"],"לא כשר!":["Not kosher!","¡No kosher!"],"לחיים:":["Cheeks:","Cachetes:"],"לכל סטטוס: צבע, חותמת (סימן כשרות), הסרה/כיבוי. הבחירה נשמרת כברירת מחדל.":["For each status: color, stamp (kosher mark), remove/disable. The selection is saved as default.","Para cada estado: color, sello (marca kosher), eliminar/desactivar. La selección se guarda como predeterminada."],"ללא":["None","Ninguno"],"לפי משק (קליטה היום)":["By farm (today's intake)","Por granja (recepción de hoy)"],"לפי עובדים":["By workers","Por trabajadores"],"לשון":["Tongue","Lengua"],"לשון ולחיים":["Tongue and cheeks","Lengua y cachetes"],"לשון ולחיים — סריקת ברקוד":["Tongue and cheeks — barcode scan","Lengua y cachetes — escaneo de código de barras"],"לשון:":["Tongue:","Lengua:"],"מדבקה לדוגמה (כולל סימן כשרות אם הוגדר)":["Sample sticker (incl. kosher mark if set)","Etiqueta de ejemplo (incluye marca kosher si está configurada)"],"מדבקה לדוגמה (מספר 1, תאריך היום)":["Sample sticker (number 1, today's date)","Etiqueta de ejemplo (número 1, fecha de hoy)"],"מדבקות כשרות (חלקים)":["Kosher stickers (parts)","Etiquetas kosher (partes)"],"מדבקות ראש":["Head stickers","Etiquetas de cabeza"],"מדבקות ראשוניות":["Initial stickers","Etiquetas iniciales"],"מדבקות רגליים":["Leg stickers","Etiquetas de patas"],"מדפיס מדבקות":["Sticker printer","Impresora de etiquetas"],"מדפסות":["Printers","Impresoras"],"מדפסת מחוברת":["Printer connected","Impresora conectada"],"מוכן":["Ready","Listo"],"מופיעה ראשונה בחלון בית הכוסות":["Shown first in the Maw window","Aparece primero en la ventana de cuajar"],"מוצגת לבודק פנים — ברירת מחדל קיימת, ניתן להחליף":["Shown to the inner inspector — default provided, can be replaced","Se muestra al inspector interno — hay una predeterminada, se puede reemplazar"],"מותאם…":["Custom…","Personalizado…"],"מזער":["Minimize","Minimizar"],"מחובר לרשת":["Connected to network","Conectado a la red"],"מחיקה":["Delete","Eliminar"],"מחיר לק״ג:":["Price per kg:","Precio por kg:"],"מכשירים":["Devices","Dispositivos"],"מכשירים רשומים":["Registered devices","Dispositivos registrados"],"ממתינים":["Pending","Pendientes"],"מסור (חד)":["Sawtooth (sharp)","Sierra (aguda)"],"מסך 1 — פנים + חוץ יחד":["Screen 1 — inner + outer together","Pantalla 1 — interna + externa juntas"],"מסך בדיקת וושט":["Esophagus check screen","Pantalla de control de esófago"],"מסך חותמות — סריקה והחתמה לפי סטטוס כשרות. הפעלה/כיבוי במסך \"מסכים\".":["Stamps screen — scanning and stamping by kosher status. Enable/disable in the \"Screens\" screen.","Pantalla de sellos — escaneo y sellado según estado kosher. Activar/desactivar en la pantalla \"Pantallas\"."],"מסך חלקים קטנים — סריקת חלקים לפי סטטוס כשרות מבודק חוץ. הפעלה/כיבוי במסך \"מסכים\".":["Small parts screen — scanning parts by kosher status from the outer inspector. Enable/disable in the \"Screens\" screen.","Pantalla de partes pequeñas — escaneo de partes según estado kosher del inspector externo. Activar/desactivar en la pantalla \"Pantallas\"."],"מסך יצרן":["Manufacturer screen","Pantalla de fabricante"],"מסך ראש צוות":["Team leader screen","Pantalla de jefe de equipo"],"מסך שחיטה":["Slaughter screen","Pantalla de faena"],"מסכי עבודה":["Work screens","Pantallas de trabajo"],"מסכים":["Screens","Pantallas"],"מספר לא כשר!":["Number not kosher!","¡Número no kosher!"],"מספר...":["Number...","Número..."],"מערכת":["System","Sistema"],"מערכת ניהול שחיטה כשרה":["Kosher Slaughter Management System","Sistema de gestión de faena kosher"],"מערכת שחיטה כשרה":["Kosher Slaughter System","Sistema de faena kosher"],"מצב הדפסה — רגליים / ראש":["Print mode — Legs / Head","Modo de impresión — Patas / Cabeza"],"מצב כניסה ל":["Entry mode for","Modo de ingreso para"],"מצב מיון רגלים":["Leg sorting mode","Modo de clasificación de patas"],"מקבל משקל…":["Receiving weight…","Recibiendo peso…"],"מרובע (Sharp)":["Square (Sharp)","Cuadrada (Sharp)"],"משגיח":["Mashgiach","Mashguiaj"],"משגיח בודק וושט אחרי שחיטה — יכול לפסול לנבלה":["Mashgiach checks esophagus after slaughter — can reject as Nevela","El Mashguiaj controla el esófago después de la faena — puede descartar como Nevelá"],"משגיח חותמות":["Stamps Mashgiach","Mashguiaj de sellos"],"משגיח חלקים":["Parts Mashgiach","Mashguiaj de partes"],"משגיח חלקים קטנים":["Small parts Mashgiach","Mashguiaj de partes pequeñas"],"משגיח רגלים / ראש":["Legs / Head Mashgiach","Mashguiaj de patas / cabeza"],"משגיח — פסילת נבלה":["Mashgiach — Nevela rejection","Mashguiaj — descarte por Nevelá"],"משגיחים":["Mashgichim","Mashguijim"],"משולש (עמוק)":["Triangle (deep)","Triangular (profunda)"],"משקים וזני בקר":["Farms and breeds","Granjas y razas"],"משקל ממוצע ליחידה (כל מפעל מזין את שלו). Skirt פנימי נלקח בכשר/רבנות כשר, ובגלאט לא — אפשר לעקוף ידנית.":["Average weight per unit (each plant enters its own). Inner Skirt is taken in Kosher/Rabbinate Kosher, not in Glatt — can be overridden manually.","Peso promedio por unidad (cada planta ingresa el suyo). El Skirt interno se toma en Kosher/Kosher Rabinato, y en Glatt no — se puede modificar manualmente."],"משתמשים":["Users","Usuarios"],"נבלה":["Nevela","Nevelá"],"ניהול":["Management","Gestión"],"ניטור":["Monitor","Monitoreo"],"ניטור חי":["Live monitor","Monitoreo en vivo"],"ניקוי":["Cleanup","Limpieza"],"נלקח בכשר/רבנות כשר (בגלאט אוטומטית לא)":["Taken in Kosher/Rabbinate Kosher (automatically not in Glatt)","Se toma en Kosher/Kosher Rabinato (en Glatt automáticamente no)"],"נסגר אוטומטית...":["Closing automatically...","Cerrando automáticamente..."],"נפסל":["Rejected","Descartado"],"נקה":["Clear","Limpiar"],"נשחט":["Slaughtered","Faenado"],"נשחט / נבלה / ירוי":["Slaughtered / Nevela / Shot","Faenado / Nevelá / Baleado"],"סגור":["Close","Cerrar"],"סה״כ":["Total","Total"],"זן בקר חדש":["New breed","Nueva raza"],"סוג:":["Type:","Tipo:"],"זני בקר":["Breeds","Razas"],"סורק מוכן":["Scanner ready","Escáner listo"],"סורקים":["Scanners","Escáneres"],"\"לא חלק\" ושליחה למסך רבנות":["\"לא חלק\" and sending to the rabbinate screen","\"לא חלק\" y envío a la pantalla del rabinato"],"סטטוסי כשרות וסימנים":["Kosher statuses and marks","Estados kosher y marcas"],"סיכום תוצאות":["Results summary","Resumen de resultados"],"סיכומים":["Summaries","Resúmenes"],"סינוס (רך)":["Sine (soft)","Senoidal (suave)"],"סנכרון פעיל":["Sync active","Sincronización activa"],"סרוק QR של הבהמה":["Scan the animal's QR","Escanee el QR del animal"],"סרוק ברקוד או לחץ על מספר":["Scan barcode or tap a number","Escanee el código de barras o toque un número"],"סרוק רגל למיון כשרות":["Scan leg for kosher sorting","Escanee la pata para clasificación kosher"],"סריקה אחת = 5 מדבקות כשרות":["One scan = 5 kosher stickers","Un escaneo = 5 etiquetas kosher"],"סריקת QR ← 5 מדבקות כשרות":["QR scan ← 5 kosher stickers","Escaneo QR ← 5 etiquetas kosher"],"סריקת משקל":["Weight scan","Escaneo de peso"],"סריקת רגליים לפי כשרות (אחרי בדיקת חוץ)":["Leg scanning by kashrut (after outer check)","Escaneo de patas según kashrut (después del control externo)"],"עוצמת קול:":["Volume:","Volumen:"],"עט":["Pen","Bolígrafo"],"עמוד 1 | 1–50":["Page 1 | 1–50","Página 1 | 1–50"],"פונקציות":["Functions","Funciones"],"פילוח נבלות":["Nevela breakdown","Desglose de Nevelá"],"פילוח נבלות (שחיטה / ירייה)":["Nevela breakdown (Slaughter / Shot)","Desglose de Nevelá (Faena / Baleado)"],"פסוק סטטוס כשרות סופי":["Final kosher status ruling","Dictamen final de estado kosher"],"פתח לעריכה":["Open for editing","Abrir para editar"],"ציפצוף אחרי:":["Beep after:","Pitido después de:"],"ציפצוף שחיטה":["Slaughter beep","Pitido de faena"],"צלם משקל":["Capture weight","Capturar peso"],"קבלת בהמות היום":["Animal intake today","Recepción de animales hoy"],"קבלת בהמות יומית":["Daily animal intake","Recepción diaria de animales"],"קוד (אופציונלי)":["Code (optional)","Código (opcional)"],"קוד בלבד":["Code only","Solo código"],"קולר":["Cooler","Cámara fría"],"קולר / אריזה":["Cooler / Packing","Cámara fría / Empaque"],"ק״ג":["kg","kg"],"ראש":["Head","Cabeza"],"ראש בלבד":["Head only","Solo cabeza"],"ראש צוות":["Team leader","Jefe de equipo"],"רבנות (אופציות מתקדמות)":["Rabbinate (advanced options)","Rabinato (opciones avanzadas)"],"רגל":["Leg","Pata"],"רגלים":["Legs","Patas"],"רגלים + ראש":["Legs + Head","Patas + Cabeza"],"רגלים / ראש":["Legs / Head","Patas / Cabeza"],"רענן את כל הטאבלטים":["Refresh all tablets","Actualizar todas las tabletas"],"רשימת משקים":["Farm list","Lista de granjas"],"שבוע":["Week","Semana"],"שגיאה":["Error","Error"],"שוחט":["Shochet","Shojet"],"שוחטים":["Shochtim","Shojtim"],"שחיטה":["Slaughter","Faena"],"שחיטה לפי שעה":["Slaughter per hour","Faena por hora"],"שיוך לכל מסך":["Assignment per screen","Asignación por pantalla"],"שיטות קליטת משקל (חותמות)":["Weight intake methods (Stamps)","Métodos de captura de peso (Sellos)"],"שינוי בדיקת פנים":["Change inner check","Cambiar control interno"],"שינוי סטטוס":["Change status","Cambiar estado"],"שינוי סטטוס בודק חוץ":["Change outer inspector status","Cambiar estado de inspector externo"],"שינוי תוצאת וושט":["Change esophagus result","Cambiar resultado de esófago"],"שלב 1 — משקל ראשוני (חותמות)":["Stage 1 — initial weight (Stamps)","Etapa 1 — peso inicial (Sellos)"],"שלב 2 — משקל לאחר הפרדה":["Stage 2 — weight after separation","Etapa 2 — peso después de la separación"],"שלב 3 — משקל משלוח":["Stage 3 — shipping weight","Etapa 3 — peso de envío"],"שליטה מלאה, הגדרות, סיכומים, הרשאות":["Full control, settings, summaries, permissions","Control total, ajustes, resúmenes, permisos"],"שם":["Name","Nombre"],"שם + קוד":["Name + code","Nombre + código"],"שם / דגם מדפסת":["Printer name / model","Nombre / modelo de impresora"],"שם / דגם סורק":["Scanner name / model","Nombre / modelo de escáner"],"שם בלבד":["Name only","Solo nombre"],"שם חלק חדש":["New part name","Nombre de nueva parte"],"שם משק חדש":["New farm name","Nombre de nueva granja"],"שמור":["Save","Guardar"],"שמירת ימים:":["Keep days:","Días a conservar:"],"שנה":["Year","Año"],"שני בודקי פנים, בודק חוץ אחד":["Two inner inspectors, one outer inspector","Dos inspectores internos, un inspector externo"],"שני בודקים לכל תפקיד (חוץ: גלאט / כשר אם לא‑חלק פעיל)":["Two inspectors per role (outer: Glatt / Kosher if non-Rabbinate Glatt active)","Dos inspectores por rol (externo: Glatt / Kosher si no-Glatt Rabinato activo)"],"שניות ללא פעילות":["Seconds of inactivity","Segundos de inactividad"],"שעה:":["Time:","Hora:"],"תדר הצליל:":["Tone frequency:","Frecuencia del tono:"],"תוכן המדבקה":["Sticker content","Contenido de la etiqueta"],"תחנות — צימוד מכשירים":["Stations — Device pairing","Estaciones — Emparejamiento de dispositivos"],"תמונת ריאה לבדיקה":["Lung image for inspection","Imagen de pulmón para control"],"תמיכה טכנית":["Technical support","Soporte técnico"],"תצוגה מקדימה — מדבקת כשרות":["Preview — kosher sticker","Vista previa — etiqueta kosher"],"תצוגה מקדימה — מדבקת רגלים / ראש":["Preview — Legs / Head sticker","Vista previa — etiqueta de Patas / Cabeza"],"תצורת מסכים — פנים/חוץ:":["Screen configuration — inner/outer:","Configuración de pantallas — interna/externa:"],"תקין":["OK","OK"],"תרשים שחיטה כללי":["General slaughter chart","Gráfico general de faena"],"תרשים תוצאות כשרות":["Kosher results chart","Gráfico de resultados kosher"],"↩ חזור לברירת מחדל":["↩ Restore default","↩ Volver a predeterminado"],"⚖️ סריקה/מאזניים":["⚖️ Scan/Scale","⚖️ Escaneo/Balanza"],"✍️ הזנה ידנית":["✍️ Manual entry","✍️ Ingreso manual"],"✓ כשר — מיין לארגז המתאים":["✓ Kosher — sort into the matching bin","✓ Kosher — clasificar en el cajón correspondiente"],"⬆ העלה תמונת ריאה":["⬆ Upload lung image","⬆ Subir imagen de pulmón"],"💾 גיבוי עכשיו":["💾 Backup now","💾 Copia de seguridad ahora"],"📂 שחזור מגיבוי":["📂 Restore from backup","📂 Restaurar desde copia de seguridad"],"📦 גיבויים אוטומטיים — צפייה ושחזור":["📦 Automatic backups — view and restore","📦 Copias de seguridad automáticas — ver y restaurar"],"📷 מיון":["📷 Sort","📷 Clasificar"],"🔄 הדפסה חוזרת — נרשם בדוח":["🔄 Reprint — logged in report","🔄 Reimpresión — queda en el reporte"],"🔊 שמע לדוגמה":["🔊 Sample sound","🔊 Sonido de ejemplo"],"🔒 איפוס יום — אוטומטי בלבד":["🔒 Day reset — automatic only","🔒 Reinicio del día — solo automático"],"🔧 החלפת מכשיר תקול":["🔧 Replace faulty device","🔧 Reemplazar dispositivo defectuoso"],"🖨️ הדפסה":["🖨️ Print","🖨️ Impresión"],"🩺 בדוק את המערכת עכשיו":["🩺 Check the system now","🩺 Verificar el sistema ahora"]};
 Object.assign(I18N_DOM,{"סריקה אחת = 3 מדבקות (2 לחיים + לשון)":["One scan = 3 stickers (2 cheeks + tongue)","Un escaneo = 3 etiquetas (2 mejillas + lengua)"],"סה״כ מודפס עכשיו:":["Printing now:","Imprimiendo ahora:"],"3 מדבקות":["3 stickers","3 etiquetas"]});
 
 Object.assign(I18N_DOM,{"כפתור \"לא חלק\" בשחיטה ובבית הכוסות. כשיש שני מסכי חוץ — המסך השני הוא מסך הרבנות, ובמסך הגלאט יש \"שליחה למסך רבנות\" (זו שליחה, לא סטטוס). במסך הרבנות פוסקים רבנות כשר / רבנות חלק / טרף.":["A \"לא חלק\" button in Slaughter and at the maw check. With two outer screens the second one is the rabbinate screen, and the glatt screen has \"Send to the rabbinate screen\" (sending, not a status). On the rabbinate screen the rulings are רבנות כשר / רבנות חלק / טרף.","Un botón \"לא חלק\" en Faena y en el cuajar. Con dos pantallas externas la segunda es la pantalla del rabinato, y la pantalla glatt tiene \"Enviar a la pantalla del rabinato\" (un envío, no un estado). En la pantalla del rabinato se dictamina רבנות כשר / רבנות חלק / טרף."],"סטטוס כשרות \"רבנות חלק\"":["Kashrut status \"רבנות חלק\"","Estado de kashrut \"רבנות חלק\""],"כפתור פסיקה בבודק החוץ ובמסך הרבנות (לא לבהמה שסומנה \"לא חלק\" בשחיטה או בבית הכוסות)":["A ruling button at the outer inspector and on the rabbinate screen (not for an animal marked \"לא חלק\" at slaughter or the maw check)","Un botón de dictamen en el inspector externo y en la pantalla del rabinato (no para un animal marcado \"לא חלק\" en la faena o el cuajar)"],"🔍 הקש על המדבקה להגדלה":["🔍 Tap the sticker to enlarge","🔍 Toque la etiqueta para ampliar"]});
@@ -8322,9 +8323,8 @@ function buildStickerPayload(idx){
 }
 // Render a visual sticker into a container. kind: 'legs'|'head'|'kosher'
 // If sample=true, render an example sticker (number 1, today, sample status).
-function renderSticker(containerId,idx,kind,sample,piece){   // v10.38: piece = {pid, i, name} — the part on a kosher sticker
-  const cont=document.getElementById(containerId);
-  if(!cont)return;
+// v10.38: the sticker's data — the same for the picture on the screen and the printed sticker
+function _gtStickerData(idx,kind,sample,piece){
   const s=KS.getSettings();
   const opt={showQR:s.printShowQR!==false, showHeb:s.printShowHeb!==false, showGreg:s.printShowGreg!==false};
   let num=idx+1, heb='', greg='', st=['—','#888'], sealImg=null, payload='', shochet='', slTime=null, stRaw=null;
@@ -8357,6 +8357,13 @@ function renderSticker(containerId,idx,kind,sample,piece){   // v10.38: piece = 
   let wMM,hMM;
   if(kind==='kosher'){wMM=s.kosherW||s.stickerW||50;hMM=s.kosherH||s.stickerH||50;}
   else{wMM=s.legsW||s.stickerW||50;hMM=s.legsH||s.stickerH||50;}
+  return {s,opt,num,heb,greg,st,sealImg,payload,shochet,slTime,stRaw,wMM,hMM};
+}
+function renderSticker(containerId,idx,kind,sample,piece){   // v10.38: piece = {pid, i, name} — the part on a kosher sticker
+  const cont=document.getElementById(containerId);
+  if(!cont)return;
+  const D=_gtStickerData(idx,kind,sample,piece);
+  let {s,opt,num,heb,greg,st,sealImg,payload,shochet,slTime,stRaw,wMM,hMM}=D;
   const scale=Math.max(0.55,Math.min(2.2, wMM/50));
   const W=Math.round(230*scale);
   const numFS=Math.round(34*scale);
@@ -8386,6 +8393,160 @@ ${(kind==='kosher'||['nevela','shot','notChalak'].includes(stRaw))?`        <div
     },30);
   }
 }
+// ═══ v10.38 (owner): STICKER PRINTING ═══════════════════════════════════════════════════════════════
+// Until now the stations only showed "printing". Now: the sticker is drawn as a picture (same data as the
+// sticker on the screen), turned into the label printer's language (ZPL — Zebra, Honeywell, TSC, Godex and
+// most label printers read it) and sent to the screen's printer:
+//   network  — a Wi-Fi / network label printer, through the plant server (print-relay.sh → IP:9100)
+//   bluetooth — a Bluetooth (BLE) label printer, straight from the tablet
+//   system   — Android's print screen (any printer it finds, also an ordinary office printer)
+const GT_DPMM=8;   // 203 dpi — the usual label printer
+function _gtPrNorm(d){ if(!d) return null; const c=d.conn==='wifi'?'network':(d.conn==='usb'?'system':(d.conn||'system')); return Object.assign({},d,{conn:c}); }
+function gtPrinterFor(key){ try{ return _gtPrNorm(_gtDevFor(key).p); }catch(e){ return null; } }
+function _gtLoadImg(src){ return new Promise(r=>{ if(!src) return r(null); const i=new Image(); i.onload=()=>r(i); i.onerror=()=>r(null); i.src=src; }); }
+function _gtFit(ctx,text,maxW,size,weight){ let f=size; do{ ctx.font=(weight||'')+' '+f+'px Arial, "Noto Sans Hebrew", sans-serif'; if(ctx.measureText(text).width<=maxW) break; f-=1; }while(f>8); return f; }
+// the sticker as a black-and-white picture, wMM × hMM at 203 dpi
+async function gtStickerCanvas(idx,kind,piece,sample){
+  const D=_gtStickerData(idx,kind,sample,piece);
+  const W=Math.max(160,Math.round(D.wMM*GT_DPMM)), H=Math.max(120,Math.round(D.hMM*GT_DPMM));
+  const cv=document.createElement('canvas'); cv.width=W; cv.height=H;
+  const c=cv.getContext('2d'); c.fillStyle='#fff'; c.fillRect(0,0,W,H); c.fillStyle='#000'; c.strokeStyle='#000';
+  const pad=Math.round(Math.min(W,H)*0.04);
+  const isK=kind==='kosher';
+  const seal=isK ? await _gtLoadImg(_safeImg(D.sealImg)) : null;
+  const sealH=isK ? Math.round(H*0.32) : 0;
+  const topH=H-pad*2-(sealH?sealH+pad:0);
+  // the QR (left), the text (right) — like the sticker on the screen
+  let qr=0;
+  if(D.opt.showQR && window.QRGen){ qr=Math.round(Math.min(topH, W*0.42));
+    const t=document.createElement('canvas'); t.width=qr; t.height=qr;
+    // the code is drawn square by square and enlarged by a whole number only (a blurred square cannot be scanned)
+    try{ if(!window.QRGen.draw(t, D.payload, 1)) throw 0; const k=Math.max(1,Math.floor(qr/t.width)); const q2=t.width*k;
+         c.imageSmoothingEnabled=false; c.drawImage(t, pad+Math.floor((qr-q2)/2), pad+Math.round((topH-q2)/2), q2, q2); }catch(e){ qr=0; } }
+  const x0=qr?pad*2+qr:pad, tw=W-x0-pad, cx=x0+tw/2;
+  const lines=[];
+  lines.push({t:String(D.num), w:'bold', r:0.36});
+  if(piece&&piece.name) lines.push({t:String(piece.name), w:'bold', r:0.12});
+  if(D.heb) lines.push({t:D.heb, r:0.09});
+  if(D.greg) lines.push({t:D.greg, r:0.09, ltr:true});
+  if(!isK && D.slTime) lines.push({t:String(D.slTime.getHours()).padStart(2,'0')+':'+String(D.slTime.getMinutes()).padStart(2,'0'), r:0.09, ltr:true});
+  const pill=(isK||['nevela','shot','notChalak'].includes(D.stRaw)) ? (D.st[0]+(D.st[2]&&D.st[2]!==D.st[0]?' · '+D.st[2]:'')) : '';
+  if(pill) lines.push({t:pill, w:'bold', r:0.11, pill:true});
+  const tot=lines.reduce((a,l)=>a+l.r,0)||1, unit=topH/tot*0.92;
+  let y=pad+(topH-tot*unit)/2;
+  c.textAlign='center'; c.textBaseline='middle';
+  lines.forEach(l=>{
+    const h=l.r*unit, f=_gtFit(c,l.t,tw-(l.pill?pad*2:0),Math.round(h*0.9),l.w);
+    c.direction=(!l.ltr && /[֐-׿]/.test(l.t))?'rtl':'ltr';
+    if(l.pill){ const mw=Math.min(tw, c.measureText(l.t).width+pad*2); c.fillStyle='#000'; c.fillRect(cx-mw/2, y+h*0.06, mw, h*0.88); c.fillStyle='#fff'; c.fillText(l.t, cx, y+h/2); c.fillStyle='#000'; }
+    else c.fillText(l.t, cx, y+h/2);
+    y+=h;
+  });
+  if(isK){ const sy=H-pad-sealH;
+    if(seal){ const r=Math.min((W-pad*2)/seal.width, sealH/seal.height); const sw=seal.width*r, sh=seal.height*r; c.drawImage(seal, (W-sw)/2, sy+(sealH-sh)/2, sw, sh); }
+    else { c.setLineDash([pad,pad/2]); c.lineWidth=Math.max(2,pad/3); c.strokeRect(pad, sy, W-pad*2, sealH); c.setLineDash([]);
+      c.direction='rtl'; _gtFit(c,'חסר סימן כשרות',W-pad*4,Math.round(sealH*0.3),'bold'); c.fillText('חסר סימן כשרות', W/2, sy+sealH*0.35);
+      c.direction='ltr'; _gtFit(c,'NO KASHRUT MARK',W-pad*4,Math.round(sealH*0.24),'bold'); c.fillText('NO KASHRUT MARK', W/2, sy+sealH*0.7); } }
+  c.setLineDash([]); c.lineWidth=Math.max(2,Math.round(pad/4)); c.strokeRect(c.lineWidth/2, c.lineWidth/2, W-c.lineWidth, H-c.lineWidth);
+  return cv;
+}
+// the picture in the label printer's language (ZPL ^GFA: one bit a dot, 1 = black)
+function gtZplFromCanvas(cv,copies){
+  const w=cv.width, h=cv.height, bpr=Math.ceil(w/8), d=cv.getContext('2d').getImageData(0,0,w,h).data, HX='0123456789ABCDEF', out=new Array(h);
+  for(let y=0;y<h;y++){ let row=''; for(let bx=0;bx<bpr;bx++){ let b=0;
+      for(let k=0;k<8;k++){ const x=bx*8+k; if(x<w){ const i=(y*w+x)*4; const lum=d[i]*0.3+d[i+1]*0.59+d[i+2]*0.11; if(d[i+3]>127 && lum<150) b|=(128>>k); } }
+      row+=HX[b>>4]+HX[b&15]; } out[y]=row; }
+  const n=bpr*h;
+  return '^XA^PW'+w+'^LL'+h+'^LH0,0^FO0,0^GFA,'+n+','+n+','+bpr+','+out.join('')+'^FS^PQ'+Math.max(1,Math.min(99,copies|0||1))+'^XZ';
+}
+function _gtB64(str){ const b=new TextEncoder().encode(str); let s=''; for(let i=0;i<b.length;i+=0x8000) s+=String.fromCharCode.apply(null,b.subarray(i,i+0x8000)); return btoa(s); }
+// a big message on the station when stickers did not come out (a kashrut matter — it must be seen)
+function _gtPrintMsg(text,bad){
+  let el=document.getElementById('gtPrintMsg');
+  if(!el){ el=document.createElement('div'); el.id='gtPrintMsg'; el.setAttribute('data-no-i18n','');
+    el.style.cssText='position:fixed;left:12px;right:12px;bottom:14px;z-index:100000;padding:14px 16px;border-radius:14px;font:800 17px Arial;text-align:center;box-shadow:0 8px 30px rgba(0,0,0,.5);cursor:pointer;';
+    el.onclick=()=>{ el.style.display='none'; }; document.body.appendChild(el); }
+  el.style.background=bad?'#B71C1C':'#1B5E20'; el.style.color='#fff'; el.style.border='2px solid '+(bad?'#FF8A80':'#A5D6A7');
+  el.textContent=text; el.style.display='block';
+  clearTimeout(el._t); el._t=setTimeout(()=>{ el.style.display='none'; }, bad?20000:3000);
+}
+function _gtPrinterStatus(p,ok){
+  try{ const s=KS.getSettings(); const list=(s.printers||[]).slice(); const i=list.findIndex(d=>d.id===p.id); if(i<0) return;
+    const st=ok?'connected':'error'; if(list[i].status===st) return; list[i]=Object.assign({},list[i],{status:st}); KS.updateSettings({printers:list}); renderScreenDeviceStatus(); }catch(e){}
+}
+// network: through the plant server; it answers sent / failed (the printer did not take it)
+async function _gtPrintNet(p,zpl){
+  if(!window.sb) throw new Error(L('אין חיבור לשרת המפעל','No connection to the plant server','Sin conexión al servidor'));
+  const r=await window.sb.rpc('print_job_add',{p_printer:(p.ip||'')+':'+(p.port||9100), p_data:_gtB64(zpl), p_command_id:_gtUuid()});
+  const x=r.data||{}; if(r.error||!x.ok) throw new Error(gtErrText(r.error||x.error||'server_error'));
+  for(const w of [1500,2500,4000,6000]){ await new Promise(z=>setTimeout(z,w));
+    const q=await window.sb.rpc('print_job_status',{p_id:x.id}); const y=q.data||{};
+    if(y.status==='sent') return true;
+    if(y.status==='failed') throw new Error(L('המדפסת לא ענתה','The printer did not answer','La impresora no respondió')+(y.error?' ('+y.error+')':'')); }
+  throw new Error(L('שרת המפעל עוד לא שלח למדפסת — בדקו ששירות ההדפסה פועל (gt-print-relay)','The plant server has not sent it yet — check the printing service (gt-print-relay)','El servidor aún no lo envió — revise el servicio de impresión'));
+}
+// Bluetooth (BLE): the common label-printer services; the first characteristic that can be written
+const GT_BLE_SVC=['38eb4a80-c570-11e3-9507-0002a5d5c51b','000018f0-0000-1000-8000-00805f9b34fb','e7810a71-73ae-499d-8c15-faa9aef0c3f2',
+  '49535343-fe7d-4ae5-8fa9-9fafd205e455','0000ff00-0000-1000-8000-00805f9b34fb','0000fee7-0000-1000-8000-00805f9b34fb'];
+const _gtBle={dev:null,ch:null};
+async function _gtBleOpen(dev){
+  const g=await dev.gatt.connect();
+  for(const sid of GT_BLE_SVC){ let svc=null; try{ svc=await g.getPrimaryService(sid); }catch(e){ continue; }
+    for(const ch of await svc.getCharacteristics()){ if(ch.properties.write||ch.properties.writeWithoutResponse) return ch; } }
+  throw new Error(L('המכשיר הזה לא מקבל הדפסה ב-Bluetooth','This device does not take Bluetooth printing','Este dispositivo no acepta impresión Bluetooth'));
+}
+async function gtBlePick(){
+  if(!navigator.bluetooth) throw new Error(L('המכשיר / הדפדפן הזה לא תומך ב-Bluetooth מהאפליקציה (צריך Chrome באנדרואיד)','This device / browser has no Bluetooth for the app (needs Chrome on Android)','Este dispositivo no tiene Bluetooth para la app'));
+  const dev=await navigator.bluetooth.requestDevice({acceptAllDevices:true, optionalServices:GT_BLE_SVC});
+  _gtBle.dev=dev; _gtBle.ch=await _gtBleOpen(dev); return dev;
+}
+async function _gtPrintBle(p,zpl){
+  if(!(_gtBle.ch && _gtBle.dev && _gtBle.dev.id===p.bleId && _gtBle.dev.gatt.connected)){
+    let dev=null;
+    try{ if(navigator.bluetooth && navigator.bluetooth.getDevices) (await navigator.bluetooth.getDevices()).forEach(d=>{ if(d.id===p.bleId) dev=d; }); }catch(e){}
+    if(dev){ _gtBle.dev=dev; _gtBle.ch=await _gtBleOpen(dev); }
+    else { const d=await gtBlePick(); if(p.bleId && d.id!==p.bleId) _gtPrinterUpdate(p.id,{bleId:d.id, name:d.name||p.name}); }
+  }
+  const bytes=new TextEncoder().encode(zpl), ch=_gtBle.ch;
+  for(let i=0;i<bytes.length;i+=180){ const part=bytes.subarray(i,i+180);
+    if(ch.properties.writeWithoutResponse && ch.writeValueWithoutResponse) await ch.writeValueWithoutResponse(part); else await ch.writeValue(part); }
+  return true;
+}
+// Android's print screen: one page a sticker, the sticker's size
+function _gtPrintSystem(items,wMM,hMM){
+  let box=document.getElementById('gtStkPrint');
+  if(!box){ box=document.createElement('div'); box.id='gtStkPrint'; box.setAttribute('data-no-i18n',''); document.body.appendChild(box); }
+  box.innerHTML=items.map(it=>{ const src=it.cv.toDataURL('image/png'); return Array.from({length:Math.max(1,it.copies||1)},()=>`<img src="${src}" style="width:${wMM}mm;height:${hMM}mm;display:block;page-break-after:always;break-after:page;">`).join(''); }).join('');
+  let st=document.getElementById('gtStkPage'); if(!st){ st=document.createElement('style'); st.id='gtStkPage'; document.head.appendChild(st); }
+  st.textContent=`#gtStkPrint{display:none}@media print{@page{size:${wMM}mm ${hMM}mm;margin:0}body.gt-stk-printing *{visibility:hidden !important}`
+    +`body.gt-stk-printing #gtStkPrint,body.gt-stk-printing #gtStkPrint *{visibility:visible !important}body.gt-stk-printing #gtStkPrint{display:block !important;position:absolute;left:0;top:0}}`;
+  document.body.classList.add('gt-stk-printing');
+  const done=()=>{ document.body.classList.remove('gt-stk-printing'); window.removeEventListener('afterprint',done); };
+  window.addEventListener('afterprint',done); setTimeout(done,120000);
+  window.print();
+  return true;
+}
+// print stickers at a screen: jobs = [{idx, kind:'legs'|'head'|'kosher', piece, copies, sample}]
+async function gtPrintStickers(key,jobs,o){
+  o=o||{};
+  const p=o.printer?_gtPrNorm(o.printer):gtPrinterFor(key);
+  if(!p){ if(!o.quiet) _gtPrintMsg(L('🖨 אין מדפסת למסך הזה — המדבקות לא הודפסו. ראש הצוות משייך מדפסת: הגדרות ← מדפסות.','🖨 No printer for this screen — the stickers were not printed. The team leader sets one: Settings → Printers.','🖨 No hay impresora para esta pantalla — no se imprimió. El jefe de equipo la asigna: Ajustes → Impresoras.'),true); return {ok:false,error:'no_printer'}; }
+  try{
+    const items=[]; for(const j of jobs){ items.push({cv:await gtStickerCanvas(j.idx,j.kind,j.piece,j.sample), copies:j.copies||1, kind:j.kind}); }
+    if(!items.length) return {ok:true};
+    const D=_gtStickerData(jobs[0].idx,jobs[0].kind,jobs[0].sample,jobs[0].piece);
+    if(p.conn==='system') _gtPrintSystem(items,D.wMM,D.hMM);
+    else { const zpl=items.map(it=>gtZplFromCanvas(it.cv,it.copies)).join('\n');
+      if(p.conn==='bluetooth') await _gtPrintBle(p,zpl); else await _gtPrintNet(p,zpl); }
+    _gtPrinterStatus(p,true);
+    if(o.test) _gtPrintMsg(L('✅ מדבקת ניסיון נשלחה ל-','✅ Test sticker sent to ','✅ Etiqueta de prueba enviada a ')+(p.name||''),false);
+    return {ok:true};
+  }catch(e){
+    _gtPrinterStatus(p,false); try{ gtLogError('print', e); }catch(_){}
+    _gtPrintMsg('🖨 '+L('המדבקות לא הודפסו! ','The stickers were NOT printed! ','¡NO se imprimieron las etiquetas! ')+(p.name?'('+p.name+') ':'')+String(e&&e.message||e)+L(' — בדקו את המדפסת והדפיסו שוב (הדפסה חוזרת).',' — check the printer and print again (reprint).',' — revise la impresora y vuelva a imprimir.'),true);
+    return {ok:false,error:String(e&&e.message||e)};
+  }
+}
 function mgrSetPrintOpt(key,val){
   // key is 'showQR' | 'showHeb' | 'showGreg' → setting 'printShowQR' etc.
   const settingKey='print'+key.charAt(0).toUpperCase()+key.slice(1);
@@ -8398,13 +8559,14 @@ function mgrSetPrintCount(which,val){
   KS.updateSettings({[map[which]]:n});
 }
 // ── PRINTERS / SCANNERS ──
-const CONN_LABELS={bluetooth:'Bluetooth',wifi:'WiFi/רשת',usb:'USB'};
+const CONN_LABELS={bluetooth:'Bluetooth',wifi:'WiFi/רשת',usb:'USB',network:'WiFi / רשת',system:'מסך ההדפסה'};
 const SCREEN_LIST=[['legs','רגלים / ראש'],['parts','חלקים קטנים'],['stamps','חותמות'],['cooler','קולר'],['nikur','מנקר'],['salting','מליחה'],['shipping','שיפינג']];
 function mgrAddDevice(kind){
+  if(kind==='printer') return gtPrinterAddManual();
   const nameEl=document.getElementById(kind==='printer'?'newDevName':'newScanName');
   const connEl=document.getElementById(kind==='printer'?'newDevConn':'newScanConn');
   const name=nameEl?nameEl.value.trim():'';
-  if(!name)return;
+  if(!name){ alert(L('כתבו שם / דגם של הסורק ואז "הוסף".','Type the scanner\'s name / model, then "Add".','Escriba el nombre / modelo del escáner y luego "Agregar".')); if(nameEl) nameEl.focus(); return; }
   const conn=connEl?connEl.value:'bluetooth';
   const s=KS.getSettings();
   const listKey=kind==='printer'?'printers':'scanners';
@@ -8424,6 +8586,106 @@ function mgrRemoveDevice(kind,id){
   Object.keys(sd).forEach(k=>{if(sd[k][kind]===id)sd[k][kind]='';});
   KS.updateSettings({[listKey]:list,screenDevices:sd});
   mgrRenderDevices();
+}
+// ═══ v10.38 (owner): adding a printer — search the network / Bluetooth / the device's print screen / by hand ═══
+const _gtPrBtnCss='width:100%;padding:11px;border-radius:10px;font-weight:800;font-size:14px;cursor:pointer;text-align:start;';
+function _gtPrConnLabel(d){ d=_gtPrNorm(d)||{};
+  return d.conn==='network' ? L('Wi-Fi / רשת','Wi-Fi / network','Wi-Fi / red')+(d.ip?' · '+d.ip+((d.port&&d.port!=9100)?':'+d.port:''):'')
+       : d.conn==='bluetooth' ? 'Bluetooth' : L('מסך ההדפסה של המכשיר','The device\'s print screen','Pantalla de impresión'); }
+function gtPrAddBoxRender(){
+  const el=document.getElementById('gtPrAddBox'); if(!el) return;
+  el.innerHTML=`<div style="display:flex;flex-direction:column;gap:7px;">
+    <button onclick="gtPrinterScan()" style="${_gtPrBtnCss}background:rgba(42,127,255,.15);border:1px solid var(--blue);color:var(--blue);">🔍 ${L('חפש מדפסות ברשת (Wi-Fi / כבל)','Search the network for printers (Wi-Fi / cable)','Buscar impresoras en la red')}</button>
+    <div id="gtPrScanRes"></div>
+    <button onclick="gtPrinterAddBle()" style="${_gtPrBtnCss}background:rgba(77,166,255,.12);border:1px solid #4DA6FF;color:#4DA6FF;">🔵 ${L('חפש מדפסת Bluetooth','Search for a Bluetooth printer','Buscar impresora Bluetooth')}</button>
+    <button onclick="gtPrinterAddSystem()" style="${_gtPrBtnCss}background:rgba(212,168,67,.12);border:1px solid var(--gold);color:var(--gold);">🖨 ${L('מדפסת דרך מסך ההדפסה של המכשיר (כל מדפסת, גם רגילה)','A printer through the device\'s print screen (any printer, also an office one)','Impresora por la pantalla de impresión del dispositivo')}</button>
+    <details style="margin-top:2px;"><summary style="cursor:pointer;font-size:13px;font-weight:700;color:var(--text);padding:6px 0;">✍️ ${L('הוספה ידנית — לפי כתובת IP','Add by hand — by IP address','Agregar a mano — por IP')}</summary>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">
+        <input id="newDevName" list="printerBrands" type="text" placeholder="${escapeHtml(L('שם / דגם (לא חובה)','Name / model (optional)','Nombre / modelo'))}" style="flex:2;min-width:120px;background:var(--panel2);border:1px solid var(--border);border-radius:7px;padding:8px;color:var(--text);font-size:13px;">
+        <input id="newDevIp" type="text" inputmode="decimal" placeholder="192.168.1.50" style="flex:2;min-width:110px;direction:ltr;background:var(--panel2);border:1px solid var(--border);border-radius:7px;padding:8px;color:var(--text);font-size:13px;">
+        <input id="newDevPort" type="number" value="9100" style="width:74px;direction:ltr;background:var(--panel2);border:1px solid var(--border);border-radius:7px;padding:8px;color:var(--text);font-size:13px;">
+        <button onclick="gtPrinterAddManual()" style="padding:8px 14px;border-radius:7px;border:none;background:var(--gold);color:#07090F;font-size:13px;font-weight:700;cursor:pointer;">${L('הוסף','Add','Agregar')}</button>
+      </div><div id="newDevErr" style="font-size:12px;color:var(--red-light);margin-top:4px;"></div>
+      <div style="font-size:11px;color:var(--muted);margin-top:4px;">${L('הכתובת מופיעה בדף ההגדרות שהמדפסת מדפיסה, או במסך שלה. יציאה רגילה: 9100.','The address is on the settings page the printer prints, or on its screen. Usual port: 9100.','La dirección aparece en la página de configuración de la impresora. Puerto usual: 9100.')}</div>
+    </details>
+    <div style="font-size:11px;color:var(--muted);line-height:1.5;">${L('אחרי ההוספה: "🧪 מדבקת ניסיון", ואז לשייך את המדפסת למסך — למטה, ב"שיוך לכל מסך".','After adding: "🧪 Test sticker", then give the printer to a screen — below, in "Assign to each screen".','Después: "🧪 Etiqueta de prueba" y luego asignarla a una pantalla — abajo.')}</div>
+  </div>`;
+  const sc=document.getElementById('gtScTestBox');
+  if(sc) sc.innerHTML=`<button onclick="gtScannerTest()" style="${_gtPrBtnCss}margin-bottom:8px;background:rgba(122,174,255,.12);border:1px solid #7AAEFF;color:#7AAEFF;">🧪 ${L('בדוק סורק — לסרוק מדבקה ולראות שנקלט','Check a scanner — scan a sticker and see it arrive','Probar escáner — escanear y ver que llega')}</button>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:8px;">${L('סורק USB או Bluetooth שמחובר לטאבלט עובד בלי הגדרה (נקלט כמו מקלדת). גם מצלמת הטאבלט סורקת.','A USB or Bluetooth scanner connected to the tablet works with no setup (it types like a keyboard). The tablet camera scans too.','Un escáner USB o Bluetooth conectado funciona sin configurar.')}</div>`;
+}
+function _gtPrinterAdd(o){
+  const s=KS.getSettings(); const list=(s.printers||[]).slice();
+  if(o.conn==='network' && list.some(d=>_gtPrNorm(d).conn==='network' && d.ip===o.ip && String(d.port||9100)===String(o.port||9100))){ alert(L('המדפסת הזו כבר ברשימה.','This printer is already on the list.','Esta impresora ya está en la lista.')); return null; }
+  if(o.conn==='bluetooth' && o.bleId && list.some(d=>d.bleId===o.bleId)){ alert(L('המדפסת הזו כבר ברשימה.','This printer is already on the list.','Esta impresora ya está en la lista.')); return null; }
+  const d=Object.assign({id:'d'+Date.now(), status:'disconnected'}, o); list.push(d);
+  KS.updateSettings({printers:list}); mgrRenderDevices(); return d;
+}
+function _gtPrinterUpdate(id,patch){ const s=KS.getSettings(); const list=(s.printers||[]).map(d=>d.id===id?Object.assign({},d,patch):d); KS.updateSettings({printers:list}); try{ mgrRenderDevices(); }catch(e){} }
+function gtPrinterAddManual(){
+  const err=document.getElementById('newDevErr'); const say=t=>{ if(err) err.textContent=t; else alert(t); };
+  const ip=String((document.getElementById('newDevIp')||{}).value||'').trim(), port=Number((document.getElementById('newDevPort')||{}).value||9100)||9100;
+  const name=String((document.getElementById('newDevName')||{}).value||'').trim();
+  if(!/^(10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3})$/.test(ip) || ip.split('.').some(x=>Number(x)>255))
+    return say(L('כתובת לא תקינה. כתובת של רשת המפעל, למשל 192.168.1.50 או 10.0.0.20.','Not a valid address. An address of the plant network, e.g. 192.168.1.50 or 10.0.0.20.','Dirección no válida. Por ejemplo 192.168.1.50.'));
+  if(![9100,9101,9102,6101].includes(port)) return say(L('יציאה של מדפסת מדבקות: 9100 (או 9101 / 9102 / 6101).','A label printer port: 9100 (or 9101 / 9102 / 6101).','Puerto de impresora: 9100.'));
+  say('');
+  const d=_gtPrinterAdd({name:name||L('מדפסת ','Printer ','Impresora ')+ip, conn:'network', ip, port});
+  if(d && confirm(L('להדפיס מדבקת ניסיון עכשיו?','Print a test sticker now?','¿Imprimir una etiqueta de prueba ahora?'))) gtPrinterTest(d.id);
+}
+async function gtPrinterScan(){
+  const box=document.getElementById('gtPrScanRes'); if(!box) return;
+  if(!window.sb){ box.innerHTML='<div style="color:var(--red-light);font-size:12px;">'+escapeHtml(L('אין חיבור לשרת המפעל.','No connection to the plant server.','Sin conexión al servidor.'))+'</div>'; return; }
+  box.innerHTML='<div style="font-size:13px;color:var(--blue);padding:6px 0;">⏳ '+escapeHtml(L('שרת המפעל מחפש מדפסות ברשת… (עד חצי דקה)','The plant server is searching the network… (up to half a minute)','El servidor busca impresoras… (hasta medio minuto)'))+'</div>';
+  const tok=KS.getManagerToken();
+  try{ const r=await window.sb.rpc('printer_scan_request',{p_token:tok}); const x=r.data||{}; if(r.error||!x.ok) throw new Error(gtErrText(r.error||x.error)); }
+  catch(e){ box.innerHTML='<div style="color:var(--red-light);font-size:12px;">'+escapeHtml(String(e.message||e))+'</div>'; return; }
+  const t0=Date.now(); let res=null;
+  while(Date.now()-t0<45000){ await new Promise(z=>setTimeout(z,2000));
+    try{ const r=await window.sb.rpc('printers_found',{p_token:tok}); res=r.data||{}; }catch(e){ res=null; }
+    if(res && res.ok && res.at && res.requestedAt && new Date(res.at)>=new Date(res.requestedAt)) break; res=res&&res.ok?Object.assign(res,{pending:true}):res; }
+  if(!res || !res.ok){ box.innerHTML='<div style="color:var(--red-light);font-size:12px;">'+escapeHtml(L('החיפוש נכשל.','The search failed.','La búsqueda falló.'))+'</div>'; return; }
+  if(res.pending){ const relayOld=!res.relay || (Date.now()-new Date(res.relay).getTime())>120000;
+    box.innerHTML='<div style="color:var(--red-light);font-size:12px;line-height:1.5;">'+escapeHtml(relayOld
+      ? L('שירות ההדפסה בשרת המפעל לא פועל, אז אין מי שיחפש. צריך להפעיל אותו בשרת: gt-print-relay (ראו המדריך). בינתיים: הוספה ידנית או מסך ההדפסה של המכשיר.','The printing service on the plant server is not running, so nothing searches. Start it on the server: gt-print-relay (see the guide). Meanwhile: add by hand or the device\'s print screen.','El servicio de impresión del servidor no está activo. Mientras tanto: agregue a mano.')
+      : L('החיפוש עוד לא הסתיים. נסו שוב בעוד רגע.','The search has not finished yet. Try again in a moment.','La búsqueda no terminó. Intente de nuevo.'))+'</div>'; return; }
+  const have=(KS.getSettings().printers||[]).map(d=>_gtPrNorm(d)).filter(d=>d.conn==='network').map(d=>d.ip+':'+(d.port||9100));
+  const P=res.printers||[];
+  box.innerHTML = P.length ? '<div style="font-size:12px;color:var(--muted);margin:4px 0;">'+escapeHtml(L('נמצאו ברשת:','Found on the network:','Encontradas:'))+'</div>'
+    + P.map(p=>{ const k=p.ip+':'+(p.port||9100), on=have.includes(k);
+        return `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border);">
+          <div><div style="font-size:13px;font-weight:700;color:var(--text);">${escapeHtml(p.model||L('מדפסת מדבקות','Label printer','Impresora'))}</div><div style="font-size:11px;color:var(--muted);direction:ltr;text-align:right;">${escapeHtml(k)}</div></div>
+          ${on?`<span style="font-size:12px;color:var(--green);">✓ ${escapeHtml(L('ברשימה','On the list','En la lista'))}</span>`
+              :`<button onclick='gtPrinterAddFound(${_jsArg(p.ip)},${Number(p.port)||9100},${_jsArg(p.model||'')})' style="padding:7px 12px;border-radius:7px;border:none;background:var(--gold);color:#07090F;font-weight:700;cursor:pointer;">${escapeHtml(L('הוסף','Add','Agregar'))}</button>`}</div>`; }).join('')
+    : '<div style="font-size:12px;color:var(--amber,#F0A030);line-height:1.5;">'+escapeHtml(L('לא נמצאה מדפסת מדבקות ברשת. בדקו שהמדפסת דולקת ומחוברת לאותה רשת (Wi-Fi / כבל) כמו שרת המפעל — או הוסיפו לפי כתובת IP. מדפסת משרדית רגילה: דרך "מסך ההדפסה של המכשיר".','No label printer found on the network. Check that it is on and connected to the same network as the plant server — or add it by IP address. An ordinary office printer: through "the device\'s print screen".','No se encontró impresora. Revise que esté encendida y en la misma red — o agréguela por IP.'))+'</div>';
+}
+function gtPrinterAddFound(ip,port,model){ const d=_gtPrinterAdd({name:model||L('מדפסת ','Printer ','Impresora ')+ip, conn:'network', ip, port:port||9100}); if(d){ gtPrinterScanRedraw(); if(confirm(L('להדפיס מדבקת ניסיון עכשיו?','Print a test sticker now?','¿Imprimir una etiqueta de prueba ahora?'))) gtPrinterTest(d.id); } }
+function gtPrinterScanRedraw(){ const b=document.getElementById('gtPrScanRes'); if(b) b.querySelectorAll('button').forEach(x=>{ if(/הוסף|Add|Agregar/.test(x.textContent)) x.disabled=true; }); }
+async function gtPrinterAddBle(){
+  try{ const dev=await gtBlePick(); const d=_gtPrinterAdd({name:dev.name||'Bluetooth', conn:'bluetooth', bleId:dev.id});
+       if(d && confirm(L('להדפיס מדבקת ניסיון עכשיו?','Print a test sticker now?','¿Imprimir una etiqueta de prueba ahora?'))) gtPrinterTest(d.id); }
+  catch(e){ if(e && e.name==='NotFoundError') return;    // the person closed the list
+    alert(L('לא נמצאה מדפסת Bluetooth: ','No Bluetooth printer: ','Sin impresora Bluetooth: ')+String(e&&e.message||e)+'\n'+L('הדפדפן רואה רק מדפסות Bluetooth חדשות (BLE). מדפסת מדבקות רגילה: עדיף Wi-Fi / רשת.','The browser sees only new Bluetooth printers (BLE). A label printer: better on Wi-Fi / network.','El navegador solo ve impresoras BLE. Mejor Wi-Fi / red.')); }
+}
+function gtPrinterAddSystem(){
+  const d=_gtPrinterAdd({name:L('מסך ההדפסה של המכשיר','The device\'s print screen','Pantalla de impresión'), conn:'system'});
+  if(d){ alert(L('עכשיו תודפס מדבקת ניסיון. ייפתח מסך ההדפסה של המכשיר — הוא מחפש לבד מדפסות Wi-Fi: בוחרים מדפסת ולוחצים "הדפס".','A test sticker prints now. The device\'s print screen opens — it searches Wi-Fi printers itself: choose a printer and tap "Print".','Ahora se imprime una prueba. Se abre la pantalla de impresión: elija la impresora y toque "Imprimir".')); gtPrinterTest(d.id); }
+}
+function gtPrinterTest(id){
+  const d=(KS.getSettings().printers||[]).find(x=>x.id===id); if(!d) return;
+  gtPrintStickers(null,[{idx:0,kind:'legs',sample:true,copies:1},{idx:0,kind:'kosher',sample:true,copies:1,piece:{pid:'',i:1,name:L('ניסיון','Test','Prueba')}}],{printer:d,test:true});
+}
+function gtScannerTest(){
+  gtSheet('🧪 '+L('בדיקת סורק','Scanner check','Prueba de escáner'), L('סורקים עכשיו מדבקה. מה שהסורק קרא יופיע כאן.','Scan a sticker now. What the scanner read shows here.','Escanee una etiqueta ahora. Lo leído aparece aquí.'),
+    '<input id="gtScTestIn" class="gt-in" autocomplete="off" style="width:100%;padding:12px;font-size:16px;direction:ltr;" placeholder="…">'
+    +'<div id="gtScTestOut" style="margin-top:10px;font-size:15px;font-weight:700;min-height:24px;"></div>'
+    +'<div class="gt-row">'+_gtHBtn(L('סגור','Close','Cerrar'),'#9aa4b5','gtSheetClose()')+'</div>');
+  setTimeout(()=>{ const i=document.getElementById('gtScTestIn'); if(!i) return; i.focus();
+    i.addEventListener('keydown',e=>{ if(e.key!=='Enter') return; e.preventDefault(); const v=i.value.trim(); i.value='';
+      const o=document.getElementById('gtScTestOut'); if(!o) return;
+      const m=v.match(/N:(\d+)/);
+      o.style.color=v?'var(--green)':'var(--red-light)';
+      o.textContent=v ? '✅ '+L('הסורק עובד. נקרא: ','The scanner works. Read: ','El escáner funciona. Leído: ')+(m?L('מספר ','number ','número ')+m[1]:v.slice(0,80)) : L('לא נקלט כלום','Nothing came in','No llegó nada'); }); },150);
 }
 function mgrToggleDeviceStatus(kind,id){
   const s=KS.getSettings();
@@ -8447,19 +8709,21 @@ function mgrRenderDevices(){
   const scanners=s.scanners||[];
   const sd=s.screenDevices||{};
   function deviceRow(kind,d){
-    const conn=escapeHtml(d.conn==='wifi'?L('WiFi/רשת','WiFi/network','WiFi/red'):(CONN_LABELS[d.conn]||d.conn));
-    const connected=d.status==='connected';
-    return `<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border);">
-      <div>
-        <div style="font-size:13px;color:var(--text);font-weight:600;">${escapeHtml(d.name)}</div>
-        <div style="font-size:10px;color:var(--muted);">${conn}</div>
+    const isP=kind==='printer', st=d.status==='connected'?'ok':(d.status==='error'?'bad':'');
+    const conn=isP?_gtPrConnLabel(d):escapeHtml(d.conn==='wifi'?L('WiFi/רשת','WiFi/network','WiFi/red'):(CONN_LABELS[d.conn]||d.conn));
+    return `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);">
+      <div style="min-width:0;">
+        <div style="font-size:13px;color:var(--text);font-weight:700;">${escapeHtml(d.name)} ${st==='ok'?'<span style="color:var(--green);font-size:12px;">✓</span>':(st==='bad'?'<span style="color:var(--red-light);font-size:12px;">⚠ '+escapeHtml(L('לא הדפיסה','did not print','no imprimió'))+'</span>':'')}</div>
+        <div style="font-size:11px;color:var(--muted);">${isP?escapeHtml(conn):conn}</div>
       </div>
-      <div style="display:flex;align-items:center;gap:8px;">
-        <button onclick="mgrToggleDeviceStatus('${kind}',${_jsArg(d.id)})" style="font-size:10px;font-weight:700;border-radius:12px;padding:3px 10px;cursor:pointer;border:1px solid ${connected?'#28C76F':'var(--border)'};background:${connected?'rgba(40,199,111,.15)':'transparent'};color:${connected?'#28C76F':'var(--muted)'};">${connected?L('● מחובר','● Connected','● Conectado'):L('○ מנותק','○ Disconnected','○ Desconectado')}</button>
-        <button onclick="mgrRemoveDevice('${kind}',${_jsArg(d.id)})" style="color:#FF6B6B;background:none;border:none;font-size:14px;cursor:pointer;">✕</button>
+      <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+        ${isP?`<button onclick="gtPrinterTest(${_jsArg(d.id)})" style="font-size:12px;font-weight:700;border-radius:8px;padding:6px 10px;cursor:pointer;border:1px solid var(--gold);background:transparent;color:var(--gold);">🧪 ${escapeHtml(L('ניסיון','Test','Prueba'))}</button>`
+             :`<button onclick="mgrToggleDeviceStatus('${kind}',${_jsArg(d.id)})" style="font-size:10px;font-weight:700;border-radius:12px;padding:3px 10px;cursor:pointer;border:1px solid ${d.status==='connected'?'#28C76F':'var(--border)'};background:transparent;color:${d.status==='connected'?'#28C76F':'var(--muted)'};">${d.status==='connected'?L('מחובר','Connected','Conectado'):L('לא מחובר','Not connected','No conectado')}</button>`}
+        <button onclick="if(confirm(L('להסיר?','Remove?','¿Quitar?')))mgrRemoveDevice('${kind}',${_jsArg(d.id)})" style="color:#FF6B6B;background:none;border:none;font-size:16px;cursor:pointer;">✕</button>
       </div>
     </div>`;
   }
+  try{ gtPrAddBoxRender(); }catch(e){}
   const pl=document.getElementById('mgrPrintersList');
   if(pl)pl.innerHTML=printers.length?printers.map(d=>deviceRow('printer',d)).join(''):'<div style="font-size:11px;color:var(--muted);">'+L('לא הוגדרו מדפסות','No printers set up','No hay impresoras configuradas')+'</div>';
   const scl=document.getElementById('mgrScannersList');
@@ -8705,6 +8969,7 @@ function showPrintPopup(idx,step,isReprint=false){
   const _st=KS.getSettings();
   const count=step==="legs"?(_st.legStickerCount!=null?_st.legStickerCount:2):(_st.headStickerCount!=null?_st.headStickerCount:7);
   document.getElementById("ppCount").textContent="x "+count;
+  try{ gtPrintStickers('legs',[{idx, kind:step==='legs'?'legs':'head', copies:count}]); }catch(e){}   // v10.38: really printed
   document.getElementById("ppInfo").textContent=new Date().toLocaleTimeString("he-IL");
   const bar=document.getElementById("ppBarInner");
   bar.style.transition="none";bar.style.width="100%";
@@ -14243,8 +14508,11 @@ function _ppBreak(cheeks, tongue){   // (one released part: the cheek / the tong
 }
 // v10.38: the rows of the print window — every part of the plant's small-parts set
 function _ppRows(list){ const e=document.getElementById('ppPartsRows'); if(e) e.innerHTML=_gtPiecesRowsHtml(list); }
-function showPartsPrint(idx,status,isReprint=false,stickerNum=1){
+function showPartsPrint(idx,status,isReprint=false,stickerNum=1,only=null){
   _ppRows(gtAreaPieces('parts'));
+  try{ const held=_partsHeldNow(idx), set=gtAreaPieces('parts');                   // v10.38: really printed
+       const out=only ? set.filter(x=>x.hold===only) : set.filter(x=>!(x.hold&&held.includes(x.hold)));
+       gtPrintStickers('parts', out.map(pc=>({idx, kind:'kosher', piece:{pid:pc.pid,i:pc.i,name:pc.name}, copies:1}))); }catch(e){}
   const statusLabels={glatt:"גלאט",beit:"בית יוסף",kosher:"כשר",mk:"MK"};
   const statusColors={glatt:"var(--glatt)",beit:"var(--beit)",kosher:"var(--kosher)",mk:"var(--mk)"};
   document.getElementById("ppPartsNum").textContent="#"+(idx+1);
@@ -15143,7 +15411,7 @@ async function _gtoNativeRead(cv){
 }
 // Read a carcass weight from a photo (canvas / image / video frame).
 // → {value:number|null, text, engine:'native'|'tesseract'|'builtin', confidence:0..1}
-async function gtOcrReadWeight(canvasOrImage){
+async function _gtoReadRaw(canvasOrImage){
   const cv=_gtoCanvas(canvasOrImage,1600);
   try{ const n=await _gtoNativeRead(cv); if(n && n.value!=null) return n; }catch(e){ console.warn('native OCR failed',e); }
   let tess=null;
@@ -15156,8 +15424,21 @@ async function gtOcrReadWeight(canvasOrImage){
     if(tess && tess.value!=null && Math.abs(tess.value-b.value)<1e-9) return Object.assign({},b,{engine:'tesseract+builtin',confidence:Math.max(b.confidence,tess.confidence)});
     if(!(tess && tess.value!=null && tess.confidence>b.confidence)) return b;
   }
-  if(tess && tess.value!=null) return tess;
-  return b || {value:null, text:(tess&&tess.text)||'', engine:'builtin', confidence:0};
+  if(tess && tess.value!=null && tess.confidence>=GT_OCR_MIN_CONF) return tess;   // (owner) a 20% guess is no reading
+  return b || {value:null, text:(tess&&tess.text)||'', engine:'builtin', confidence:0, guess:(tess&&tess.value!=null)?tess.value:null};
+}
+// v10.38 (owner: a photo of an oil bottle gave "742 kg"): a reading counts only when it is sure enough AND
+// looks like the weight of half an animal (the plant's range, default 40–600 kg); otherwise "no weight found".
+const GT_OCR_MIN_CONF=0.6;
+function gtWeightRange(){ const w=(KS.getSettings().weightRange)||{}; const mn=Number(w.min), mx=Number(w.max);
+  return { min: isFinite(mn)&&mn>0 ? mn : 40, max: isFinite(mx)&&mx>0 ? mx : 600 }; }
+async function gtOcrReadWeight(canvasOrImage){
+  const r=await _gtoReadRaw(canvasOrImage);
+  if(!r || r.value==null) return r||{value:null,text:'',engine:'builtin',confidence:0};
+  if(r.engine!=='native' && (Number(r.confidence)||0)<GT_OCR_MIN_CONF) return Object.assign({},r,{value:null,guess:r.value,why:'unsure'});
+  const g=gtWeightRange();
+  if(!(r.value>=g.min && r.value<=g.max)) return Object.assign({},r,{value:null,guess:r.value,why:'range'});
+  return r;
 }
 
 // ═══ WEIGHT OCR — screen (stamps station): frame → capture → confirm ═══
@@ -15241,7 +15522,10 @@ function _gtoRenderResult(){
   _gtoEl('wmOcrEngine').textContent=ok?(_gtoEngineName(r.engine)+' · '+Math.round((r.confidence||0)*100)+'%'+(r.unit==='lb'?' · '+r.rawLb+' lb → kg':'')):'';   // v10.37: a pounds label says it was converted
   const msg=_gtoEl('wmOcrMsg');
   msg.style.display=ok?'none':'block';
-  msg.textContent=ok?'':L('לא זוהה משקל בתמונה. ודא שהמספר בתוך המסגרת, מואר וחד — וצלם שוב.','No weight was found in the picture. Make sure the number is inside the frame, lit and sharp — and try again.','No se encontró el peso en la imagen. Asegúrese de que el número esté dentro del marco, iluminado y nítido, e inténtelo de nuevo.');
+  const g=gtWeightRange();
+  msg.textContent=ok?'':(r.why==='range' ? L('המספר שנקרא ('+r.guess+') לא נראה כמו משקל של חצי בהמה ('+g.min+'–'+g.max+' ק״ג). צלם את מדבקת המשקל / הצג — או הקלד ידנית.','The number read ('+r.guess+') does not look like the weight of half an animal ('+g.min+'–'+g.max+' kg). Photograph the weight label / display — or type it.','El número leído ('+r.guess+') no parece el peso de medio animal ('+g.min+'–'+g.max+' kg). Fotografíe la etiqueta / pantalla de peso — o escríbalo.')
+     : r.why==='unsure' ? L('הקריאה לא בטוחה ('+Math.round((r.confidence||0)*100)+'%). צלם שוב מקרוב, מואר וחד — או הקלד ידנית.','The reading is not sure ('+Math.round((r.confidence||0)*100)+'%). Take it again closer, lit and sharp — or type it.','La lectura no es segura ('+Math.round((r.confidence||0)*100)+'%). Repita más cerca, con luz y nítida — o escríbalo.')
+     : L('לא זוהה משקל בתמונה. ודא שהמספר בתוך המסגרת, מואר וחד — וצלם שוב.','No weight was found in the picture. Make sure the number is inside the frame, lit and sharp — and try again.','No se encontró el peso en la imagen. Asegúrese de que el número esté dentro del marco, iluminado y nítido, e inténtelo de nuevo.'));
   _gtoEl('wmOcrOk').style.display=ok?'':'none';
   _gtoEl('wmOcrHint').textContent=ok?L('בדוק שהמספר זהה למדבקה / לצג ואשר','Check that the number matches the label / display, then confirm','Compruebe que el número coincide con la etiqueta / pantalla y confirme'):'';
   _gtoShow('result');
@@ -15437,6 +15721,7 @@ function stampsShowError(title,desc){
 }
 
 function stampsShowPrint(idx,status,isReprint){
+  try{ gtPrintStickers('stamps', gtAreaPieces('stamps').map(pc=>({idx, kind:'kosher', piece:pc.pid?{pid:pc.pid,i:pc.i,name:pc.name}:null, copies:1}))); }catch(e){}   // v10.38: really printed
   const sc={glatt:"var(--glatt)",beit:"var(--beit)",kosher:"var(--kosher)",mk:"var(--mk)",rabChalak:"#16A085"};
   document.getElementById("ppStampsNum").textContent="#"+(idx+1);
   { const r=document.getElementById('ppStampsRows'); if(r) r.innerHTML=_gtPiecesRowsHtml(gtAreaPieces('stamps')); }   // v10.38: the plant's stamps set
@@ -15854,12 +16139,21 @@ setInterval(_gtScreenTitleUpdate, 1000);
 // "Welcome, <worker>" (in the screen's language) when a worker is logged in, and is hidden when not.
 const _GT_SCR_ROLES={scSlaughter:['slaughter'],scEsophagus:['esophagus','eso'],scLegs:['legs'],scInner:['inspector','inner'],scOuter:['inspector','outer'],
   scParts:['parts'],scStamps:['stamps','stamped']};
+// v10.38 (owner): always "the Rabbi" — "ברוך הבא, הרב משה" / "Welcome, Rabbi Moshe"; a name that already
+// carries the title does not get it twice (and in English / Spanish the Hebrew title becomes Rabbi / Rabino)
+function gtRabbiName(n){
+  let name=String(n||'').trim(); if(!name) return '';
+  const m=name.match(/^(הרב|הר"ר|הר״ר|רבי|Rabbi|Rabino|Rav|R\.|R')\s+/i); if(m) name=name.slice(m[0].length).trim();
+  return L('הרב ','Rabbi ','Rabino ')+name;
+}
 function _gtWelcomeUpdate(){
   const a=document.querySelector('.screen.active'); if(!a) return;
   const box=a.querySelector('.topbar .tb-user'); if(!box) return;
   let roles=_GT_SCR_ROLES[a.id]; if(a.id==='scSup'){ try{ roles=[supRole]; }catch(e){} }
-  if(!roles) return;
-  let name=null; try{ for(const r of roles){ name=activeUserName(r,null); if(name) break; } }catch(e){}
+  let name=null;
+  if(a.id==='scManager'){ try{ const u=KS.getSettings().currentUser||{}; name=u.name||null; }catch(e){} }
+  else { if(!roles) return; try{ for(const r of roles){ name=activeUserName(r,null); if(name) break; } }catch(e){} }
+  if(name) name=gtRabbiName(name);
   // (owner) no name → just "Welcome", in the screen's language
   const t=name ? L('ברוך הבא, ','Welcome, ','Bienvenido, ')+name : L('ברוך הבא','Welcome','Bienvenido');
   if(box.style.display==='none') box.style.display='';

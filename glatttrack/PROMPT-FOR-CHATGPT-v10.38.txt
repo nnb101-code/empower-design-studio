@@ -18,13 +18,14 @@
 (4) _products_error החדש: האם יש רשימה שעוברת ושוברת את הניקור או את ספירת המדבקות?
 (5) באפליקציה: בדיקת הכניסה של ראש הצוות (_gtLeaderSessionOk), החיבור מחדש בחזרה לטאב (_gtNetResume), ומסך הניקור (nkScan עם B:).
 (6) מערכת היצרן (חדש): support-center/central-setup.sql — האם תפקיד (כספים / צפייה / תמיכה) יכול לעשות משהו שאסור לו? האם sc_report יכול לפתוח תקלה או לשנות חיוב של מפעל אחר? האם החיוב (_sc_bill) נכון? במפעל (02 סעיף 39): האם _plant_report שולח משהו שאסור לשלוח (פסיקות, קודים)? האם support_issue_add / support_tickets / maker_changes פתוחים למי שלא צריך?
-בדיקת האבטחה: 162/162 (מסד נקי מ-glatttrack-schema-full.sql + הרצה שנייה של 02).
+(7) הדפסה אמיתית (חדש, 02 סעיף 40 + plant-server/print-relay.sh): האם מכשיר יכול לגרום לשרת המפעל לשלוח נתונים לכתובת / יציאה שאינה מדפסת ברשת המפעל (print_job_add, _printer_addr_ok, ADDR_RE בסקריפט)? האם אפשר להזריק פקודת shell דרך printer / data? באפליקציה: gtStickerCanvas / gtZplFromCanvas / gtPrintStickers — האם יכולה לצאת מדבקה כשרה בלי שהבהמה כשרה, או מדבקה של חלק שעל USDA?
+בדיקת האבטחה: 164/164 (מסד נקי מ-glatttrack-schema-full.sql + הרצה שנייה של 02).
 
 Please review this pack according to README-REVIEW.md.
 
 Rules for the review:
 1. Audit the ACTIVE state in active-schema-snapshot.sql (one definition per function). Do not audit older step files or the history inside glatttrack-schema-full.sql as if it were active.
-2. Use SECURITY-MANIFEST.md and security-selftest-result.txt (162/162) to see what is already enforced and tested. Before reporting a vulnerability, check whether a self-test already covers it; if it does, say so and explain why you still think it is exploitable (with the exact function name and line from the snapshot).
+2. Use SECURITY-MANIFEST.md and security-selftest-result.txt (164/164) to see what is already enforced and tested. Before reporting a vulnerability, check whether a self-test already covers it; if it does, say so and explain why you still think it is exploitable (with the exact function name and line from the snapshot).
 3. Separate your findings into:
    A. Real, exploitable problems (with a concrete attack: which role, which call, which parameters, what wrong result).
    B. Defense-in-depth improvements (not exploitable today).

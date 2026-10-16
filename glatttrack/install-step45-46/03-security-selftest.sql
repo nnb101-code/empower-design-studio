@@ -3241,6 +3241,44 @@ begin
     concat_ws(' | ', left(r::text, 160), left(r2::text, 120), r3::text, r4::text));
 end $$;
 $gt78$;
+    v_step := 'v10.38 sticker printing through the plant server';
+    execute $gt79$
+-- ── v10.38 (owner): stickers really printed — a network printer through the plant server ──
+do $$
+declare r jsonb; r2 jsonb; r3 jsonb; r4 jsonb; r5 jsonb; ok boolean; s0 jsonb; z text := 'XlhBXkZPNTAsNTBeRkRURVNUXkZTXlha';
+begin
+  select settings into s0 from settings_pilot where id = 1;
+  update settings_pilot set settings = settings || '{"printers":[{"id":"p1","name":"Zebra","conn":"network","ip":"192.168.1.50","port":9100},{"id":"p2","name":"BT","conn":"bluetooth","bleId":"x"}]}'::jsonb where id = 1;
+  r  := pg_temp.api(pg_temp.dev('PARTS'), format('select print_job_add(%L, %L)', '192.168.1.50:9100', z));
+  r2 := pg_temp.api(pg_temp.dev('PARTS'), format('select print_job_add(%L, %L)', '192.168.1.51:9100', z));          -- not on the list
+  r3 := pg_temp.api(pg_temp.dev('PARTS'), format('select print_job_add(%L, %L)', '192.168.1.50:9100', 'not base64 !'));
+  r4 := pg_temp.api('{}', format('select print_job_add(%L, %L)', '192.168.1.50:9100', z));                          -- no device
+  r5 := pg_temp.api(pg_temp.dev('PARTS'), format('select print_job_status(%s)', (r ->> 'id')::bigint));
+  ok := pg_temp.ok(r) and r2 ->> 'error' = 'unknown_printer' and r3 ->> 'error' = 'bad_value' and not pg_temp.ok(r4)
+        and pg_temp.ok(r5) and r5 ->> 'status' = 'new'
+        and (select printer from print_jobs where id = (r ->> 'id')::bigint) = '192.168.1.50:9100';
+  -- the list is a station setting: a printer outside the plant network / on another port is never sent to
+  update settings_pilot set settings = settings || '{"printers":[{"id":"p3","name":"x","conn":"network","ip":"8.8.8.8","port":9100},{"id":"p4","name":"y","conn":"network","ip":"192.168.1.9","port":22}]}'::jsonb where id = 1;
+  r2 := pg_temp.api(pg_temp.dev('PARTS'), format('select print_job_add(%L, %L)', '8.8.8.8:9100', z));
+  r3 := pg_temp.api(pg_temp.dev('PARTS'), format('select print_job_add(%L, %L)', '192.168.1.9:22', z));
+  r4 := pg_temp.api(pg_temp.dev('NIK'), format('select print_job_status(%s)', (r ->> 'id')::bigint));               -- another device's job
+  ok := ok and r2 ->> 'error' = 'unknown_printer' and r3 ->> 'error' = 'unknown_printer' and r4 ->> 'error' = 'bad_id';
+  perform pg_temp.rec('v10.38 printing: a paired device sends stickers to a network printer of the list; not to a printer off the list, outside the plant network or on another port; bad data / no device refused; a device sees only its own job', ok,
+    concat_ws(' | ', r::text, r2::text, r3::text, left(r4::text, 60), left(r5::text, 80)));
+  -- the search: the team leader asks; the list comes back (only plant-network printers)
+  r  := pg_temp.api('{}', format('select printer_scan_request(%L)', pg_temp.v('mgr')));
+  r2 := pg_temp.api(pg_temp.dev('PARTS'), format('select printer_scan_request(%L)', 'not-a-token'));
+  insert into plant_state (key, value) values ('printersFound', '{"at":"2099-01-01T00:00:00Z","printers":[{"ip":"192.168.1.50","port":9100,"model":"ZD421"},{"ip":"1.2.3.4","port":9100}]}')
+    on conflict (key) do update set value = excluded.value;
+  r3 := pg_temp.api('{}', format('select printers_found(%L)', pg_temp.v('mgr')));
+  r4 := pg_temp.api(pg_temp.dev('PARTS'), 'select printers_found(null)');
+  ok := pg_temp.ok(r) and r2 ->> 'error' = 'unauthorized' and pg_temp.ok(r3) and jsonb_array_length(r3 -> 'printers') = 1
+        and r3 -> 'printers' -> 0 ->> 'model' = 'ZD421' and r4 ->> 'error' = 'unauthorized';
+  perform pg_temp.rec('v10.38 printer search: only the team leader asks and reads; only printers on the plant network are listed', ok,
+    concat_ws(' | ', r::text, r2::text, left(r3::text, 160), r4::text));
+  update settings_pilot set settings = s0 where id = 1;
+end $$;
+$gt79$;
     v_step := 'the ACTIVE security surface against the expected manifest';
     execute $gt70$
 -- ── the ACTIVE security surface against the expected manifest ───────────────
@@ -3343,7 +3381,7 @@ begin
                 'eso_change(integer,text,text,bigint)', 'eso_change(integer,text,text,bigint,uuid)', 'event_append(jsonb)',
                 'lung_drawing_get(integer)', 'lung_drawing_set(integer,bigint,text)', 'manager_add(text,text,text)',
                 'manager_add_owner(text,text,text)', 'manager_deactivate(text,uuid)', 'manager_list(text)', 'manager_login(text)',
-                'manager_logout(text)', 'manager_session_check(text)', 'leader_recovery_code_new(text)', 'leader_recovery_status(text)', 'leader_device_replace(text,text)', 'plant_server_status(text)', 'animal_card(text,date,integer)', 'seal_set(text,text,text)', 'seals_get(text,bigint)', 'hold_set(integer,text,text,text,bigint,uuid)', 'hold_resolve(bigint,text,uuid)', 'nikur_scan(integer,text,integer,bigint,uuid)', 'nikur_board()', 'nikur_hold(integer,bigint,text,uuid)', 'nikur_day_close(text,bigint,text)', 'support_issue_add(text,text)', 'support_tickets(text)', 'maker_changes(text)', 'board_flags(text)', 'change_ack(text,bigint)', 'manufacturer_set_billing(text,boolean,numeric,text,text)',
+                'manager_logout(text)', 'manager_session_check(text)', 'leader_recovery_code_new(text)', 'leader_recovery_status(text)', 'leader_device_replace(text,text)', 'plant_server_status(text)', 'animal_card(text,date,integer)', 'seal_set(text,text,text)', 'seals_get(text,bigint)', 'hold_set(integer,text,text,text,bigint,uuid)', 'hold_resolve(bigint,text,uuid)', 'nikur_scan(integer,text,integer,bigint,uuid)', 'nikur_board()', 'nikur_hold(integer,bigint,text,uuid)', 'nikur_day_close(text,bigint,text)', 'support_issue_add(text,text)', 'support_tickets(text)', 'maker_changes(text)', 'print_job_add(text,text,uuid)', 'print_job_status(bigint)', 'printer_scan_request(text)', 'printers_found(text)', 'board_flags(text)', 'change_ack(text,bigint)', 'manufacturer_set_billing(text,boolean,numeric,text,text)',
                 'outer_open(integer,bigint,boolean,text)', 'outer_open(integer,bigint,boolean,text,uuid)', 'plant_status_snapshot()', 'plant_setup_needed()',
                 'push_settings(jsonb,text,text,text)', 'request_daily_rollover()', 'reset_daily_board(text,text)', 'security_summary(text)',
                 'processing_board(text)', 'carry_push(bigint,jsonb,uuid)', 'carry_claim(bigint,integer,text,uuid)',

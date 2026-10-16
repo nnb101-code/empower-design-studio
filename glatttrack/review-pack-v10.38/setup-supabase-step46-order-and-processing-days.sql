@@ -7468,6 +7468,105 @@ language sql stable security definer set search_path = public, extensions, pg_te
 $$;
 revoke execute on function _plant_report() from public, anon, authenticated;
 
+-- ── 40. sticker printing through the plant server (v10.38, owner) ─────────────
+-- A station tablet sends the stickers (ZPL, base64) for a network printer of the plant's printer list;
+-- plant-server/print-relay.sh sends them to the printer (IP:9100) and marks the job sent / failed.
+-- Only a paired device; only a printer that is in the list, on the plant's own network (10.x / 172.16–31.x /
+-- 192.168.x) and on a label-printer port (9100–9102, 6101) — the server never sends anything anywhere else.
+-- The search: the team leader asks (printer_scan_request), the relay scans the plant network for label
+-- printers and leaves the list in plant_state 'printersFound' (printers_found).
+create table if not exists print_jobs (
+  id bigint generated always as identity primary key,
+  at timestamptz not null default now(),
+  device_id text, printer text not null, data text not null,
+  status text not null default 'new' check (status in ('new', 'sent', 'failed')),
+  sent_at timestamptz, error text);
+create index if not exists print_jobs_new on print_jobs (id) where status = 'new';
+alter table print_jobs enable row level security;
+revoke all on table print_jobs from public, anon, authenticated;
+revoke all on sequence print_jobs_id_seq from public, anon, authenticated;   -- Supabase opens new sequences by default
+
+create or replace function _printer_addr_ok(p text) returns boolean
+language sql immutable set search_path = public, extensions, pg_temp as $$
+  select coalesce(p ~ '^(10\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}|172\.(1[6-9]|2[0-9]|3[01])\.[0-9]{1,3}\.[0-9]{1,3}|192\.168\.[0-9]{1,3}\.[0-9]{1,3}):(9100|9101|9102|6101)$'
+    and (select bool_and(x::int between 0 and 255) from unnest(string_to_array(split_part(p, ':', 1), '.')) x), false);
+$$;
+revoke execute on function _printer_addr_ok(text) from public, anon, authenticated;
+
+create or replace function print_job_add(p_printer text, p_data text, p_command_id uuid default null) returns jsonb
+language plpgsql security definer set search_path = public, extensions, pg_temp as $$
+declare v_dev text; v_res jsonb; v_id bigint;
+begin
+  v_dev := _call_device(null);
+  if v_dev is null then return jsonb_build_object('ok', false, 'error', _no_device_error()); end if;
+  v_res := _cmd_get(p_command_id, v_dev, 'print_job_add');
+  if v_res is not null then return v_res; end if;
+  if not _printer_addr_ok(p_printer)
+     or not exists (select 1 from jsonb_array_elements(case when jsonb_typeof(_gt_settings() -> 'printers') = 'array' then _gt_settings() -> 'printers' else '[]'::jsonb end) x
+                     where x ->> 'conn' = 'network' and (x ->> 'ip') || ':' || coalesce(nullif(x ->> 'port', ''), '9100') = p_printer) then
+    v_res := jsonb_build_object('ok', false, 'error', 'unknown_printer');
+    perform _cmd_put(p_command_id, v_dev, 'print_job_add', v_res); return v_res;
+  end if;
+  if p_data is null or length(p_data) = 0 or length(p_data) > 3000000 or p_data !~ '^[A-Za-z0-9+/=]+$' then
+    v_res := jsonb_build_object('ok', false, 'error', 'bad_value');
+    perform _cmd_put(p_command_id, v_dev, 'print_job_add', v_res); return v_res;
+  end if;
+  if (select count(*) from print_jobs where device_id = v_dev and at > now() - interval '1 minute') >= 120 then
+    return jsonb_build_object('ok', false, 'error', 'too_many');
+  end if;
+  insert into print_jobs (device_id, printer, data) values (v_dev, p_printer, p_data) returning id into v_id;
+  delete from print_jobs where at < now() - interval '2 days';
+  v_res := jsonb_build_object('ok', true, 'id', v_id);
+  perform _cmd_put(p_command_id, v_dev, 'print_job_add', v_res);
+  return v_res;
+end $$;
+revoke execute on function print_job_add(text, text, uuid) from public;
+grant execute on function print_job_add(text, text, uuid) to anon, authenticated;
+
+-- the device sees whether its job reached the printer (sent / failed + why)
+create or replace function print_job_status(p_id bigint) returns jsonb
+language plpgsql stable security definer set search_path = public, extensions, pg_temp as $$
+declare v_dev text; j print_jobs;
+begin
+  v_dev := _call_device(null);
+  if v_dev is null then return jsonb_build_object('ok', false, 'error', _no_device_error()); end if;
+  select * into j from print_jobs where id = p_id and device_id = v_dev;
+  if j.id is null then return jsonb_build_object('ok', false, 'error', 'bad_id'); end if;
+  return jsonb_build_object('ok', true, 'status', j.status, 'error', j.error, 'sentAt', j.sent_at);
+end $$;
+revoke execute on function print_job_status(bigint) from public;
+grant execute on function print_job_status(bigint) to anon, authenticated;
+
+create or replace function printer_scan_request(p_token text) returns jsonb
+language plpgsql security definer set search_path = public, extensions, pg_temp as $$
+begin
+  if not _manager_session_valid(p_token) or coalesce(_session_role(p_token), 'manager') not in ('manager', 'manufacturer') then
+    return jsonb_build_object('ok', false, 'error', 'unauthorized');
+  end if;
+  insert into plant_state (key, value) values ('printerScanRequestedAt', now()::text)
+    on conflict (key) do update set value = excluded.value, updated_at = now();
+  return jsonb_build_object('ok', true);
+end $$;
+revoke execute on function printer_scan_request(text) from public;
+grant execute on function printer_scan_request(text) to anon, authenticated;
+
+create or replace function printers_found(p_token text) returns jsonb
+language plpgsql stable security definer set search_path = public, extensions, pg_temp as $$
+declare f jsonb;
+begin
+  if not _manager_session_valid(p_token) or coalesce(_session_role(p_token), 'manager') not in ('manager', 'manufacturer') then
+    return jsonb_build_object('ok', false, 'error', 'unauthorized');
+  end if;
+  begin f := (select value from plant_state where key = 'printersFound')::jsonb; exception when others then f := null; end;
+  return jsonb_build_object('ok', true,
+    'requestedAt', (select value from plant_state where key = 'printerScanRequestedAt'),
+    'at', f ->> 'at', 'relay', (select value from plant_state where key = 'printRelayAt'),
+    'printers', coalesce((select jsonb_agg(x) from jsonb_array_elements(case when jsonb_typeof(f -> 'printers') = 'array' then f -> 'printers' else '[]'::jsonb end) x
+                           where _printer_addr_ok((x ->> 'ip') || ':' || coalesce(x ->> 'port', '9100'))), '[]'::jsonb));
+end $$;
+revoke execute on function printers_found(text) from public;
+grant execute on function printers_found(text) to anon, authenticated;
+
 -- ── self-check ──────────────────────────────────────────────────────────────
 do $$
 declare problems text[] := '{}';

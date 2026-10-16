@@ -90,6 +90,14 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now gt-sync-watchdog.service gt-backup.timer gt-nightly.timer
 ```
 
+**הדפסת מדבקות (v10.38):** שירות שמעביר את המדבקות מהטאבלטים למדפסות הרשת, ומחפש מדפסות כשראש הצוות מבקש:
+
+```bash
+sudo systemctl enable --now gt-print-relay.service
+```
+
+המדפסות צריכות להיות באותה רשת כמו השרת (Wi-Fi או כבל), ביציאה 9100. אם המדפסות ברשת אחרת של המפעל, כותבים ב-`gt-plant.conf`: `GT_PRINTER_NETS="192.168.10 192.168.11"`.
+
 ### 3.5 UPS (NUT), על כל שרת שה-UPS מחובר אליו ב-USB
 
 1. מגדירים את NUT לפי סוג ה-UPS (`/etc/nut/ups.conf`).
