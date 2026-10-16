@@ -8479,7 +8479,8 @@ async function _gtPrintNet(p,zpl){
   if(!window.sb) throw new Error(L('אין חיבור לשרת המפעל','No connection to the plant server','Sin conexión al servidor'));
   const r=await window.sb.rpc('print_job_add',{p_printer:(p.ip||'')+':'+(p.port||9100), p_data:_gtB64(zpl), p_command_id:_gtUuid()});
   const x=r.data||{}; if(r.error||!x.ok) throw new Error(gtErrText(r.error||x.error||'server_error'));
-  for(const w of [1500,2500,4000,6000]){ await new Promise(z=>setTimeout(z,w));
+  // (review) up to 24 s: the server prints a job only within its first 20 s, so after that the answer is final
+  for(const w of [1500,2500,4000,6000,6000,4000]){ await new Promise(z=>setTimeout(z,w));
     const q=await window.sb.rpc('print_job_status',{p_id:x.id}); const y=q.data||{};
     if(y.status==='sent') return true;
     if(y.status==='failed') throw new Error(L('המדפסת לא ענתה','The printer did not answer','La impresora no respondió')+(y.error?' ('+y.error+')':'')); }

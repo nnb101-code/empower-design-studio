@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict 0LSTzUBRTiOzJ87YaU05jgKVLuXjQfs6elPPbMMqfQfoe1s1XNgikrrf9z9vE4a
+\restrict BbkogzmFtIEe3WGw3y1Cz6S9H3T9a608RyedaEfxrkg8XRe0ytaQKGPdEqS9Jab
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -8823,7 +8823,7 @@ CREATE TABLE public.print_jobs (
     status text DEFAULT 'new'::text NOT NULL,
     sent_at timestamp with time zone,
     error text,
-    CONSTRAINT print_jobs_status_check CHECK ((status = ANY (ARRAY['new'::text, 'sent'::text, 'failed'::text])))
+    CONSTRAINT print_jobs_status_check CHECK ((status = ANY (ARRAY['new'::text, 'sending'::text, 'sent'::text, 'failed'::text])))
 );
 
 
@@ -9632,6 +9632,13 @@ CREATE UNIQUE INDEX events_pilot_chain_pos_key ON public.events_pilot USING btre
 --
 
 CREATE UNIQUE INDEX events_pilot_event_id_uq ON public.events_pilot USING btree (event_id);
+
+
+--
+-- Name: events_pilot_problem_reports; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX events_pilot_problem_reports ON public.events_pilot USING btree (created_at) WHERE (action = 'problem_report'::text);
 
 
 --
@@ -12636,5 +12643,5 @@ GRANT ALL ON TABLE public.system_flags TO service_role;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict 0LSTzUBRTiOzJ87YaU05jgKVLuXjQfs6elPPbMMqfQfoe1s1XNgikrrf9z9vE4a
+\unrestrict BbkogzmFtIEe3WGw3y1Cz6S9H3T9a608RyedaEfxrkg8XRe0ytaQKGPdEqS9Jab
 

@@ -12,6 +12,8 @@ ADDR_RE='^(10\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}|172\.(1[6-9]|2[0-9]|3[01])\.[0
 send_job(){   # $1 = id, $2 = ip:port
   local id="$1" ip="${2%:*}" port="${2##*:}" f rc err=""
   [[ "$2" =~ $ADDR_RE ]] || { gt_psql -c "update print_jobs set status = 'failed', error = 'address not allowed' where id = $id" >/dev/null; return; }
+  # (review) take the job first: after a restart it is never sent twice
+  [ -n "$(gt_psql -c "update print_jobs set status = 'sending' where id = $id and status = 'new' returning id")" ] || return
   f="$(mktemp)"
   gt_psql -c "select data from print_jobs where id = $id" | base64 -d > "$f" 2>/dev/null
   if [ ! -s "$f" ]; then err="empty job"
@@ -49,8 +51,11 @@ while true; do
   if [ "$(gt_self_role)" != "primary" ]; then sleep 5; continue; fi
   now=$(date +%s)
   if [ $((now - last_beat)) -ge 30 ]; then gt_state printRelayAt "$(date -Is)" >/dev/null; last_beat=$now; fi
+  # (review) a sticker the station already reported as not printed is never printed later; a send cut off by a restart is failed
+  gt_psql -c "update print_jobs set status = 'failed', error = 'too old — not printed (the station said so; print again)' where status = 'new' and at < now() - interval '20 seconds';
+              update print_jobs set status = 'failed', error = 'interrupted' where status = 'sending' and at < now() - interval '2 minutes'" >/dev/null
   while read -r id printer; do [ -n "$id" ] && send_job "$id" "$printer"; done \
-    < <(gt_psql -c "select id || ' ' || printer from print_jobs where status = 'new' order by id limit 50")
+    < <(gt_psql -c "select id || ' ' || printer from print_jobs where status = 'new' and at >= now() - interval '20 seconds' order by id limit 50")
   if [ "$(gt_psql -c "select coalesce((select value::timestamptz from plant_state where key = 'printerScanRequestedAt')
                         > coalesce((select (value::jsonb ->> 'at')::timestamptz from plant_state where key = 'printersFound'), '-infinity'), false)")" = "t" ]; then
     scan

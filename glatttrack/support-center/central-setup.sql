@@ -395,6 +395,8 @@ begin
     values (p_code, (x ->> 'day')::date, least(greatest(coalesce((x ->> 'animals')::int, 0), 0), 100000), least(greatest(coalesce((x ->> 'kg')::numeric, 0), 0), 99999999))
     on conflict (code, day) do update set animals = excluded.animals, kg = excluded.kg, updated_at = now();
   end loop;
+  delete from sc_tickets where code = p_code and status = 'closed' and updated_at < now() - interval '1 year';   -- (review)
+  delete from sc_usage where code = p_code and day < current_date - 1100;
   return coalesce((select jsonb_agg(jsonb_build_object('key', t.key, 'status', t.status, 'at', t.updated_at, 'reply', left(t.notes -> -1 ->> 'text', 300)) order by t.at desc)
                      from (select * from sc_tickets where code = p_code and at > now() - interval '30 days' order by at desc limit 100) t), '[]'::jsonb);
 end $$;
@@ -444,7 +446,12 @@ language plpgsql security definer set search_path = public, extensions, pg_temp 
 declare s sc_staff; v_tok text; v_ip text := coalesce(nullif(current_setting('request.headers', true), '')::json ->> 'x-forwarded-for', 'local');
 begin
   delete from sc_login_attempts where at < now() - interval '1 day';
-  if (select count(*) from sc_login_attempts where not ok and at > now() - interval '15 minutes') >= 10 then
+  delete from sc_sessions where expires_at < now() - interval '1 day';   -- (review) old sessions do not pile up
+  -- (review) counted per address: someone typing wrong codes locks only himself out, not the whole team;
+  -- a high limit for everyone together still stops a flood (the codes are long and bcrypt — not guessable anyway)
+  v_ip := left(trim(split_part(v_ip, ',', 1)), 64);
+  if (select count(*) from sc_login_attempts where not ok and ip = v_ip and at > now() - interval '15 minutes') >= 10
+     or (select count(*) from sc_login_attempts where not ok and at > now() - interval '15 minutes') >= 500 then
     return jsonb_build_object('ok', false, 'error', 'rate_limited');
   end if;
   select * into s from sc_staff where active and p_code is not null and crypt(p_code, code_hash) = code_hash limit 1;
@@ -586,7 +593,7 @@ language plpgsql security definer set search_path = public, extensions, pg_temp 
 declare v_m text := coalesce(p_month, to_char(now(), 'YYYY-MM'));
 begin
   if not _sc_can(p_token, 'billing') then return jsonb_build_object('ok', false, 'error', 'unauthorized'); end if;
-  if v_m !~ '^[0-9]{4}-[0-9]{2}$' then return jsonb_build_object('ok', false, 'error', 'bad_value'); end if;
+  if v_m !~ '^[0-9]{4}-(0[1-9]|1[0-2])$' then return jsonb_build_object('ok', false, 'error', 'bad_value'); end if;
   return jsonb_build_object('ok', true, 'month', v_m, 'rows', coalesce((select jsonb_agg(_sc_bill(p.code, v_m) || jsonb_build_object('name', p.name) order by p.code) from sc_plants p), '[]'::jsonb));
 end $$;
 revoke execute on function sc_billing(text, text) from public;
@@ -617,7 +624,7 @@ language plpgsql security definer set search_path = public, extensions, pg_temp 
 declare w text := _sc_staff(p_token);
 begin
   if not _sc_can(p_token, 'billing_write') then return jsonb_build_object('ok', false, 'error', 'unauthorized'); end if;
-  if p_month !~ '^[0-9]{4}-[0-9]{2}$' or p_paid is null then return jsonb_build_object('ok', false, 'error', 'bad_value'); end if;
+  if p_month !~ '^[0-9]{4}-(0[1-9]|1[0-2])$' or p_paid is null then return jsonb_build_object('ok', false, 'error', 'bad_value'); end if;
   if not exists (select 1 from sc_plants where code = p_code) then return jsonb_build_object('ok', false, 'error', 'bad_id'); end if;
   insert into sc_paid (code, month, paid, at, by) values (p_code, p_month, p_paid, now(), w)
   on conflict (code, month) do update set paid = excluded.paid, at = now(), by = w;

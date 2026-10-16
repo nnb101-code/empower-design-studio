@@ -117,6 +117,17 @@ begin
       (select y ->> 'amount' from jsonb_array_elements(r2 -> 'rows') y where y ->> 'code' = '9001')::numeric = 2500 and (select y ->> 'paid' from jsonb_array_elements(r2 -> 'rows') y where y ->> 'code' = '9001')::boolean
       and exists (select 1 from sc_audit where action = 'paid_set' and who = 'Selftest finance'), r2::text);
   end;
+  -- (review) a month that does not exist is refused, not a crash; wrong codes lock only their own address
+  perform pg_temp.rec('a month that does not exist (2026-13) is refused',
+    sc_billing(tok, '2026-13') ->> 'error' = 'bad_value' and sc_paid_set(tok, '9001', '2026-00', true) ->> 'error' = 'bad_value');
+  perform set_config('request.headers', '{"x-forwarded-for":"203.0.113.9"}', true);
+  perform sc_login('selftest-wrong-code') from generate_series(1, 11);
+  r := sc_login('selftest-staff-code-1');
+  perform set_config('request.headers', '{"x-forwarded-for":"198.51.100.7, 10.0.0.1"}', true);
+  r2 := sc_login('selftest-staff-code-1');
+  perform set_config('request.headers', '', true);
+  perform pg_temp.rec('wrong codes lock only the address that typed them; the rest of the team still logs in',
+    r ->> 'error' = 'rate_limited' and (r2 ->> 'ok')::boolean, r::text || ' | ' || r2::text);
   perform set_config('role', 'anon', true);
   begin perform 1 from sc_tickets limit 1; ok := false; exception when insufficient_privilege then ok := true; end;
   begin perform 1 from sc_usage limit 1; ok := ok and false; exception when insufficient_privilege then ok := ok and true; end;

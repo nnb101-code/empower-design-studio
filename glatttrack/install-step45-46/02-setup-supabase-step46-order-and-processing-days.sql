@@ -7358,6 +7358,8 @@ alter table support_issues enable row level security;
 revoke all on table support_issues from public, anon, authenticated;
 revoke all on sequence support_issues_id_seq from public, anon, authenticated;   -- Supabase opens new sequences to the app by default
 
+create index if not exists events_pilot_problem_reports on events_pilot (created_at) where action = 'problem_report';   -- (review)
+
 create or replace function support_issue_add(p_token text, p_message text) returns jsonb
 language plpgsql security definer set search_path = public, extensions, pg_temp as $$
 declare v_id bigint;
@@ -7482,6 +7484,10 @@ create table if not exists print_jobs (
   status text not null default 'new' check (status in ('new', 'sent', 'failed')),
   sent_at timestamptz, error text);
 create index if not exists print_jobs_new on print_jobs (id) where status = 'new';
+-- (review) 'sending': the relay took the job (a restart never sends it twice); a job the relay did not take
+-- within 20 seconds is never printed later — the station already told the worker it was not printed
+alter table print_jobs drop constraint if exists print_jobs_status_check;
+alter table print_jobs add constraint print_jobs_status_check check (status in ('new', 'sending', 'sent', 'failed'));
 alter table print_jobs enable row level security;
 revoke all on table print_jobs from public, anon, authenticated;
 revoke all on sequence print_jobs_id_seq from public, anon, authenticated;   -- Supabase opens new sequences by default
