@@ -18,6 +18,18 @@ This pack is the CURRENT state. Review these files only.
 | `test-mode-on.sql` / `test-mode-off.sql` | The owner's SQL-only test switch. |
 | `plant-server/` | Plant resilience kit (bash, runs as root on the plant servers, NOT in the database): standby server, floating address, UPS, nightly checked backup. Guide: `PLANT-RESILIENCE-HE.md`. |
 
+## Round 24 — fixes after the round-23 report (18.10). Please verify each one really closes the problem.
+- **A1 print first, then mark:** `gtPrintGate(key, jobs, commit)` — the station marks stickers done (legs / head / parts / stamps, also reprints and a part printed after a USDA release) only after the printer took them (network: the plant server says `sent`; Bluetooth: the write succeeded; the device's print screen: the worker confirms). A failure → red message, nothing marked; a second tap while printing is refused. A screen with no printer set works as before (with a red note) — so tests without printers still run.
+- **A2:** `printers` removed from the station keys of `push_settings` (team leader / manufacturer only). The printer's "took it / did not print" status is kept on the tablet (localStorage).
+- **A5:** `nikur_hold` refuses a future day (`stale_board`) and a day closed at the nikur (`day_closed`).
+- **A6:** `_gtNetResume` no longer pretends the server answered: a "connecting…" overlay (taps wait) until the first real answer; after 8 s without one the usual 15-s rule decides.
+- **B1:** `_print_data_ok` — `print_job_add` accepts only labels as the app draws them (`^XA^PW^LL^LH0,0^FO0,0^GFA…^FS^PQ^XZ`); any other ZPL (printer settings, network, memory) is refused.
+- **B2:** the ✓ says "took it", not "printed".
+- **B3 (support center):** a value of a wrong type no longer fails the whole report (a bad date → the arrival time; a bad number line → skipped; attention / tablets / working of a wrong type → ignored).
+- **Found while checking:** a USDA / "?" on ONE part (tongue / a cheek / a half) blocked ALL the animal's pieces at the nikur. Now `_nikur_refusal(a, x, ep, piece)` blocks only that part; a condemned tongue no longer stops the kosher cheeks and is not counted as expected.
+- **Not changed (checked, not a problem):** A3 — both active reset paths reopen the nikur holds right after `_do_board_reset` (self-test gt77); the older definitions in the file are not active. A4 — `animal_pieces` is recorded when the pieces are actually printed, so a part closed / opened mid-day is counted right.
+- Self-test 167/167 (3 new), also as an upgrade from the version installed at the plant with Supabase-like default privileges. Support center 24/24. `PLANT-TEST-CHECKLIST-HE.md` — the acceptance list for the plant test (real printers, full shift).
+
 ## Round 23 — our own deep review of the server files (16.10), fixed
 - **Print relay:** a job is taken first (`status = 'sending'`) — a restart never sends it twice; a job not taken within 20 s is failed, never printed later (the station already told the worker it was not printed; the app waits up to 24 s for the final answer).
 - **Index** `events_pilot_problem_reports` (the issues list and the plant report read only the problem reports).

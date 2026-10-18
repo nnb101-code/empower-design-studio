@@ -23,6 +23,9 @@ A separate Supabase project of the manufacturer (not a plant's database). Every 
 ## Fixed in our own review (16.10)
 A month that does not exist (2026-13) crashed `_sc_bill` → refused. The login lock was global (anyone could lock the whole team out) → per address. Old sessions, closed tickets (> 1 year), daily totals (> 3 years) are cleaned.
 
+## Fixed after the review (18.10)
+B3 (round 23): a report with a value of a wrong type failed whole — now a bad date → the arrival time (`_sc_ts`), a bad number line → skipped, attention / tablets / working of a wrong type → ignored (`_sc_level`). Self-test 24/24.
+
 ## Please check especially
 1. Can a role do more than `_sc_can` allows (finance seeing plants, viewer writing, support touching billing / staff)? Any RPC without a role check?
 2. Can a plant (with its own code + secret) write into another plant (tickets, usage, commands, status)? Can it make the center store something huge / slow (report size, issues, usage)?

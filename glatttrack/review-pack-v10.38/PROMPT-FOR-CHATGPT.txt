@@ -1,5 +1,5 @@
 מצורפת חבילת הבדיקה העדכנית של GlattTrack (אפליקציה v10.38, שרת שלב 46).
-זה סבב עשרים ושלושה. קודם תקרא ב-README-REVIEW.md את החלקים "Round 23" ו-"real sticker printing" ו-"manufacturer center", ואחריהם שאר חלקי v10.38 ומטה.
+זה סבב עשרים וארבעה. קודם תקרא ב-README-REVIEW.md את החלק "Round 24" (התיקונים אחרי הדוח של סבב 23 — בדוק שכל תיקון באמת סוגר את הבעיה), ואחריו "Round 23", "real sticker printing" ו-"manufacturer center", ואחריהם שאר חלקי v10.38 ומטה.
 מרכז השירות של היצרן (מסד נפרד) נמצא בתיקייה support-center: central-setup.sql (הקוד), central-selftest.sql ו-central-selftest-result.txt (24/24), index.html (הדף). הסקריפטים של שרת המפעל: plant-server (print-relay.sh, report-to-center.sh).
 
 הכללים של בעל המערכת (המצב הנוכחי):

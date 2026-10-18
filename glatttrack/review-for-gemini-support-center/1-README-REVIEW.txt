@@ -5,7 +5,7 @@ A separate Supabase project of the manufacturer (not a plant's database). Every 
 
 ## Files
 - `central-setup.sql` — the whole central database (tables, RLS, RPCs). Re-runnable; the LAST definition of a function is the active one.
-- `central-selftest.sql` + `central-selftest-result.txt` — the self-test (23/23), one DO block, everything undone.
+- `central-selftest.sql` + `central-selftest-result.txt` — the self-test (24/24), one DO block, everything undone.
 - `index.html` — the staff page (vanilla JS, calls the RPCs with the public anon / publishable key).
 - `notify.sh` — sends the alerts (e-mail / SMS / WhatsApp), runs on the manufacturer's machine.
 - `report-to-center.sh`, `update-app.sh`, `gt-lib.sh` — on each PLANT server (as root, timer every 5 min): sends `_plant_report()`, runs the center's commands, installs a released app version (sha256 checked, then 02 + the plant's security self-test).
@@ -22,6 +22,9 @@ A separate Supabase project of the manufacturer (not a plant's database). Every 
 
 ## Fixed in our own review (16.10)
 A month that does not exist (2026-13) crashed `_sc_bill` → refused. The login lock was global (anyone could lock the whole team out) → per address. Old sessions, closed tickets (> 1 year), daily totals (> 3 years) are cleaned.
+
+## Fixed after the review (18.10)
+B3 (round 23): a report with a value of a wrong type failed whole — now a bad date → the arrival time (`_sc_ts`), a bad number line → skipped, attention / tablets / working of a wrong type → ignored (`_sc_level`). Self-test 24/24.
 
 ## Please check especially
 1. Can a role do more than `_sc_can` allows (finance seeing plants, viewer writing, support touching billing / staff)? Any RPC without a role check?
