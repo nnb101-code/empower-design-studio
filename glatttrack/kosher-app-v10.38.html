@@ -8666,6 +8666,8 @@ function _gtScAddRender(){
     <div style="display:flex;flex-direction:column;gap:7px;">
     <button onclick="gtScannerSearchWifi()" style="${_gtPrBtnCss}background:rgba(42,127,255,.15);border:1px solid var(--blue);color:var(--blue);">🔍 ${L('חפש סורק Wi-Fi (רשת)','Search for a Wi-Fi scanner (network)','Buscar escáner Wi-Fi (red)')}</button>
     <div id="gtScWifiRes"></div>
+    <button onclick="gtPhoneScannerInvite()" style="${_gtPrBtnCss}background:rgba(40,199,111,.12);border:1px solid #28C76F;color:#28C76F;">📱 ${L('טלפון כסורק','A phone as a scanner','Un teléfono como escáner')}</button>
+    <div id="gtPhInvite"></div>
     <button onclick="gtScannerSearchLocal()" style="${_gtPrBtnCss}background:rgba(122,174,255,.12);border:1px solid #7AAEFF;color:#7AAEFF;">🔍 ${L('סורק USB / Bluetooth בטאבלט הזה — סרקו מדבקה','A USB / Bluetooth scanner on this tablet — scan a sticker','Escáner USB / Bluetooth en esta tableta — escanee')}</button>
     <details style="margin-top:2px;"><summary style="cursor:pointer;font-size:13px;font-weight:700;color:var(--text);padding:6px 0;">✍️ ${L('הוספה ידנית','Add by hand','Agregar a mano')}</summary><div id="gtScManualHost" style="margin-top:6px;"></div></details>
     <details><summary style="cursor:pointer;font-size:12px;color:var(--muted);padding:4px 0;">ℹ️ ${L('איך מחברים סורק','How to connect a scanner','Cómo conectar un escáner')}</summary>
@@ -16303,6 +16305,7 @@ function pairRender(){
     <div style="font-size:22px;font-weight:700;color:var(--text);font-family:'Frank Ruhl Libre',serif;margin-bottom:6px;">${L('מכשיר לא משויך','Device not paired','Dispositivo no emparejado')}</div>
     <div style="font-size:12px;color:var(--muted);margin-bottom:16px;">${escapeHtml(_kioskDeviceName())}</div>
     <div style="${box}">${main}</div>
+    <button onclick="gtPhoneScanStart('')" style="margin-top:10px;width:100%;padding:12px;border-radius:10px;background:rgba(40,199,111,.12);border:1px solid #28C76F;color:#28C76F;font-size:14px;font-weight:700;cursor:pointer;">📱 ${L('להשתמש בטלפון הזה כסורק','Use this phone as a scanner','Usar este teléfono como escáner')}</button>
     <button onclick="mgrEnter()" style="margin-top:18px;width:100%;padding:13px;border-radius:10px;background:transparent;border:1px solid var(--gold);color:var(--gold);font-size:14px;font-weight:700;cursor:pointer;">${L('כניסת ראש צוות / בעלים','Team leader / owner login','Acceso jefe de equipo / propietario')}</button>`;
 }
 
@@ -18800,7 +18803,7 @@ function _gtMaybeWizard(){
 function _gtDot(state){ const c=state==='ok'?'#28C76F':state==='bad'?'#E03030':state==='warn'?'#F0A030':'#6B7D99';
   return '<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:'+c+';'+(state==='ok'?'box-shadow:0 0 7px '+c+';':'')+'margin-inline-end:6px;vertical-align:middle;"></span>'; }
 function _gtPrivIp(ip){ return /^(10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3})$/.test(String(ip||'')) && String(ip).split('.').every(x=>Number(x)<=255); }
-function _gtScConnLabel(d){ return d.conn==='network'||d.conn==='wifi' ? L('Wi-Fi / רשת','Wi-Fi / network','Wi-Fi / red')+(d.ip?' · '+d.ip:'') : (d.conn==='usb'?'USB':'Bluetooth'); }
+function _gtScConnLabel(d){ if(d.conn==='phone') return L('📱 טלפון','📱 Phone','📱 Teléfono'); return d.conn==='network'||d.conn==='wifi' ? L('Wi-Fi / רשת','Wi-Fi / network','Wi-Fi / red')+(d.ip?' · '+d.ip:'') : (d.conn==='usb'?'USB':'Bluetooth'); }
 function _gtAgo(t){ const s=Math.max(0,Math.round((Date.now()-t)/1000));
   return s<60 ? L('לפני '+s+' שנ׳',s+' s ago','hace '+s+' s') : s<3600 ? L('לפני '+Math.round(s/60)+' דק׳',Math.round(s/60)+' min ago','hace '+Math.round(s/60)+' min') : L('מ-','since ','desde ')+_gtHM(t); }
 function _gtHM(t){ const d=new Date(t); return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); }
@@ -18837,7 +18840,7 @@ function _gtScMark(){ try{ localStorage.setItem('gt_scan_last', String(Date.now(
 function _gtKeySlot(k){ return k==='head'?['legs',1] : k==='nikur2'?['nikur',1] : [k,0]; }
 function gtScannerLive(d, here){
   let t=0;
-  if(d.conn==='network'){
+  if(d.conn==='network'||d.conn==='phone'){
     t = here ? (window._gtScFeedAt[d.ip]||0) : 0;
     const H=window._gtScHeard; if(H && H.lastSeen && H.lastSeen[d.ip]) t=Math.max(t, Date.parse(H.lastSeen[d.ip])||0);
   } else if(here) t=_gtScLocalAt();
@@ -18959,7 +18962,7 @@ async function _gtScFeedTick(){
   if(_gtScFeed.busy || !window.sb || window._gtNetLocked || document.hidden) return;
   const k=_gtStationKey(); if(!k){ _gtScFeed.ip=null; return; }
   const sd=(KS.getSettings().screenDevices||{})[k]||{}, sc=(KS.getSettings().scanners||[]).find(x=>x.id===sd.scanner);
-  if(!sc || sc.conn!=='network' || !sc.ip){ _gtScFeed.ip=null; return; }
+  if(!sc || !(sc.conn==='network'||sc.conn==='phone') || !sc.ip){ _gtScFeed.ip=null; return; }
   if(_gtScFeed.ip!==sc.ip){ _gtScFeed.ip=sc.ip; _gtScFeed.last=null; }
   _gtScFeed.busy=true;
   try{ const r=await window.sb.rpc('scanner_scans_since',{p_ip:sc.ip, p_after:_gtScFeed.last}); const x=r.data||{};
@@ -18981,6 +18984,172 @@ function _gtLiveRefresh(){
 }
 setInterval(_gtLiveRefresh, 30000); setTimeout(_gtLiveRefresh, 4000);
 (function(){ const og=window.goTo; window.goTo=function(id){ const r=og.apply(this,arguments); setTimeout(_gtLiveRefresh, 300); return r; }; })();
+</script>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════════
+   v10.38 (owner): A PHONE AS A SCANNER.
+   The team leader shows a one-time QR (or an 8-digit code, 10 minutes). The phone opens it and becomes a
+   scanner screen ONLY: a live camera reads barcodes / QR, each code goes to the plant server (phone_scan) and
+   the station the phone is given to receives it within a second — like any scanner. The phone sees nothing else.
+   ═══════════════════════════════════════════════════════════════════ */
+const _GT_PH_KEY='gt_phone_scan_token';
+function _gtPhTok(){ try{ return localStorage.getItem(_GT_PH_KEY)||''; }catch(e){ return ''; } }
+// ── the team leader: invitation (QR + code), wait until the phone joins ──
+let _gtPhInv=null;
+async function gtPhoneScannerInvite(){
+  const box=document.getElementById('gtPhInvite'); if(!box) return;
+  const tok=KS.getManagerToken&&KS.getManagerToken(); if(!window.sb||!tok){ box.textContent=L('אין חיבור לשרת המפעל.','No connection to the plant server.','Sin conexión.'); return; }
+  let x; try{ const r=await window.sb.rpc('phone_scanner_invite',{p_token:tok}); x=r.data||{}; if(r.error||!x.ok) throw new Error(gtErrText(r.error||x.error)); }
+  catch(e){ box.innerHTML='<div style="color:var(--red-light);font-size:12px;">'+escapeHtml(e.message||String(e))+'</div>'; return; }
+  const web=/^https?:$/.test(location.protocol), url=location.origin+location.pathname+'#phonescan='+x.code, my=_gtPhInv={id:x.id, until:Date.parse(x.until)};
+  const sh=String(x.short||'');
+  box.innerHTML='<div style="border:1px solid #28C76F;border-radius:10px;padding:10px;text-align:center;background:rgba(40,199,111,.06);">'
+    +(web?'<canvas id="gtPhQr" width="200" height="200" style="background:#fff;border-radius:8px;padding:8px;"></canvas>'
+         +'<div style="font-size:12px;color:var(--muted);margin:6px 0;">'+escapeHtml(L('סורקים את הקוד הזה במצלמה של הטלפון (הטלפון מחובר ל-Wi-Fi של המפעל)','Scan this code with the phone\'s camera (the phone on the plant Wi-Fi)','Escanee este código con la cámara del teléfono'))+'</div>':'')
+    +'<div style="font-size:12px;color:var(--muted);">'+escapeHtml(web?L('או בטלפון: פותחים את האפליקציה ← "להשתמש בטלפון הזה כסורק" ← מקלידים:','Or on the phone: open the app → "Use this phone as a scanner" → type:','O en el teléfono: abra la app → "Usar como escáner" → escriba:')
+                                       :L('בטלפון: פותחים את האפליקציה ← "להשתמש בטלפון הזה כסורק" ← מקלידים:','On the phone: open the app → "Use this phone as a scanner" → type:','En el teléfono: abra la app → "Usar como escáner" → escriba:'))+'</div>'
+    +'<div dir="ltr" style="font-size:30px;font-weight:900;letter-spacing:4px;color:var(--gold);font-family:monospace;margin:4px 0;">'+escapeHtml(sh.slice(0,4)+' '+sh.slice(4))+'</div>'
+    +'<div id="gtPhWait" style="font-size:13px;margin-top:6px;"><span class="gt-spin"></span>'+escapeHtml(L('ממתין שהטלפון יתחבר… (10 דקות)','Waiting for the phone… (10 minutes)','Esperando el teléfono… (10 minutos)'))+'</div></div>';
+  if(web){ try{ QRGen.draw(document.getElementById('gtPhQr'), url, 184); }catch(e){} }
+  while(_gtPhInv===my && Date.now()<my.until){
+    await new Promise(z=>setTimeout(z,2000));
+    const sc=(KS.getSettings().scanners||[]).find(d=>d.id==='ph'+my.id);
+    if(sc){ const w=document.getElementById('gtPhWait');
+      if(w) w.innerHTML='<b style="color:var(--green);">✅ '+escapeHtml(L('הטלפון מחובר: ','The phone is connected: ','Teléfono conectado: ')+sc.name)+'</b><div style="font-size:12px;color:var(--muted);">'
+        +escapeHtml(L('עכשיו משייכים אותו למסך — ב"שיוך לכל מסך".','Now give it to a screen — in "Assign to each screen".','Ahora asígnelo a una pantalla.'))+'</div>';
+      try{ mgrRenderDevices(); }catch(e){} return; }
+    try{ if(KS.syncNow) KS.syncNow(); }catch(e){}
+  }
+  const w=document.getElementById('gtPhWait'); if(w && _gtPhInv===my) w.textContent=L('הקוד פג. לוחצים שוב "טלפון כסורק".','The code expired. Tap "A phone as a scanner" again.','El código caducó.');
+}
+// removing a phone from the list stops its key
+(function(){ const o=window.mgrRemoveDevice; if(typeof o!=='function') return;
+  window.mgrRemoveDevice=mgrRemoveDevice=function(kind,id){
+    if(kind==='scanner' && /^ph\d+$/.test(String(id)) && window.sb && KS.getManagerToken()){
+      try{ window.sb.rpc('phone_scanner_remove',{p_token:KS.getManagerToken(), p_id:Number(String(id).slice(2))}).then(()=>{},()=>{}); }catch(e){} }   // (sent only when awaited)
+    return o.apply(this,arguments); }; })();
+
+// ── the phone ──
+window._gtPhoneMode=false;
+(function(){   // a phone scanner is never stopped by the station rules (no device key, no pairing, no "no server" lock)
+  const ol=window._gtNetLockShow; if(typeof ol==='function') window._gtNetLockShow=_gtNetLockShow=function(on,why){ return ol.call(this, window._gtPhoneMode?false:on, why); };
+  const op=window.pairEnsureCode; if(typeof op==='function') window.pairEnsureCode=pairEnsureCode=function(){ if(window._gtPhoneMode) return; return op.apply(this,arguments); };
+})();
+const _gtPh={stream:null, timer:null, det:null, last:'', lastAt:0, busy:false, screens:[], today:0, name:''};
+function _gtPhEl(){ let el=document.getElementById('gtPhone');
+  if(!el){ el=document.createElement('div'); el.id='gtPhone'; el.setAttribute('data-no-i18n','');
+    el.style.cssText='position:fixed;inset:0;z-index:2147483600;background:#05070c;color:#E8ECF4;overflow-y:auto;font-family:Arial,sans-serif;direction:'+(lang==='he'?'rtl':'ltr')+';';
+    document.body.appendChild(el); }
+  return el; }
+function gtPhoneScanStart(invite){
+  window._gtPhoneMode=true; _gtNetLockShow(false);
+  const el=_gtPhEl();
+  if(_gtPhTok()){ _gtPhScanner(); return; }
+  el.innerHTML='<div style="max-width:420px;margin:0 auto;padding:40px 18px;text-align:center;">'
+    +'<div style="font-size:44px;">📱</div><div style="font-size:22px;font-weight:900;color:#D4A843;margin:8px 0;">'+escapeHtml(L('הטלפון הזה כסורק','This phone as a scanner','Este teléfono como escáner'))+'</div>'
+    +'<div style="font-size:13px;color:#8A93A6;line-height:1.6;margin-bottom:14px;">'+escapeHtml(L('ראש הצוות פותח: הגדרות ← סורקים ← "➕ הוספת סורק" ← "📱 טלפון כסורק". שם מופיע קוד.','The team leader opens: Settings → Scanners → "➕ Add a scanner" → "📱 A phone as a scanner". A code appears there.','El jefe abre: Ajustes → Escáneres → "Agregar" → "Teléfono". Aparece un código.'))+'</div>'
+    +(invite?'':'<input id="gtPhCode" inputmode="numeric" maxlength="9" placeholder="•••• ••••" style="width:100%;box-sizing:border-box;padding:14px;font-size:26px;letter-spacing:5px;text-align:center;direction:ltr;border-radius:12px;border:1px solid #2A3142;background:#11151F;color:#fff;margin-bottom:10px;">')
+    +'<input id="gtPhName" maxlength="40" placeholder="'+escapeHtml(L('שם הטלפון (למשל: טלפון של משה)','Phone name (e.g. Moshe\'s phone)','Nombre del teléfono'))+'" style="width:100%;box-sizing:border-box;padding:12px;font-size:16px;border-radius:12px;border:1px solid #2A3142;background:#11151F;color:#fff;margin-bottom:12px;">'
+    +'<button id="gtPhJoin" style="width:100%;padding:15px;border-radius:12px;border:none;background:#28C76F;color:#05070c;font-size:17px;font-weight:900;">'+escapeHtml(L('חבר את הטלפון','Connect the phone','Conectar el teléfono'))+'</button>'
+    +'<div id="gtPhErr" style="color:#FF6B6B;font-size:14px;min-height:20px;margin-top:10px;"></div>'
+    +'<button onclick="gtPhoneScanExit()" style="margin-top:16px;background:none;border:1px solid #2A3142;color:#8A93A6;border-radius:10px;padding:9px 16px;">'+escapeHtml(L('ביטול','Cancel','Cancelar'))+'</button></div>';
+  document.getElementById('gtPhJoin').onclick=async()=>{
+    const code=invite || String((document.getElementById('gtPhCode')||{}).value||'').replace(/\D/g,'');
+    const name=String(document.getElementById('gtPhName').value||'').trim()||L('טלפון','Phone','Teléfono');
+    const err=document.getElementById('gtPhErr'); err.style.color='#8A93A6'; err.textContent=L('מתחבר…','Connecting…','Conectando…');
+    for(let i=0;i<50 && !window.sb;i++) await new Promise(z=>setTimeout(z,200));
+    if(!window.sb){ err.style.color='#FF6B6B'; err.textContent=L('אין חיבור לשרת המפעל.','No connection to the plant server.','Sin conexión.'); return; }
+    try{ const r=await window.sb.rpc('phone_scanner_join',{p_invite:code, p_name:name}); const x=r.data||{};
+      if(r.error||!x.ok){ err.style.color='#FF6B6B'; err.textContent=x.error==='rate_limited'?L('יותר מדי ניסיונות — חכו כמה דקות.','Too many tries — wait a few minutes.','Demasiados intentos.'):L('הקוד לא נכון או שפג (10 דקות). בקשו מראש הצוות קוד חדש.','The code is wrong or expired (10 minutes). Ask the team leader for a new one.','Código incorrecto o caducado.'); return; }
+      localStorage.setItem(_GT_PH_KEY, x.token); try{ history.replaceState(null,'',location.pathname); }catch(e){}
+      _gtPhScanner();
+    }catch(e){ err.style.color='#FF6B6B'; err.textContent=gtErrText(e); }
+  };
+}
+function gtPhoneScanExit(){
+  _gtPhStop(); window._gtPhoneMode=false; const el=document.getElementById('gtPhone'); if(el) el.remove();
+  try{ history.replaceState(null,'',location.pathname); }catch(e){}
+}
+function gtPhoneScanForget(){
+  if(!confirm(L('לנתק את הטלפון מהסורקים של המפעל?','Disconnect this phone from the plant\'s scanners?','¿Desconectar este teléfono?'))) return;
+  try{ localStorage.removeItem(_GT_PH_KEY); }catch(e){} gtPhoneScanExit();
+}
+function _gtPhStop(){ clearInterval(_gtPh.timer); _gtPh.timer=null; try{ _gtPh.stream && _gtPh.stream.getTracks().forEach(t=>t.stop()); }catch(e){} _gtPh.stream=null; }
+function _gtPhScreensTxt(){
+  if(!_gtPh.screens.length) return L('לא משויך למסך — ראש הצוות משייך ב"שיוך לכל מסך"','Not given to a screen — the team leader does it in "Assign to each screen"','Sin pantalla asignada');
+  const names=Object.fromEntries((typeof SCREEN_LIST!=='undefined'?SCREEN_LIST:[]).concat([['head','ראש'],['nikur2','ניקור חלקים קטנים']]));
+  return _gtPh.screens.map(k=>_gtScreenName(names[k]||k)).join(' · ');
+}
+async function _gtPhStatus(){
+  try{ const r=await window.sb.rpc('phone_scanner_status',{p_token:_gtPhTok()}); const x=r.data||{};
+    if(x.error==='unauthorized'){ _gtPhGone(); return; }
+    if(x.ok){ _gtPh.screens=x.screens||[]; _gtPh.today=x.today||0; _gtPh.name=x.name||''; _gtPhHead(); } }catch(e){}
+}
+function _gtPhGone(){
+  try{ localStorage.removeItem(_GT_PH_KEY); }catch(e){} _gtPhStop();
+  _gtPhEl().innerHTML='<div style="padding:50px 20px;text-align:center;font-size:18px;">📵 '+escapeHtml(L('הטלפון הוסר מהסורקים של המפעל. כדי לחבר שוב — קוד חדש מראש הצוות.','This phone was removed from the plant\'s scanners. To connect again — a new code from the team leader.','El teléfono fue quitado.'))
+    +'<br><br><button onclick="gtPhoneScanExit()" style="padding:10px 18px;border-radius:10px;border:1px solid #2A3142;background:none;color:#8A93A6;">'+escapeHtml(L('סגור','Close','Cerrar'))+'</button></div>';
+}
+function _gtPhHead(){ const h=document.getElementById('gtPhHead'); if(h) h.textContent='📷 '+L('סורק','Scanner','Escáner')+' · '+_gtPhScreensTxt();
+  const t=document.getElementById('gtPhToday'); if(t) t.textContent=L('היום: ','Today: ','Hoy: ')+_gtPh.today+L(' סריקות',' scans',' escaneos'); }
+function _gtPhBeep(ok){ try{ const c=new (window.AudioContext||window.webkitAudioContext)(), o=c.createOscillator(), g=c.createGain(); o.frequency.value=ok?1400:300; g.gain.value=.25; o.connect(g); g.connect(c.destination); o.start(); setTimeout(()=>{ o.stop(); c.close(); }, ok?120:400); }catch(e){}
+  try{ navigator.vibrate && navigator.vibrate(ok?80:[100,60,100]); }catch(e){} }
+async function _gtPhSend(code){
+  code=String(code||'').trim(); if(!code) return;
+  const now=Date.now(); if(code===_gtPh.last && now-_gtPh.lastAt<3000) return;   // the same code held in front of the camera
+  _gtPh.last=code; _gtPh.lastAt=now;
+  const box=document.getElementById('gtPhRes'); const n=_gtCodeNum(code), shown=!isNaN(n)?'#'+n:code.slice(0,24);
+  try{ const r=await window.sb.rpc('phone_scan',{p_token:_gtPhTok(), p_code:code}); const x=r.data||{};
+    if(x.error==='unauthorized'){ _gtPhGone(); return; }
+    if(r.error||!x.ok) throw new Error(gtErrText(r.error||x.error));
+    _gtPh.today++; _gtPhHead(); _gtPhBeep(true);
+    if(box){ box.style.borderColor='#28C76F'; box.style.background='#0f3d24';
+      box.innerHTML='<b style="font-size:30px;color:#28C76F;display:block;">✓ '+escapeHtml(shown)+'</b><span style="font-size:13px;">'+escapeHtml((_gtPh.screens.length?L('נשלח ל: ','Sent to: ','Enviado a: ')+_gtPhScreensTxt():L('נשלח (הטלפון עוד לא משויך למסך)','Sent (the phone is not given to a screen yet)','Enviado (sin pantalla)'))+' · '+_gtHM(Date.now()))+'</span>'; }
+  }catch(e){ _gtPhBeep(false);
+    if(box){ box.style.borderColor='#E03030'; box.style.background='#3a0d0d'; box.innerHTML='<b style="font-size:20px;color:#FF6B6B;">✕ '+escapeHtml(shown)+'</b><div style="font-size:13px;">'+escapeHtml(L('לא נשלח: ','Not sent: ','No enviado: ')+(e.message||e))+'</div>'; } }
+}
+async function _gtPhScanner(){
+  _gtPhStop();
+  const el=_gtPhEl();
+  el.innerHTML='<div style="max-width:480px;margin:0 auto;padding:10px;">'
+    +'<div id="gtPhHead" style="color:#D4A843;font-weight:900;text-align:center;font-size:18px;margin:6px 0 10px;">📷 …</div>'
+    +'<div style="position:relative;border-radius:14px;overflow:hidden;background:#1c2028;min-height:200px;">'
+    +'<video id="gtPhVid" playsinline muted autoplay style="width:100%;display:block;max-height:52vh;object-fit:cover;"></video>'
+    +'<div style="position:absolute;left:12%;right:12%;top:28%;height:40%;border:3px solid #28C76F;border-radius:10px;box-shadow:0 0 0 999px rgba(0,0,0,.3);pointer-events:none;"></div></div>'
+    +'<div id="gtPhMsg" style="font-size:13px;color:#F0A030;text-align:center;margin:6px 0;"></div>'
+    +'<div id="gtPhRes" style="margin-top:8px;border:2px solid #2A3142;border-radius:12px;padding:12px;text-align:center;min-height:56px;font-size:14px;color:#8A93A6;">'+escapeHtml(L('מכוונים את המצלמה לברקוד / QR','Point the camera at a barcode / QR','Apunte la cámara al código'))+'</div>'
+    +'<div style="display:flex;gap:8px;margin-top:10px;">'
+    +'<button id="gtPhTorch" style="flex:1;padding:12px;border-radius:10px;border:1px solid #2A3142;background:#11151F;color:#E8ECF4;font-size:14px;">🔦 '+escapeHtml(L('פנס','Light','Linterna'))+'</button>'
+    +'<button onclick="document.getElementById(\'gtPhFile\').click()" style="flex:1;padding:12px;border-radius:10px;border:1px solid #2A3142;background:#11151F;color:#E8ECF4;font-size:14px;">📷 '+escapeHtml(L('צלם','Photo','Foto'))+'</button>'
+    +'<button onclick="_gtPhType()" style="flex:1;padding:12px;border-radius:10px;border:1px solid #2A3142;background:#11151F;color:#E8ECF4;font-size:14px;">⌨ '+escapeHtml(L('הקלד','Type','Escribir'))+'</button></div>'
+    +'<input type="file" id="gtPhFile" accept="image/*" capture="environment" style="display:none">'
+    +'<div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;font-size:12px;color:#8A93A6;"><span id="gtPhToday"></span>'
+    +'<button onclick="gtPhoneScanForget()" style="background:none;border:none;color:#8A93A6;font-size:12px;text-decoration:underline;">'+escapeHtml(L('נתק טלפון','Disconnect phone','Desconectar'))+'</button></div></div>';
+  for(let i=0;i<50 && !window.sb;i++) await new Promise(z=>setTimeout(z,200));
+  _gtPhStatus(); clearInterval(_gtPh.st); _gtPh.st=setInterval(()=>{ if(window._gtPhoneMode && !document.hidden) _gtPhStatus(); }, 20000);
+  const msg=document.getElementById('gtPhMsg'), vid=document.getElementById('gtPhVid');
+  try{ _gtPh.det=('BarcodeDetector' in window) ? new window.BarcodeDetector() : null; }catch(e){ _gtPh.det=null; }
+  document.getElementById('gtPhFile').onchange=async(ev)=>{ const f=ev.target.files&&ev.target.files[0]; ev.target.value=''; if(!f) return;
+    if(!_gtPh.det){ msg.textContent=L('הדפדפן הזה לא קורא ברקוד מתמונה — "הקלד".','This browser cannot read a code from a photo — "Type".','Use "Escribir".'); return; }
+    try{ const bmp=await createImageBitmap(f); const r=await _gtPh.det.detect(bmp); if(r&&r.length){ _gtPh.last=''; _gtPhSend(r[0].rawValue); } else { _gtPhBeep(false); msg.textContent=L('לא נמצא ברקוד בתמונה — צלמו שוב מקרוב.','No code in the photo — take it again closer.','Sin código en la foto.'); } }catch(e){ msg.textContent=String(e.message||e); } };
+  if(!_gtPh.det){ msg.textContent=L('הדפדפן הזה לא קורא ברקוד במצלמה (מומלץ Chrome באנדרואיד). אפשר "הקלד".','This browser cannot read codes with the camera (Chrome on Android is best). "Type" works.','Este navegador no lee códigos (mejor Chrome en Android).'); vid.style.display='none'; return; }
+  if(!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia) || !window.isSecureContext){
+    msg.textContent=L('מצלמה חיה צריכה כתובת https — כאן: "📷 צלם" לכל סריקה.','A live camera needs an https address — here: "📷 Photo" for each scan.','La cámara en vivo necesita https — use "Foto".'); vid.style.display='none'; return; }
+  try{ _gtPh.stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}}); vid.srcObject=_gtPh.stream; await vid.play(); }
+  catch(e){ msg.textContent=L('אין גישה למצלמה — מאשרים מצלמה בדפדפן, או "📷 צלם".','No camera access — allow the camera in the browser, or "📷 Photo".','Sin cámara — permítala o use "Foto".'); vid.style.display='none'; return; }
+  const tr=_gtPh.stream.getVideoTracks()[0]; let torch=false;
+  document.getElementById('gtPhTorch').onclick=async()=>{ try{ torch=!torch; await tr.applyConstraints({advanced:[{torch}]}); }catch(e){ msg.textContent=L('לטלפון הזה אין פנס שאפשר להדליק מכאן.','This phone\'s light cannot be switched on from here.','Sin linterna.'); } };
+  _gtPh.timer=setInterval(async()=>{ if(_gtPh.busy || document.hidden || !vid.videoWidth) return; _gtPh.busy=true;
+    try{ const r=await _gtPh.det.detect(vid); if(r&&r.length) await _gtPhSend(r[0].rawValue); }catch(e){} finally{ _gtPh.busy=false; } }, 250);
+}
+function _gtPhType(){ const v=prompt(L('הקלידו את הקוד / המספר:','Type the code / number:','Escriba el código / número:'),''); if(v&&v.trim()){ _gtPh.last=''; _gtPhSend(v.trim()); } }
+// at start: a phone scanner link (#phonescan=…) or a phone that already joined → the scanner screen only
+(function(){
+  const m=String(location.hash||'').match(/^#phonescan=([0-9a-f]{36})$/);
+  if(m) setTimeout(()=>gtPhoneScanStart(m[1]), 50);
+  else if(_gtPhTok() && !(typeof _kioskLoadLocal==='function' && _kioskLoadLocal())) setTimeout(()=>gtPhoneScanStart(''), 50);
+})();
 </script>
 
 </body>
