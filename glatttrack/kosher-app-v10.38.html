@@ -8867,12 +8867,11 @@ function _gtScAddRender(){
     <div style="display:flex;flex-direction:column;gap:7px;">
     <button onclick="gtScannerSearchWifi()" style="${_gtPrBtnCss}background:rgba(42,127,255,.15);border:1px solid var(--blue);color:var(--blue);">🔍 ${L('חפש סורק Wi-Fi (רשת)','Search for a Wi-Fi scanner (network)','Buscar escáner Wi-Fi (red)')}</button>
     <div id="gtScWifiRes"></div>
-    <button onclick="gtPhoneScannerInvite()" style="${_gtPrBtnCss}background:rgba(40,199,111,.12);border:1px solid #28C76F;color:#28C76F;">📱 ${L('טלפון כסורק','A phone as a scanner','Un teléfono como escáner')}</button>
-    <div id="gtPhInvite"></div>
+    <div style="font-size:12px;color:#28C76F;background:rgba(40,199,111,.08);border:1px solid rgba(40,199,111,.4);border-radius:10px;padding:9px 11px;line-height:1.5;">📷 ${L('המצלמה של הטלפון / הטאבלט של כל מסך היא כבר סורק — כפתור 📷 בפינת המסך. לא צריך להוסיף כלום.','The camera of each screen\'s phone / tablet is already a scanner — the 📷 button in the screen\'s corner. Nothing to add.','La cámara del teléfono / tableta de cada pantalla ya es un escáner — el botón 📷 en la esquina. No hay que agregar nada.')}</div>
     <button onclick="gtScannerSearchLocal()" style="${_gtPrBtnCss}background:rgba(122,174,255,.12);border:1px solid #7AAEFF;color:#7AAEFF;">🔍 ${L('סורק USB / Bluetooth בטאבלט הזה — סרקו מדבקה','A USB / Bluetooth scanner on this tablet — scan a sticker','Escáner USB / Bluetooth en esta tableta — escanee')}</button>
     <details style="margin-top:2px;"><summary style="cursor:pointer;font-size:13px;font-weight:700;color:var(--text);padding:6px 0;">✍️ ${L('הוספה ידנית','Add by hand','Agregar a mano')}</summary><div id="gtScManualHost" style="margin-top:6px;"></div></details>
     <details><summary style="cursor:pointer;font-size:12px;color:var(--muted);padding:4px 0;">ℹ️ ${L('איך מחברים סורק','How to connect a scanner','Cómo conectar un escáner')}</summary>
-      <div style="font-size:11px;color:var(--muted);line-height:1.5;margin-top:4px;">${L('סורק Wi-Fi: מגדירים בסורק "TCP client" לכתובת שרת המפעל, יציאה 9300 — ואז "חפש". סורק USB / Bluetooth עובד כמו מקלדת; "פעיל" = סרק בטאבלט בדקות האחרונות. גם מצלמת הטאבלט סורקת.','Wi-Fi scanner: set it to "TCP client" → the plant server, port 9300 — then "Search". A USB / Bluetooth scanner types like a keyboard; "active" = it scanned on the tablet in the last minutes. The tablet camera scans too.','Escáner Wi-Fi: "TCP client" → servidor, puerto 9300; luego "Buscar". USB / Bluetooth funciona como teclado.')}</div></details>
+      <div style="font-size:11px;color:var(--muted);line-height:1.5;margin-top:4px;">${L('סורק Wi-Fi: מגדירים בסורק "TCP client" לכתובת שרת המפעל, יציאה 9300 — ואז "חפש". סורק USB / Bluetooth עובד כמו מקלדת; "פעיל" = סרק בטאבלט בדקות האחרונות. בלי סורק — כפתור 📷 בכל מסך סורק במצלמה של המכשיר.','Wi-Fi scanner: set it to "TCP client" → the plant server, port 9300 — then "Search". A USB / Bluetooth scanner types like a keyboard; "active" = it scanned on the tablet in the last minutes. The tablet camera scans too.','Escáner Wi-Fi: "TCP client" → servidor, puerto 9300; luego "Buscar". USB / Bluetooth funciona como teclado.')}</div></details>
     </div></div></details>`;
   const host=document.getElementById('gtScManualHost');
   if(host){ if(form) host.appendChild(form); if(hint) host.appendChild(hint); }
@@ -16548,7 +16547,6 @@ function pairRender(){
     <div style="font-size:22px;font-weight:700;color:var(--text);font-family:'Frank Ruhl Libre',serif;margin-bottom:6px;">${L('מכשיר לא משויך','Device not paired','Dispositivo no emparejado')}</div>
     <div style="font-size:12px;color:var(--muted);margin-bottom:16px;">${escapeHtml(_kioskDeviceName())}</div>
     <div style="${box}">${main}</div>
-    <button onclick="gtPhoneScanStart('')" style="margin-top:10px;width:100%;padding:12px;border-radius:10px;background:rgba(40,199,111,.12);border:1px solid #28C76F;color:#28C76F;font-size:14px;font-weight:700;cursor:pointer;">📱 ${L('להשתמש בטלפון הזה כסורק','Use this phone as a scanner','Usar este teléfono como escáner')}</button>
     <button onclick="mgrEnter()" style="margin-top:18px;width:100%;padding:13px;border-radius:10px;background:transparent;border:1px solid var(--gold);color:var(--gold);font-size:14px;font-weight:700;cursor:pointer;">${L('כניסת ראש צוות / בעלים','Team leader / owner login','Acceso jefe de equipo / propietario')}</button>`;
 }
 
@@ -19387,12 +19385,9 @@ async function _gtPhScanner(){
     try{ const r=await _gtPh.det.detect(vid); if(r&&r.length) await _gtPhSend(r[0].rawValue); }catch(e){} finally{ _gtPh.busy=false; } }, 250);
 }
 function _gtPhType(){ const v=prompt(L('הקלידו את הקוד / המספר:','Type the code / number:','Escriba el código / número:'),''); if(v&&v.trim()){ _gtPh.last=''; _gtPhSend(v.trim()); } }
-// at start: a phone scanner link (#phonescan=…) or a phone that already joined → the scanner screen only
-(function(){
-  const m=String(location.hash||'').match(/^#phonescan=([0-9a-f]{36})$/);
-  if(m) setTimeout(()=>gtPhoneScanStart(m[1]), 50);
-  else if(_gtPhTok() && !(typeof _kioskLoadLocal==='function' && _kioskLoadLocal())) setTimeout(()=>gtPhoneScanStart(''), 50);
-})();
+// (owner, 19.10) the separate "phone as a scanner" was removed — every screen scans with its own camera (📷).
+// A phone that had joined as a scanner forgets it and opens as a normal device.
+(function(){ try{ if(_gtPhTok()) localStorage.removeItem(_GT_PH_KEY); }catch(e){} })();
 </script>
 
 <script>
