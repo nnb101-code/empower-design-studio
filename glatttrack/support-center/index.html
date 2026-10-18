@@ -129,15 +129,15 @@ async function showPlant(code){
   if(ng && (ng.problems||[]).length) h += '<div class="n r" style="padding:4px 0">' + ng.problems.map(E).join('<br>') + '</div>';
   h += row('יומן האירועים', ch.ok ? '✓' : '✕ שבור', ch.ok ? 'g' : 'r');
   h += row('כניסות שגויות (24 ש׳)', sec.failedLogins24h|0, (sec.failedLogins24h|0) >= 10 ? 'r' : 'g');
-  h += row('גרסת המפעל', r.appVersion || '?'); h += row('עובד עכשיו', r.working ? 'כן' : 'לא');
+  h += row('גרסת המפעל', (r.appVersion || '?') + (d.holdUpdates ? ' · ⏸ עדכון אוטומטי עצור' : ''), d.holdUpdates ? 'a' : ''); h += row('עובד עכשיו', r.working ? 'כן' : 'לא');
   h += `</div><div class="card"><div class="t" style="color:var(--gold);margin-bottom:6px">טאבלטים</div>`;
   (r.tablets || []).forEach(t => { h += row((ROLE[t.role] || t.role) + (t.index ? ' ' + (t.index+1) : ''), (t.online ? '● מחובר' : '○ מנותק') + ' · ' + (t.version || '?'), t.online ? 'g' : 'r'); });
   h += `<div class="w" style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
       <button class="btn" onclick="cmd('restart_standby')">🔄 הפעל מחדש את שרת הגיבוי</button><button class="ghost" onclick="cmd('reload_tablets')">♻ רענן טאבלטים</button>
-      <button class="ghost" onclick="cmd('update_now')">⬆ עדכן מפעל זה</button><button class="ghost" onclick="cmd('run_nightly_check')">🩺 הרץ בדיקת לילה</button></div>
+      <button class="ghost" onclick="cmd('update_now')">⬆ עדכן מפעל זה</button><button class="ghost" onclick="hold(${d.holdUpdates ? 'false' : 'true'})">${d.holdUpdates ? '▶ החזר לעדכון האוטומטי' : '⏸ עצור עדכון אוטומטי למפעל זה'}</button><button class="ghost" onclick="cmd('run_nightly_check')">🩺 הרץ בדיקת לילה</button></div>
       <div class="n w" style="margin-top:6px">הפקודה מתבצעת בדיווח הבא של המפעל (עד 5 דקות). רענון / עדכון של טאבלט לא מפריע לעבודה — טאבלט בשימוש שואל את העובד.</div></div></div>`;
   h += `<div class="cols"><div class="card"><div class="t" style="color:var(--gold);margin-bottom:6px">התראות</div>${(d.alerts||[]).map(a => row(new Date(a.created_at).toLocaleString('he-IL') + ' · ' + tx(a.text), a.resolved_at ? '✓ נסגר' : 'פתוח', a.resolved_at ? 'g' : (a.level === 'bad' ? 'r' : 'a'))).join('') || '<div class="n">אין</div>'}</div>
-     <div class="card"><div class="t" style="color:var(--gold);margin-bottom:6px">פקודות</div>${(d.commands||[]).map(c => row(new Date(c.created_at).toLocaleString('he-IL') + ' · ' + c.cmd, c.done_at ? (c.result || '✓') : (c.delivered_at ? 'נשלח למפעל' : 'ממתין'))).join('') || '<div class="n">אין</div>'}</div></div>`;
+     <div class="card"><div class="t" style="color:var(--gold);margin-bottom:6px">פקודות</div>${(d.commands||[]).map(c => row(new Date(c.created_at).toLocaleString('he-IL') + ' · ' + c.cmd, c.done_at ? (c.result || '✓') : (c.delivered_at ? (Date.now() - new Date(c.delivered_at).getTime() > 30*60000 ? 'נשלח — המפעל לא ענה' : 'נשלח למפעל') : 'ממתין'))).join('') || '<div class="n">אין</div>'}</div></div>`;
   const b = d.bill;
   h += `<div class="cols"><div class="card"><div class="t" style="color:var(--gold);margin-bottom:6px">🛠 תקלות של המפעל (${myT.filter(t => t.status !== 'closed').length} פתוחות)</div>${ticketRows(myT, false)}</div>
      ${b ? `<div class="card"><div class="t" style="color:var(--gold);margin-bottom:6px">💰 החודש (${E(b.month)})</div>
@@ -238,6 +238,7 @@ async function sadd(){
   if(!d.ok){ document.getElementById('aerr').textContent = 'לא נוסף — ' + er(d.error); return; } showStaff();
 }
 async function sset(id, role, active){ const d = await rpc('sc_staff_set', { p_token: TOK, p_id: id, p_role: role, p_active: active }); if(!d.ok) alert('נכשל: ' + er(d.error)); showStaff(); }
+async function hold(on){ const d = await rpc('sc_plant_hold', { p_token: TOK, p_code: CUR, p_hold: on }); if(!d.ok) alert('נכשל: ' + er(d.error)); showPlant(CUR); }
 async function cmd(c){ const d = await rpc('sc_command_add', { p_token: TOK, p_code: CUR, p_cmd: c }); if(!d.ok) alert('נכשל: ' + er(d.error)); showPlant(CUR); }
 async function showSettings(){
   mark('settings');

@@ -1,5 +1,5 @@
 -- GlattTrack support center — self-test. Changes nothing (every change is undone inside it).
--- Expected result (one row): PASSED — 21 of 21 support-center checks (nothing was changed)
+-- Expected result (one row): PASSED — 27 of 27 support-center checks (nothing was changed)
 -- ONE statement (one DO block), no temporary table: the Supabase SQL Editor runs it like psql does
 -- (the same way as the plant's 03). Works on an empty center and on one that already has plants and staff.
 do $$
@@ -134,6 +134,31 @@ begin
   perform set_config('request.headers', '', true);
   perform pg_temp.rec('wrong codes lock only the address that typed them; the rest of the team still logs in',
     r ->> 'error' = 'rate_limited' and (r2 ->> 'ok')::boolean, r::text || ' | ' || r2::text);
+  -- (full review C2) the address is the platform's, not the one the caller wrote first
+  perform set_config('request.headers', '{"x-forwarded-for":"1.1.1.1, 192.0.2.44"}', true);
+  perform sc_login('selftest-wrong-code') from generate_series(1, 11);
+  perform set_config('request.headers', '{"x-forwarded-for":"2.2.2.2, 192.0.2.44"}', true);
+  r := sc_login('selftest-staff-code-1');
+  perform set_config('request.headers', '{"cf-connecting-ip":"192.0.2.45","x-forwarded-for":"192.0.2.44"}', true);
+  r2 := sc_login('selftest-staff-code-1');
+  perform set_config('request.headers', '', true);
+  perform pg_temp.rec('full review C2: a made-up first x-forwarded-for address does not escape the limit; the platform address counts',
+    r ->> 'error' = 'rate_limited' and (r2 ->> 'ok')::boolean, r::text || ' | ' || r2::text);
+  -- (full review C3) a plant that never reported (added 3 days ago) → "no_report"; "on" must be true / false
+  insert into sc_plants (code, name, secret_hash, created_at) values ('9077', 'selftest silent', 'x', now() - interval '3 days');
+  v := _sc_check_silent();
+  r := sc_notify_set(tok, '{"email":{"on":"yes","to":[]}}');
+  perform pg_temp.rec('full review C3: a plant that never reported gets "no_report"; a non-boolean "on" is bad_value',
+    exists (select 1 from sc_alerts where code = '9077' and text = 'no_report' and resolved_at is null) and r ->> 'error' = 'bad_value', r::text);
+  -- (full review C4) a plant held out of the automatic release gets it only with "update this plant now"
+  r := sc_plant_hold(tok, '9001', true);
+  r2 := sc_report('9001', sec, '{"attention":[]}');
+  perform sc_command_add(tok, '9001', 'update_now');
+  x := sc_report('9001', sec, '{"attention":[]}');
+  perform sc_plant_hold(tok, '9001', false);
+  perform pg_temp.rec('full review C4: a held plant gets no automatic release; "update this plant now" brings it',
+    (r ->> 'ok')::boolean and (r2 -> 'release' is null or r2 -> 'release' = 'null'::jsonb) and x -> 'release' ->> 'version' is not null,
+    concat_ws(' | ', r::text, left(r2::text, 120), left(x::text, 160)));
   perform set_config('role', 'anon', true);
   begin perform 1 from sc_tickets limit 1; ok := false; exception when insufficient_privilege then ok := true; end;
   begin perform 1 from sc_usage limit 1; ok := ok and false; exception when insufficient_privilege then ok := ok and true; end;

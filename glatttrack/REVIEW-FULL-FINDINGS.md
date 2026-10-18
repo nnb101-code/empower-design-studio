@@ -7,6 +7,27 @@ index.html, notify.sh), the plant-server scripts.
 Severity: HIGH = wrong kashrut / security result possible · MED = a real malfunction · LOW = edge case /
 display · INFO = cleanup.
 
+## FIXED (18.10) — every finding below
+
+| | what was done | checked |
+|---|---|---|
+| S1–S6 | 02 §41: safe reads (`_ts_or_null`, seals version), the nikur "today" = the plant's day, part number checked, printers / scanners must be a device list, dead code removed, usage by the plant's day | 03: 171 / 171 (+3 new checks) |
+| A1 | the "nothing was printed" note only when there is no printer at all | browser |
+| A2 | stamps without the cuts list: the server allows the stamps set (stampsCount) on the stamps screen | 03 + browser (printed through the fake printer) |
+| A3 | station "Connect": no test print from a station; the scanner opens the scan check | — |
+| A4–A5 | the dead AI button / duplicate id / dead login code / stale comment removed | browser: no errors |
+| A6–A7 | pounds / kilos labels; the parts set size from the plant's list (not 3) | — |
+| A8 | the manufacturer keeps his session on the home screen | — |
+| A9–A10 | station names right (head / small-parts nikur / counter); the small-parts nikur can be paired (choose screens → nikur: two screens) | browser |
+| A11–A12 | the old licensing window only when a licensing server is set; messages in 3 languages; dead code removed | — |
+| C1–C4 | alerts: each recipient once; login limit by the platform's address, no lock-out of the whole team; a plant that never reported → alert; "on" checked; hold one plant out of the automatic update | center test 27 / 27 + notify dry run |
+| P1 | the tools run as the `postgres` system user (Ubuntu peer authentication) | VERIFIED on a stock Ubuntu Postgres 16 |
+| P2 | the app file is kept in the database; the standby writes it to its web folder | tested |
+| P3 | the backup disk must be mounted | tested |
+| P4 | the printer search sends nothing to the devices (GT_PRINTER_ASK_MODEL=1 to ask the model) | — |
+| P5 | 02 + 03 in ONE transaction (a failed test undoes 02); a failed release waits 6 h | tested (forced failure rolled back) |
+| P6 | gt_state with psql variables; the nightly test deletes only its own attempt | tested |
+
 ## Server (02 / active schema) — DONE
 
 - Grants: anon/authenticated reach only the RPC list + SELECT on 7 tables (RLS guarded). Server-only

@@ -6,6 +6,10 @@ GT_CONF="${GT_CONF:-/etc/glatttrack/gt-plant.conf}"
 # shellcheck disable=SC1090
 . "$GT_CONF"
 GT_PGHOST="${GT_PGHOST:-/var/run/postgresql}"
+GT_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# (full review P1) root → the Postgres tools run as the "postgres" system user (Ubuntu / Debian peer authentication)
+GT_PSQL="${GT_PSQL:-$GT_LIB_DIR/gt-psql.sh}"
+GT_ASPG="${GT_ASPG:-$GT_LIB_DIR/gt-as-pg.sh}"
 umask 077
 # the settings file holds passwords: readable by root only
 [ "$(id -u)" = "0" ] && chmod 600 "$GT_CONF" 2>/dev/null || true
@@ -36,5 +40,12 @@ gt_pg_stop(){ eval "${GT_STOP_CMD:-systemctl stop postgresql}"; }
 gt_pg_start(){ eval "${GT_START_CMD:-systemctl start postgresql}"; }
 gt_self_role(){ gt_psql -c "select case when pg_is_in_recovery() then 'standby' else 'primary' end" 2>/dev/null || echo "down"; }
 # write a plant_state key (on the primary only — a standby is read-only)
-gt_state(){ gt_psql -c "insert into plant_state (key, value) values ('$1', \$v\$$2\$v\$) on conflict (key) do update set value = excluded.value, updated_at = now()"; }
-gt_state_del(){ gt_psql -c "delete from plant_state where key = '$1'"; }
+# (full review P6) the key and the value go in as psql variables — any text is safe
+gt_state(){ gt_psql -v k="$1" -v v="$2" <<'SQL'
+insert into plant_state (key, value) values (:'k', :'v') on conflict (key) do update set value = excluded.value, updated_at = now();
+SQL
+}
+gt_state_del(){ gt_psql -v k="$1" <<'SQL'
+delete from plant_state where key = :'k';
+SQL
+}

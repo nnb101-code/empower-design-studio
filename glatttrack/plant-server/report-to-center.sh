@@ -16,7 +16,7 @@ D="$(cd "$(dirname "$0")" && pwd)"
 AUTH=(); case "${GT_CENTER_KEY:-}" in eyJ*) AUTH=(-H "Authorization: Bearer $GT_CENTER_KEY");; esac
 RPC(){ curl -s -m 20 -X POST -H 'Content-Type: application/json' -H "apikey: $GT_CENTER_KEY" ${AUTH[@]+"${AUTH[@]}"} \
             "$GT_CENTER_URL/rest/v1/rpc/$1" --data-binary @-; }
-J(){ "${GT_PSQL:-psql}" -X -q -t -A -h "$GT_PGHOST" -p "$GT_PG_PORT" -U "${GT_PGUSER:-postgres}" -d "$GT_DB" "$@"; }
+J(){ "$GT_PSQL" -X -q -t -A -h "$GT_PGHOST" -p "$GT_PG_PORT" -U "${GT_PGUSER:-postgres}" -d "$GT_DB" "$@"; }
 
 body="$(J -v code="$GT_PLANT_CODE" -v sec="$GT_PLANT_SECRET" <<'SQL'
 select jsonb_build_object('p_code', :'code', 'p_secret', :'sec', 'p_report', _plant_report());
@@ -50,6 +50,9 @@ SQL
   read -r V AURL ASHA SURL SSHA <<<"$rel"
   local cur; cur="$(J -c "select value from plant_state where key = 'appVersion'")"
   [ "$V" = "$cur" ] && [ "$1" != "force" ] && return 0
+  # (full review P5) a release that failed is tried again after 6 hours (or at once with "update this plant now")
+  if [ "$1" != "force" ] && [ "$(J -c "select coalesce((select value from plant_state where key = 'lastUpdateFailedVersion'), '')")" = "$V" ] \
+     && [ "$(J -c "select coalesce((select value::timestamptz from plant_state where key = 'lastUpdateFailedAt') > now() - interval '6 hours', false)")" = "t" ]; then return 0; fi
   if [ "$SURL" != "-" ] && working && [ "$1" != "force" ]; then gt_log "release $V has a server part — waits until nobody works"; return 0; fi
   local T; T="$(mktemp -d)"
   curl -fsS -m 120 -o "$T/app.html" "$AURL" && [ "$(sha256sum "$T/app.html" | cut -d' ' -f1)" = "$ASHA" ] \
@@ -60,7 +63,8 @@ SQL
     bash "$D/update-app.sh" "$T/app.html" "$T/02.sql"; rc=$?
   else bash "$D/update-app.sh" "$T/app.html"; rc=$?; fi
   rm -rf "$T"
-  [ $rc -eq 0 ] && gt_state_del lastUpdateError || gt_state lastUpdateError "update-app.sh exit $rc ($V)"
+  if [ $rc -eq 0 ]; then gt_state_del lastUpdateError; gt_state_del lastUpdateFailedVersion
+  else gt_state lastUpdateError "update-app.sh exit $rc ($V)"; gt_state lastUpdateFailedVersion "$V"; gt_state lastUpdateFailedAt "$(date -Is)"; fi
   return $rc
 }
 

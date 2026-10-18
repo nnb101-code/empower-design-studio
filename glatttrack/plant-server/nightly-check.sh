@@ -13,7 +13,7 @@ checks=(); problems=(); fixed=()
 ok(){ checks+=("$1|ok|${2:-}"); }
 bad(){ checks+=("$1|problem|$2"); problems+=("$1: $2"); gt_log "PROBLEM $1: $2"; }
 fix(){ checks+=("$1|fixed|$2"); fixed+=("$1: $2"); gt_log "FIXED $1: $2"; }
-PSQLV(){ "${GT_PSQL:-psql}" -X -q -t -A -h "$GT_PGHOST" -p "$GT_PG_PORT" -U "${GT_PGUSER:-postgres}" -d "$GT_DB" "$@"; }
+PSQLV(){ "$GT_PSQL" -X -q -t -A -h "$GT_PGHOST" -p "$GT_PG_PORT" -U "${GT_PGUSER:-postgres}" -d "$GT_DB" "$@"; }
 
 # 1. the database answers, the expected schema step
 step="$(PSQLV -c "select value from plant_state where key = 'schemaStep'" 2>/dev/null)"
@@ -39,7 +39,8 @@ if [ -n "${GT_API_URL:-}" ]; then
   curl -s -m 8 -o /dev/null -X POST -H 'Content-Type: application/json' ${GT_API_KEY:+-H "apikey: $GT_API_KEY"} \
        -H "X-GT-Client-IP: $fake" "$GT_API_URL/rest/v1/rpc/manager_login" -d '{"p_code":"gt-nightly-ip-check"}' >/dev/null 2>&1
   seen="$(PSQLV -c "select ip from login_attempts where not ok and at > now() - interval '1 minute' order by at desc limit 1" 2>/dev/null)"
-  PSQLV -c "delete from login_attempts where not ok and at > now() - interval '1 minute' and (ip = '$fake' or ip = '${seen:-x}')" >/dev/null 2>&1
+  # (full review P6) remove only the ONE test attempt (the newest one) — not a real tablet's wrong code of the same minute
+  PSQLV -c "delete from login_attempts where ctid = (select ctid from login_attempts where not ok and at > now() - interval '1 minute' and ip in ('$fake', '${seen:-x}') order by at desc limit 1)" >/dev/null 2>&1
   if [ "$seen" = "$fake" ]; then bad "כתובת הטאבלט" "שרת האינטרנט מעביר כתובת שהטאבלט כתב — להוסיף ב-nginx: proxy_set_header X-GT-Client-IP \$remote_addr;"
   elif [ -z "$seen" ]; then ok "כתובת הטאבלט" "לא נבדק (אין תשובה)"
   else ok "כתובת הטאבלט" "השרת רושם את הכתובת האמיתית"; fi
@@ -51,7 +52,7 @@ if [ -n "${GT_SELFTEST_SQL:-}" ] && [ -f "$GT_SELFTEST_SQL" ]; then
   busy="$(PSQLV -c "select count(*) from animals_pilot where updated_at > now() - interval '10 minutes'" 2>/dev/null || echo 0)"
   if [ "${busy:-0}" -gt 0 ]; then ok "בדיקת אבטחה" "דולגה — יש עבודה עכשיו"
   else
-    out="$("${GT_PSQL:-psql}" -X -h "$GT_PGHOST" -p "$GT_PG_PORT" -U "${GT_PGUSER:-postgres}" -d "$GT_DB" -f "$GT_SELFTEST_SQL" 2>&1)"
+    out="$("$GT_PSQL" -X -h "$GT_PGHOST" -p "$GT_PG_PORT" -U "${GT_PGUSER:-postgres}" -d "$GT_DB" -f - < "$GT_SELFTEST_SQL" 2>&1)"
     line="$(echo "$out" | grep -o 'PASSED — [0-9]* of [0-9]*' | tail -1)"
     if [ -n "$line" ]; then ok "בדיקת אבטחה" "$line"; else bad "בדיקת אבטחה" "נכשלה — לקרוא למתקין: $(echo "$out" | grep -o 'FAILED[^(]*' | head -1 | cut -c1-300)"; fi
   fi

@@ -7698,6 +7698,15 @@ language sql stable security definer set search_path = public, extensions, pg_te
 $$;
 revoke execute on function _maker_session_end() from public, anon, authenticated;
 
+-- P2: the app file the tablets load is kept in the database too, so the standby server (streaming copy) always
+-- has the same file: its watchdog writes it to its own web folder. Only the plant server's tools touch it.
+create table if not exists plant_app_file (
+  id int primary key check (id = 1),
+  version text not null, sha256 text not null check (sha256 ~ '^[0-9a-f]{64}$'), body_b64 text not null,
+  at timestamptz not null default now());
+alter table plant_app_file enable row level security;
+revoke all on plant_app_file from public, anon, authenticated;
+
 -- ── self-check ──────────────────────────────────────────────────────────────
 do $$
 declare problems text[] := '{}';

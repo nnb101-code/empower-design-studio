@@ -32,8 +32,12 @@ scan(){
   done
   local lines=""
   for ip in $found; do
-    # a Zebra / ZPL printer answers ~HI with its model (others stay silent — then only the address)
-    model="$(timeout 3 bash -c 'exec 3<>"/dev/tcp/$0/9100"; printf "~HI\r\n" >&3; timeout 2 head -c 120 <&3' "$ip" 2>/dev/null | tr -cd '[:alnum:] ._,-' | cut -c1-60)"
+    # (full review P4) nothing is sent to the devices found — an ordinary office printer would print it as a page.
+    # Only a plant whose network has label printers only may ask for the model (GT_PRINTER_ASK_MODEL=1: ~HI).
+    model=""
+    if [ "${GT_PRINTER_ASK_MODEL:-0}" = "1" ]; then
+      model="$(timeout 3 bash -c 'exec 3<>"/dev/tcp/$0/9100"; printf "~HI\r\n" >&3; timeout 2 head -c 120 <&3' "$ip" 2>/dev/null | tr -cd '[:alnum:] ._,-' | cut -c1-60)"
+    fi
     lines="$lines$ip|$model"$'\n'
   done
   # (psql substitutes :'l' only in what it reads, not in -c)

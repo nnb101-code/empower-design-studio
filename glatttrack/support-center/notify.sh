@@ -37,13 +37,14 @@ while IFS='|' read -r id code name level text; do
   [ "$level" = "warn" ] && [ "$MIN" != "warn" ] && { Q -c "update sc_alerts set sent = sent || '{\"skipped\":true}' where id = $id" >/dev/null; continue; }
   icon=$([ "$level" = bad ] && echo "🔴" || echo "🟠")
   msg="$icon מפעל #$code $name: ${HE[$text]:-$text}"
-  ok_e=1; ok_s=1; ok_w=1
-  if [ "$EON" = true ]; then for t in "${ETO[@]}"; do send_email "$t" "$msg" || ok_e=0; done; fi
-  if [ "$SON" = true ]; then for t in "${STO[@]}"; do send_twilio "$t" "${SMS_FROM:-}" "$msg" || ok_s=0; done; fi
-  if [ "$WON" = true ]; then for t in "${WTO[@]}"; do send_twilio "whatsapp:$t" "whatsapp:${WHATSAPP_FROM:-}" "$msg" || ok_w=0; done; fi
-  # sent (a channel that failed is tried again next minute)
-  if [ $ok_e = 1 ] && [ $ok_s = 1 ] && [ $ok_w = 1 ]; then
-    Q -c "update sc_alerts set sent = sent || jsonb_build_object('at', now()::text) where id = $id" >/dev/null
-  fi
+  # (full review C1) each recipient once: a channel / address that failed is tried again next minute,
+  # the ones that already got it are not sent it again
+  sent="$(Q -c "select sent::text from sc_alerts where id = $id")"; all=1
+  mark(){ Q -c "update sc_alerts set sent = sent || jsonb_build_object('$1', now()::text) where id = $id" >/dev/null; }
+  got(){ printf '%s' "$sent" | grep -qF "\"$1\""; }
+  if [ "$EON" = true ]; then for t in "${ETO[@]}"; do k="email:$t"; got "$k" && continue; if send_email "$t" "$msg"; then mark "$k"; else all=0; fi; done; fi
+  if [ "$SON" = true ]; then for t in "${STO[@]}"; do k="sms:$t"; got "$k" && continue; if send_twilio "$t" "${SMS_FROM:-}" "$msg"; then mark "$k"; else all=0; fi; done; fi
+  if [ "$WON" = true ]; then for t in "${WTO[@]}"; do k="whatsapp:$t"; got "$k" && continue; if send_twilio "whatsapp:$t" "whatsapp:${WHATSAPP_FROM:-}" "$msg"; then mark "$k"; else all=0; fi; done; fi
+  [ $all = 1 ] && mark at
 done < <(Q -c "select a.id, a.code, p.name, a.level, a.text from sc_alerts a join sc_plants p on p.code = a.code
                where a.resolved_at is null and not (a.sent ? 'at') and not (a.sent ? 'skipped') order by a.id")

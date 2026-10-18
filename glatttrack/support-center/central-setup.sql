@@ -245,6 +245,7 @@ begin
   foreach ch in array array['email', 'sms', 'whatsapp'] loop
     e := coalesce(p_settings -> ch, '{}'::jsonb);
     if jsonb_typeof(e -> 'to') is distinct from 'array' and e ? 'to' then return jsonb_build_object('ok', false, 'error', 'bad_value'); end if;
+    if e ? 'on' and jsonb_typeof(e -> 'on') <> 'boolean' then return jsonb_build_object('ok', false, 'error', 'bad_value', 'channel', ch); end if;   -- (full review C3)
     if exists (select 1 from jsonb_array_elements_text(coalesce(e -> 'to', '[]'::jsonb)) t
                 where length(t) > 120 or (ch = 'email' and t !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$') or (ch <> 'email' and t !~ '^\+[0-9]{8,15}$')) then
       return jsonb_build_object('ok', false, 'error', 'bad_value', 'channel', ch);
@@ -299,7 +300,8 @@ create or replace function _sc_check_silent() returns integer language plpgsql s
 declare n int := 0; p record;
 begin
   for p in select pl.code from sc_plants pl left join sc_status s on s.code = pl.code
-            where s.reported_at < now() - interval '15 minutes'
+            where (s.reported_at < now() - interval '15 minutes'
+                   or (s.code is null and pl.created_at < now() - interval '2 days'))   -- (full review C3) never reported at all
               and not exists (select 1 from sc_alerts a where a.code = pl.code and a.text = 'no_report' and a.resolved_at is null) loop
     insert into sc_alerts (code, level, text) values (p.code, 'bad', 'no_report'); n := n + 1;
   end loop;
@@ -317,6 +319,7 @@ revoke execute on function _sc_check_silent() from public, anon, authenticated;
 --   billing: per plant — by kg, by animal or a fixed monthly sum (+ a monthly minimum); paid / not paid.
 -- ══════════════════════════════════════════════════════════════════════════════
 alter table sc_staff add column if not exists role text not null default 'admin';
+alter table sc_plants add column if not exists hold_updates boolean not null default false;   -- (full review C4) out of the automatic release
 alter table sc_staff drop constraint if exists sc_staff_role_ok;
 alter table sc_staff add constraint sc_staff_role_ok check (role in ('admin', 'support', 'finance', 'viewer'));
 
@@ -444,7 +447,8 @@ begin
   update sc_commands set delivered_at = now() where code = p_code and delivered_at is null;
   select * into r from sc_release where id = 1;
   return jsonb_build_object('ok', true, 'level', lv.level, 'commands', v_cmds, 'tickets', v_tickets,
-    'release', case when r.version is not null then jsonb_build_object('version', r.version, 'appUrl', r.app_url, 'appSha256', r.app_sha256,
+    -- (full review C4) a plant held out of the automatic release gets it only by "update this plant now" (the release is sent with that command)
+    'release', case when r.version is not null and (not p.hold_updates or exists (select 1 from jsonb_array_elements(v_cmds) cm where cm ->> 'cmd' = 'update_now')) then jsonb_build_object('version', r.version, 'appUrl', r.app_url, 'appSha256', r.app_sha256,
                                                                       'sqlUrl', r.sql_url, 'sqlSha256', r.sql_sha256) end);
 end $$;
 revoke execute on function sc_report(text, text, jsonb) from public;
@@ -459,11 +463,16 @@ begin
   delete from sc_sessions where expires_at < now() - interval '1 day';   -- (review) old sessions do not pile up
   -- (review) counted per address: someone typing wrong codes locks only himself out, not the whole team;
   -- a high limit for everyone together still stops a flood (the codes are long and bcrypt — not guessable anyway)
-  v_ip := left(trim(split_part(v_ip, ',', 1)), 64);
-  if (select count(*) from sc_login_attempts where not ok and ip = v_ip and at > now() - interval '15 minutes') >= 10
-     or (select count(*) from sc_login_attempts where not ok and at > now() - interval '15 minutes') >= 500 then
+  -- (full review C2) the address the platform saw: Cloudflare's / the proxy's own header, else the LAST address of
+  -- x-forwarded-for (the one the proxy added) — the first one is whatever the caller wrote
+  v_ip := left(trim(coalesce(nullif(current_setting('request.headers', true), '')::json ->> 'cf-connecting-ip',
+                             nullif(current_setting('request.headers', true), '')::json ->> 'x-real-ip',
+                             (regexp_split_to_array(v_ip, '\s*,\s*'))[cardinality(regexp_split_to_array(v_ip, '\s*,\s*'))])), 64);
+  if (select count(*) from sc_login_attempts where not ok and ip = v_ip and at > now() - interval '15 minutes') >= 10 then
     return jsonb_build_object('ok', false, 'error', 'rate_limited');
   end if;
+  -- a flood from many addresses slows every attempt down, but never locks the whole team out
+  if (select count(*) from sc_login_attempts where not ok and at > now() - interval '15 minutes') >= 500 then perform pg_sleep(2); end if;
   select * into s from sc_staff where active and p_code is not null and crypt(p_code, code_hash) = code_hash limit 1;
   if s.id is null then
     insert into sc_login_attempts (ip, ok) values (v_ip, false); perform pg_sleep(0.5);
@@ -534,6 +543,7 @@ begin
     'alerts', coalesce((select jsonb_agg(to_jsonb(a) - 'sent' order by a.id desc) from (select * from sc_alerts where code = p_code order by id desc limit 30) a), '[]'::jsonb),
     'commands', coalesce((select jsonb_agg(to_jsonb(c) order by c.id desc) from (select * from sc_commands where code = p_code order by id desc limit 10) c), '[]'::jsonb),
     'openTickets', (select count(*) from sc_tickets t where t.code = p_code and t.status <> 'closed'),
+    'holdUpdates', p.hold_updates,
     'bill', case when _sc_can(p_token, 'billing') then _sc_bill(p_code, to_char(now(), 'YYYY-MM')) end);
 end $$;
 revoke execute on function sc_plant(text, text) from public;
@@ -692,6 +702,21 @@ begin
 end $$;
 revoke execute on function sc_staff_set(text, uuid, text, boolean) from public;
 grant execute on function sc_staff_set(text, uuid, text, boolean) to anon, authenticated;
+
+-- (full review C4) hold one plant out of the automatic release (it updates only by "update this plant now")
+create or replace function sc_plant_hold(p_token text, p_code text, p_hold boolean) returns jsonb
+language plpgsql security definer set search_path = public, extensions, pg_temp as $$
+declare w text := _sc_staff(p_token);
+begin
+  if not _sc_can(p_token, 'plants_write') then return jsonb_build_object('ok', false, 'error', 'unauthorized'); end if;
+  if p_hold is null then return jsonb_build_object('ok', false, 'error', 'bad_value'); end if;
+  update sc_plants set hold_updates = p_hold where code = p_code;
+  if not found then return jsonb_build_object('ok', false, 'error', 'bad_id'); end if;
+  insert into sc_audit (who, action, detail) values (w, 'plant_hold', jsonb_build_object('code', p_code, 'hold', p_hold));
+  return jsonb_build_object('ok', true);
+end $$;
+revoke execute on function sc_plant_hold(text, text, boolean) from public;
+grant execute on function sc_plant_hold(text, text, boolean) to anon, authenticated;
 
 -- the first staff member (run once by the manufacturer in the SQL editor):
 --   insert into sc_staff (name, code_hash, role) values ('Admin 1', crypt('<a long code>', gen_salt('bf', 8)), 'admin');
