@@ -1,29 +1,30 @@
-psql:support-center/central-selftest.sql:154: NOTICE:    PASS the app reads no table and calls no internal function
-psql:support-center/central-selftest.sql:154: NOTICE:    PASS staff login: wrong code refused, right code → session  :: {"ok": false, "error": "code_invalid"}
-psql:support-center/central-selftest.sql:154: NOTICE:    PASS overview without a session refused
-psql:support-center/central-selftest.sql:154: NOTICE:    PASS a plant is added once; its secret is given once  :: {"ok": true, "code": "9001", "secret": "7af7cac3be3765e5ed36992c77511d2f1cc7"}
-psql:support-center/central-selftest.sql:154: NOTICE:    PASS report: wrong secret refused; right one → green  :: {"ok": true, "level": "ok", "release": null, "tickets": [], "commands": []}
-psql:support-center/central-selftest.sql:154: NOTICE:    PASS a new problem → red + one alert per problem (not again on the next report)  :: {"ok": true, "level": "bad", "release": null, "tickets": [], "commands": []}
-psql:support-center/central-selftest.sql:154: NOTICE:    PASS a tablet offline while the plant works → orange  :: {"ok": true, "level": "warn", "release": null, "tickets": [], "commands": []}
-psql:support-center/central-selftest.sql:154: NOTICE:    PASS the problem is gone → green, alerts closed
-psql:support-center/central-selftest.sql:154: NOTICE:    PASS a plant silent 15 minutes → red "no_report" + one alert  :: {"ok": true, "plants": [{"code": "1007", "name": "מפעל דמו צפון", "level": "bad", "working": true, "problems": ["no_report"], "appVersion": "v10.38", "openAlerts": 1, "reportedAt": "2026-10-15T22:54:0
-psql:support-center/central-selftest.sql:154: NOTICE:    PASS only known commands
-psql:support-center/central-selftest.sql:154: NOTICE:    PASS a release needs https and a sha256
-psql:support-center/central-selftest.sql:154: NOTICE:    PASS the plant gets the command once and the release  :: {"ok": true, "level": "ok", "release": {"appUrl": "https://example.com/app.html", "sqlUrl": null, "version": "v10.36", "appSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", 
-psql:support-center/central-selftest.sql:154: NOTICE:    PASS command done only with the plant secret
-psql:support-center/central-selftest.sql:154: NOTICE:    PASS notifications: each channel on / off; addresses checked  :: {"ok": true, "settings": {"sms": {"on": false, "to": ["+972501234567"]}, "email": {"on": true, "to": ["support@example.com"]}, "minLevel": "warn", "whatsapp": {"on": true, "to": ["+972501234567"]}}}
-psql:support-center/central-selftest.sql:154: NOTICE:    PASS staff: the admin adds a member with a role; a short code is refused; the last admin stays  :: {"id": "8310cbc0-062d-4424-8e71-ca0ed7965dd0", "ok": true}
-psql:support-center/central-selftest.sql:154: NOTICE:    PASS roles: finance sees billing only; viewer sees all and changes nothing; support no billing / staff
-psql:support-center/central-selftest.sql:154: NOTICE:    PASS reports: problem reports → tickets once; daily totals kept (the last one of a day wins); no issues / usage kept in the status  :: {"ok": true, "level": "ok", "release": {"appUrl": "https://example.com/app.html", "sqlUrl": null, "version": "v10.36", "appSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", 
-psql:support-center/central-selftest.sql:154: NOTICE:    PASS a ticket: support takes it (status, note, who); the viewer cannot; the plant sees the new status  :: {"ok": true}
-psql:support-center/central-selftest.sql:154: NOTICE:    PASS billing: by kg (48,000 kg × 0.02 = 960), by animal with a minimum (160 × 3 = 480 → 1,000); bad values refused  :: {"ok": true, "rows": [{"kg": 0.0, "code": "1007", "mode": "kg", "name": "מפעל דמו צפון", "paid": false, "rate": 0.03, "month": "2026-09", "amount": 0.00, "animals": 0, "currency": "₪", "monthlyMin": 0
-psql:support-center/central-selftest.sql:154: NOTICE:    PASS billing: a fixed monthly sum; marked paid by finance (audited)  :: {"ok": true, "rows": [{"kg": 0.0, "code": "1007", "mode": "kg", "name": "מפעל דמו צפון", "paid": false, "rate": 0.03, "month": "2026-09", "amount": 0.00, "animals": 0, "currency": "₪", "monthlyMin": 0
-psql:support-center/central-selftest.sql:154: NOTICE:    PASS a month that does not exist (2026-13) is refused
-psql:support-center/central-selftest.sql:154: NOTICE:    PASS wrong codes lock only the address that typed them; the rest of the team still logs in  :: {"ok": false, "error": "rate_limited"} | {"ok": true, "name": "selftest staff", "role": "admin", "token": "808b3bade8d4c715921558dcf5b2f9cd51cc8981039fde3a"}
-psql:support-center/central-selftest.sql:154: NOTICE:    PASS the app reads no ticket / usage / billing table and calls no internal role check
-psql:support-center/central-selftest.sql:154: NOTICE:  PASSED — 23 of 23 support-center checks (nothing was changed)
+psql:support-center/central-selftest.sql:160: NOTICE:    PASS the app reads no table and calls no internal function
+psql:support-center/central-selftest.sql:160: NOTICE:    PASS staff login: wrong code refused, right code → session  :: {"ok": false, "error": "code_invalid"}
+psql:support-center/central-selftest.sql:160: NOTICE:    PASS overview without a session refused
+psql:support-center/central-selftest.sql:160: NOTICE:    PASS a plant is added once; its secret is given once  :: {"ok": true, "code": "9001", "secret": "0d2b4d2eda488c71f83714ee2bc2ed20246f"}
+psql:support-center/central-selftest.sql:160: NOTICE:    PASS report: wrong secret refused; right one → green  :: {"ok": true, "level": "ok", "release": null, "tickets": [], "commands": []}
+psql:support-center/central-selftest.sql:160: NOTICE:    PASS a new problem → red + one alert per problem (not again on the next report)  :: {"ok": true, "level": "bad", "release": null, "tickets": [], "commands": []}
+psql:support-center/central-selftest.sql:160: NOTICE:    PASS a tablet offline while the plant works → orange  :: {"ok": true, "level": "warn", "release": null, "tickets": [], "commands": []}
+psql:support-center/central-selftest.sql:160: NOTICE:    PASS the problem is gone → green, alerts closed
+psql:support-center/central-selftest.sql:160: NOTICE:    PASS a plant silent 15 minutes → red "no_report" + one alert  :: {"ok": true, "plants": [{"code": "1007", "name": "מפעל דמו צפון", "level": "bad", "working": true, "problems": ["no_report"], "appVersion": "v10.38", "openAlerts": 1, "reportedAt": "2026-10-15T22:54:0
+psql:support-center/central-selftest.sql:160: NOTICE:    PASS only known commands
+psql:support-center/central-selftest.sql:160: NOTICE:    PASS a release needs https and a sha256
+psql:support-center/central-selftest.sql:160: NOTICE:    PASS the plant gets the command once and the release  :: {"ok": true, "level": "ok", "release": {"appUrl": "https://example.com/app.html", "sqlUrl": null, "version": "v10.36", "appSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", 
+psql:support-center/central-selftest.sql:160: NOTICE:    PASS command done only with the plant secret
+psql:support-center/central-selftest.sql:160: NOTICE:    PASS notifications: each channel on / off; addresses checked  :: {"ok": true, "settings": {"sms": {"on": false, "to": ["+972501234567"]}, "email": {"on": true, "to": ["support@example.com"]}, "minLevel": "warn", "whatsapp": {"on": true, "to": ["+972501234567"]}}}
+psql:support-center/central-selftest.sql:160: NOTICE:    PASS staff: the admin adds a member with a role; a short code is refused; the last admin stays  :: {"id": "3896bc25-7237-4998-a351-9044edb27462", "ok": true}
+psql:support-center/central-selftest.sql:160: NOTICE:    PASS roles: finance sees billing only; viewer sees all and changes nothing; support no billing / staff
+psql:support-center/central-selftest.sql:160: NOTICE:    PASS reports: problem reports → tickets once; daily totals kept (the last one of a day wins); no issues / usage kept in the status  :: {"ok": true, "level": "ok", "release": {"appUrl": "https://example.com/app.html", "sqlUrl": null, "version": "v10.36", "appSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", 
+psql:support-center/central-selftest.sql:160: NOTICE:    PASS a ticket: support takes it (status, note, who); the viewer cannot; the plant sees the new status  :: {"ok": true}
+psql:support-center/central-selftest.sql:160: NOTICE:    PASS billing: by kg (48,000 kg × 0.02 = 960), by animal with a minimum (160 × 3 = 480 → 1,000); bad values refused  :: {"ok": true, "rows": [{"kg": 0.0, "code": "1007", "mode": "kg", "name": "מפעל דמו צפון", "paid": false, "rate": 0.03, "month": "2026-09", "amount": 0.00, "animals": 0, "currency": "₪", "monthlyMin": 0
+psql:support-center/central-selftest.sql:160: NOTICE:    PASS billing: a fixed monthly sum; marked paid by finance (audited)  :: {"ok": true, "rows": [{"kg": 0.0, "code": "1007", "mode": "kg", "name": "מפעל דמו צפון", "paid": false, "rate": 0.03, "month": "2026-09", "amount": 0.00, "animals": 0, "currency": "₪", "monthlyMin": 0
+psql:support-center/central-selftest.sql:160: NOTICE:    PASS a report with wrong types is still taken: a bad date → the time it arrived; a bad number line is skipped; the rest kept  :: {"ok": true, "level": "ok", "release": {"appUrl": "https://example.com/app.html", "sqlUrl": null, "version": "v10.36", "appSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", 
+psql:support-center/central-selftest.sql:160: NOTICE:    PASS a month that does not exist (2026-13) is refused
+psql:support-center/central-selftest.sql:160: NOTICE:    PASS wrong codes lock only the address that typed them; the rest of the team still logs in  :: {"ok": false, "error": "rate_limited"} | {"ok": true, "name": "selftest staff", "role": "admin", "token": "38cd5e4285088da69e502390742f3468348497bfa0fd5184"}
+psql:support-center/central-selftest.sql:160: NOTICE:    PASS the app reads no ticket / usage / billing table and calls no internal role check
+psql:support-center/central-selftest.sql:160: NOTICE:  PASSED — 24 of 24 support-center checks (nothing was changed)
               GlattTrack support-center self-test              
 ---------------------------------------------------------------
- PASSED — 23 of 23 support-center checks (nothing was changed)
+ PASSED — 24 of 24 support-center checks (nothing was changed)
 (1 row)
 
