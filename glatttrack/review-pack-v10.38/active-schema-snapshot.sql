@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict Dq9nq3tKRzWjl1ZxweS0MV7Hkn0SoHUXm1QKL8G8e36hhNQauaXqApgqt9cMcCh
+\restrict LBHRCNYgab392tDgxVu4DWOoVyMtr5Y0dBJaR9ZeBc1urxW7wCfuGUOcdqDVXqm
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -7101,28 +7101,74 @@ end $_$;
 ALTER FUNCTION public.plant_status_snapshot() OWNER TO postgres;
 
 --
--- Name: print_job_add(text, text, uuid); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: print_job_add(text, text, text, integer, jsonb, text, uuid); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
-CREATE FUNCTION public.print_job_add(p_printer text, p_data text, p_command_id uuid DEFAULT NULL::uuid) RETURNS jsonb
+CREATE FUNCTION public.print_job_add(p_printer text, p_data text, p_kind text, p_animal integer DEFAULT NULL::integer, p_parts jsonb DEFAULT '[]'::jsonb, p_token text DEFAULT NULL::text, p_command_id uuid DEFAULT NULL::uuid) RETURNS jsonb
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public', 'extensions', 'pg_temp'
     AS $_$
-declare v_dev text; v_res jsonb; v_id bigint;
+declare v_dev text; v_res jsonb; v_id bigint; v_role text; z text; v_labels int; v_pq int; a animals_pilot; x jsonb; v_e text;
+        v_test boolean := _test_mode_on(); s jsonb := _gt_settings(); v_max int;
 begin
   v_dev := _call_device(null);
+  -- the team leader's test sticker comes from the team leader's session (no station tablet needed)
+  if v_dev is null and p_kind = 'test' and _manager_session_valid(p_token) and coalesce(_session_role(p_token), '') in ('manager', 'manufacturer') then
+    v_dev := 'leader';
+  end if;
   if v_dev is null then return jsonb_build_object('ok', false, 'error', _no_device_error()); end if;
   v_res := _cmd_get(p_command_id, v_dev, 'print_job_add');
   if v_res is not null then return v_res; end if;
   if not _printer_addr_ok(p_printer)
-     or not exists (select 1 from jsonb_array_elements(case when jsonb_typeof(_gt_settings() -> 'printers') = 'array' then _gt_settings() -> 'printers' else '[]'::jsonb end) x
-                     where x ->> 'conn' = 'network' and (x ->> 'ip') || ':' || coalesce(nullif(x ->> 'port', ''), '9100') = p_printer) then
+     or not exists (select 1 from jsonb_array_elements(case when jsonb_typeof(s -> 'printers') = 'array' then s -> 'printers' else '[]'::jsonb end) pr
+                     where pr ->> 'conn' = 'network' and (pr ->> 'ip') || ':' || coalesce(nullif(pr ->> 'port', ''), '9100') = p_printer) then
     v_res := jsonb_build_object('ok', false, 'error', 'unknown_printer');
     perform _cmd_put(p_command_id, v_dev, 'print_job_add', v_res); return v_res;
   end if;
   if p_data is null or length(p_data) = 0 or length(p_data) > 3000000 or p_data !~ '^[A-Za-z0-9+/=]+$'
-     or not _print_data_ok(p_data) then
+     or not _print_data_ok(p_data) or p_kind is null or p_kind not in ('legs', 'head', 'kosher', 'test')
+     or (p_parts is not null and jsonb_typeof(p_parts) <> 'array') then
     v_res := jsonb_build_object('ok', false, 'error', 'bad_value');
+    perform _cmd_put(p_command_id, v_dev, 'print_job_add', v_res); return v_res;
+  end if;
+  z := convert_from(decode(p_data, 'base64'), 'LATIN1');
+  v_labels := (select count(*) from regexp_matches(z, '\^XA', 'g'));
+  v_pq := coalesce((select max(m[1]::int) from regexp_matches(z, '\^PQ([0-9]{1,2})', 'g') m), 1);
+  v_role := (select assigned_role from devices_pilot where id = v_dev and coalesce(device_status, 'active') <> 'retired');
+  if p_kind = 'test' then
+    if not (_manager_session_valid(p_token) and coalesce(_session_role(p_token), '') in ('manager', 'manufacturer')) then v_e := 'unauthorized';
+    elsif v_labels > 2 or v_pq > 1 then v_e := 'bad_value'; end if;
+  else
+    if p_animal is null or p_animal < 0 or p_animal > 999 then v_e := 'bad_id'; end if;
+    if v_e is null then select * into a from animals_pilot where id = p_animal; end if;
+    -- the screen that prints these stickers (test mode: the team leader's one-phone test may print anything)
+    if v_e is null and not v_test and not (case when p_kind = 'kosher' then coalesce(v_role, '') in ('parts', 'stamps')
+                                                else coalesce(v_role, '') = 'legs' end) then v_e := 'wrong_station'; end if;
+    if v_e is null and p_kind in ('legs', 'head') then
+      v_max := least(20, greatest(1, coalesce(nullif(s ->> case when p_kind = 'legs' then 'legStickerCount' else 'headStickerCount' end, '')::int,
+                                               case when p_kind = 'legs' then 2 else 7 end)));
+      if a.id is null or a.slaughter is null then v_e := 'not_slaughtered';
+      elsif v_labels <> 1 or v_pq > v_max then v_e := 'too_many'; end if;
+    end if;
+    if v_e is null and p_kind = 'kosher' then
+      if a.id is null or a.slaughter is null or a.slaughter in ('nevela', 'shot') or a.inner_status = 'treif' or a.outer_status = 'treif'
+         or not _kosher_ready(a) then v_e := 'not_kosher';
+      elsif v_pq > 1 or v_labels > greatest(1, jsonb_array_length(coalesce(p_parts, '[]'::jsonb))) or v_labels > 30 then v_e := 'too_many';
+      else
+        for x in select e from jsonb_array_elements(coalesce(p_parts, '[]'::jsonb)) e loop
+          if jsonb_typeof(x) <> 'object' or coalesce(x ->> 'pid', '') !~ '^[a-z][a-z0-9_]{0,40}$' then v_e := 'bad_value'; exit; end if;
+          v_e := _nikur_refusal(a, _product_def(x ->> 'pid'), _board_epoch(), nullif(x ->> 'i', '')::int);
+          if v_e is not null then exit; end if;
+        end loop;
+        -- no parts named (a plant without the cuts list): any open whole-animal hold still stops it
+        if v_e is null and jsonb_array_length(coalesce(p_parts, '[]'::jsonb)) = 0 then
+          v_e := _nikur_refusal(a, null, _board_epoch(), null);
+        end if;
+      end if;
+    end if;
+  end if;
+  if v_e is not null then
+    v_res := jsonb_build_object('ok', false, 'error', 'refused', 'reason', v_e);
     perform _cmd_put(p_command_id, v_dev, 'print_job_add', v_res); return v_res;
   end if;
   if (select count(*) from print_jobs where device_id = v_dev and at > now() - interval '1 minute') >= 120 then
@@ -7136,7 +7182,7 @@ begin
 end $_$;
 
 
-ALTER FUNCTION public.print_job_add(p_printer text, p_data text, p_command_id uuid) OWNER TO postgres;
+ALTER FUNCTION public.print_job_add(p_printer text, p_data text, p_kind text, p_animal integer, p_parts jsonb, p_token text, p_command_id uuid) OWNER TO postgres;
 
 --
 -- Name: print_job_status(bigint); Type: FUNCTION; Schema: public; Owner: postgres
@@ -12275,12 +12321,12 @@ GRANT ALL ON FUNCTION public.plant_status_snapshot() TO authenticated;
 
 
 --
--- Name: FUNCTION print_job_add(p_printer text, p_data text, p_command_id uuid); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION print_job_add(p_printer text, p_data text, p_kind text, p_animal integer, p_parts jsonb, p_token text, p_command_id uuid); Type: ACL; Schema: public; Owner: postgres
 --
 
-REVOKE ALL ON FUNCTION public.print_job_add(p_printer text, p_data text, p_command_id uuid) FROM PUBLIC;
-GRANT ALL ON FUNCTION public.print_job_add(p_printer text, p_data text, p_command_id uuid) TO anon;
-GRANT ALL ON FUNCTION public.print_job_add(p_printer text, p_data text, p_command_id uuid) TO authenticated;
+REVOKE ALL ON FUNCTION public.print_job_add(p_printer text, p_data text, p_kind text, p_animal integer, p_parts jsonb, p_token text, p_command_id uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.print_job_add(p_printer text, p_data text, p_kind text, p_animal integer, p_parts jsonb, p_token text, p_command_id uuid) TO anon;
+GRANT ALL ON FUNCTION public.print_job_add(p_printer text, p_data text, p_kind text, p_animal integer, p_parts jsonb, p_token text, p_command_id uuid) TO authenticated;
 
 
 --
@@ -12702,5 +12748,5 @@ GRANT ALL ON TABLE public.system_flags TO service_role;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict Dq9nq3tKRzWjl1ZxweS0MV7Hkn0SoHUXm1QKL8G8e36hhNQauaXqApgqt9cMcCh
+\unrestrict LBHRCNYgab392tDgxVu4DWOoVyMtr5Y0dBJaR9ZeBc1urxW7wCfuGUOcdqDVXqm
 

@@ -3245,24 +3245,25 @@ $gt78$;
     execute $gt79$
 -- ── v10.38 (owner): stickers really printed — a network printer through the plant server ──
 do $$
-declare r jsonb; r2 jsonb; r3 jsonb; r4 jsonb; r5 jsonb; ok boolean; s0 jsonb; z text := 'XlhBXlBXMTZeTEwxNl5MSDAsMF5GTzAsMF5HRkEsNCw0LDIsRkYwMEZGMDBeRlNeUFEyXlha'; zbad text := 'XlhBXk5TUywxOTIuMTY4LjEuOTksMjU1LjI1NS4yNTUuMCwxOTIuMTY4LjEuMV5YWn5KUg==';
+declare r jsonb; r2 jsonb; r3 jsonb; r4 jsonb; r5 jsonb; ok boolean; s0 jsonb; z text := 'XlhBXlBXMTZeTEwxNl5MSDAsMF5GTzAsMF5HRkEsNCw0LDIsRkYwMEZGMDBeRlNeUFExXlha'; zbad text := 'XlhBXk5TUywxOTIuMTY4LjEuOTksMjU1LjI1NS4yNTUuMCwxOTIuMTY4LjEuMV5YWn5KUg==';
 begin
   select settings into s0 from settings_pilot where id = 1;
+  perform pg_temp.prep(940, 'outer');
   update settings_pilot set settings = settings || '{"printers":[{"id":"p1","name":"Zebra","conn":"network","ip":"192.168.1.50","port":9100},{"id":"p2","name":"BT","conn":"bluetooth","bleId":"x"}]}'::jsonb where id = 1;
-  r  := pg_temp.api(pg_temp.dev('PARTS'), format('select print_job_add(%L, %L)', '192.168.1.50:9100', z));
-  r2 := pg_temp.api(pg_temp.dev('PARTS'), format('select print_job_add(%L, %L)', '192.168.1.51:9100', z));          -- not on the list
-  r3 := pg_temp.api(pg_temp.dev('PARTS'), format('select print_job_add(%L, %L)', '192.168.1.50:9100', 'not base64 !'));
+  r  := pg_temp.api(pg_temp.dev('PARTS'), format('select print_job_add(%L, %L, ''kosher'', 940)', '192.168.1.50:9100', z));
+  r2 := pg_temp.api(pg_temp.dev('PARTS'), format('select print_job_add(%L, %L, ''kosher'', 940)', '192.168.1.51:9100', z));          -- not on the list
+  r3 := pg_temp.api(pg_temp.dev('PARTS'), format('select print_job_add(%L, %L, ''kosher'', 940)', '192.168.1.50:9100', 'not base64 !'));
   -- (round 23) a printer-setting / network command is refused: only labels as the app draws them
-  ok := pg_temp.api(pg_temp.dev('PARTS'), format('select print_job_add(%L, %L)', '192.168.1.50:9100', zbad)) ->> 'error' = 'bad_value';
-  r4 := pg_temp.api('{}', format('select print_job_add(%L, %L)', '192.168.1.50:9100', z));                          -- no device
+  ok := pg_temp.api(pg_temp.dev('PARTS'), format('select print_job_add(%L, %L, ''kosher'', 940)', '192.168.1.50:9100', zbad)) ->> 'error' = 'bad_value';
+  r4 := pg_temp.api('{}', format('select print_job_add(%L, %L, ''kosher'', 940)', '192.168.1.50:9100', z));                          -- no device
   r5 := pg_temp.api(pg_temp.dev('PARTS'), format('select print_job_status(%s)', (r ->> 'id')::bigint));
   ok := ok and pg_temp.ok(r) and r2 ->> 'error' = 'unknown_printer' and r3 ->> 'error' = 'bad_value' and not pg_temp.ok(r4)
         and pg_temp.ok(r5) and r5 ->> 'status' = 'new'
         and (select printer from print_jobs where id = (r ->> 'id')::bigint) = '192.168.1.50:9100';
   -- the list is a station setting: a printer outside the plant network / on another port is never sent to
   update settings_pilot set settings = settings || '{"printers":[{"id":"p3","name":"x","conn":"network","ip":"8.8.8.8","port":9100},{"id":"p4","name":"y","conn":"network","ip":"192.168.1.9","port":22}]}'::jsonb where id = 1;
-  r2 := pg_temp.api(pg_temp.dev('PARTS'), format('select print_job_add(%L, %L)', '8.8.8.8:9100', z));
-  r3 := pg_temp.api(pg_temp.dev('PARTS'), format('select print_job_add(%L, %L)', '192.168.1.9:22', z));
+  r2 := pg_temp.api(pg_temp.dev('PARTS'), format('select print_job_add(%L, %L, ''kosher'', 940)', '8.8.8.8:9100', z));
+  r3 := pg_temp.api(pg_temp.dev('PARTS'), format('select print_job_add(%L, %L, ''kosher'', 940)', '192.168.1.9:22', z));
   r4 := pg_temp.api(pg_temp.dev('NIK'), format('select print_job_status(%s)', (r ->> 'id')::bigint));               -- another device's job
   ok := ok and r2 ->> 'error' = 'unknown_printer' and r3 ->> 'error' = 'unknown_printer' and r4 ->> 'error' = 'bad_id';
   perform pg_temp.rec('v10.38 printing: a paired device sends stickers to a network printer of the list; not to a printer off the list, outside the plant network or on another port; bad data / a printer-setting command / no device refused; a device sees only its own job', ok,
@@ -3326,6 +3327,27 @@ begin
         and exists (select 1 from jsonb_array_elements(r4 -> 'days') d where (d ->> 'epoch')::bigint = e0 and (d ->> 'expected')::int = 2 and (d ->> 'in')::int = 1);   -- cheek 1 + liver (tongue condemned, cheek 2 held)
   perform pg_temp.rec('round 23: a held / condemned part blocks only itself (tongue / one cheek); the other kosher parts go in and count', ok,
     concat_ws(' | ', left(r::text, 80), left(r2::text, 60), left(r3::text, 80), left((r4 -> 'days')::text, 160)));
+  -- (round 24) a print job is checked for what it is: the right screen, the animal's state, the part's holds, the copies
+  update settings_pilot set settings = settings || '{"printers":[{"id":"p1","name":"Zebra","conn":"network","ip":"192.168.1.50","port":9100}]}'::jsonb where id = 1;
+  perform pg_temp.prep(911, 'slaughter');
+  declare zk text := encode(convert_to('^XA^PW16^LL16^LH0,0^FO0,0^GFA,4,4,2,FF00FF00^FS^PQ1^XZ', 'LATIN1'), 'base64');
+          zl text := encode(convert_to('^XA^PW16^LL16^LH0,0^FO0,0^GFA,4,4,2,FF00FF00^FS^PQ2^XZ', 'LATIN1'), 'base64');
+          zl9 text := encode(convert_to('^XA^PW16^LL16^LH0,0^FO0,0^GFA,4,4,2,FF00FF00^FS^PQ50^XZ', 'LATIN1'), 'base64');
+          q1 jsonb; q2 jsonb; q3 jsonb; q4 jsonb; q5 jsonb; q6 jsonb; q7 jsonb; q8 jsonb;
+  begin
+    q1 := pg_temp.api(pg_temp.dev('LEGS'),  format('select print_job_add(%L, %L, ''legs'', 911)', '192.168.1.50:9100', zl));            -- legs screen, slaughtered: yes
+    q2 := pg_temp.api(pg_temp.dev('PARTS'), format('select print_job_add(%L, %L, ''legs'', 911)', '192.168.1.50:9100', zl));            -- legs stickers from the parts screen: no
+    q3 := pg_temp.api(pg_temp.dev('LEGS'),  format('select print_job_add(%L, %L, ''legs'', 911)', '192.168.1.50:9100', zl9));           -- 50 copies: no
+    q4 := pg_temp.api(pg_temp.dev('PARTS'), format('select print_job_add(%L, %L, ''kosher'', 911, %L)', '192.168.1.50:9100', zk, '[{"pid":"cheeks","i":1}]'));   -- not ruled yet: no
+    q5 := pg_temp.api(pg_temp.dev('PARTS'), format('select print_job_add(%L, %L, ''kosher'', 910, %L)', '192.168.1.50:9100', zk, '[{"pid":"cheeks","i":1}]'));   -- kosher, cheek 1 free: yes
+    q6 := pg_temp.api(pg_temp.dev('PARTS'), format('select print_job_add(%L, %L, ''kosher'', 910, %L)', '192.168.1.50:9100', zk, '[{"pid":"tongue","i":1}]'));   -- the tongue is condemned: no
+    q7 := pg_temp.api(pg_temp.dev('LEGS'),  format('select print_job_add(%L, %L, ''test'')', '192.168.1.50:9100', zk));                  -- a test without the team leader: no
+    q8 := pg_temp.api('{}', format('select print_job_add(%L, %L, ''test'', null, ''[]'', %L)', '192.168.1.50:9100', zk, pg_temp.v('mgr')));
+    ok := pg_temp.ok(q1) and q2 ->> 'reason' = 'wrong_station' and q3 ->> 'reason' = 'too_many' and q4 ->> 'reason' = 'not_kosher'
+          and pg_temp.ok(q5) and q6 ->> 'reason' = 'held' and q7 ->> 'reason' = 'unauthorized' and not (q8 ->> 'reason' is not distinct from 'unauthorized');
+    perform pg_temp.rec('round 24: a print job is checked for what it is — the right screen, the animal (slaughtered / ruled kosher), the part''s holds, the copies; a test only by the team leader', ok,
+      concat_ws(' | ', left(q1::text, 50), q2 ->> 'reason', q3 ->> 'reason', q4 ->> 'reason', left(q5::text, 50), q6 ->> 'reason', q7 ->> 'reason', left(q8::text, 80)));
+  end;
   update settings_pilot set settings = s0 where id = 1;
 end $$;
 $gt80$;
@@ -3431,7 +3453,7 @@ begin
                 'eso_change(integer,text,text,bigint)', 'eso_change(integer,text,text,bigint,uuid)', 'event_append(jsonb)',
                 'lung_drawing_get(integer)', 'lung_drawing_set(integer,bigint,text)', 'manager_add(text,text,text)',
                 'manager_add_owner(text,text,text)', 'manager_deactivate(text,uuid)', 'manager_list(text)', 'manager_login(text)',
-                'manager_logout(text)', 'manager_session_check(text)', 'leader_recovery_code_new(text)', 'leader_recovery_status(text)', 'leader_device_replace(text,text)', 'plant_server_status(text)', 'animal_card(text,date,integer)', 'seal_set(text,text,text)', 'seals_get(text,bigint)', 'hold_set(integer,text,text,text,bigint,uuid)', 'hold_resolve(bigint,text,uuid)', 'nikur_scan(integer,text,integer,bigint,uuid)', 'nikur_board()', 'nikur_hold(integer,bigint,text,uuid)', 'nikur_day_close(text,bigint,text)', 'support_issue_add(text,text)', 'support_tickets(text)', 'maker_changes(text)', 'print_job_add(text,text,uuid)', 'print_job_status(bigint)', 'printer_scan_request(text)', 'printers_found(text)', 'board_flags(text)', 'change_ack(text,bigint)', 'manufacturer_set_billing(text,boolean,numeric,text,text)',
+                'manager_logout(text)', 'manager_session_check(text)', 'leader_recovery_code_new(text)', 'leader_recovery_status(text)', 'leader_device_replace(text,text)', 'plant_server_status(text)', 'animal_card(text,date,integer)', 'seal_set(text,text,text)', 'seals_get(text,bigint)', 'hold_set(integer,text,text,text,bigint,uuid)', 'hold_resolve(bigint,text,uuid)', 'nikur_scan(integer,text,integer,bigint,uuid)', 'nikur_board()', 'nikur_hold(integer,bigint,text,uuid)', 'nikur_day_close(text,bigint,text)', 'support_issue_add(text,text)', 'support_tickets(text)', 'maker_changes(text)', 'print_job_add(text,text,text,integer,jsonb,text,uuid)', 'print_job_status(bigint)', 'printer_scan_request(text)', 'printers_found(text)', 'board_flags(text)', 'change_ack(text,bigint)', 'manufacturer_set_billing(text,boolean,numeric,text,text)',
                 'outer_open(integer,bigint,boolean,text)', 'outer_open(integer,bigint,boolean,text,uuid)', 'plant_status_snapshot()', 'plant_setup_needed()',
                 'push_settings(jsonb,text,text,text)', 'request_daily_rollover()', 'reset_daily_board(text,text)', 'security_summary(text)',
                 'processing_board(text)', 'carry_push(bigint,jsonb,uuid)', 'carry_claim(bigint,integer,text,uuid)',

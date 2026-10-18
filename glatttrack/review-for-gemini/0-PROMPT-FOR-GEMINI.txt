@@ -2,7 +2,7 @@
 1-README-REVIEW.txt — הסבר, כללי העסק וכל השינויים לפי גרסאות.
 2-server-active-schema.sql.txt — המצב הפעיל של השרת (Postgres / Supabase): כל הפונקציות, הטריגרים וההרשאות. זה הקוד שצריך לבדוק.
 3-app-kosher-app-v10.38.html.txt — האפליקציה (קובץ HTML אחד עם JavaScript).
-4-security-selftest-result.txt — תוצאת בדיקת האבטחה האוטומטית (167/167).
+4-security-selftest-result.txt — תוצאת בדיקת האבטחה האוטומטית (168/168).
 5-SECURITY-MANIFEST.txt — מה כבר נאכף בשרת.
 6-support-center-central-setup.sql.txt — מרכז השירות של היצרן (מסד נפרד): מפעלים, דיווחים, התראות, פקודות מרחוק, עדכונים.
 7-plant-server-report-and-update.sh.txt — הסקריפטים בשרת המפעל: דיווח למרכז, ביצוע פקודות, התקנת עדכון, והעברת מדבקות למדפסות (print-relay.sh).

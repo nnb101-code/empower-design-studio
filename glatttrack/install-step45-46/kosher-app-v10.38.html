@@ -8479,10 +8479,21 @@ function _gtPrinterStatus(p,ok){
        localStorage.setItem('gt_printer_status', JSON.stringify(m)); renderScreenDeviceStatus(); try{ mgrRenderDevices(); }catch(e){} }catch(e){}
 }
 // network: through the plant server; it answers sent / failed (the printer did not take it)
-async function _gtPrintNet(p,zpl){
+const GT_PRINT_REFUSED={ wrong_station:['המסך הזה לא מדפיס מדבקות כאלה','This screen does not print these stickers','Esta pantalla no imprime estas etiquetas'],
+  not_slaughtered:['הבהמה עוד לא נשחטה','The animal is not slaughtered yet','El animal aún no fue faenado'],
+  not_kosher:['הבהמה לא נפסקה כשרה — אין מדבקת כשרות','The animal is not ruled kosher — no kosher sticker','El animal no es kosher — sin etiqueta kosher'],
+  held:['החלק מעוכב (USDA / "?") — לא מודפס','The part is held (USDA / "?") — not printed','La parte está retenida — no se imprime'],
+  not_glatt:['החלק הזה לא נלקח מבהמה גלאט','This part is not taken from a glatt animal','Esta parte no se toma de un animal glatt'],
+  too_many:['יותר מדבקות ממה שמוגדר במפעל','More stickers than the plant\'s setting','Más etiquetas que lo configurado'],
+  unauthorized:['רק ראש הצוות מדפיס מדבקת ניסיון','Only the team leader prints a test sticker','Solo el jefe de equipo imprime una prueba'] };
+async function _gtPrintNet(p,zpl,meta){
   if(!window.sb) throw new Error(L('אין חיבור לשרת המפעל','No connection to the plant server','Sin conexión al servidor'));
-  const r=await window.sb.rpc('print_job_add',{p_printer:(p.ip||'')+':'+(p.port||9100), p_data:_gtB64(zpl), p_command_id:_gtUuid()});
-  const x=r.data||{}; if(r.error||!x.ok) throw new Error(gtErrText(r.error||x.error||'server_error'));
+  meta=meta||{};
+  const r=await window.sb.rpc('print_job_add',{p_printer:(p.ip||'')+':'+(p.port||9100), p_data:_gtB64(zpl), p_kind:meta.kind||'test',
+    p_animal:meta.animal!=null?meta.animal:null, p_parts:meta.parts||[], p_token:meta.token||null, p_command_id:_gtUuid()});
+  const x=r.data||{};
+  if(x && x.error==='refused'){ const t=GT_PRINT_REFUSED[x.reason]; throw new Error(t?L(t[0],t[1],t[2]):String(x.reason||'refused')); }   // (round 24) the server checked it
+  if(r.error||!x.ok) throw new Error(gtErrText(r.error||x.error||'server_error'));
   // (review) up to 24 s: the server prints a job only within its first 20 s, so after that the answer is final
   for(const w of [1500,2500,4000,6000,6000,4000]){ await new Promise(z=>setTimeout(z,w));
     const q=await window.sb.rpc('print_job_status',{p_id:x.id}); const y=q.data||{};
@@ -8542,7 +8553,9 @@ async function gtPrintStickers(key,jobs,o){
     const D=_gtStickerData(jobs[0].idx,jobs[0].kind,jobs[0].sample,jobs[0].piece);
     if(p.conn==='system') _gtPrintSystem(items,D.wMM,D.hMM);
     else { const zpl=items.map(it=>gtZplFromCanvas(it.cv,it.copies)).join('\n');
-      if(p.conn==='bluetooth') await _gtPrintBle(p,zpl); else await _gtPrintNet(p,zpl); }
+      const meta=o.test ? {kind:'test', token:(KS.getManagerToken&&KS.getManagerToken())||null}
+                        : {kind:jobs[0].kind, animal:jobs[0].idx, parts:jobs.filter(j=>j.piece&&j.piece.pid).map(j=>({pid:j.piece.pid,i:j.piece.i}))};
+      if(p.conn==='bluetooth') await _gtPrintBle(p,zpl); else await _gtPrintNet(p,zpl,meta); }
     _gtPrinterStatus(p,true);
     if(o.test) _gtPrintMsg(L('✅ מדבקת ניסיון נשלחה ל-','✅ Test sticker sent to ','✅ Etiqueta de prueba enviada a ')+(p.name||''),false);
     return {ok:true};
@@ -8571,7 +8584,15 @@ function _gtPrintingShow(on,p){
 async function gtPrintGate(key,jobs,commit){
   if(_gtPrintBusy){ try{ KS.notice(L('מדפיס… רגע','Printing… one moment','Imprimiendo… un momento')); }catch(e){} return false; }
   const p=gtPrinterFor(key);
-  if(!p){ commit(); gtPrintStickers(key,jobs); return true; }           // no printer for this screen: as before (+ the red note)
+  if(!p){
+    // (round 24) no printer for this screen: nothing is marked — only the server's test mode (switched on by the
+    // owner, 8 hours at most) lets the screens be tried before the printers are there
+    let test=window._gtServerTestMode===true;
+    try{ if(window.sb){ const r=await window.sb.rpc('server_test_mode'); if(!r.error) test = r.data===true; } }catch(e){}
+    if(test){ commit(); _gtPrintMsg('🧪 '+L('מצב בדיקה — אין מדפסת למסך הזה; סומן בלי הדפסה.','Test mode — no printer for this screen; marked without printing.','Modo de prueba — sin impresora; marcado sin imprimir.'),false); return true; }
+    _gtPrintMsg('🖨 '+L('אין מדפסת למסך הזה — לא סומן. קראו לראש הצוות (הגדרות ← מדפסות ← שיוך לכל מסך).','No printer for this screen — not marked. Call the team leader (Settings → Printers → Assign to each screen).','No hay impresora para esta pantalla — no marcado. Llame al jefe de equipo.'),true);
+    return false;
+  }
   _gtPrintBusy=true; if(p.conn!=='system') _gtPrintingShow(true,p);
   let r={ok:false};
   try{ r=await gtPrintStickers(key,jobs); } finally{ _gtPrintBusy=false; _gtPrintingShow(false); }

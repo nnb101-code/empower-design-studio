@@ -1,9 +1,9 @@
 == 1. plant state =======================================================
     key     |     value     |          updated_at           
 ------------+---------------+-------------------------------
- boardEpoch | 1792285182376 | 2026-10-18 00:59:42.376111+00
- schemaStep | 46            | 2026-10-18 00:59:43.604539+00
- testMode   | off           | 2026-10-18 00:59:42.998782+00
+ boardEpoch | 1792289732879 | 2026-10-18 02:15:32.878949+00
+ schemaStep | 46            | 2026-10-18 02:15:34.169622+00
+ testMode   | off           | 2026-10-18 02:15:33.477679+00
 (3 rows)
 
 == 2. functions (public, gt_rls) ========================================
@@ -60,7 +60,7 @@
  public | plant_server_status(text)                                                          | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
  public | plant_setup_needed()                                                               | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
  public | plant_status_snapshot()                                                            | function | t                | public, extensions, pg_temp | postgres | t    | t             | t           | f
- public | print_job_add(text,text,uuid)                                                      | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
+ public | print_job_add(text,text,text,integer,jsonb,text,uuid)                              | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
  public | print_job_status(bigint)                                                           | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
  public | printer_scan_request(text)                                                         | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
  public | printers_found(text)                                                               | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
@@ -315,7 +315,7 @@
  plant_server_status(text)                                   | t
  plant_setup_needed()                                        | t
  plant_status_snapshot()                                     | t
- print_job_add(text,text,uuid)                               | t
+ print_job_add(text,text,text,integer,jsonb,text,uuid)       | t
  print_job_status(bigint)                                    | t
  printer_scan_request(text)                                  | t
  printers_found(text)                                        | t

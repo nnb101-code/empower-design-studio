@@ -18,6 +18,11 @@ This pack is the CURRENT state. Review these files only.
 | `test-mode-on.sql` / `test-mode-off.sql` | The owner's SQL-only test switch. |
 | `plant-server/` | Plant resilience kit (bash, runs as root on the plant servers, NOT in the database): standby server, floating address, UPS, nightly checked backup. Guide: `PLANT-RESILIENCE-HE.md`. |
 
+## Round 25 — fixes after the round-24 report (18.10)
+- **A1:** a screen with no printer no longer marks anything ("no printer — call the team leader"); only the server's test mode (`server_test_mode()`, switched on by the owner, 8 h max) lets a screen be tried without a printer (marked, with a note).
+- **A2:** `print_job_add(p_printer, p_data, p_kind, p_animal, p_parts, p_token, p_command_id)` — the job says what it is for and the server checks it: legs / head only from a `legs` device, a slaughtered animal of today's board, one picture, copies ≤ the plant's sticker count; kosher only from a `parts` / `stamps` device, an animal ruled kosher (`_kosher_ready`, not treif / nevela / shot), every part through `_nikur_refusal(a, part, epoch, piece)` (USDA / "?" holds, not-glatt parts), one copy a part, labels ≤ parts; `test` only with a team leader / manufacturer session. The old 3-argument function is dropped. **Still open (known):** the picture is drawn by the tablet (the plant server drawing it is a later step); Bluetooth / print-screen printers do not pass the server.
+- Self-test 168/168 (new check + the printing checks in the new form), also as an upgrade.
+
 ## Round 24 — fixes after the round-23 report (18.10). Please verify each one really closes the problem.
 - **A1 print first, then mark:** `gtPrintGate(key, jobs, commit)` — the station marks stickers done (legs / head / parts / stamps, also reprints and a part printed after a USDA release) only after the printer took them (network: the plant server says `sent`; Bluetooth: the write succeeded; the device's print screen: the worker confirms). A failure → red message, nothing marked; a second tap while printing is refused. A screen with no printer set works as before (with a red note) — so tests without printers still run.
 - **A2:** `printers` removed from the station keys of `push_settings` (team leader / manufacturer only). The printer's "took it / did not print" status is kept on the tablet (localStorage).
