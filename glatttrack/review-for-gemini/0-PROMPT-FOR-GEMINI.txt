@@ -2,12 +2,12 @@
 1-README-REVIEW.txt — הסבר, כללי העסק וכל השינויים לפי גרסאות.
 2-server-active-schema.sql.txt — המצב הפעיל של השרת (Postgres / Supabase): כל הפונקציות, הטריגרים וההרשאות. זה הקוד שצריך לבדוק.
 3-app-kosher-app-v10.38.html.txt — האפליקציה (קובץ HTML אחד עם JavaScript).
-4-security-selftest-result.txt — תוצאת בדיקת האבטחה האוטומטית (164/164).
+4-security-selftest-result.txt — תוצאת בדיקת האבטחה האוטומטית (167/167).
 5-SECURITY-MANIFEST.txt — מה כבר נאכף בשרת.
 6-support-center-central-setup.sql.txt — מרכז השירות של היצרן (מסד נפרד): מפעלים, דיווחים, התראות, פקודות מרחוק, עדכונים.
 7-plant-server-report-and-update.sh.txt — הסקריפטים בשרת המפעל: דיווח למרכז, ביצוע פקודות, התקנת עדכון, והעברת מדבקות למדפסות (print-relay.sh).
 8-support-center-index.html.txt — הדף של מרכז השירות (תפקידים, תקלות, חיובים, צוות).
-9-support-center-selftest-result.txt — תוצאת הבדיקה של מרכז השירות (23/23).
+9-support-center-selftest-result.txt — תוצאת הבדיקה של מרכז השירות (24/24).
 חדש בסבב הזה (README, מלמעלה): הדפסה אמיתית של מדבקות (02 סעיף 40, print_job_add, _printer_addr_ok, print-relay.sh, gtPrintStickers); "?" ליד כל USDA; משקל במצלמה עם בדיקת סבירות; מערכת היצרן (תפקידים, תקלות, חיובים — 02 סעיף 39 ו-6-support-center); ניקור אחרי הקולר לפי היום שעל המדבקה; היום מתאפס תמיד.
 קודם תקרא ב-README את החלקים של v10.38 מלמעלה. כללי בעל המערכת שהשתנו: היום מתאפס תמיד (אין יום שמור שתופס מסכים); בכל מסך יש "?" ו-USDA (בשחיטה רק "?").
 

@@ -5,7 +5,7 @@ A separate Supabase project of the manufacturer (not a plant's database). Every 
 
 ## Files
 - `central-setup.sql` — the whole central database (tables, RLS, RPCs). Re-runnable; the LAST definition of a function is the active one.
-- `central-selftest.sql` + `central-selftest-result.txt` — the self-test (23/23), one DO block, everything undone.
+- `central-selftest.sql` + `central-selftest-result.txt` — the self-test (24/24), one DO block, everything undone.
 - `index.html` — the staff page (vanilla JS, calls the RPCs with the public anon / publishable key).
 - `notify.sh` — sends the alerts (e-mail / SMS / WhatsApp), runs on the manufacturer's machine.
 - `report-to-center.sh`, `update-app.sh`, `gt-lib.sh` — on each PLANT server (as root, timer every 5 min): sends `_plant_report()`, runs the center's commands, installs a released app version (sha256 checked, then 02 + the plant's security self-test).

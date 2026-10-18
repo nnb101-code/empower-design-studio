@@ -3245,16 +3245,18 @@ $gt78$;
     execute $gt79$
 -- ── v10.38 (owner): stickers really printed — a network printer through the plant server ──
 do $$
-declare r jsonb; r2 jsonb; r3 jsonb; r4 jsonb; r5 jsonb; ok boolean; s0 jsonb; z text := 'XlhBXkZPNTAsNTBeRkRURVNUXkZTXlha';
+declare r jsonb; r2 jsonb; r3 jsonb; r4 jsonb; r5 jsonb; ok boolean; s0 jsonb; z text := 'XlhBXlBXMTZeTEwxNl5MSDAsMF5GTzAsMF5HRkEsNCw0LDIsRkYwMEZGMDBeRlNeUFEyXlha'; zbad text := 'XlhBXk5TUywxOTIuMTY4LjEuOTksMjU1LjI1NS4yNTUuMCwxOTIuMTY4LjEuMV5YWn5KUg==';
 begin
   select settings into s0 from settings_pilot where id = 1;
   update settings_pilot set settings = settings || '{"printers":[{"id":"p1","name":"Zebra","conn":"network","ip":"192.168.1.50","port":9100},{"id":"p2","name":"BT","conn":"bluetooth","bleId":"x"}]}'::jsonb where id = 1;
   r  := pg_temp.api(pg_temp.dev('PARTS'), format('select print_job_add(%L, %L)', '192.168.1.50:9100', z));
   r2 := pg_temp.api(pg_temp.dev('PARTS'), format('select print_job_add(%L, %L)', '192.168.1.51:9100', z));          -- not on the list
   r3 := pg_temp.api(pg_temp.dev('PARTS'), format('select print_job_add(%L, %L)', '192.168.1.50:9100', 'not base64 !'));
+  -- (round 23) a printer-setting / network command is refused: only labels as the app draws them
+  ok := pg_temp.api(pg_temp.dev('PARTS'), format('select print_job_add(%L, %L)', '192.168.1.50:9100', zbad)) ->> 'error' = 'bad_value';
   r4 := pg_temp.api('{}', format('select print_job_add(%L, %L)', '192.168.1.50:9100', z));                          -- no device
   r5 := pg_temp.api(pg_temp.dev('PARTS'), format('select print_job_status(%s)', (r ->> 'id')::bigint));
-  ok := pg_temp.ok(r) and r2 ->> 'error' = 'unknown_printer' and r3 ->> 'error' = 'bad_value' and not pg_temp.ok(r4)
+  ok := ok and pg_temp.ok(r) and r2 ->> 'error' = 'unknown_printer' and r3 ->> 'error' = 'bad_value' and not pg_temp.ok(r4)
         and pg_temp.ok(r5) and r5 ->> 'status' = 'new'
         and (select printer from print_jobs where id = (r ->> 'id')::bigint) = '192.168.1.50:9100';
   -- the list is a station setting: a printer outside the plant network / on another port is never sent to
@@ -3263,7 +3265,7 @@ begin
   r3 := pg_temp.api(pg_temp.dev('PARTS'), format('select print_job_add(%L, %L)', '192.168.1.9:22', z));
   r4 := pg_temp.api(pg_temp.dev('NIK'), format('select print_job_status(%s)', (r ->> 'id')::bigint));               -- another device's job
   ok := ok and r2 ->> 'error' = 'unknown_printer' and r3 ->> 'error' = 'unknown_printer' and r4 ->> 'error' = 'bad_id';
-  perform pg_temp.rec('v10.38 printing: a paired device sends stickers to a network printer of the list; not to a printer off the list, outside the plant network or on another port; bad data / no device refused; a device sees only its own job', ok,
+  perform pg_temp.rec('v10.38 printing: a paired device sends stickers to a network printer of the list; not to a printer off the list, outside the plant network or on another port; bad data / a printer-setting command / no device refused; a device sees only its own job', ok,
     concat_ws(' | ', r::text, r2::text, r3::text, left(r4::text, 60), left(r5::text, 80)));
   -- the search: the team leader asks; the list comes back (only plant-network printers)
   r  := pg_temp.api('{}', format('select printer_scan_request(%L)', pg_temp.v('mgr')));
@@ -3279,6 +3281,54 @@ begin
   update settings_pilot set settings = s0 where id = 1;
 end $$;
 $gt79$;
+    v_step := 'v10.38 round 23: printer list, nikur hold on a closed day, a held part blocks only itself';
+    execute $gt80$
+do $$
+declare r jsonb; r2 jsonb; r3 jsonb; r4 jsonb; ok boolean; s0 jsonb; e0 bigint;
+  pr jsonb := '[{"id":"tongue","he":"לשון","on":true,"pre":"head","n":1,"post":"parts","m":1,"nikur":"small","builtin":true},
+                {"id":"cheeks","he":"לחיים","on":true,"pre":"head","n":2,"post":"parts","m":2,"nikur":"small","builtin":true},
+                {"id":"sides","he":"צדדים","on":true,"pre":"head","n":2,"post":"stamps","m":6,"nikur":"big","builtin":true},
+                {"id":"lung","he":"ריאה","on":true,"pre":"head","n":1,"post":"none","m":0,"nikur":"none","builtin":true},
+                {"id":"legs","he":"רגליים","on":true,"pre":"legs","n":2,"post":"legs","m":0,"nikur":"none","builtin":true},
+                {"id":"tail","he":"זנב","on":true,"pre":"none","n":0,"post":"stamps","m":1,"nikur":"small","builtin":true},
+                {"id":"liver","he":"כבד","on":true,"pre":"head","n":1,"post":"parts","m":1,"nikur":"small","builtin":true}]';
+begin
+  select settings into s0 from settings_pilot where id = 1;
+  -- a station cannot change the printer list (the team leader can)
+  update settings_pilot set settings = settings || '{"printers":[{"id":"p1","name":"Zebra","conn":"network","ip":"192.168.1.50","port":9100}]}'::jsonb where id = 1;
+  r  := pg_temp.api(pg_temp.dev('PARTS'), format('select push_settings(%L::jsonb, ''x'')', '{"printers":[{"id":"evil","name":"x","conn":"network","ip":"192.168.1.66","port":9100}]}'));
+  r2 := pg_temp.api(pg_temp.mgr(), format('select push_settings(%L::jsonb, ''x'', %L)', '{"printers":[{"id":"p2","name":"TSC","conn":"network","ip":"192.168.1.51","port":9100}]}', pg_temp.v('mgr')));
+  ok := (select settings -> 'printers' -> 0 ->> 'id' from settings_pilot where id = 1) = 'p2' and not ((select settings::text from settings_pilot where id = 1) like '%192.168.1.66%');
+  perform pg_temp.rec('round 23: a station tablet cannot change the printer list; the team leader can', ok, left(r::text, 120) || ' | ' || left(r2::text, 120));
+  -- the nikur: a "?" on a day closed at the nikur / on a future day is refused
+  perform pg_temp.api('{}', format('select reset_daily_board(%L, ''selftest r23'')', pg_temp.v('mgr')));
+  perform pg_temp.api(pg_temp.mgr(), format('select push_settings(%L::jsonb, ''x'', %L)', jsonb_build_object('products', pr), pg_temp.v('mgr')));
+  e0 := _board_epoch();
+  perform pg_temp.prep(910, 'outer');
+  perform set_config('gt.reset_in_progress', 'true', true);
+  update animals_pilot set parts_scanned = true where id = 910;
+  perform set_config('gt.reset_in_progress', 'false', true);
+  r  := pg_temp.api(pg_temp.dev('NIK'), format('select nikur_hold(910, %s, ''question'')', e0 + 1000000));
+  insert into nikur_days_closed (board_epoch, closed_by, reason) values (e0 - 1, 'selftest', 'selftest');
+  r2 := pg_temp.api(pg_temp.dev('NIK'), format('select nikur_hold(910, %s, ''question'')', e0 - 1));
+  ok := r ->> 'error' = 'stale_board' and r2 ->> 'reason' = 'day_closed';
+  perform pg_temp.rec('round 23: a nikur "?" / USDA on a future day or a day closed at the nikur is refused', ok, left(r::text, 100) || ' | ' || left(r2::text, 100));
+  -- a condemned tongue (USDA at the small parts) blocks the tongue only — the kosher cheeks go into the nikur
+  insert into animal_holds (board_epoch, animal_id, station, kind, part, created_by, resolved_at, resolution)
+  values (e0, 910, 'parts', 'usda', 'tongue', 'selftest', now(), 'condemned');
+  r  := pg_temp.api(pg_temp.dev('NIKS'), format('select nikur_scan(910, ''tongue'', 1, %s)', e0));
+  r2 := pg_temp.api(pg_temp.dev('NIKS'), format('select nikur_scan(910, ''cheeks'', 1, %s)', e0));
+  insert into animal_holds (board_epoch, animal_id, station, kind, part, created_by)
+  values (e0, 910, 'parts', 'usda', 'cheek2', 'selftest');
+  r3 := pg_temp.api(pg_temp.dev('NIKS'), format('select nikur_scan(910, ''cheeks'', 2, %s)', e0));
+  r4 := pg_temp.api(pg_temp.dev('NIKS'), 'select nikur_board()');
+  ok := r ->> 'reason' = 'held' and pg_temp.ok(r2) and r3 ->> 'reason' = 'held'
+        and exists (select 1 from jsonb_array_elements(r4 -> 'days') d where (d ->> 'epoch')::bigint = e0 and (d ->> 'expected')::int = 2 and (d ->> 'in')::int = 1);   -- cheek 1 + liver (tongue condemned, cheek 2 held)
+  perform pg_temp.rec('round 23: a held / condemned part blocks only itself (tongue / one cheek); the other kosher parts go in and count', ok,
+    concat_ws(' | ', left(r::text, 80), left(r2::text, 60), left(r3::text, 80), left((r4 -> 'days')::text, 160)));
+  update settings_pilot set settings = s0 where id = 1;
+end $$;
+$gt80$;
     v_step := 'the ACTIVE security surface against the expected manifest';
     execute $gt70$
 -- ── the ACTIVE security surface against the expected manifest ───────────────

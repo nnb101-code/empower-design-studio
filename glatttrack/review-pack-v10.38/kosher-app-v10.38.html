@@ -5279,11 +5279,12 @@ function gtAfterRelease(h){
   if(h.station==='parts' && ['cheek1','cheek2','tongue'].includes(h.part)){
     const a=KS.getAnimal(h.animal_id);
     if(a && ((a.partsPrintCount||0)>=gtPartsExpected() || a.partsScanned)){
-      try{ showPartsPrint(h.animal_id, a.outerStatus, false, {cheek1:1,cheek2:2,tongue:3}[h.part], h.part);
+      gtPrintGate('parts',_gtPartsJobs(h.animal_id,h.part),()=>{ try{ showPartsPrint(h.animal_id, a.outerStatus, false, {cheek1:1,cheek2:2,tongue:3}[h.part], h.part);
            _ppBreak(h.part==='tongue'?0:1, h.part==='tongue'?1:0);
            const sn=document.getElementById('ppPartsInfo'); if(sn){ sn.textContent=L('הודפס עכשיו: ','Printed now: ','Impreso ahora: ')+_gtL(GT_PART_NAME[h.part])+L(' (שוחרר מ-USDA)',' (released from USDA)',' (liberado de USDA)'); sn.style.color='#9BE7B0'; sn.style.fontWeight='800'; } }catch(e){}
       try{ _partsRecordPrinted(h.animal_id); }catch(e){}                    // v10.32: the server learns it is out now
       try{ KS.addAuditLog({type:'parts_print_after_release', animal:h.animal_id+1, part:h.part}); }catch(e){}
+      });   // (round 23) marked after the printer took it
     }
   }
   if(h.station==='stamps' && ['right','left'].includes(h.part)){
@@ -8470,9 +8471,12 @@ function _gtPrintMsg(text,bad){
   el.textContent=text; el.style.display='block';
   clearTimeout(el._t); el._t=setTimeout(()=>{ el.style.display='none'; }, bad?20000:3000);
 }
+// (round 23) "printed / did not print" is kept on this tablet only — the printer list is the team leader's setting
+function _gtPrStGet(){ try{ return JSON.parse(localStorage.getItem('gt_printer_status')||'{}')||{}; }catch(e){ return {}; } }
+function gtPrinterStatusOf(d){ if(!d) return ''; const m=_gtPrStGet(); return m[d.id] || (d.status==='connected'?'connected':''); }
 function _gtPrinterStatus(p,ok){
-  try{ const s=KS.getSettings(); const list=(s.printers||[]).slice(); const i=list.findIndex(d=>d.id===p.id); if(i<0) return;
-    const st=ok?'connected':'error'; if(list[i].status===st) return; list[i]=Object.assign({},list[i],{status:st}); KS.updateSettings({printers:list}); renderScreenDeviceStatus(); }catch(e){}
+  try{ const m=_gtPrStGet(); const st=ok?'connected':'error'; if(m[p.id]===st) return; m[p.id]=st;
+       localStorage.setItem('gt_printer_status', JSON.stringify(m)); renderScreenDeviceStatus(); try{ mgrRenderDevices(); }catch(e){} }catch(e){}
 }
 // network: through the plant server; it answers sent / failed (the printer did not take it)
 async function _gtPrintNet(p,zpl){
@@ -8544,10 +8548,43 @@ async function gtPrintStickers(key,jobs,o){
     return {ok:true};
   }catch(e){
     _gtPrinterStatus(p,false); try{ gtLogError('print', e); }catch(_){}
-    _gtPrintMsg('🖨 '+L('המדבקות לא הודפסו! ','The stickers were NOT printed! ','¡NO se imprimieron las etiquetas! ')+(p.name?'('+p.name+') ':'')+String(e&&e.message||e)+L(' — בדקו את המדפסת והדפיסו שוב (הדפסה חוזרת).',' — check the printer and print again (reprint).',' — revise la impresora y vuelva a imprimir.'),true);
+    _gtPrintMsg('🖨 '+L('המדבקות לא הודפסו! ','The stickers were NOT printed! ','¡NO se imprimieron las etiquetas! ')+(p.name?'('+p.name+') ':'')+String(e&&e.message||e)+L(' — לא סומן. בדקו את המדפסת ולחצו שוב.',' — not marked. Check the printer and tap again.',' — no marcado. Revise la impresora y toque de nuevo.'),true);
     return {ok:false,error:String(e&&e.message||e)};
   }
 }
+
+// (round 23, owner: "fix") PRINT FIRST, THEN MARK. A station marks an animal's stickers done (legs / head / parts /
+// stamps) only after the printer took them: a network / Bluetooth printer answers; with the device's print screen
+// the worker confirms "the stickers came out". If the printer fails, nothing is marked — the number waits and the
+// worker taps again. A screen with no printer set keeps working as before (and says the stickers were not printed).
+let _gtPrintBusy=false;
+function _gtPrintingShow(on,p){
+  let el=document.getElementById('gtPrinting');
+  if(!on){ if(el) el.remove(); return; }
+  if(!el){ el=document.createElement('div'); el.id='gtPrinting'; el.setAttribute('data-no-i18n','');
+    el.style.cssText='position:fixed;inset:0;z-index:99998;background:rgba(5,10,20,.55);display:flex;align-items:center;justify-content:center;';
+    ['pointerdown','click','touchstart'].forEach(ev=>el.addEventListener(ev,e=>{ e.stopPropagation(); e.preventDefault(); },true));
+    document.body.appendChild(el); }
+  el.innerHTML='<div style="background:#0E1626;border:2px solid #7AAEFF;border-radius:16px;padding:18px 26px;text-align:center;color:#fff;font:800 22px Arial;">🖨 '
+    +escapeHtml(L('מדפיס…','Printing…','Imprimiendo…'))+'<div style="font:600 13px Arial;color:#9fb3d1;margin-top:6px;">'+escapeHtml((p&&p.name)||'')+'</div></div>';
+}
+async function gtPrintGate(key,jobs,commit){
+  if(_gtPrintBusy){ try{ KS.notice(L('מדפיס… רגע','Printing… one moment','Imprimiendo… un momento')); }catch(e){} return false; }
+  const p=gtPrinterFor(key);
+  if(!p){ commit(); gtPrintStickers(key,jobs); return true; }           // no printer for this screen: as before (+ the red note)
+  _gtPrintBusy=true; if(p.conn!=='system') _gtPrintingShow(true,p);
+  let r={ok:false};
+  try{ r=await gtPrintStickers(key,jobs); } finally{ _gtPrintBusy=false; _gtPrintingShow(false); }
+  if(!r.ok) return false;                                                 // the red message is on the screen; nothing marked
+  if(p.conn==='system' && !confirm(L('המדבקות יצאו מהמדפסת?','Did the stickers come out of the printer?','¿Salieron las etiquetas de la impresora?'))){
+    _gtPrintMsg('🖨 '+L('לא סומן — המספר מחכה. הדפיסו שוב.','Not marked — the number waits. Print again.','No marcado — el número espera. Imprima de nuevo.'),true); return false; }
+  commit(); return true;
+}
+function _gtLgCount(step){ const st=KS.getSettings(); return step==='legs'?(st.legStickerCount!=null?st.legStickerCount:2):(st.headStickerCount!=null?st.headStickerCount:7); }
+function _gtPartsJobs(idx,only){ const held=_partsHeldNow(idx), set=gtAreaPieces('parts');
+  const out=only ? set.filter(x=>x.hold===only) : set.filter(x=>!(x.hold&&held.includes(x.hold)));
+  return out.map(pc=>({idx, kind:'kosher', piece:{pid:pc.pid,i:pc.i,name:pc.name}, copies:1})); }
+function _gtStampsJobs(idx){ return gtAreaPieces('stamps').map(pc=>({idx, kind:'kosher', piece:pc.pid?{pid:pc.pid,i:pc.i,name:pc.name}:null, copies:1})); }
 function mgrSetPrintOpt(key,val){
   // key is 'showQR' | 'showHeb' | 'showGreg' → setting 'printShowQR' etc.
   const settingKey='print'+key.charAt(0).toUpperCase()+key.slice(1);
@@ -8710,11 +8747,11 @@ function mgrRenderDevices(){
   const scanners=s.scanners||[];
   const sd=s.screenDevices||{};
   function deviceRow(kind,d){
-    const isP=kind==='printer', st=d.status==='connected'?'ok':(d.status==='error'?'bad':'');
+    const isP=kind==='printer', _ps=isP?gtPrinterStatusOf(d):d.status, st=_ps==='connected'?'ok':(_ps==='error'?'bad':'');
     const conn=isP?_gtPrConnLabel(d):escapeHtml(d.conn==='wifi'?L('WiFi/רשת','WiFi/network','WiFi/red'):(CONN_LABELS[d.conn]||d.conn));
     return `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);">
       <div style="min-width:0;">
-        <div style="font-size:13px;color:var(--text);font-weight:700;">${escapeHtml(d.name)} ${st==='ok'?'<span style="color:var(--green);font-size:12px;">✓</span>':(st==='bad'?'<span style="color:var(--red-light);font-size:12px;">⚠ '+escapeHtml(L('לא הדפיסה','did not print','no imprimió'))+'</span>':'')}</div>
+        <div style="font-size:13px;color:var(--text);font-weight:700;">${escapeHtml(d.name)} ${st==='ok'?'<span style="color:var(--green);font-size:12px;">✓ '+escapeHtml(L('קיבלה','took it','recibió'))+'</span>':(st==='bad'?'<span style="color:var(--red-light);font-size:12px;">⚠ '+escapeHtml(L('לא הדפיסה','did not print','no imprimió'))+'</span>':'')}</div>
         <div style="font-size:11px;color:var(--muted);">${isP?escapeHtml(conn):conn}</div>
       </div>
       <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
@@ -8759,10 +8796,10 @@ function connectScreenDevices(screenKey){
   const printers=s.printers||[];
   const scanners=s.scanners||[];
   let any=false;
-  const p=printers.find(d=>d.id===cfg.printer); if(p){p.status='connected';any=true;}
+  const p=printers.find(d=>d.id===cfg.printer); if(p){ any=true; try{ gtPrintStickers(screenKey,[{idx:0,kind:'legs',sample:true,copies:1}],{printer:p,test:true}); }catch(e){} }   // (round 23) a real test
   const sc=scanners.find(d=>d.id===cfg.scanner); if(sc){sc.status='connected';any=true;}
   if(!any){alert(L('לא שויכו מדפסת/סורק למסך זה (הגדר במסך ראש הצוות → הדפסה וסריקה)','No printer/scanner is assigned to this screen (set it in Team leader → Printing & scanning)','No hay impresora/escáner asignado a esta pantalla (configúrelo en Jefe de equipo → Impresión y escaneo)'));return;}
-  KS.updateSettings({printers,scanners});
+  KS.updateSettings({scanners});
   renderScreenDeviceStatus();
 }
 // Show which printer + scanner are assigned to a work screen, and their status.
@@ -8970,7 +9007,6 @@ function showPrintPopup(idx,step,isReprint=false){
   const _st=KS.getSettings();
   const count=step==="legs"?(_st.legStickerCount!=null?_st.legStickerCount:2):(_st.headStickerCount!=null?_st.headStickerCount:7);
   document.getElementById("ppCount").textContent="x "+count;
-  try{ gtPrintStickers('legs',[{idx, kind:step==='legs'?'legs':'head', copies:count}]); }catch(e){}   // v10.38: really printed
   document.getElementById("ppInfo").textContent=new Date().toLocaleTimeString("he-IL");
   const bar=document.getElementById("ppBarInner");
   bar.style.transition="none";bar.style.width="100%";
@@ -8989,19 +9025,16 @@ function lgTap(idx){
   let first=-1;for(let i=0;i<a.length;i++){if(_lgNeeds(a[i])){first=i;break;}}
   if(idx!==first){showNoSkip();return;}
   const x=a[idx];
-  const _r=_lgRole();
-  if(_r==='legs'){ KS.setLegsStickers(idx); showPrintPopup(idx,"legs"); }
-  else if(_r==='head'){ KS.setHeadStickers(idx); showPrintPopup(idx,"head"); }
+  const _r=_lgRole(); let step, mark;
+  if(_r==='legs'){ step='legs'; mark=()=>KS.setLegsStickers(idx); }
+  else if(_r==='head'){ step='head'; mark=()=>KS.setHeadStickers(idx); }
   else if(!x.legsStickers && _legsRequired(x)){
-    KS.setLegsStickers(idx);
-    if(KS.getSettings().legsMode!==false)showPrintPopup(idx,"legs");
-    else{KS.setHeadStickers(idx);showPrintPopup(idx,"head");}
-  } else {
-    KS.setHeadStickers(idx);
-    showPrintPopup(idx,"head");
-  }
-  lgManualPage=false;
-  lgRenderGrid();lgUpdateSummary();
+    if(KS.getSettings().legsMode!==false){ step='legs'; mark=()=>KS.setLegsStickers(idx); }
+    else { step='head'; mark=()=>{ KS.setLegsStickers(idx); KS.setHeadStickers(idx); }; }
+  } else { step='head'; mark=()=>KS.setHeadStickers(idx); }
+  // (round 23) print first; mark only when the printer took the stickers
+  gtPrintGate('legs',[{idx, kind:step, copies:_gtLgCount(step)}],()=>{
+    mark(); showPrintPopup(idx,step); lgManualPage=false; lgRenderGrid(); lgUpdateSummary(); });
 }
 let lgReprintIdx=-1,lgReprintStep="";
 // ── v10.34 (owner): screens switched off for a while — esophagus, legs, small parts ──
@@ -9089,7 +9122,7 @@ function lgDoReprint(step){
   // v10.37: also an append-only event — two stations reprinting at the same moment each sent their own copy of
   // the whole log, and one copy overwrote the other (a reprint is a kashrut audit line, it must not be lost)
   try{ const _e=logs[logs.length-1]||{}; KS.recordOwnEvent && KS.recordOwnEvent('reprint', Object.assign({ step: _e.step||null }, _e), (_e.idx!=null && isFinite(Number(_e.idx))) ? Number(_e.idx) : null); }catch(e){}
-  showPrintPopup(lgReprintIdx,step,true);
+  { const _i=lgReprintIdx; gtPrintGate('legs',[{idx:_i, kind:step, copies:_gtLgCount(step)}],()=>showPrintPopup(_i,step,true)); }   // (round 23)
   lgReprintIdx=-1;
 }
 function lgPrevPage(){if(lgPage>0){lgManualPage=true;lgPage--;lgRenderGrid();}}
@@ -14511,9 +14544,6 @@ function _ppBreak(cheeks, tongue){   // (one released part: the cheek / the tong
 function _ppRows(list){ const e=document.getElementById('ppPartsRows'); if(e) e.innerHTML=_gtPiecesRowsHtml(list); }
 function showPartsPrint(idx,status,isReprint=false,stickerNum=1,only=null){
   _ppRows(gtAreaPieces('parts'));
-  try{ const held=_partsHeldNow(idx), set=gtAreaPieces('parts');                   // v10.38: really printed
-       const out=only ? set.filter(x=>x.hold===only) : set.filter(x=>!(x.hold&&held.includes(x.hold)));
-       gtPrintStickers('parts', out.map(pc=>({idx, kind:'kosher', piece:{pid:pc.pid,i:pc.i,name:pc.name}, copies:1}))); }catch(e){}
   const statusLabels={glatt:"גלאט",beit:"בית יוסף",kosher:"כשר",mk:"MK"};
   const statusColors={glatt:"var(--glatt)",beit:"var(--beit)",kosher:"var(--kosher)",mk:"var(--mk)"};
   document.getElementById("ppPartsNum").textContent="#"+(idx+1);
@@ -14566,6 +14596,8 @@ function partsAddPrint(idx){
   const a=KS.getAnimal(idx);
   if(_gtRulingPending(idx)){ showPartsError(_gtRulingPendingTitle(), _gtRulingPendingText(idx)); return; }
   // all 3 stickers at once — except a part on USDA hold (v10.32: the server is told which parts are out)
+  // (round 23) print first; mark only when the printer took the stickers
+  gtPrintGate('parts',_gtPartsJobs(idx),()=>{
   _partsRecordPrinted(idx);
   KS.setPartsScanned(idx);
   KS.setPartsPrintedAs(idx,_printedAsKey(a));
@@ -14577,6 +14609,8 @@ function partsAddPrint(idx){
       _ppRows(outP);
       if(sn){ sn.textContent=L('הודפס: ','Printed: ','Impreso: ')+out.map(p=>_gtL(GT_PART_NAME[p])).join(' + ')+L(' · מעוכב USDA: ',' · USDA hold: ',' · retenido USDA: ')+held.map(p=>_gtL(GT_PART_NAME[p])).join(', '); sn.style.color='#C5B3FF'; sn.style.fontWeight='800'; }
       KS.addAuditLog({type:'parts_printed_without', animal:idx+1, held}); } }catch(e){}
+  try{ partsRenderGrid(); partsUpdateSummary(); }catch(e){}
+  });
 }
 
 let partsReprintIdx=-1;
@@ -14620,8 +14654,9 @@ function partsDoReprint(){
   // v10.37: also an append-only event — two stations reprinting at the same moment each sent their own copy of
   // the whole log, and one copy overwrote the other (a reprint is a kashrut audit line, it must not be lost)
   try{ const _e=logs[logs.length-1]||{}; KS.recordOwnEvent && KS.recordOwnEvent('reprint', Object.assign({ step: _e.step||null }, _e), (_e.idx!=null && isFinite(Number(_e.idx))) ? Number(_e.idx) : null); }catch(e){}
-  showPartsPrint(partsReprintIdx,a.outerStatus,true,cnt);
-  try{ const _h=_partsHeldNow(partsReprintIdx); if(_h.length) _ppBreak(['cheek1','cheek2'].filter(p=>!_h.includes(p)).length, _h.includes('tongue')?0:1); }catch(e){}   // v10.32: a held part is not reprinted
+  { const _i=partsReprintIdx; gtPrintGate('parts',_gtPartsJobs(_i),()=>{     // (round 23)
+    showPartsPrint(_i,a.outerStatus,true,cnt);
+    try{ const _h=_partsHeldNow(_i); if(_h.length) _ppBreak(['cheek1','cheek2'].filter(p=>!_h.includes(p)).length, _h.includes('tongue')?0:1); }catch(e){} }); }   // v10.32: a held part is not reprinted
   partsReprintIdx=-1;
   setTimeout(()=>focusScan(),1500);
 }
@@ -15674,7 +15709,8 @@ function stampsTapAnimal(idx){
     return;
   }
 
-  // All good — stamp and print
+  // All good — stamp and print (round 23: print first; mark only when the printer took the stickers)
+  gtPrintGate('stamps',_gtStampsJobs(idx),()=>{
   KS.setStamped(idx);
   KS.setStampedAs(idx,_printedAsKey(a));
   stampsShowPrint(idx,a.outerStatus,false);
@@ -15684,6 +15720,7 @@ function stampsTapAnimal(idx){
     _syncPendingWeight();
     setTimeout(()=>{weightToastShow(L('סרוק משקל צד ימין','Scan the right side weight','Escanee el peso del lado derecho'),L('בהמה #','Animal #','Animal #')+(idx+1),'⚖️');},1600);
   }
+  });
 }
 
 function stampsDoReprint(){
@@ -15708,7 +15745,7 @@ function stampsDoReprint(){
   // v10.37: also an append-only event — two stations reprinting at the same moment each sent their own copy of
   // the whole log, and one copy overwrote the other (a reprint is a kashrut audit line, it must not be lost)
   try{ const _e=logs[logs.length-1]||{}; KS.recordOwnEvent && KS.recordOwnEvent('reprint', Object.assign({ step: _e.step||null }, _e), (_e.idx!=null && isFinite(Number(_e.idx))) ? Number(_e.idx) : null); }catch(e){}
-  stampsShowPrint(stampsRpIdx,a.outerStatus,true);
+  { const _i=stampsRpIdx; gtPrintGate('stamps',_gtStampsJobs(_i),()=>stampsShowPrint(_i,a.outerStatus,true)); }   // (round 23)
   stampsRpIdx=-1;
   setTimeout(()=>stampsFocusScan(),1500);
 }
@@ -15722,7 +15759,6 @@ function stampsShowError(title,desc){
 }
 
 function stampsShowPrint(idx,status,isReprint){
-  try{ gtPrintStickers('stamps', gtAreaPieces('stamps').map(pc=>({idx, kind:'kosher', piece:pc.pid?{pid:pc.pid,i:pc.i,name:pc.name}:null, copies:1}))); }catch(e){}   // v10.38: really printed
   const sc={glatt:"var(--glatt)",beit:"var(--beit)",kosher:"var(--kosher)",mk:"var(--mk)",rabChalak:"#16A085"};
   document.getElementById("ppStampsNum").textContent="#"+(idx+1);
   { const r=document.getElementById('ppStampsRows'); if(r) r.innerHTML=_gtPiecesRowsHtml(gtAreaPieces('stamps')); }   // v10.38: the plant's stamps set
@@ -16659,6 +16695,14 @@ function _gtNetLockShow(on, why){
     ['pointerdown','pointerup','click','touchstart','touchend','mousedown','mouseup','contextmenu'].forEach(ev=>ov.addEventListener(ev, e=>{ e.stopPropagation(); e.preventDefault(); }, true));
     document.body.appendChild(ov);
   }
+  if(why === 'resume'){
+    ov.style.background = 'rgba(5,12,24,.88)';
+    ov.innerHTML = '<div style="max-width:420px;"><div style="font-size:48px;line-height:1;">🔄</div>'+
+      '<div style="font-size:24px;font-weight:800;color:#7AAEFF;margin:12px 0 6px;">'+escapeHtml(L('מתחבר לשרת המפעל…','Connecting to the plant server…','Conectando con el servidor…'))+'</div>'+
+      '<div style="font-size:14px;color:#ccd;">'+escapeHtml(L('רגע — המסך ייפתח כשהשרת יענה.','One moment — the screen opens when the server answers.','Un momento — la pantalla se abre cuando responda el servidor.'))+'</div></div>';
+    return;
+  }
+  ov.style.background = 'rgba(40,4,4,.96)';
   if(why === 'storage'){
     ov.innerHTML = '<div style="max-width:520px;"><div style="font-size:64px;line-height:1;">💾</div>'+
       '<div style="font-size:26px;font-weight:800;color:#FF6B6B;margin:14px 0 8px;">'+escapeHtml(L('הטאבלט לא מצליח לשמור','This tablet cannot save','Esta tableta no puede guardar'))+'</div>'+
@@ -16687,6 +16731,10 @@ function _gtNetTick(){
   // v10.16 (review B4): "no network" from the browser is only a hint — a plant LAN without internet
   // can look "offline" to it; the server is always asked, and only its silence stops the work
   if(now - okAt > 6000) _gtNetPing();
+  { const rs = window._gtNetResumeAt || 0, resuming = rs && okAt < rs && (now - rs) < 8000;
+    const scr0 = (document.querySelector('.screen.active')||{}).id;
+    if(resuming && !window._gtStorageBad){ if(window._gtNetLockWhy !== 'resume') _gtNetLockShow(scr0 !== 'scPair', 'resume'); setTimeout(_gtNetTick, 700); return; }
+    if(window._gtNetLockWhy === 'resume') _gtNetLockShow(false); }
   let bad;
   if(offline) bad = (now - _gtOfflineSince) > _GT_NET_GRACE && (now - okAt) > _GT_NET_GRACE;   // Wi-Fi gone AND no answer: 15 s grace
   else if(!window.sb) bad = (now - (window._gtBootAt||now)) > _GT_NET_GRACE;   // the server library never loaded
@@ -16717,7 +16765,9 @@ setInterval(_gtNetTick, 2000);
 // what it saw in the background says nothing about the server. Ask the server at once (fresh grace), take
 // what changed, and reconnect the live updates now instead of waiting for the library's own retry.
 function _gtNetResume(){
-  window._gtNetOkAt = Math.max(window._gtNetOkAt||0, Date.now());   // a fresh 15 s, not the background silence
+  // (round 23) no made-up "the server answered": the screen says "connecting…" (taps wait) until the server's
+  // first real answer; without an answer in 8 s the usual rule decides (no server = work stops)
+  window._gtNetResumeAt = Date.now();
   window._gtNetFailAt = 0; _gtNetPinging = false;
   _gtNetPing();
   try{ if(window.sb && window.sb.realtime && typeof window.sb.realtime.isConnected==='function' && !window.sb.realtime.isConnected()) window.sb.realtime.connect(); }catch(e){}
@@ -17595,7 +17645,7 @@ function renderScreenDeviceStatus(){
     const bar=document.getElementById(barId), chips=chipsId?document.getElementById(chipsId):null;
     if(!bar && !chips) return;
     const {p,sc}=_gtDevFor(key);
-    const pOn=!!(p&&p.status==='connected'), scOn=!!(sc&&sc.status==='connected');
+    const pOn=!!(p&&gtPrinterStatusOf(p)==='connected'), scOn=!!(sc&&sc.status==='connected');
     const pChip=p ? _gtChip(pOn?'#28C76F':'#FF8866', '🖨 '+L('מדפסת: ','Printer: ','Impresora: ')+escapeHtml(p.name)+(pOn?'':L(' — לא מחוברת',' — not connected',' — no conectada')))
                   : _gtChip('#F0A030', '🖨 '+L('אין מדפסת מצומדת','No printer paired','Sin impresora emparejada'));
     const sChip=sc ? _gtChip(scOn?'#7AAEFF':'#FF8866', '📷 '+L('סורק: ','Scanner: ','Escáner: ')+escapeHtml(sc.name)+(scOn?'':L(' — לא מחובר',' — not connected',' — no conectado')), scOn)

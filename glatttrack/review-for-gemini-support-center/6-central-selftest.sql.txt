@@ -117,6 +117,12 @@ begin
       (select y ->> 'amount' from jsonb_array_elements(r2 -> 'rows') y where y ->> 'code' = '9001')::numeric = 2500 and (select y ->> 'paid' from jsonb_array_elements(r2 -> 'rows') y where y ->> 'code' = '9001')::boolean
       and exists (select 1 from sc_audit where action = 'paid_set' and who = 'Selftest finance'), r2::text);
   end;
+  -- (round 23) a report with wrong types (a bad date, a word for a number, attention not a list) is still taken
+  r := sc_report('9001', sec, '{"attention":"x","working":"yes","tablets":"none","issues":[{"key":"E900","at":"not-a-date","message":"bad date"},{"key":"E901","message":"good one"}],"usage":[{"day":"2026-08-01","animals":"many","kg":1},{"day":"2026-08-02","animals":7,"kg":70}]}');
+  perform pg_temp.rec('a report with wrong types is still taken: a bad date → the time it arrived; a bad number line is skipped; the rest kept',
+    (r ->> 'ok')::boolean and exists (select 1 from sc_tickets where code = '9001' and key = 'E901')
+    and exists (select 1 from sc_tickets where code = '9001' and key = 'E900' and at > now() - interval '1 minute')
+    and (select animals from sc_usage where code = '9001' and day = '2026-08-02') = 7, r::text);
   -- (review) a month that does not exist is refused, not a crash; wrong codes lock only their own address
   perform pg_temp.rec('a month that does not exist (2026-13) is refused',
     sc_billing(tok, '2026-13') ->> 'error' = 'bad_value' and sc_paid_set(tok, '9001', '2026-00', true) ->> 'error' = 'bad_value');

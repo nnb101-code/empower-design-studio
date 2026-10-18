@@ -12130,6 +12130,7 @@ notify pgrst, 'reload schema';
 -- ============================================================================
 -- ============================================================================
 -- ============================================================================
+-- ============================================================================
 -- GlattTrack — step 46: stage order on the server, each station its own stage,
 -- kashrut configuration locks, and processing that continues over several days
 -- ============================================================================
@@ -13157,7 +13158,7 @@ language plpgsql security definer set search_path = public, extensions, pg_temp 
 declare
   station_keys text[] := array[
     'currentUser','activeUserByRole','reprintLog','problemReports',
-    'printers','scanners','licenseRequestDismissed'
+    'scanners','licenseRequestDismissed'      -- (round 23) 'printers' only by the team leader / manufacturer
   ];
   list_keys text[] := array['reprintLog','problemReports'];
   server_keys text[] := array['lastServerResetAt','lastServerResetReason','billing','forceReloadAt','supportAccessUntil',
@@ -19271,7 +19272,9 @@ revoke execute on function _nikur_day_date(bigint) from public, anon, authentica
 
 -- why this piece may not go into the nikur (null = it may). A hold left open when its day was reset ('board_closed')
 -- still holds the meat: only the nikur's own "?" / USDA are released at the nikur.
-create or replace function _nikur_refusal(a animals_pilot, x jsonb, p_ep bigint) returns text
+-- (round 23) a USDA / "?" hold blocks the pieces it is about: the whole animal (part 'whole'), the tongue, one
+-- cheek (piece 1 / 2), or a half (the stamps pieces). A condemned tongue no longer stops the animal's kosher cheeks.
+create or replace function _nikur_refusal(a animals_pilot, x jsonb, p_ep bigint, p_piece integer) returns text
 language plpgsql stable security definer set search_path = public, extensions, pg_temp as $$
 begin
   if a.id is null or a.slaughter is null then return 'not_slaughtered'; end if;
@@ -19281,12 +19284,21 @@ begin
   if exists (select 1 from animal_holds h where h.board_epoch = p_ep and h.animal_id = a.id
                and h.kind in ('usda', 'question')
                and (h.resolved_at is null or h.resolution = 'condemned'
-                    or (h.resolution = 'board_closed' and h.station <> 'nikur'))) then
+                    or (h.resolution = 'board_closed' and h.station <> 'nikur'))
+               and (coalesce(h.part, 'whole') = 'whole'
+                    or (h.part = 'tongue' and x ->> 'id' = 'tongue')
+                    or (h.part in ('cheek1', 'cheek2') and x ->> 'id' = 'cheeks'
+                        and (p_piece is null or p_piece = case h.part when 'cheek1' then 1 else 2 end))
+                    or (h.part in ('right', 'left') and x ->> 'post' = 'stamps')
+                    or h.part not in ('tongue', 'cheek1', 'cheek2', 'right', 'left'))) then
     return 'held';
   end if;
   if x is not null and coalesce((x ->> 'notGlatt')::boolean, false) and a.outer_status = 'glatt' then return 'not_glatt'; end if;
   return null;
 end $$;
+revoke execute on function _nikur_refusal(animals_pilot, jsonb, bigint, integer) from public, anon, authenticated;
+create or replace function _nikur_refusal(a animals_pilot, x jsonb, p_ep bigint) returns text
+language sql stable security definer set search_path = public, extensions, pg_temp as $$ select _nikur_refusal(a, x, p_ep, null::integer) $$;
 revoke execute on function _nikur_refusal(animals_pilot, jsonb, bigint) from public, anon, authenticated;
 
 -- a piece into the nikur: p_epoch = the board of the piece's sticker (B: in the QR), or the tablet's board
@@ -19339,7 +19351,7 @@ begin
     select * into a from _nikur_day_rows(v_ep) r where r.id = p_id limit 1;
   end if;
   v_actor := _derive_actor('nikur', null);
-  v_err := _nikur_refusal(a, x, v_ep);
+  v_err := _nikur_refusal(a, x, v_ep, v_piece);
   if v_err is null then
     select cnt into v_cnt from animal_pieces where board_epoch = v_ep and animal_id = p_id and product = p_product;
     if v_cnt is null then v_err := 'not_printed';              -- no kosher sticker was printed for this part of this animal
@@ -19382,6 +19394,15 @@ begin
   if v_res is not null then return v_res; end if;
   perform _board_write_lock();
   v_ep := coalesce(p_epoch, _board_epoch());
+  -- (round 23) like the scan: not on a future day, not on a day closed at the nikur
+  if _board_epoch() is not null and v_ep > _board_epoch() then
+    v_res := jsonb_build_object('ok', false, 'error', 'stale_board', 'boardEpoch', _board_epoch());
+    perform _cmd_put(p_command_id, v_dev, 'nikur_hold', v_res); return v_res;
+  end if;
+  if exists (select 1 from nikur_days_closed where board_epoch = v_ep) then
+    v_res := jsonb_build_object('ok', false, 'error', 'refused', 'reason', 'day_closed');
+    perform _cmd_put(p_command_id, v_dev, 'nikur_hold', v_res); return v_res;
+  end if;
   if v_ep = _board_epoch() then select * into a from animals_pilot where id = p_id for update;
   else select * into a from _nikur_day_rows(v_ep) r where r.id = p_id limit 1; end if;
   if a.id is null or a.slaughter is null then
@@ -19447,7 +19468,7 @@ begin
                     from animal_pieces p join _nikur_day_rows(ep) r on r.id = p.animal_id
                     cross join lateral generate_series(1, p.cnt) g(i)
                    where p.board_epoch = ep and (v_screen is null or p.screen = v_screen)
-                     and _nikur_refusal(r, _product_def(p.product), ep) is null),
+                     and _nikur_refusal(r, _product_def(p.product), ep, g.i) is null),
          got as (select s.animal_id, s.product, s.piece from piece_scans s where s.board_epoch = ep)
     select count(*)::int,
            count(*) filter (where exists (select 1 from got where got.animal_id = w.animal_id and got.product = w.product and got.piece = w.i))::int,
@@ -19630,6 +19651,17 @@ language sql immutable set search_path = public, extensions, pg_temp as $$
 $$;
 revoke execute on function _printer_addr_ok(text) from public, anon, authenticated;
 
+-- (round 23) only labels as the app draws them: ^XA ^PW ^LL ^LH0,0 ^FO0,0 ^GFA(picture) ^FS ^PQ(copies) ^XZ — no printer
+-- setting / network / memory command can be sent through the plant server
+create or replace function _print_data_ok(p_data text) returns boolean
+language plpgsql immutable set search_path = public, extensions, pg_temp as $$
+declare z text;
+begin
+  begin z := convert_from(decode(p_data, 'base64'), 'LATIN1'); exception when others then return false; end;
+  return z ~ '^(\^XA\^PW[0-9]{2,4}\^LL[0-9]{2,4}\^LH0,0\^FO0,0\^GFA,[0-9]{1,7},[0-9]{1,7},[0-9]{1,4},[0-9A-F]+\^FS\^PQ[0-9]{1,2}\^XZ\n?)+$';
+end $$;
+revoke execute on function _print_data_ok(text) from public, anon, authenticated;
+
 create or replace function print_job_add(p_printer text, p_data text, p_command_id uuid default null) returns jsonb
 language plpgsql security definer set search_path = public, extensions, pg_temp as $$
 declare v_dev text; v_res jsonb; v_id bigint;
@@ -19644,7 +19676,8 @@ begin
     v_res := jsonb_build_object('ok', false, 'error', 'unknown_printer');
     perform _cmd_put(p_command_id, v_dev, 'print_job_add', v_res); return v_res;
   end if;
-  if p_data is null or length(p_data) = 0 or length(p_data) > 3000000 or p_data !~ '^[A-Za-z0-9+/=]+$' then
+  if p_data is null or length(p_data) = 0 or length(p_data) > 3000000 or p_data !~ '^[A-Za-z0-9+/=]+$'
+     or not _print_data_ok(p_data) then
     v_res := jsonb_build_object('ok', false, 'error', 'bad_value');
     perform _cmd_put(p_command_id, v_dev, 'print_job_add', v_res); return v_res;
   end if;

@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict BbkogzmFtIEe3WGw3y1Cz6S9H3T9a608RyedaEfxrkg8XRe0ytaQKGPdEqS9Jab
+\restrict Dq9nq3tKRzWjl1ZxweS0MV7Hkn0SoHUXm1QKL8G8e36hhNQauaXqApgqt9cMcCh
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -2626,6 +2626,18 @@ ALTER FUNCTION public._nikur_day_rows(p_ep bigint) OWNER TO postgres;
 --
 
 CREATE FUNCTION public._nikur_refusal(a public.animals_pilot, x jsonb, p_ep bigint) RETURNS text
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $$ select _nikur_refusal(a, x, p_ep, null::integer) $$;
+
+
+ALTER FUNCTION public._nikur_refusal(a public.animals_pilot, x jsonb, p_ep bigint) OWNER TO postgres;
+
+--
+-- Name: _nikur_refusal(public.animals_pilot, jsonb, bigint, integer); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public._nikur_refusal(a public.animals_pilot, x jsonb, p_ep bigint, p_piece integer) RETURNS text
     LANGUAGE plpgsql STABLE SECURITY DEFINER
     SET search_path TO 'public', 'extensions', 'pg_temp'
     AS $$
@@ -2637,7 +2649,13 @@ begin
   if exists (select 1 from animal_holds h where h.board_epoch = p_ep and h.animal_id = a.id
                and h.kind in ('usda', 'question')
                and (h.resolved_at is null or h.resolution = 'condemned'
-                    or (h.resolution = 'board_closed' and h.station <> 'nikur'))) then
+                    or (h.resolution = 'board_closed' and h.station <> 'nikur'))
+               and (coalesce(h.part, 'whole') = 'whole'
+                    or (h.part = 'tongue' and x ->> 'id' = 'tongue')
+                    or (h.part in ('cheek1', 'cheek2') and x ->> 'id' = 'cheeks'
+                        and (p_piece is null or p_piece = case h.part when 'cheek1' then 1 else 2 end))
+                    or (h.part in ('right', 'left') and x ->> 'post' = 'stamps')
+                    or h.part not in ('tongue', 'cheek1', 'cheek2', 'right', 'left'))) then
     return 'held';
   end if;
   if x is not null and coalesce((x ->> 'notGlatt')::boolean, false) and a.outer_status = 'glatt' then return 'not_glatt'; end if;
@@ -2645,7 +2663,7 @@ begin
 end $$;
 
 
-ALTER FUNCTION public._nikur_refusal(a public.animals_pilot, x jsonb, p_ep bigint) OWNER TO postgres;
+ALTER FUNCTION public._nikur_refusal(a public.animals_pilot, x jsonb, p_ep bigint, p_piece integer) OWNER TO postgres;
 
 --
 -- Name: _no_device_error(); Type: FUNCTION; Schema: public; Owner: postgres
@@ -2858,6 +2876,23 @@ $$;
 
 
 ALTER FUNCTION public._plant_usage() OWNER TO postgres;
+
+--
+-- Name: _print_data_ok(text); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public._print_data_ok(p_data text) RETURNS boolean
+    LANGUAGE plpgsql IMMUTABLE
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $_$
+declare z text;
+begin
+  begin z := convert_from(decode(p_data, 'base64'), 'LATIN1'); exception when others then return false; end;
+  return z ~ '^(\^XA\^PW[0-9]{2,4}\^LL[0-9]{2,4}\^LH0,0\^FO0,0\^GFA,[0-9]{1,7},[0-9]{1,7},[0-9]{1,4},[0-9A-F]+\^FS\^PQ[0-9]{1,2}\^XZ\n?)+$';
+end $_$;
+
+
+ALTER FUNCTION public._print_data_ok(p_data text) OWNER TO postgres;
 
 --
 -- Name: _printed_as_key(public.animals_pilot); Type: FUNCTION; Schema: public; Owner: postgres
@@ -6699,7 +6734,7 @@ begin
                     from animal_pieces p join _nikur_day_rows(ep) r on r.id = p.animal_id
                     cross join lateral generate_series(1, p.cnt) g(i)
                    where p.board_epoch = ep and (v_screen is null or p.screen = v_screen)
-                     and _nikur_refusal(r, _product_def(p.product), ep) is null),
+                     and _nikur_refusal(r, _product_def(p.product), ep, g.i) is null),
          got as (select s.animal_id, s.product, s.piece from piece_scans s where s.board_epoch = ep)
     select count(*)::int,
            count(*) filter (where exists (select 1 from got where got.animal_id = w.animal_id and got.product = w.product and got.piece = w.i))::int,
@@ -6771,6 +6806,15 @@ begin
   if v_res is not null then return v_res; end if;
   perform _board_write_lock();
   v_ep := coalesce(p_epoch, _board_epoch());
+  -- (round 23) like the scan: not on a future day, not on a day closed at the nikur
+  if _board_epoch() is not null and v_ep > _board_epoch() then
+    v_res := jsonb_build_object('ok', false, 'error', 'stale_board', 'boardEpoch', _board_epoch());
+    perform _cmd_put(p_command_id, v_dev, 'nikur_hold', v_res); return v_res;
+  end if;
+  if exists (select 1 from nikur_days_closed where board_epoch = v_ep) then
+    v_res := jsonb_build_object('ok', false, 'error', 'refused', 'reason', 'day_closed');
+    perform _cmd_put(p_command_id, v_dev, 'nikur_hold', v_res); return v_res;
+  end if;
   if v_ep = _board_epoch() then select * into a from animals_pilot where id = p_id for update;
   else select * into a from _nikur_day_rows(v_ep) r where r.id = p_id limit 1; end if;
   if a.id is null or a.slaughter is null then
@@ -6851,7 +6895,7 @@ begin
     select * into a from _nikur_day_rows(v_ep) r where r.id = p_id limit 1;
   end if;
   v_actor := _derive_actor('nikur', null);
-  v_err := _nikur_refusal(a, x, v_ep);
+  v_err := _nikur_refusal(a, x, v_ep, v_piece);
   if v_err is null then
     select cnt into v_cnt from animal_pieces where board_epoch = v_ep and animal_id = p_id and product = p_product;
     if v_cnt is null then v_err := 'not_printed';              -- no kosher sticker was printed for this part of this animal
@@ -7076,7 +7120,8 @@ begin
     v_res := jsonb_build_object('ok', false, 'error', 'unknown_printer');
     perform _cmd_put(p_command_id, v_dev, 'print_job_add', v_res); return v_res;
   end if;
-  if p_data is null or length(p_data) = 0 or length(p_data) > 3000000 or p_data !~ '^[A-Za-z0-9+/=]+$' then
+  if p_data is null or length(p_data) = 0 or length(p_data) > 3000000 or p_data !~ '^[A-Za-z0-9+/=]+$'
+     or not _print_data_ok(p_data) then
     v_res := jsonb_build_object('ok', false, 'error', 'bad_value');
     perform _cmd_put(p_command_id, v_dev, 'print_job_add', v_res); return v_res;
   end if;
@@ -7261,7 +7306,7 @@ CREATE FUNCTION public.push_settings(p_settings jsonb, p_device_id text, p_token
 declare
   station_keys text[] := array[
     'currentUser','activeUserByRole','reprintLog','problemReports',
-    'printers','scanners','licenseRequestDismissed'
+    'scanners','licenseRequestDismissed'      -- (round 23) 'printers' only by the team leader / manufacturer
   ];
   list_keys text[] := array['reprintLog','problemReports'];
   server_keys text[] := array['lastServerResetAt','lastServerResetReason','billing','forceReloadAt','supportAccessUntil',
@@ -11263,6 +11308,13 @@ REVOKE ALL ON FUNCTION public._nikur_refusal(a public.animals_pilot, x jsonb, p_
 
 
 --
+-- Name: FUNCTION _nikur_refusal(a public.animals_pilot, x jsonb, p_ep bigint, p_piece integer); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public._nikur_refusal(a public.animals_pilot, x jsonb, p_ep bigint, p_piece integer) FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION _no_device_error(); Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -11323,6 +11375,13 @@ REVOKE ALL ON FUNCTION public._plant_state_test_mode_trg() FROM PUBLIC;
 --
 
 REVOKE ALL ON FUNCTION public._plant_usage() FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION _print_data_ok(p_data text); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public._print_data_ok(p_data text) FROM PUBLIC;
 
 
 --
@@ -12643,5 +12702,5 @@ GRANT ALL ON TABLE public.system_flags TO service_role;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict BbkogzmFtIEe3WGw3y1Cz6S9H3T9a608RyedaEfxrkg8XRe0ytaQKGPdEqS9Jab
+\unrestrict Dq9nq3tKRzWjl1ZxweS0MV7Hkn0SoHUXm1QKL8G8e36hhNQauaXqApgqt9cMcCh
 

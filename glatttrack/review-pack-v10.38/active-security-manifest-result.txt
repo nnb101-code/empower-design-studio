@@ -1,9 +1,9 @@
 == 1. plant state =======================================================
     key     |     value     |          updated_at           
 ------------+---------------+-------------------------------
- boardEpoch | 1792183939078 | 2026-10-16 20:52:19.07785+00
- schemaStep | 46            | 2026-10-16 20:52:20.508442+00
- testMode   | off           | 2026-10-16 20:52:19.77752+00
+ boardEpoch | 1792285182376 | 2026-10-18 00:59:42.376111+00
+ schemaStep | 46            | 2026-10-18 00:59:43.604539+00
+ testMode   | off           | 2026-10-18 00:59:42.998782+00
 (3 rows)
 
 == 2. functions (public, gt_rls) ========================================
@@ -184,6 +184,7 @@
  public | _nikur_day_date(bigint)                                                            | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _nikur_day_rows(bigint)                                                            | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _nikur_refusal(animals_pilot,jsonb,bigint)                                         | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _nikur_refusal(animals_pilot,jsonb,bigint,integer)                                 | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _no_device_error()                                                                 | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _note_revoked_write(text)                                                          | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _outer_status_known(text)                                                          | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
@@ -193,6 +194,7 @@
  public | _plant_report()                                                                    | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _plant_state_test_mode_trg()                                                       | trigger  | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _plant_usage()                                                                     | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _print_data_ok(text)                                                               | function | f                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _printed_as_key(animals_pilot)                                                     | function | f                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _printer_addr_ok(text)                                                             | function | f                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _proc_board_json(bigint)                                                           | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
@@ -257,7 +259,7 @@
  public | leader_account_remove(text)                                                        | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | leader_device_recovery(text)                                                       | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | manufacturer_set_code(text,text)                                                   | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
-(248 rows)
+(250 rows)
 
 == 2b. API surface: functions the app roles can run ======================
                        callable_by_app                       | security_definer 

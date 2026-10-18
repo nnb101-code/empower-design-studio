@@ -85,14 +85,15 @@ revoke execute on function _sc_staff(text) from public, anon, authenticated;
 
 -- red / orange from a plant's report (the same codes as the plant's system health)
 create or replace function _sc_level(p_report jsonb, out level text, out problems jsonb) language plpgsql immutable as $$
-declare a jsonb := coalesce(p_report -> 'attention', '[]'::jsonb); bad text[] := '{}'; warn text[] := '{}'; c text;
+declare a jsonb := case when jsonb_typeof(p_report -> 'attention') = 'array' then p_report -> 'attention' else '[]'::jsonb end;   -- (round 23) a wrong type is no crash
+        bad text[] := '{}'; warn text[] := '{}'; c text;
 begin
-  for c in select jsonb_array_elements_text(a) loop
+  for c in select left(e #>> '{}', 60) from jsonb_array_elements(a) e where jsonb_typeof(e) = 'string' loop
     if c in ('chain_broken', 'standby_down', 'ups_on_battery', 'ups_low_battery', 'nightly_check_problems', 'nightly_check_missing', 'backup_stale')
       then bad := bad || c; else warn := warn || c; end if;
   end loop;
-  if exists (select 1 from jsonb_array_elements(coalesce(p_report -> 'tablets', '[]'::jsonb)) t
-              where (t ->> 'online')::boolean is false and coalesce((p_report ->> 'working')::boolean, false)) then
+  if exists (select 1 from jsonb_array_elements(case when jsonb_typeof(p_report -> 'tablets') = 'array' then p_report -> 'tablets' else '[]'::jsonb end) t
+              where jsonb_typeof(t) = 'object' and t -> 'online' = 'false'::jsonb and p_report -> 'working' = 'true'::jsonb) then
     warn := warn || 'tablet_offline_while_working'::text;
   end if;
   level := case when cardinality(bad) > 0 then 'bad' when cardinality(warn) > 0 then 'warn' else 'ok' end;
@@ -378,22 +379,31 @@ revoke execute on function _sc_can(text, text) from public, anon, authenticated;
 
 -- the plant's report also carries its problem reports and its daily totals; the answer carries the
 -- status of its tickets (what the team leader sees)
+-- (round 23) a date that cannot be read → null (the ticket keeps the time it arrived)
+create or replace function _sc_ts(p text) returns timestamptz language plpgsql immutable set search_path = public, extensions, pg_temp as $$
+begin return p::timestamptz; exception when others then return null; end $$;
+revoke execute on function _sc_ts(text) from public, anon, authenticated;
+
 create or replace function _sc_take_report_extras(p_code text, p_report jsonb) returns jsonb
 language plpgsql security definer set search_path = public, extensions, pg_temp as $$
 declare x jsonb;
 begin
   for x in select e from jsonb_array_elements(case when jsonb_typeof(p_report -> 'issues') = 'array' then p_report -> 'issues' else '[]'::jsonb end) e limit 300 loop
     continue when coalesce(x ->> 'key', '') !~ '^[A-Za-z0-9:_-]{1,40}$' or coalesce(trim(x ->> 'message'), '') = '';
+    begin   -- (round 23) one bad value (a date, a number) skips that line only, not the whole report
     insert into sc_tickets (code, key, at, source, screen, message)
-    values (p_code, x ->> 'key', coalesce((x ->> 'at')::timestamptz, now()),
+    values (p_code, x ->> 'key', coalesce(least(_sc_ts(x ->> 'at'), now()), now()),
             case when x ->> 'source' = 'leader' then 'leader' else 'station' end, left(x ->> 'screen', 40), left(x ->> 'message', 1000))
     on conflict (code, key) do nothing;
+    exception when others then null; end;
   end loop;
   for x in select e from jsonb_array_elements(case when jsonb_typeof(p_report -> 'usage') = 'array' then p_report -> 'usage' else '[]'::jsonb end) e limit 60 loop
     continue when coalesce(x ->> 'day', '') !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$';
+    begin
     insert into sc_usage (code, day, animals, kg)
     values (p_code, (x ->> 'day')::date, least(greatest(coalesce((x ->> 'animals')::int, 0), 0), 100000), least(greatest(coalesce((x ->> 'kg')::numeric, 0), 0), 99999999))
     on conflict (code, day) do update set animals = excluded.animals, kg = excluded.kg, updated_at = now();
+    exception when others then null; end;
   end loop;
   delete from sc_tickets where code = p_code and status = 'closed' and updated_at < now() - interval '1 year';   -- (review)
   delete from sc_usage where code = p_code and day < current_date - 1100;
@@ -416,7 +426,7 @@ begin
   select * into old from sc_status where code = p_code for update;
   select * into lv from _sc_level(p_report);
   insert into sc_status (code, level, problems, report, app_version, working, reported_at)
-  values (p_code, lv.level, lv.problems, p_report - 'issues' - 'usage', left(p_report ->> 'appVersion', 20), (p_report ->> 'working')::boolean, now())
+  values (p_code, lv.level, lv.problems, p_report - 'issues' - 'usage', left(p_report ->> 'appVersion', 20), case when jsonb_typeof(p_report -> 'working') = 'boolean' then (p_report -> 'working')::boolean end, now())
   on conflict (code) do update set level = excluded.level, problems = excluded.problems, report = excluded.report,
     app_version = excluded.app_version, working = excluded.working, reported_at = now();
   for c in select jsonb_array_elements_text(lv.problems) loop

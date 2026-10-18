@@ -2,7 +2,7 @@
 קודם תקרא את README-REVIEW.md: הקבצים, המודל (מפעלים, צוות ותפקידים, דיווח, פקודות, עדכונים, חיובים) ומה לבדוק במיוחד.
 
 הקוד לבדיקה: central-setup.sql (ההגדרה האחרונה של כל פונקציה היא הפעילה), index.html, report-to-center.sh + update-app.sh (רצים כ-root בכל שרת מפעל), plant-side-functions.sql (צד המפעל).
-תוצאת הבדיקה האוטומטית: central-selftest-result.txt (23/23).
+תוצאת הבדיקה האוטומטית: central-selftest-result.txt (24/24).
 
 Rules for the review:
 1. Read the actual code of each function — do not rely on the README's description. Before reporting, check whether central-selftest.sql already covers it; if it does, say why you still think it is exploitable.
