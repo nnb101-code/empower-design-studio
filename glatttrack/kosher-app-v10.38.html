@@ -8567,7 +8567,7 @@ async function gtPrintGate(key,jobs,commit){
     let test=window._gtServerTestMode===true;
     try{ if(window.sb){ const r=await window.sb.rpc('server_test_mode'); if(!r.error) test = r.data===true; } }catch(e){}
     if(test){ commit(); _gtPrintMsg('🧪 '+L('מצב בדיקה — אין מדפסת למסך הזה; סומן בלי הדפסה.','Test mode — no printer for this screen; marked without printing.','Modo de prueba — sin impresora; marcado sin imprimir.'),false); return true; }
-    _gtPrintMsg('🖨 '+L('אין מדפסת למסך הזה — לא סומן. קראו לראש הצוות (הגדרות ← מדפסות ← שיוך לכל מסך).','No printer for this screen — not marked. Call the team leader (Settings → Printers → Assign to each screen).','No hay impresora para esta pantalla — no marcado. Llame al jefe de equipo.'),true);
+    _gtPrintMsg('🖨 '+L('אין מדפסת למסך הזה — לא סומן. קראו לראש הצוות (הגדרות ← מדפסות ← שיוך לכל מסך).','No printer for this screen — not marked. Call the team leader (Settings → Printers → Assign to each screen).','No hay impresora para esta pantalla — no marcado. Llame al jefe de equipo.'),true+(window.GT_SERVER?'':L(' · לבדיקה בלי מדפסות: להפעיל מצב בדיקה בשרת (test-mode-on.sql) — 8 שעות.',' · Testing without printers: turn on test mode on the server (test-mode-on.sql) — 8 hours.',' · Prueba sin impresoras: active el modo de prueba (test-mode-on.sql).')));
     return false;
   }
   _gtPrintBusy=true; if(p.conn!=='system') _gtPrintingShow(true,p);
