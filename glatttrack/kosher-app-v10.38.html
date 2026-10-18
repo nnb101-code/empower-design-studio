@@ -1903,8 +1903,6 @@ const LUNG_B64="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICA
       <button class="owner-hide maker-hide" onclick="mgrReportSupportIssue()" style="width:100%;padding:10px;border-radius:8px;background:rgba(212,168,67,.15);border:1px solid var(--gold);color:var(--gold);font-weight:700;font-size:14px;cursor:pointer;margin-bottom:6px;">📨 דווח על תקלה לתמיכה הטכנית של היצרן</button>
       <div style="font-size:11px;color:var(--muted);line-height:1.5;">דיווחים מהמסכים נשלחים גם לתמיכה הטכנית של היצרן. היצרן מטפל בתקלות.</div>
       <div id="gtSupTickets" style="margin-top:8px;"></div>
-      <button class="owner-hide gt-tech" onclick="mgrAiAnalyzeProblems()" data-t="mgrAiBtn"
-        style="width:100%;padding:9px;border-radius:8px;background:rgba(155,111,255,.15);border:1px solid var(--purple);color:var(--purple);font-weight:700;font-size:13px;cursor:pointer;">AI — נתח ותקן בעיות</button>
     </div>
 
     <div class="mgr-sec owner-hide maker-hide">🔧 מה היצרן שינה</div>
@@ -1959,7 +1957,7 @@ const LUNG_B64="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICA
       <button onclick="minimizeLung()" style="background:var(--panel2);border:1px solid var(--border);color:var(--text);width:36px;height:36px;border-radius:8px;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;" title="מזער">&#8722;</button>
     </div>
     <div class="tool-row">
-      <button class="tbtn active" id="tPen" onclick="setTool('pen')" id="tPen">עט</button>
+      <button class="tbtn active" id="tPen" onclick="setTool('pen')">עט</button>
       <button class="tbtn" id="tErase" onclick="setTool('erase')">מחיקה</button>
       <button class="tbtn" onclick="clearDraw()">ניקוי</button>
       <div class="cswatch active" style="background:#FF2222" onclick="setCol('#FF2222',this)"></div>
@@ -2872,14 +2870,8 @@ const KS = (function(){
   // or delete policy at all, so even the app's own key cannot alter history —
   // only insert new events.
   //
-  // Honest limitation for this pilot stage: hash verification here runs in
-  // the browser (same JS on both write and verify, so JSON.stringify output
-  // is guaranteed identical) — it is NOT re-verified inside Postgres itself,
-  // since Postgres's own JSON serialization doesn't reliably byte-match
-  // JavaScript's. That means a forged chain is always *detectable* after the
-  // fact by re-running the verification, but not *rejected instantly* by the
-  // database on write. Closing that gap needs a Supabase Edge Function
-  // (same JS runtime as the browser) — a natural next layer, not built yet.
+  // The server keeps its own chain too (verify_event_chain — checked by the nightly check, the backup
+  // check and system health); this browser hash is an extra, local check.
   async function _sha256Hex(str){
     // v10.37: a plant server on a plain-http address has no crypto.subtle — every ledger event
     // (rulings, corrections, reprints) failed there and was lost. Same hash, computed in JS.
@@ -7035,19 +7027,6 @@ async function _workerLoginVerify(role, name, code, users, err, loginScreenId){
     _doLoginProceed(loginScreenId);
     if(notice) _gtWorkerNotice(notice);
   };
-  const offlineNote=L('אין חיבור לשרת — הכניסה נבדקה בטאבלט בלבד. השם יסומן כ"לא מאומת" עד שהחיבור יחזור.',
-                      'No server connection — the login was checked on this tablet only. The name is marked unverified until back online.',
-                      'Sin conexión — el acceso se verificó solo en esta tableta. El nombre queda como no verificado hasta volver a estar en línea.');
-  const local=async (note)=>{
-    if(!users.length){
-      return fail(L('לא הוגדרו עובדים עם קוד לתחנה הזו. ראש הצוות מגדיר אותם במסך ראש צוות ← הגדרות ← משתמשים.',
-                    'No workers with a code are defined for this station. The team leader adds them in Team leader → Settings → Users.',
-                    'No hay trabajadores con código para esta estación. El jefe de equipo los agrega en Ajustes → Usuarios.'));
-    }
-    const m=await _workerLocalMatch(users, name, code);
-    if(!m) return fail(name ? L('שם או קוד שגויים','Wrong name or code','Datos incorrectos') : L('קוד שגוי','Wrong code','Código incorrecto'));
-    finish(m.name, {token:'', name:m.name, role, exp:0, local:true}, note);
-  };
   // step 46: a worker logs in only against the plant server (no server = no work)
   const noServer=()=>fail(L('אין חיבור לשרת המפעל — אי אפשר להיכנס עכשיו. המסך ייפתח לבד כשהחיבור יחזור.','No connection to the plant server — cannot log in now.','Sin conexión con el servidor de la planta — no se puede entrar ahora.'));
   if(!window.sb) return noServer();                       // v10.16: the server itself is asked (no browser 'offline' shortcut)
@@ -7076,10 +7055,6 @@ async function _workerLoginVerify(role, name, code, users, err, loginScreenId){
     const m=await _workerLocalMatch(users, name, code, true);
     // v10.16: an old-format code cannot be checked by the server — no login until the team leader sets a new one
     if(m) return fail(L('הקוד של '+m.name+' נשמר בפורמט ישן — ראש הצוות צריך להגדיר לו קוד חדש (הגדרות ← עובדים).',m.name+'\'s code is in an old format — the team leader must set a new code (Settings → Workers).','Código en formato antiguo — el jefe de equipo debe definir uno nuevo.'));
-    if(false) return finish(m.name, {token:'', name:m.name, role, exp:0, local:true},
-      L('הקוד של '+m.name+' נשמר בפורמט ישן — ראש הצוות צריך להגדיר לו קוד חדש. עד אז השם יסומן כ"לא מאומת".',
-        m.name+'\'s code is in an old format — the team leader needs to set a new code. Until then the name is marked unverified.',
-        'El código de '+m.name+' tiene un formato antiguo — el jefe de equipo debe definir uno nuevo. Hasta entonces el nombre queda como no verificado.'));
     return fail(name ? L('שם או קוד שגויים','Wrong name or code','Datos incorrectos') : gtErrText('code_invalid'));
   }
   return fail(data.error ? gtErrText(data.error) : L('שגיאת תקשורת — נסה שוב','Connection error — try again','Error de conexión — intente de nuevo'));
@@ -7229,7 +7204,7 @@ function mgrRenderSupportAccess(){
 }
 async function mgrSupportAccess(hours){
   if(_isOwnerSession()||_isMakerSession()) return;
-  if(!window.sb){ ATalert('אין חיבור לשרת'); return; }
+  if(!window.sb){ ATalert(L('אין חיבור לשרת','No server connection','Sin conexión al servidor')); return; }
   try{
     const args={p_token:KS.getManagerToken(),p_hours:hours};
     if(hours>0){   // step45: opening access for the manufacturer needs a reason (closing does not)
@@ -8817,35 +8792,19 @@ function connectScreenDevices(screenKey){
   const printers=s.printers||[];
   const scanners=s.scanners||[];
   let any=false;
-  const p=printers.find(d=>d.id===cfg.printer); if(p){ any=true; try{ gtPrintStickers(screenKey,[{idx:0,kind:'legs',sample:true,copies:1}],{printer:p,test:true}); }catch(e){} }   // (round 23) a real test
-  const sc=scanners.find(d=>d.id===cfg.scanner); if(sc){sc.status='connected';any=true;}
-  if(!any){alert(L('לא שויכו מדפסת/סורק למסך זה (הגדר במסך ראש הצוות → הדפסה וסריקה)','No printer/scanner is assigned to this screen (set it in Team leader → Printing & scanning)','No hay impresora/escáner asignado a esta pantalla (configúrelo en Jefe de equipo → Impresión y escaneo)'));return;}
-  KS.updateSettings({scanners});
+  const p=printers.find(d=>d.id===cfg.printer);
+  if(p){ any=true;
+    // (full review A3) a test sticker is printed only with the team leader's session (the server refuses it from a
+    // station) — a station says so and keeps the printer's last real result
+    if(KS.getManagerToken && KS.getManagerToken() && ['manager','manufacturer'].includes(KS.getManagerRole())){
+      try{ gtPrintStickers(screenKey,[{idx:0,kind:'legs',sample:true,copies:1}],{printer:p,test:true}); }catch(e){}
+    } else _gtPrintMsg(L('🖨 מדבקת ניסיון מודפסת רק ממסך ראש הצוות. המצב של המדפסת מתעדכן בהדפסה הבאה.','🖨 A test sticker is printed only from the team-leader screen. The printer\'s status updates with the next print.','🖨 La etiqueta de prueba se imprime solo desde la pantalla del jefe. El estado se actualiza con la próxima impresión.'),false);
+  }
+  const sc=scanners.find(d=>d.id===cfg.scanner); if(sc){ any=true; try{ gtScannerTest(); }catch(e){} }   // a scanner is checked by scanning
+  if(!any){ATalert(L('לא שויכו מדפסת/סורק למסך זה (הגדר במסך ראש הצוות → הדפסה וסריקה)','No printer/scanner is assigned to this screen (set it in Team leader → Printing & scanning)','No hay impresora/escáner asignado a esta pantalla (configúrelo en Jefe de equipo → Impresión y escaneo)'));return;}
   renderScreenDeviceStatus();
 }
 // Show which printer + scanner are assigned to a work screen, and their status.
-function _renderScreenDeviceStatusOld(){ // superseded by renderScreenDeviceStatus in the UX script block
-  const s=KS.getSettings();
-  const sd=s.screenDevices||{};
-  const printers=s.printers||[];
-  const scanners=s.scanners||[];
-  const find=(list,id)=>list.find(d=>d.id===id);
-  [['legs','devStatus-legs'],['parts','devStatus-parts'],['stamps','devStatus-stamps'],['cooler','devStatus-cooler']].forEach(([key,elId])=>{
-    const el=document.getElementById(elId);if(!el)return;
-    const cfg=sd[key]||{};
-    const p=find(printers,cfg.printer);
-    const sc=find(scanners,cfg.scanner);
-    function chip(icon,dev){
-      if(!dev)return `<span style="display:inline-flex;align-items:center;gap:4px;color:var(--muted);"><span>${icon}</span><span>—</span></span>`;
-      const on=dev.status==='connected';
-      return `<span style="display:inline-flex;align-items:center;gap:4px;color:${on?'#28C76F':'#FF8866'};"><span>${icon}</span><span>${escapeHtml(dev.name)}</span><span style="font-size:8px;">${on?'●':'○'}</span></span>`;
-    }
-    el.innerHTML=`<div style="display:flex;gap:12px;align-items:center;justify-content:center;padding:4px 8px;font-size:10px;background:var(--panel2);border-bottom:1px solid var(--border);">
-      ${chip('🖨️',p)} ${chip('📷',sc)}
-      <button onclick="connectScreenDevices('${key}')" style="font-size:9px;font-weight:700;border-radius:10px;padding:2px 9px;cursor:pointer;border:1px solid var(--gold);background:rgba(212,168,67,.1);color:var(--gold);">חבר</button>
-    </div>`;
-  });
-}
 function mgrSetTypeSize(type,val){
   const wKey=type==='kosher'?'kosherW':'legsW';
   const hKey=type==='kosher'?'kosherH':'legsH';
@@ -10431,7 +10390,7 @@ function gtAnHtml(acc, K, C){
     `<table class="gt-tbl"><tr><th></th><th>${L('התקופה', 'Period', 'Período')}</th>${C.map(c => `<th>${escapeHtml(c.l)}</th>`).join('')}</tr>
      <tr><td>${L('בהמות שנשקלו', 'Animals weighed', 'Animales pesados')}</td><td>${_gtNum(K.weighed)}</td>${C.map(c => `<td>${_gtNum(c.K.weighed)}</td>`).join('')}</tr>
      <tr><td>${L('סה״כ ', 'Total ', 'Total ') + gtWU()}</td><td>${_gtNum(gtW(K.kg))}</td>${C.map(c => `<td>${_gtNum(gtW(c.K.kg))} ${gtDelta(K.kg, c.K.kg, {})}</td>`).join('')}</tr>
-     <tr><td>${L('ממוצע לבהמה', 'Average per animal', 'Promedio por animal')}</td><td>${W.nFull ? _gtNum(W.sumFull / W.nFull, 1) : '—'}</td>${C.map(c => `<td>${c.acc.weights.nFull ? _gtNum(c.acc.weights.sumFull / c.acc.weights.nFull, 1) : '—'}</td>`).join('')}</tr>
+     <tr><td>${L('ממוצע לבהמה', 'Average per animal', 'Promedio por animal')}</td><td>${W.nFull ? _gtNum(gtW(W.sumFull / W.nFull), 1) : '—'}</td>${C.map(c => `<td>${c.acc.weights.nFull ? _gtNum(gtW(c.acc.weights.sumFull / c.acc.weights.nFull), 1) : '—'}</td>`).join('')}</tr>
      ${K.price ? `<tr><td>${L('חיוב', 'Charge', 'Cargo')} (${escapeHtml(gtMoney(K.cur, K.price, 2))}/${L('ק״ג', 'kg', 'kg')})</td><td><b style="color:var(--gold);">${escapeHtml(gtMoney(K.cur, K.charge, 0))}</b></td>${C.map(c => `<td>${escapeHtml(gtMoney(K.cur, c.K.charge, 0))} ${gtDelta(K.charge, c.K.charge, {})}</td>`).join('')}</tr>` : ''}
      </table><div style="margin-top:12px;" id="mgrWeightTableA"></div>`);
   // 9. by hour
@@ -10461,7 +10420,7 @@ function gtRankTable(bucket, id){
     if(r[k] === best(k, !up)) return ' style="color:var(--red-light);font-weight:800;"'; return ''; };
   const p = v => v == null ? '—' : _gtNum(v, 1) + '%';
   const cols = [['name', L('שם', 'Name', 'Nombre')], ['n', L('בהמות', 'Animals', 'Animales')], ['glatt', 'גלאט'], ['kosher', 'כשר'],
-                ['treif', 'טרף'], ['nevela', L('נבלה', 'Nevela', 'Nevelá')], ['shot', L('ירוי', 'Shot', 'Baleado')], ['avg', L('ממוצע ', 'Avg ', 'Prom. ') + gtWU()], ['kg', L('סה״כ ק״ג', 'Total kg', 'Total kg')]];
+                ['treif', 'טרף'], ['nevela', L('נבלה', 'Nevela', 'Nevelá')], ['shot', L('ירוי', 'Shot', 'Baleado')], ['avg', L('ממוצע ', 'Avg ', 'Prom. ') + gtWU()], ['kg', L('סה״כ ', 'Total ', 'Total ') + gtWU()]];   // (full review A6) the plant's unit
   const sortHint = '<span style="font-size:9px;opacity:.6;">⇅</span>';
   rows.sort((a, b) => b.n - a.n);
   return `<div style="overflow-x:auto;"><table class="gt-tbl gt-rank gt-tight" id="gtRank_${id}"><tr>${cols.map(([k, l], i) => `<th style="cursor:pointer;white-space:nowrap;" onclick="gtSortTbl('gtRank_${id}', ${i})">${l} ${sortHint}</th>`).join('')}</tr>` +
@@ -10469,8 +10428,8 @@ function gtRankTable(bucket, id){
       `<td data-v="${r.glatt ?? -1}"${mark(r, 'glatt', true)}>${p(r.glatt)}</td><td data-v="${r.kosher ?? -1}"${mark(r, 'kosher', true)}>${p(r.kosher)}</td>` +
       `<td data-v="${r.treif ?? -1}"${mark(r, 'treif', false)}>${p(r.treif)}</td><td data-v="${r.nevela ?? -1}"${mark(r, 'nevela', false)}>${p(r.nevela)}</td><td data-v="${r.shot ?? -1}"${mark(r, 'shot', false)}>${p(r.shot)}</td>` +
       `<td data-v="${r.avg ?? -1}"${mark(r, 'avg', true)}>${r.avg == null ? '—' : _gtNum(gtW(r.avg), 1)}</td><td data-v="${r.kg}">${r.kg ? _gtNum(gtW(r.kg)) : '—'}</td></tr>`).join('') +
-    `</table></div><div class="gt-hint" style="margin-top:6px;">${L('ירוק = הכי טוב, אדום = הכי חלש (רק כשיש לפחות ' + _GT_MIN_N + ' בהמות). ממוצע ק״ג = בהמות ששתי החצאים שלהן נשקלו. לחיצה על כותרת ממיינת.',
-      'Green = best, red = weakest (only with at least ' + _GT_MIN_N + ' animals). Avg kg = animals with both halves weighed. Tap a header to sort.', 'Verde = mejor, rojo = más débil. Toque un encabezado para ordenar.')}</div>`;
+    `</table></div><div class="gt-hint" style="margin-top:6px;">${L('ירוק = הכי טוב, אדום = הכי חלש (רק כשיש לפחות ' + _GT_MIN_N + ' בהמות). ממוצע = בהמות ששתי החצאים שלהן נשקלו. לחיצה על כותרת ממיינת.',
+      'Green = best, red = weakest (only with at least ' + _GT_MIN_N + ' animals). Avg = animals with both halves weighed. Tap a header to sort.', 'Verde = mejor, rojo = más débil. Toque un encabezado para ordenar.')}</div>`;
 }
 function gtSortTbl(id, col){
   const t = document.getElementById(id); if(!t) return;
@@ -10514,7 +10473,7 @@ function gtFocusRender(){
     return `<tr><td style="text-align:start;white-space:nowrap;">${label}</td><td>${_gtNum(K.total)}</td><td>${pc(K.glattPct)}${R ? '<br>' + gtDelta(K.glattPct, R.glattPct, { points: true, goodUp: true }) : ''}</td>` +
       `<td>${pc(K.treifPct)}${R ? '<br>' + gtDelta(K.treifPct, R.treifPct, { points: true, goodUp: false }) : ''}</td><td>${_gtNum(K.nev)}</td>` +
       `<td>${avg == null ? '—' : _gtNum(gtW(avg), 1)}${R && avg != null && ravg != null ? '<br>' + gtDelta(avg, ravg, {}) : ''}</td><td>${K.kg ? _gtNum(gtW(K.kg)) : '—'}</td></tr>`; };
-  const head = `<tr><th style="text-align:start;">${L('תאריך', 'Date', 'Fecha')}</th><th>${L('בהמות', 'Animals', 'Animales')}</th><th>${'גלאט'}</th><th>${'טרף'}</th><th>${L('נבלה/ירוי', 'Nevela/shot', 'Nevelá')}</th><th>${L('ממוצע ק״ג', 'Avg kg', 'Prom. kg')}</th><th>${L('סה״כ ק״ג', 'Total kg', 'Total kg')}</th></tr>`;
+  const head = `<tr><th style="text-align:start;">${L('תאריך', 'Date', 'Fecha')}</th><th>${L('בהמות', 'Animals', 'Animales')}</th><th>${'גלאט'}</th><th>${'טרף'}</th><th>${L('נבלה/ירוי', 'Nevela/shot', 'Nevelá')}</th><th>${L('ממוצע ', 'Avg ', 'Prom. ') + gtWU()}</th><th>${L('סה״כ ', 'Total ', 'Total ') + gtWU()}</th></tr>`;
   const days = D.cur.slice().sort((a, b) => a.date < b.date ? -1 : 1).filter(d => stat([d]).total > 0);
   const total = stat(D.cur);
   h += `<div style="overflow-x:auto;"><table class="gt-tbl gt-tight">${head}` +
@@ -13185,14 +13144,6 @@ function gtNightlyExplain(){
     .then(({data,error})=>{ const t=!error && data && data.content && data.content[0] && data.content[0].text; if(!t) return noAi();
       box('<div style="font-size:14px;line-height:1.8;white-space:pre-wrap;">'+escapeHtml(t)+'</div>'); }, noAi);
 }
-async function mgrAiAnalyzeProblems(){
-  if(_isOwnerSession()) return;                                   // the owner only watches
-  const s=KS.getSettings();
-  const probs=s.problemReports||[];const errs=s.errorLog||[];
-  if(!probs.length&&!errs.length){ATalert('אין בעיות לניתוח');return;}
-  document.getElementById('mgrAiInput').value=`נתח את הבעיות הבאות: ${JSON.stringify([...probs,...errs.map(e=>({msg:e}))])}`;
-  mgrSubTab('l','ai');mgrAiSend();
-}
 
 // ── FUNC TAB (per-screen settings) ──
 let currentFuncTab='slaughter';
@@ -13972,17 +13923,7 @@ async function ksRunProtectedDailyReset(reason){
         // step11: reset_daily_board now requires a valid manager session
         // token — a manager must be logged in (KS.getManagerToken()) for
         // the server side of the reset to go through at all.
-        let { data: rpcData, error: rpcErr } = await window.sb.rpc('reset_daily_board', { p_token: KS.getManagerToken() });
-        // step 46: slaughtered animals without their last ruling would leave the screens for good —
-        // the server stops; going on needs a written reason (recorded with the numbers)
-        if(!rpcErr && rpcData && rpcData.error === 'unfinished_animals'){
-          const nums=(rpcData.numbers||[]).join(', ');
-          const why=prompt(L('בהמות שעוד לא קיבלו את כל סימני הכשרות (פסיקה / רגליים וראש / חלקים / חותמות): '+nums+'.\nבהמה לא עוברת ליום הבא בלי כל הסימנים — איפוס יוציא אותן מהמסכים לצמיתות.\nכדי לאפס בכל זאת, כתוב סיבה (נרשמת):',
-                             'Animals without all their kashrut marks (ruling / legs and head / parts / stamps): '+nums+'.\nAn animal does not go to the next day without all its marks — a reset takes them off the screens for good.\nTo reset anyway, write a reason (recorded):',
-                             'Animales sin todas sus marcas kosher (dictamen / patas y cabeza / partes / sellos): '+nums+'.\nUn reinicio los saca de las pantallas para siempre.\nPara reiniciar igualmente, escriba un motivo (se registra):'), '');
-          if(!why || !why.trim()){ _lastResetFailureReason = L('האיפוס בוטל — יש בהמות שלא הסתיימו: ','Reset cancelled — unfinished animals: ','Reinicio cancelado — animales sin terminar: ')+nums; return false; }
-          ({ data: rpcData, error: rpcErr } = await window.sb.rpc('reset_daily_board', { p_token: KS.getManagerToken(), p_reason: why.trim() }));
-        }
+        const { data: rpcData, error: rpcErr } = await window.sb.rpc('reset_daily_board', { p_token: KS.getManagerToken() });   // (v10.38 §37) the day always resets
         if(rpcErr){
           _lastResetFailureReason = rpcErr.message;
           console.error('[KS] Server-side board reset FAILED — other devices may still see yesterday\'s data:', rpcErr.message); gtLogError('reset.server', rpcErr);
@@ -14504,8 +14445,8 @@ No se pueden imprimir etiquetas kosher.`)
   }
   // A ruling made on this device and not yet sent to the server → no kosher stickers yet
   if(_gtRulingPending(idx)){ showPartsError(_gtRulingPendingTitle(), _gtRulingPendingText(idx)); return; }
-  // Already printed all 3 → offer reprint. Between 1-2 → continue to next sticker.
-  if(((a.partsPrintCount||0)>=3 || a.partsScanned) && !_partsNeedsReprint(a)){   // v10.32: also a set printed without a held part
+  // Already printed the whole set → offer reprint. (full review A7: the plant's set size, not a fixed 3)
+  if(((a.partsPrintCount||0)>=Math.max(1,gtPartsExpected()) || a.partsScanned) && !_partsNeedsReprint(a)){   // v10.32: also a set printed without a held part
     partsReprintWarn(idx);
     return;
   }
@@ -14529,10 +14470,11 @@ No se pueden imprimir etiquetas kosher.`)
 
   // Count how many stickers already printed for this animal
   const printed=a.partsPrintCount||0;
-  if(printed>=3 && !_partsNeedsReprint(a)){
+  const _pn=Math.max(1,gtPartsExpected());
+  if(printed>=_pn && !_partsNeedsReprint(a)){
     showPartsError(
-      L("הודפסו 3 מדבקות","3 Stickers Printed","Se imprimieron 3 etiquetas"),
-      L(`בהמה #${idx+1} — כבר הודפסו 3 מדבקות.\nלהדפסה חוזרת לחץ על המספר.`,`Animal #${idx+1} — all 3 stickers printed.\nTap the number to reprint.`,`Animal #${idx+1} — ya se imprimieron las 3 etiquetas.\nToque el número para reimprimir.`)
+      L("הודפסו "+_pn+" מדבקות",_pn+" Stickers Printed","Se imprimieron "+_pn+" etiquetas"),
+      L(`בהמה #${idx+1} — כבר הודפסו ${_pn} מדבקות.\nלהדפסה חוזרת לחץ על המספר.`,`Animal #${idx+1} — all ${_pn} stickers printed.\nTap the number to reprint.`,`Animal #${idx+1} — ya se imprimieron las ${_pn} etiquetas.\nToque el número para reimprimir.`)
     );
     return;
   }
@@ -14670,7 +14612,7 @@ function partsDoReprint(){
   // Log reprint
   const s=KS.getSettings();
   const logs=s.reprintLog||[];
-  logs.push({screen:"חלקים",idx:partsReprintIdx+1,sticker:cnt+"/3",time:new Date().toLocaleTimeString("he-IL")});
+  logs.push({screen:"חלקים",idx:partsReprintIdx+1,sticker:cnt+"/"+Math.max(1,gtPartsExpected()),time:new Date().toLocaleTimeString("he-IL")});
   KS.updateSettings({reprintLog:logs.slice(-2000)});   // (improvement round) only the newest 2000 lines
   // v10.37: also an append-only event — two stations reprinting at the same moment each sent their own copy of
   // the whole log, and one copy overwrote the other (a reprint is a kashrut audit line, it must not be lost)
@@ -14732,8 +14674,8 @@ function partsRenderGrid(){
       const labels={glatt:"גלאט",beit:"ב״י",kosher:LK('kosherS'),mk:"MK"};
       const cnt2=x.partsPrintCount||0;
       if(_partsNeedsReprint(x)) return _reprintNeededLabel();
-      if(cnt2>=3||x.partsScanned) return LK('done');
-      if(cnt2>0) return cnt2+"/3"; // show progress
+      if(cnt2>=Math.max(1,gtPartsExpected())||x.partsScanned) return LK('done');
+      if(cnt2>0) return cnt2+"/"+Math.max(1,gtPartsExpected()); // show progress (the plant's set size)
       if(x.innerStatus==="treif"||x.outerStatus==="treif") return LK('treif');
       return statusDisplayName(x.outerStatus,x)||"";
     },
@@ -14749,7 +14691,7 @@ function partsRenderGrid(){
 function partsUpdateSummary(){
   const a=KS.getAnimals();
   const kosher=a.filter(x=>isKosherReady(x));
-  document.getElementById("partsCScanned").textContent=kosher.filter(x=>((x.partsPrintCount||0)>=3||x.partsScanned)&&!_partsNeedsReprint(x)).length;
+  document.getElementById("partsCScanned").textContent=kosher.filter(x=>((x.partsPrintCount||0)>=Math.max(1,gtPartsExpected())||x.partsScanned)&&!_partsNeedsReprint(x)).length;
   document.getElementById("partsCWaiting").textContent=kosher.filter(x=>_partsPending(x)).length;
   document.getElementById("partsCNot").textContent=a.filter(x=>x.outerStatus==="treif"||x.innerStatus==="treif").length;
   document.getElementById("partsCTot").textContent=kosher.length;
@@ -16007,6 +15949,14 @@ function _kioskRoleLabels(){
     'leader-3': he?'ראש צוות 4':es?'Jefe de equipo 4':'Team leader 4',
   };
 }
+// (full review A9) the label key of a station slot: inner / outer / leader / display by slot; the second legs slot
+// is the head screen, the second nikur slot the small-parts nikur
+function _gtRoleKey(role, idx){
+  idx = Number(idx||0);
+  if(role==='inner'||role==='outer'||role==='leader'||role==='display') return role+'-'+idx;
+  if((role==='legs'||role==='nikur') && idx===1) return role+'-1';
+  return role||'';
+}
 const KIOSK_ROLE_KEYS = ['slaughter','esophagus','legs','legs-1','inner-0','inner-1','outer-0','outer-1','parts','stamps','cooler','nikur','nikur-1','salting','shipping','display-0','display-1'];
 
 /** Registers this device (heartbeat), listens for the manager assigning or
@@ -16236,7 +16186,7 @@ async function _gtLeaderSessionOk(){
     try{
       const r=await _withTimeout(window.sb.rpc('manager_session_check',{p_token:tok}),6000);
       if(r && !r.error && r.data){
-        if(r.data.ok===true && (!r.data.role || r.data.role==='manager' || r.data.role==='owner')) return true;
+        if(r.data.ok===true && (!r.data.role || ['manager','owner','manufacturer'].includes(r.data.role))) return true;   // (full review A8)
         KS.setManagerToken(null,null); try{ _clearLeaderStash(); }catch(e){} return false;
       }
     }catch(e){}
@@ -16565,38 +16515,23 @@ async function mgrRenderStationsPanel(){
 
   const planNote = (typeof gtPlan==='function' && !gtPlan().decided)
     ? `<div style="padding:9px 10px;border-radius:8px;border:1px solid var(--gold);background:rgba(212,168,67,.10);color:var(--gold);font-size:12px;font-weight:700;margin-bottom:8px;">${L('קודם בוחרים למעלה אילו מסכים עובדים במפעל ושומרים. רק אחר כך אפשר לצמד אליהם מכשירים.','First choose above which screens the plant uses and save. Only then can devices be paired to them.','Primero elija arriba las pantallas y guarde; luego empareje.')}</div>` : '';
-  el.innerHTML = planNote + rows + leaderBlock +
-    `<div style="font-size:10px;color:var(--muted);margin-top:10px;">${L('קולר, אריזה, מליחה, ניקור — בקרוב','Cooler, packaging, salting, nikkur — coming soon','Cámara, empaque, salazón, nikkur — próximamente')}</div>`;
+  el.innerHTML = planNote + rows + leaderBlock;
 
   // Home-menu cards follow the stations: with a device → shown, without → hidden.
   _syncStationFlags(devices);
 }
 
-async function _mgrPairPromptOld(role, idx){ // superseded by mgrPairPrompt (pairing window) in the UX script block
-  const key = role + ((role==='inner'||role==='outer') ? '-'+idx : '');
-  const label = _kioskRoleLabels()[key] || role;
-  const code = prompt(L(
-    'הקלד את קוד הצימוד (6 ספרות) שמופיע על המכשיר שישרת את "'+label+'":',
-    'Type the 6-digit pairing code shown on the device that will serve "'+label+'":',
-    'Ingrese el código de 6 dígitos que aparece en el dispositivo para "'+label+'":'));
-  if(code===null) return;
-  const clean = (code||'').replace(/\D/g,'');
-  if(clean.length!==6){ ATalert('הקוד צריך להיות 6 ספרות'); return; }
-  const name = prompt(L('שם למכשיר (אפשר להשאיר כמו שזה):','Name for this device (you can keep this):','Nombre del dispositivo (puede dejarlo así):'), label);
-  if(name===null) return;
-  await _mgrDoPair(clean, role, idx, false, name);
-}
 
 async function _mgrDoPair(code, role, idx, replace, name, reason){
-  if(!window.sb){ ATalert('אין חיבור לשרת'); return; }
+  if(!window.sb){ ATalert(L('אין חיבור לשרת','No server connection','Sin conexión al servidor')); return; }
   const args = { p_token: KS.getManagerToken(), p_code: code, p_role: role, p_index: idx, p_replace: replace, p_device_name: name||null };
   if(replace) args.p_reason = reason || null;              // step45: replacing a working device needs a reason
   const { data, error } = await window.sb.rpc('device_pair', args);
-  if(error){ ATalert('הצימוד נכשל: '+gtErrText(error)); return; }
+  if(error){ ATalert(L('הצימוד נכשל: ','Pairing failed: ','El emparejamiento falló: ')+gtErrText(error)); return; }
   if(!data || !data.ok){
     const errc = data && data.error;
     if(errc==='slot_taken'){
-      if(await ATconfirm('בתחנה הזו כבר עובד "'+(data.device_name||'')+'". להחליף אותו במכשיר החדש? המכשיר הישן ינותק מהתחנה.')){
+      if(await ATconfirm(L('בתחנה הזו כבר עובד "'+(data.device_name||'')+'". להחליף אותו במכשיר החדש? המכשיר הישן ינותק מהתחנה.','"'+(data.device_name||'')+'" already works at this station. Replace it with the new device? The old one is disconnected from the station.','"'+(data.device_name||'')+'" ya trabaja en esta estación. ¿Reemplazarlo por el nuevo? El anterior se desconecta.'))){
         const why = await gtAskReason(L('סיבת ההחלפה','Reason for the replacement','Motivo del reemplazo'),
           L('המכשיר "'+(data.device_name||'')+'" ינותק מהתחנה. למה מחליפים אותו? (נרשם ביומן המכשירים)',
             'The device "'+(data.device_name||'')+'" will be disconnected from the station. Why is it being replaced? (written to the device log)',
@@ -16608,16 +16543,17 @@ async function _mgrDoPair(code, role, idx, replace, name, reason){
       return;
     }
     if(errc==='reason_required'){ ATalert(gtErrText('reason_required')); return; }
-    if(errc==='code_invalid'){ ATalert('הקוד לא נכון או שפג תוקפו. בדוק את הקוד שמופיע כרגע על המכשיר ונסה שוב.'); return; }
-    if(errc==='unauthorized'){ ATalert('כניסת ראש הצוות פגה. צא מהמסך, היכנס שוב עם קוד ראש הצוות ונסה שוב.'); return; }
-    ATalert('הצימוד נכשל: '+(errc||'')); return;
+    if(errc==='code_invalid'){ ATalert(L('הקוד לא נכון או שפג תוקפו. בדוק את הקוד שמופיע כרגע על המכשיר ונסה שוב.','The code is wrong or expired. Check the code now on the device and try again.','El código es incorrecto o caducó. Revise el código del dispositivo e intente de nuevo.')); return; }
+    if(errc==='unauthorized'){ ATalert(L('כניסת ראש הצוות פגה. צא מהמסך, היכנס שוב עם קוד ראש הצוות ונסה שוב.','The team-leader login expired. Leave the screen, log in again with the team-leader code and try again.','El acceso del jefe caducó. Entre de nuevo con su código e intente otra vez.')); return; }
+    ATalert(L('הצימוד נכשל: ','Pairing failed: ','El emparejamiento falló: ')+(errc||'')); return;
   }
-  ATalert(role==='leader' ? '✅ המכשיר צומד כמכשיר ראש צוות. ראש צוות יוכל להיכנס ממנו בעוד כמה שניות.' : '✅ המכשיר צומד. הוא יעבור לתחנה שלו תוך כמה שניות.');
+  ATalert(role==='leader' ? L('✅ המכשיר צומד כמכשיר ראש צוות. ראש צוות יוכל להיכנס ממנו בעוד כמה שניות.','✅ Paired as a team-leader device. A team leader can log in from it in a few seconds.','✅ Emparejado como dispositivo del jefe. En unos segundos se puede entrar desde él.') : L('✅ המכשיר צומד. הוא יעבור לתחנה שלו תוך כמה שניות.','✅ Paired. It moves to its station within a few seconds.','✅ Emparejado. Pasa a su estación en unos segundos.'));
   mgrRenderStationsPanel();
 }
 
 // step 46: removing the LAST team-leader device locks every team leader out until the
 // installer reopens it on the server (leader_device_recovery) — say so first
+function _gtLoginExpiredTxt(){ return L('כניסת ראש הצוות פגה. היכנס שוב ונסה שוב.','The team-leader login expired. Log in again and try again.','El acceso del jefe caducó. Entre de nuevo e intente otra vez.'); }
 async function _gtLastLeaderOk(deviceId){
   try{
     const { data } = await window.sb.from('devices_pilot').select('id,assigned_role,device_status').eq('assigned_role','leader');
@@ -16631,12 +16567,12 @@ async function _gtLastLeaderOk(deviceId){
 async function mgrUnpairDevice(deviceId){
   if(!window.sb) return;
   if(!await _gtLastLeaderOk(deviceId)) return;
-  if(!await ATconfirm('לנתק את המכשיר מהתחנה? הוא יחזור למסך קוד הצימוד, והתחנה תיכבה עד שיצומד מכשיר אחר.')) return;
+  if(!await ATconfirm(L('לנתק את המכשיר מהתחנה? הוא יחזור למסך קוד הצימוד, והתחנה תיכבה עד שיצומד מכשיר אחר.','Disconnect the device from the station? It goes back to the pairing code, and the station is off until another device is paired.','¿Desconectar el dispositivo de la estación? Vuelve al código de emparejamiento y la estación queda apagada.'))) return;
   const why = await gtAskReason(L('סיבת הניתוק','Reason for disconnecting','Motivo de la desconexión'), null, '');   // step45: required
   if(!why) return;
   const { data, error } = await window.sb.rpc('device_unpair', { p_token: KS.getManagerToken(), p_device_id: deviceId, p_reason: why });
-  if(error){ ATalert('הניתוק נכשל: '+gtErrText(error)); return; }
-  if(data && data.ok===false){ ATalert(data.error==='unauthorized' ? 'כניסת ראש הצוות פגה. היכנס שוב ונסה שוב.' : ('הניתוק נכשל: '+gtErrText(data.error))); return; }
+  if(error){ ATalert(L('הניתוק נכשל: ','Disconnecting failed: ','La desconexión falló: ')+gtErrText(error)); return; }
+  if(data && data.ok===false){ ATalert(data.error==='unauthorized' ? _gtLoginExpiredTxt() : (L('הניתוק נכשל: ','Disconnecting failed: ','La desconexión falló: ')+gtErrText(data.error))); return; }
   mgrRenderStationsPanel();
 }
 
@@ -16649,7 +16585,7 @@ async function mgrSetDeviceEnforcement(on, legacyCount){
     if(!await ATconfirm(msg)) return;
   }
   const { data, error } = await window.sb.rpc('device_auth_set', { p_token: KS.getManagerToken(), p_on: !!on });
-  if(error){ ATalert('השינוי נכשל: '+gtErrText(error)); return; }
+  if(error){ ATalert(L('השינוי נכשל: ','The change failed: ','El cambio falló: ')+gtErrText(error)); return; }
   if(data && data.ok===false){ ATalert(data.error==='unauthorized' ? 'כניסת ראש הצוות פגה. היכנס שוב ונסה שוב.' : data.error==='locked' ? L('ההגנה על המכשירים נעולה במצב פעיל.','Device protection is locked on.','La protección de dispositivos está bloqueada en activo.') : ('השינוי נכשל: '+data.error)); return; }
   mgrRenderStationsPanel();
 }
@@ -16835,7 +16771,7 @@ async function mgrRenderDevicesPanel(){
     return;
   }
   if(pl.error && _isMissingFn(pl.error)){ _panelProblem(el, L('השרת לא מעודכן — ניהול מכשירים לא זמין. פנה לתמיכה.','The server is not up to date — device management is unavailable.','El servidor no está actualizado.'), 'mgrRenderDevicesPanel'); return; }
-  if(devs.error){ el.innerHTML = '<div style="color:var(--red-light);font-size:12px;">שגיאה בטעינת מכשירים: '+escapeHtml(devs.error.message)+'</div>'; return; }
+  if(devs.error){ el.innerHTML = '<div style="color:var(--red-light);font-size:12px;">'+escapeHtml(L('שגיאה בטעינת מכשירים: ','Error loading devices: ','Error al cargar dispositivos: ')+devs.error.message)+'</div>'; return; }
   if(!pl.error && pl.data && pl.data.ok === false){ _panelProblem(el, escapeHtml(gtErrText(pl.data.error || 'unauthorized')), 'mgrRenderDevicesPanel'); return; }   // (step43) the list would be incomplete
   const keyed = new Set((pl.data && pl.data.ok && pl.data.devices) || []);
   const labels = _kioskRoleLabels();
@@ -16844,7 +16780,7 @@ async function mgrRenderDevicesPanel(){
   const btn = (c) => `flex:1;padding:6px;border-radius:6px;background:transparent;border:1px solid ${c};color:${c};font-size:11px;cursor:pointer;`;
   el.innerHTML = (devs.data||[]).filter(d=>_safeDevId(d.id)).map(d=>{
     const retired = d.device_status==='retired';
-    const key = d.assigned_role ? d.assigned_role + ((d.assigned_role==='inner'||d.assigned_role==='outer'||d.assigned_role==='leader') ? '-'+(d.assigned_index||0) : '') : '';
+    const key = d.assigned_role ? _gtRoleKey(d.assigned_role, d.assigned_index) : '';
     const station = key ? escapeHtml(labels[key]||key) : L('לא משויך','Not paired','Sin asignar');
     const online = d.last_seen && (now - new Date(d.last_seen).getTime() < 3*60000);
     const badge = retired ? '🔴 '+L('מושבת','Retired','Retirado')
@@ -16873,8 +16809,8 @@ async function mgrRenameDevice(deviceId){
   const name = prompt(L('שם חדש למכשיר:','New device name:','Nuevo nombre:'));
   if(!name || !name.trim()) return;
   const { data, error } = await window.sb.rpc('device_manage', { p_token: KS.getManagerToken(), p_device_id: deviceId, p_action: 'rename', p_reason: name.trim() });
-  if(error){ ATalert('שינוי השם נכשל: '+gtErrText(error)); return; }
-  if(data && data.ok===false){ ATalert(data.error==='unauthorized' ? 'כניסת ראש הצוות פגה. היכנס שוב ונסה שוב.' : ('שינוי השם נכשל: '+gtErrText(data.error))); return; }
+  if(error){ ATalert(L('שינוי השם נכשל: ','Renaming failed: ','El cambio de nombre falló: ')+gtErrText(error)); return; }
+  if(data && data.ok===false){ ATalert(data.error==='unauthorized' ? _gtLoginExpiredTxt() : (L('שינוי השם נכשל: ','Renaming failed: ','El cambio de nombre falló: ')+gtErrText(data.error))); return; }
   mgrRenderDevicesPanel();
 }
 
@@ -16889,8 +16825,8 @@ async function mgrRetireDevice(deviceId){
   if(!reason) return;
   // server-side only (verifies the team leader and revokes the device key); step45: the reason is required
   const r = await window.sb.rpc('device_manage', { p_token: KS.getManagerToken(), p_device_id: deviceId, p_action: 'retire', p_reason: reason });
-  if(r.error){ ATalert('לא ניתן להשבית: '+gtErrText(r.error)); return; }
-  if(r.data && r.data.ok===false){ ATalert(r.data.error==='unauthorized' ? 'כניסת ראש הצוות פגה. היכנס שוב ונסה שוב.' : ('לא ניתן להשבית: '+gtErrText(r.data.error))); return; }
+  if(r.error){ ATalert(L('לא ניתן להשבית: ','Cannot retire: ','No se puede retirar: ')+gtErrText(r.error)); return; }
+  if(r.data && r.data.ok===false){ ATalert(r.data.error==='unauthorized' ? _gtLoginExpiredTxt() : (L('לא ניתן להשבית: ','Cannot retire: ','No se puede retirar: ')+gtErrText(r.data.error))); return; }
   mgrRenderDevicesPanel();
 }
 
@@ -16903,9 +16839,9 @@ async function mgrReactivateDevice(deviceId){
     L('חזר מתיקון','Back from repair','Volvió de reparación'));
   if(!reason) return;
   const r = await window.sb.rpc('device_manage', { p_token: KS.getManagerToken(), p_device_id: deviceId, p_action: 'reactivate', p_reason: reason });
-  if(r.error){ ATalert('לא ניתן להחזיר לשימוש: '+gtErrText(r.error)); return; }
+  if(r.error){ ATalert(L('לא ניתן להחזיר לשימוש: ','Cannot bring it back: ','No se puede reactivar: ')+gtErrText(r.error)); return; }
   if(r.data && r.data.ok===true) ATalert(L('המכשיר הוחזר לשימוש. כדי שיעבוד בתחנה צריך לצמד אותו מחדש עם קוד צימוד (המפתח הישן שלו בוטל כשהושבת).','The device is back in use. To work at a station it must be paired again with a pairing code (its old key was revoked when it was retired).','El dispositivo volvió a usarse. Para trabajar en una estación hay que emparejarlo de nuevo con un código (su clave anterior se revocó al darlo de baja).'));
-  if(r.data && r.data.ok===false){ ATalert(r.data.error==='unauthorized' ? 'כניסת ראש הצוות פגה. היכנס שוב ונסה שוב.' : ('לא ניתן להחזיר לשימוש: '+gtErrText(r.data.error))); return; }
+  if(r.data && r.data.ok===false){ ATalert(r.data.error==='unauthorized' ? _gtLoginExpiredTxt() : (L('לא ניתן להחזיר לשימוש: ','Cannot bring it back: ','No se puede reactivar: ')+gtErrText(r.data.error))); return; }
   mgrRenderDevicesPanel();
 }
 
@@ -16963,6 +16899,13 @@ function mgrRenderLicensePanel(){
   if(!el) return;
   const s = KS.getSettings();
   const lic = s.license;
+  // (full review A11) no licensing server set (the usual plant): the plant server reports to the manufacturer's
+  // support center by itself — nothing to activate here
+  if(!_getCentralClient() && !(lic && lic.apiKey)){
+    el.innerHTML = `<div style="font-size:12px;color:var(--muted);line-height:1.6;">${L('הרישיון והחיוב מנוהלים במרכז השירות של היצרן. שרת המפעל מדווח לבד — אין כאן מה להפעיל.','The licence and billing are handled by the manufacturer\'s support center. The plant server reports by itself — nothing to activate here.','La licencia y la facturación se gestionan en el centro de soporte del fabricante. El servidor de la planta informa solo.')}</div>
+      <button class="secondary" style="margin-top:10px;" onclick="mgrReportSupportIssue()">${L('דווח על תקלה ליצרן','Report an issue to the manufacturer','Reportar un problema al fabricante')}</button>`;
+    return;
+  }
   const installationCode = _getInstallationCode();
   if(!lic || !lic.apiKey){
     el.innerHTML = `
@@ -17154,6 +17097,7 @@ function _maybeShowLicenseRequest(){
     const s = KS.getSettings();
     if(s.license && s.license.apiKey) return; // already activated
     if(s.licenseRequestDismissed) return;      // user already saw it (submitted or skipped)
+    if(!_getCentralClient()) return;           // (full review A11) no licensing server set: the plant server reports to the support center
     const _act=document.querySelector('.screen.active');
     if(!_act || _act.id!=='scManager' || !KS.getManagerToken() || KS.getManagerRole()!=='manager') return; // real team leader only (not worker tablets, owner or manufacturer)
     if(window._gtLicShown) return; window._gtLicShown=true;            // once per session
@@ -17679,10 +17623,11 @@ function renderScreenDeviceStatus(){
 // Printing cards: say plainly when nothing was really printed.
 function _gtPrintNotice(key,elId){
   const el=document.getElementById(elId); if(!el) return;
-  const {p}=_gtDevFor(key); const on=!!(p&&p.status==='connected');
-  if(on){ el.style.display='none'; el.textContent=''; return; }
-  el.textContent = p ? L('⚠ המדפסת "'+p.name+'" לא מחוברת — לא הודפס כלום','⚠ Printer "'+p.name+'" is not connected — nothing was printed','⚠ La impresora "'+p.name+'" no está conectada — no se imprimió nada')
-                     : L('⚠ אין מדפסת מחוברת — לא הודפס כלום (הדמיה)','⚠ No printer connected — nothing was printed (simulation)','⚠ No hay impresora conectada — no se imprimió nada (simulación)');
+  // (full review A1) this card opens only after the printer took the stickers (gtPrintGate) — the note is
+  // needed only when there is no printer at all (the server's test mode marks without printing)
+  const {p}=_gtDevFor(key);
+  if(p){ el.style.display='none'; el.textContent=''; return; }
+  el.textContent = L('⚠ אין מדפסת מחוברת — לא הודפס כלום (הדמיה)','⚠ No printer connected — nothing was printed (simulation)','⚠ No hay impresora conectada — no se imprimió nada (simulación)');
   el.style.display='block';
 }
 [['showPrintPopup','legs','ppNoPrinter'],['showPartsPrint','parts','ppPartsNoPrinter'],['stampsShowPrint','stamps','ppStampsNoPrinter']].forEach(([fn,key,elId])=>{
@@ -17719,7 +17664,7 @@ function _gtProblemSend(){
 // ── 11. Pairing a device: a real window with a number keypad ──
 let _gtPair=null;
 function mgrPairPrompt(role, idx){
-  const key=role+((role==='inner'||role==='outer'||role==='leader')?'-'+idx:'');
+  const key=_gtRoleKey(role, idx);
   const label=_kioskRoleLabels()[key]||role;
   _gtPair={role,idx,label};
   let m=document.getElementById('gtPairModal');
@@ -18239,6 +18184,7 @@ function gtPlanSlots(){
   ['legs','parts','stamps'].forEach(r => { if(p.screens.has(r)) out.push([r,0]); });
   if(p.screens.has('legs') && s.legsHeadSplit===true && s.legsMode!==false) out.push(['legs',1]);   // v10.34: the head screen
   GT_SUP_KEYS.forEach(r => { if(p.screens.has(r)) out.push([r,0]); });   // v10.35: the supervisor screens
+  if(p.screens.has('nikur') && s.nikurSmallScreen!==false) out.push(['nikur',1]);   // (full review A10) the small-parts nikur
   if(p.screens.has('display')) out.push(['display',0]);
   return out;
 }
@@ -18269,7 +18215,8 @@ async function mgrRenderPlan(){
   const s = KS.getSettings(), p = gtPlan();
   if(!_gtPlanDraft){
     const cfg = _GT_CFG[s.screenConfig] || [1,1];
-    _gtPlanDraft = { screens: new Set(p.screens), ni: cfg[0], no: cfg[1], shared: s.screenConfig==='1both', legsMode: s.legsMode!==false, sort: s.legsSortEnabled===true && s.legsMode!==false, split: s.legsHeadSplit===true };
+    _gtPlanDraft = { screens: new Set(p.screens), ni: cfg[0], no: cfg[1], shared: s.screenConfig==='1both', legsMode: s.legsMode!==false, sort: s.legsSortEnabled===true && s.legsMode!==false, split: s.legsHeadSplit===true,
+                     nikSmall: s.nikurSmallScreen!==false };
   }
   const D = _gtPlanDraft, E = escapeHtml;
   const devs = await _gtDevices();
@@ -18316,6 +18263,10 @@ async function mgrRenderPlan(){
           <div style="min-width:0;"><div style="font-size:14px;font-weight:700;color:var(--text);">${E(L('רגליים','Legs','Patas'))}</div>
           <div style="font-size:11px;color:var(--muted);line-height:1.5;">${E(L('מדבקות מספר לרגליים, ומיון הרגליים.','Number stickers for the legs, and the leg sorting.','Etiquetas de número de patas y su clasificación.'))}</div></div></div>`;
     }
+    if(on && sc.k==='nikur'){   // (full review A10) one nikur screen, or a second one for the small parts
+      x += `<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:8px 32px 0 0;font-size:12px;color:var(--muted);">${L('ניקור:','Nikur:','Nikur:')}
+        ${opt(!D.nikSmall, L('מסך אחד','One screen','Una pantalla'), 'gtPlanNikSmall(false)')} ${opt(D.nikSmall, L('שני מסכים — רגיל · חלקים קטנים','Two screens — regular · small parts','Dos pantallas — normal · partes pequeñas'), 'gtPlanNikSmall(true)')}</div>`;
+    }
     if(on && sc.k==='legs' && D.legsMode){
       x += `<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:8px 32px 0 0;">
         ${opt(D.sort && D.legsMode, (D.sort && D.legsMode ? '✓ ' : '') + L('מיון רגלים','Leg sorting','Clasificación de patas'), 'gtPlanSort()', !D.legsMode)}</div>
@@ -18348,6 +18299,7 @@ function gtPlanShared(on){ const D=_gtPlanDraft; if(!D) return; D.shared=!!on; m
 function gtPlanCount(k, n){ const D=_gtPlanDraft; if(!D) return; if(k==='inner') D.ni=n; else D.no=n; mgrRenderPlan(); }
 function gtPlanSplit(on){ const D=_gtPlanDraft; if(!D) return; D.split=!!on; mgrRenderPlan(); }
 function gtPlanLegs(on){ const D=_gtPlanDraft; if(!D) return; D.legsMode=!!on; if(!on) D.sort=false; mgrRenderPlan(); }
+function gtPlanNikSmall(on){ const D=_gtPlanDraft; if(!D) return; D.nikSmall=!!on; mgrRenderPlan(); }
 function gtPlanSort(){ const D=_gtPlanDraft; if(!D || !D.legsMode) return; D.sort=!D.sort; mgrRenderPlan(); }
 async function gtPlanSave(){
   const D = _gtPlanDraft; if(!D) return;
@@ -18361,6 +18313,13 @@ async function gtPlanSave(){
     alert(L('לטאבלט הראש (רגליים 2) עדיין מצומד מכשיר. כדי לחזור למסך אחד, קודם מסירים אותו (למטה, "תחנות — צימוד מכשירים").',
             'The head tablet (legs 2) is still paired. To go back to one screen, first remove it (below, "Stations").',
             'La tableta de cabeza sigue emparejada. Para volver a una pantalla, quítela primero.'));
+    return;
+  }
+  // (full review A10) back to one nikur screen while the small-parts nikur tablet (nikur 2) is still paired
+  if(!(D.screens.has('nikur') && D.nikSmall) && devs.some(d => d.assigned_role==='nikur' && Number(d.assigned_index||0)===1)){
+    alert(L('לטאבלט ניקור החלקים הקטנים עדיין מצומד מכשיר. קודם מסירים אותו (למטה, "תחנות — צימוד מכשירים").',
+            'The small-parts nikur tablet is still paired. Remove it first (below, "Stations").',
+            'La tableta de nikur de partes pequeñas sigue emparejada. Quítela primero.'));
     return;
   }
   const busy2 = shared ? (devs.some(d => d.assigned_role==='inner' && Number(d.assigned_index||0)===1) ? 'inner' : null)
@@ -18381,7 +18340,8 @@ async function gtPlanSave(){
     screenConfig: (D.shared && D.screens.has('inner') && D.screens.has('outer')) ? '1both' : _gtCfgFor(D.ni, D.no),
     legsMode: !!D.legsMode,
     legsSortEnabled: !!(D.legsMode && D.sort),
-    legsHeadSplit: !!(D.legsMode && D.split)
+    legsHeadSplit: !!(D.legsMode && D.split),
+    nikurSmallScreen: !!D.nikSmall
   };
   if(eso && !s.esophagusEnabled){ upd.esophagusEnabled = true; upd.esoFromIdx = _esoComputeFromIdx(); upd.esoFromReset = s.lastServerResetAt || ''; }
   else if(!eso && s.esophagusEnabled) upd.esophagusEnabled = false;
@@ -18454,73 +18414,8 @@ async function _gtOwners(){
 }
 function _gtGuideState(){ return KS.getSettings().setupGuide || {}; }
 function gtGuideMark(key, val){ const g = Object.assign({}, _gtGuideState()); g[key] = val; KS.updateSettings({ setupGuide: g }); gtRenderSetupGuide(); }
-async function gtRenderSetupGuide(){
-  const el = document.getElementById('gtSetupGuide'); if(!el) return;
-  const leader = !!(KS.getManagerToken && KS.getManagerToken()) && KS.getManagerRole()==='manager';
-  const g = _gtGuideState();
-  // the installation is the one-time page (gtWizard); after it everything is done in its own tab — no guide card on "Today"
-  el.style.display = 'none'; return;
-  if(!leader || (g.closed && !g.reopened)){ el.style.display = 'none'; return; }
-  const s = KS.getSettings(), p = gtPlan(), E = escapeHtml;
-  const devs = await _gtDevices(true);
-  _gtPlanAdopt(devs);
-  const slots = gtPlanSlots();
-  const has = (r,i) => devs.some(d => d.assigned_role===r && Number(d.assigned_index||0)===i);
-  const missing = slots.filter(([r,i]) => !has(r,i));
-  const labels = _kioskRoleLabels();
-  const sharedScr = s.screenConfig==='1both' && p.screens.has('inner') && p.screens.has('outer');
-  const workerScreens = [...p.screens].filter(r => r!=='display' && !(sharedScr && r==='outer'));
-  const users = Array.isArray(s.users) ? s.users : [];
-  const lm = s.loginModeByRole || {};
-  const needPrint = ['legs','parts','stamps'].some(r => p.screens.has(r));
-  const owners = await _gtOwners();
-  let recOk = null; try{ const rr = await _withTimeout(window.sb.rpc('leader_recovery_status', { p_token: KS.getManagerToken() }), 8000); recOk = !!(rr.data && rr.data.exists); }catch(e){}
-  const steps = [
-    { k:'recovery', done: recOk===true, t:L('קוד שחזור לראש הצוות','Team-leader recovery code','Código de recuperación'),
-      d: recOk ? L('נשמר. אם המכשיר הזה יאבד — מחליפים אותו לבד עם הקוד.','Saved. If this device is lost, replace it yourself with the code.','Guardado.') : L('בלעדיו, אם המכשיר של ראש הצוות יאבד, צריך את המתקין.','Without it a lost team-leader device needs the installer.','Sin él se necesita al instalador.'),
-      go: () => gtOpenSetting('system','mgrRecoveryTitle') },
-    { k:'plan', done: p.decided, t:L('בחירת מסכים','Choose screens','Elegir pantallas'),
-      d: p.decided ? [...p.screens].map(r => { const sc = GT_PLAN_SCREENS.find(x => x.k===r); return sc ? L(sc.t[0],sc.t[1],sc.t[2]) : r; }).join(' · ')
-                   : L('מסמנים אילו מסכים עובדים במפעל. רק אותם אפשר יהיה לצמד.','Mark which screens the plant uses. Only those can be paired.','Marque las pantallas que usa la planta.'),
-      go: () => gtOpenSetting('devices','mgrPlanTitle') },
-    { k:'workers', done: !!g.workers, need: p.decided, t:L('רשימות עובדים ומצב כניסה','Worker lists and login mode','Listas de trabajadores y modo de acceso'),
-      d: workerScreens.map(r => { const n = users.filter(u => u.role===r).length; const m = lm[r]||'none';
-           const ml = { none:L('בלי כניסה','no login','sin acceso'), name:L('שם','name','nombre'), code:L('קוד','code','código'), both:L('שם + קוד','name + code','nombre + código') }[m] || m;
-           const sc = GT_PLAN_SCREENS.find(x => x.k===r); const nm = (sharedScr && r==='inner') ? L('בודקים (פנים + חוץ)','Inspectors (inner + outer)','Inspectores') : (sc?L(sc.t[0],sc.t[1],sc.t[2]):r);
-           return nm+': '+n+' · '+ml; }).join('<br>') || '—',
-      go: () => gtOpenSetting('users'), mark: 'workers' },
-    { k:'pair', done: p.decided && slots.length>0 && !missing.length, need: p.decided, t:L('צימוד מכשירים','Pair the devices','Emparejar dispositivos'),
-      d: !p.decided ? L('אחרי בחירת המסכים.','After choosing the screens.','Después de elegir las pantallas.')
-         : (L('בטאבלט פותחים את האפליקציה ומופיע קוד של 6 ספרות. כאן לוחצים "הוסף מכשיר" ליד המסך ומקלידים את הקוד.','On the tablet open the app: a 6-digit code appears. Here press "Add device" next to the screen and type the code.','En la tableta abra la app: aparece un código de 6 dígitos; aquí pulse "Agregar" y escríbalo.')+'<br>'+
-            slots.map(([r,i]) => { const k = r+((r==='inner'||r==='outer'||r==='display')?'-'+i:''); return (has(r,i)?'✅ ':'⬜ ')+E(labels[k]||r); }).join(' · ')),
-      go: () => gtOpenSetting('devices','mgrStationsTitle') },
-    needPrint ? { k:'print', done: !!g.print, need: p.decided, t:L('מדפסות וסורקים','Printers and scanners','Impresoras y escáneres'),
-      d: L('מדפסות: ','Printers: ','Impresoras: ')+((s.printers||[]).length)+' · '+L('סורקים: ','Scanners: ','Escáneres: ')+((s.scanners||[]).length)+' — '+L('לכל מסך שמדפיס (רגלים / חלקים / חותמות).','for every screen that prints (legs / parts / stamps).','para cada pantalla que imprime.'),
-      go: () => gtOpenSetting('printing'), mark: 'print' } : null,
-    { k:'owner', done: (owners||0)>0 || !!g.ownerSkip, optional: true, t:L('חשבון בעלים (לא חובה)','Owner account (optional)','Cuenta del propietario (opcional)'),
-      d: (owners||0)>0 ? L('נוסף','added','agregada') : L('הבעלים רואה הכל ולא משנה כלום.','The owner sees everything and changes nothing.','El propietario ve todo y no cambia nada.'),
-      go: () => gtOpenSetting('users','mgrOwnersTitle'), mark: 'ownerSkip', markTxt: L('דלג','Skip','Omitir') }
-  ].filter(Boolean);
-  const all = steps.every(x => x.done);
-  const btn = (txt, fn, col) => `<button onclick="${fn}" style="padding:6px 12px;border-radius:8px;border:1px solid ${col};background:transparent;color:${col};font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">${txt}</button>`;
-  window._gtGuideSteps = steps;
-  let firstOpen = steps.findIndex(x => !x.done);
-  let x = `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px;">
-     <div style="font-size:16px;font-weight:800;color:var(--gold);">🧭 ${all?L('ההתקנה הושלמה','Installation complete','Instalación completa'):L('התקנת המפעל — לפי הסדר','Plant installation — in order','Instalación — en orden')}</div>
-     ${all ? btn(L('סגור','Close','Cerrar'), "gtGuideMark('closed',true);gtGuideMark('reopened',false)", 'var(--muted)') : ''}</div>`;
-  if(!all) x += `<div style="font-size:11px;color:var(--muted);margin-bottom:8px;">${L('כל שלב אפשר לשנות גם אחר כך, מלשונית ההגדרות.','Every step can be changed later from the Settings tab.','Cada paso se puede cambiar luego en Ajustes.')}</div>`;
-  steps.forEach((st, i) => {
-    const locked = st.need===false;
-    const cur = i===firstOpen;
-    x += `<div style="display:flex;gap:10px;align-items:flex-start;padding:9px 0;border-top:1px solid var(--border);opacity:${locked?.45:1};">
-      <div style="font-size:18px;line-height:1.2;">${st.done?'✅':(cur?'👉':'⬜')}</div>
-      <div style="flex:1;min-width:0;"><div style="font-size:14px;font-weight:700;color:${cur?'var(--gold)':'var(--text)'};">${i+1}. ${E(st.t)}</div>
-        <div style="font-size:11px;color:var(--muted);line-height:1.6;margin-top:2px;">${st.d}</div>
-        ${locked?'':`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">${btn(L('פתח','Open','Abrir'),'window._gtGuideSteps['+i+'].go()','var(--blue)')}${st.mark&&!st.done?btn(st.markTxt||L('סיימתי','Done','Listo'),"gtGuideMark('"+st.mark+"',true)",'var(--green)'):''}</div>`}
-      </div></div>`;
-  });
-  el.innerHTML = x; el.style.display = '';
-}
+// the installation is the one-time page (gtWizard); after it everything is done in its own tab — no guide card on "Today"
+async function gtRenderSetupGuide(){ const el = document.getElementById('gtSetupGuide'); if(el) el.style.display = 'none'; }
 function gtReopenGuide(){ const g = Object.assign({}, _gtGuideState(), { closed:false, reopened:true }); KS.updateSettings({ setupGuide: g }); try{ mgrTab('monitor'); }catch(e){} gtRenderSetupGuide(); }
 
 // refresh: entering the team-leader screen, the Today tab, and after the stations panel changes
@@ -18813,7 +18708,7 @@ async function gtWizRenderPair(){
   const devs = await _gtDevices(true), labels = _kioskRoleLabels(), slots = gtPlanSlots();
   const shared = KS.getSettings().screenConfig==='1both';
   host.innerHTML = slots.map(([r,i]) => {
-    const k = r+((r==='inner'||r==='outer'||r==='display')?'-'+i:''); const d = devs.find(x => x.assigned_role===r && Number(x.assigned_index||0)===i);
+    const k = _gtRoleKey(r, i); const d = devs.find(x => x.assigned_role===r && Number(x.assigned_index||0)===i);
     const name = (shared && r==='inner') ? L('בודק פנים + חוץ (מסך משותף)','Inner + outer (shared screen)','Interno + externo') : (labels[k]||r);
     return `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);">
       <div><div style="font-size:14px;font-weight:700;">${d?'✅':'⬜'} ${_gtE(name)}</div>${d?`<div style="font-size:11px;color:var(--muted);">${_gtE(d.device_name||d.id)}</div>`:''}</div>

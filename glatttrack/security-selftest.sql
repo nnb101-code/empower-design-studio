@@ -2034,10 +2034,10 @@ begin
   perform pg_temp.put('maker46', v_mk);
   select settings -> 'users' into v_users from settings_pilot where id = 1;
   r := pg_temp.api(pg_temp.mgr('maker46'), format('select push_settings(%L::jsonb, ''x'', %L, ''printer repair'')',
-         '{"printers":{"parts":"zebra-46"},"customStatuses":[],"users":[],"loginModeByRole":{"inspector":"none"},"notChalakEnabled":false}',
+         '{"printers":[{"id":"zebra-46","name":"Zebra","conn":"network","ip":"192.168.1.50","port":9100}],"customStatuses":[],"users":[],"loginModeByRole":{"inspector":"none"},"notChalakEnabled":false}',
          pg_temp.v('maker46')));
   ok := pg_temp.ok(r) and r -> 'ignored' ? 'customStatuses' and r -> 'ignored' ? 'users' and r -> 'ignored' ? 'loginModeByRole'
-        and (select settings -> 'printers' ->> 'parts' from settings_pilot where id = 1) = 'zebra-46'
+        and (select settings -> 'printers' -> 0 ->> 'id' from settings_pilot where id = 1) = 'zebra-46'
         and (select settings -> 'users' from settings_pilot where id = 1) = v_users
         and jsonb_array_length((select settings -> 'customStatuses' from settings_pilot where id = 1)) = 2;
   update plant_state set value = (now() - interval '1 minute')::text where key = 'supportAccessUntil';
@@ -3351,6 +3351,44 @@ begin
   update settings_pilot set settings = s0 where id = 1;
 end $$;
 $gt80$;
+    v_step := 'full review 18.10: safe plant_state reads, device lists, stamps without the cuts list';
+    execute $gt81$
+-- ── full review (18.10) ──
+do $$
+declare r jsonb; r2 jsonb; r3 jsonb; r4 jsonb; ok boolean; s0 jsonb; z text := 'XlhBXlBXMTZeTEwxNl5MSDAsMF5GTzAsMF5HRkEsNCw0LDIsRkYwMEZGMDBeRlNeUFExXlha';
+        z5 text; sa text; sv text;
+begin
+  select settings into s0 from settings_pilot where id = 1;
+  select value into sa from plant_state where key = 'supportAccessUntil';
+  select value into sv from plant_state where key = 'sealsVersion';
+  -- S1 / S2: a bad value in plant_state (only by hand) never breaks the session checks or the seals
+  insert into plant_state (key, value) values ('supportAccessUntil', 'not a date') on conflict (key) do update set value = excluded.value;
+  insert into plant_state (key, value) values ('sealsVersion', 'x1') on conflict (key) do update set value = excluded.value;
+  ok := _support_access_open() = false and _maker_session_end() > now();
+  r := pg_temp.api(pg_temp.dev('STAMPS'), 'select seals_get(null, null)');
+  ok := ok and pg_temp.ok(r) and (r ->> 'version')::bigint = 0;
+  if sa is null then delete from plant_state where key = 'supportAccessUntil'; else update plant_state set value = sa where key = 'supportAccessUntil'; end if;
+  if sv is null then delete from plant_state where key = 'sealsVersion'; else update plant_state set value = sv where key = 'sealsVersion'; end if;
+  perform pg_temp.rec('full review S1/S2: a bad supportAccessUntil / sealsVersion value breaks no session check and no seals read', ok, r::text);
+  -- S5: the device lists keep their shape (a station writes 'scanners')
+  r  := pg_temp.api(pg_temp.dev('PARTS'), format('select push_settings(%L::jsonb, ''x'')', '{"scanners":{"evil":1}}'));
+  r2 := pg_temp.api(pg_temp.dev('PARTS'), format('select push_settings(%L::jsonb, ''x'')', '{"scanners":[{"id":"s1","name":"Zebra DS","conn":"usb"}]}'));
+  ok := r ->> 'error' = 'bad_settings' and pg_temp.ok(r2);
+  perform pg_temp.rec('full review S5: the printer / scanner lists must be a list of devices', ok, r::text || ' | ' || r2::text);
+  -- A2 + S4: a plant without the cuts list — the stamps station prints its set (stampsCount); a part number that is not a number is bad_value
+  perform pg_temp.prep(941, 'outer');
+  update settings_pilot set settings = (settings - 'products') || '{"stampsCount":5,"printers":[{"id":"p1","name":"Zebra","conn":"network","ip":"192.168.1.50","port":9100}]}'::jsonb where id = 1;
+  z5 := encode(convert_to(repeat(convert_from(decode(z, 'base64'), 'LATIN1'), 5), 'LATIN1'), 'base64');
+  z5 := replace(z5, E'\n', '');
+  r  := pg_temp.api(pg_temp.dev('STAMPS'), format('select print_job_add(%L, %L, ''kosher'', 941)', '192.168.1.50:9100', z5));
+  r2 := pg_temp.api(pg_temp.dev('PARTS'), format('select print_job_add(%L, %L, ''kosher'', 941)', '192.168.1.50:9100', z5));   -- not the stamps screen
+  r3 := pg_temp.api(pg_temp.dev('PARTS'), format('select print_job_add(%L, %L, ''kosher'', 941, %L::jsonb)', '192.168.1.50:9100', z, '[{"pid":"tongue","i":"x"}]'));
+  ok := pg_temp.ok(r) and r2 ->> 'reason' = 'too_many' and r3 ->> 'reason' = 'bad_value';
+  perform pg_temp.rec('full review A2/S4: without the cuts list the stamps station prints its 5 stamps (another screen does not); a part number that is not a number is refused', ok,
+    concat_ws(' | ', r::text, r2::text, r3::text));
+  update settings_pilot set settings = s0 where id = 1;
+end $$;
+$gt81$;
     v_step := 'the ACTIVE security surface against the expected manifest';
     execute $gt70$
 -- ── the ACTIVE security surface against the expected manifest ───────────────

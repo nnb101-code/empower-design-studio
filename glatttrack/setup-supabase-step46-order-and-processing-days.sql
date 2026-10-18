@@ -2452,7 +2452,20 @@ begin
     end if;
     return 'expected a list of records';
   end if;
-  if p_key in ('loginModeByRole', 'activeUserByRole', 'statusColorOverrides', 'slaughterKeys', 'screenDevices',
+  -- (full review S5) printers / scanners: a list of devices with a plain shape (a station writes 'scanners')
+  if p_key in ('printers', 'scanners') then
+    if t = 'array' and jsonb_array_length(v) <= 100
+       and not exists (select 1 from jsonb_array_elements(v) x
+                        where jsonb_typeof(x) <> 'object' or length(x::text) > 2000
+                           or coalesce(x ->> 'id', '') !~ '^[A-Za-z0-9_-]{1,40}$'
+                           or (x ? 'name' and not _jstr_ok(x -> 'name', 80))
+                           or (x ? 'ip' and coalesce(x ->> 'ip', '') !~ '^[0-9.]{0,15}$')
+                           or (x ? 'port' and coalesce(x ->> 'port', '') !~ '^[0-9]{0,5}$')) then
+      return null;
+    end if;
+    return 'expected a list of devices';
+  end if;
+  if p_key in ('activeUserByRole', 'statusColorOverrides', 'slaughterKeys', 'screenDevices',
                'weightMethods', 'archiveSettings') then
     if t = 'object' then return null; end if; return 'expected an object';
   end if;
@@ -3728,7 +3741,7 @@ grant execute on function seal_set(text, text, text) to anon, authenticated;
 -- since p_version (then only {ok, version, same:true})
 create or replace function seals_get(p_token text default null, p_version bigint default null) returns jsonb
 language plpgsql stable security definer set search_path = public, extensions, pg_temp as $$
-declare v_ver bigint := coalesce((select value from plant_state where key = 'sealsVersion')::bigint, 0);
+declare v_ver bigint := coalesce((select case when value ~ '^[0-9]{1,18}$' then value::bigint end from plant_state where key = 'sealsVersion'), 0);   -- (full review S2)
 begin
   if _current_device_id() is null and coalesce(_session_role(p_token), '') not in ('manager', 'owner') then
     return jsonb_build_object('ok', false, 'error', 'unauthorized');
@@ -6862,7 +6875,7 @@ language plpgsql security definer set search_path = public, extensions, pg_temp 
 declare v_epoch bigint := (extract(epoch from clock_timestamp()) * 1000)::bigint;
         v_old_epoch bigint := _board_epoch();
         v_day date := coalesce(p_business_date, _board_business_date());
-        v_board bigint; v_carry boolean := false; st text;
+        v_board bigint; st text;
 begin
   insert into daily_board_archive (business_date, reason, animals_count, board, statuses)
   select v_day, p_reason, count(*), coalesce(jsonb_agg(to_jsonb(a) order by a.id), '[]'::jsonb),
@@ -6879,18 +6892,10 @@ begin
   -- v10.35 (owner): NO kept day for legs / parts / stamps — an animal goes to the next day only with its
   -- final kashrut marks. The rollover waits for them (_board_unfinished); the team leader's emergency
   -- reset (with a written reason, audited) archives the day as it is. (animals_carry stays only to finish
-  -- days kept by an older version; it is not filled any more.)
-  v_carry := false;
-  if v_carry then
-    insert into animals_carry          -- by column name (v10.33: columns added later sit after board_id)
-    select (jsonb_populate_record(null::animals_carry,
-              to_jsonb(a) || jsonb_build_object('board_id', v_board, 'slaughter_day', v_day))).*
-      from animals_pilot a where a.slaughter is not null;
-  end if;
+  -- days kept by an older version; it is not filled any more — the dead copy code was removed.)
   if v_old_epoch is not null then
     update animal_holds set resolved_at = now(), resolution = 'board_closed'
-     where board_epoch = v_old_epoch and resolved_at is null
-       and (not v_carry or not exists (select 1 from animals_carry c where c.board_id = v_board and c.id = animal_holds.animal_id));
+     where board_epoch = v_old_epoch and resolved_at is null;   -- (full review S6) nothing is carried to the next day any more
   end if;
   perform _proc_finalize(null);
 
@@ -7240,7 +7245,7 @@ begin
     perform _gt_event(p_id + 1, 'nikur', 'piece_in', jsonb_build_object('part', p_product, 'piece', v_piece, 'screen', v_screen, 'board', v_ep), v_actor, v_dev);
   end if;
   v_res := jsonb_build_object('ok', true, 'duplicate', v_new is null, 'status', a.outer_status, 'day', _nikur_day_date(v_ep),
-                              'today', (select count(*) from piece_scans where screen = v_screen and at >= date_trunc('day', now())));
+                              'today', (select count(*) from piece_scans where screen = v_screen and at >= _plant_day_start()));   -- (full review S3) the plant's day
   perform _cmd_put(p_command_id, v_dev, 'nikur_scan', v_res);
   return v_res;
 end $$;
@@ -7351,7 +7356,7 @@ begin
                                            'expected', v_exp, 'in', v_in, 'missing', (select coalesce(jsonb_agg(m), '[]'::jsonb) from (select m from jsonb_array_elements(v_miss) m limit 300) q));
   end loop;
   return jsonb_build_object('ok', true, 'boardEpoch', v_cur, 'screen', v_screen, 'days', v_days,
-    'todayIn', (select count(*) from piece_scans s where (v_screen is null or s.screen = v_screen) and s.at >= date_trunc('day', now())),
+    'todayIn', (select count(*) from piece_scans s where (v_screen is null or s.screen = v_screen) and s.at >= _plant_day_start()),   -- (full review S3)
     'pieces', coalesce((select jsonb_agg(jsonb_build_object('n', s.animal_id + 1, 'p', s.product, 'i', s.piece, 's', s.screen, 'e', s.board_epoch,
                                                             'at', s.at, 'by', s.worker) order by s.at)
                           from piece_scans s where s.board_epoch = v_cur and (v_screen is null or s.screen = v_screen)), '[]'::jsonb),
@@ -7450,7 +7455,7 @@ language sql stable security definer set search_path = public, extensions, pg_te
             select b.business_date d, count(*) filter (where x ->> 'slaughter' is not null) n,
                    coalesce(sum(coalesce(nullif(x ->> 'weight_right', '')::numeric, 0) + coalesce(nullif(x ->> 'weight_left', '')::numeric, 0)), 0) kg
               from daily_board_archive b, jsonb_array_elements(case when jsonb_typeof(b.board) = 'array' then b.board else '[]'::jsonb end) x
-             where b.business_date > current_date - 40
+             where b.business_date > _board_business_date() - 40   -- (full review S6) the plant's day
              group by b.business_date
             union all
             select _board_business_date(), count(*) filter (where a.slaughter is not null),
@@ -7538,6 +7543,17 @@ revoke execute on function _print_data_ok(text) from public, anon, authenticated
 --   test        — only the team leader / manufacturer (the sample sticker of the printer settings).
 -- (The picture itself is still drawn by the tablet; the plant server drawing it is a later step.)
 drop function if exists print_job_add(text, text, uuid);
+-- (full review A2) how many kosher labels one print may carry: one per part named; no parts named = a plant
+-- without the cuts list → the stamps station prints its set (stampsCount, default 5), any other screen one
+create or replace function _print_kosher_max(p_parts jsonb, p_role text, p_test boolean, s jsonb) returns integer
+language sql immutable set search_path = public, extensions, pg_temp as $$
+  select case when jsonb_array_length(coalesce(p_parts, '[]'::jsonb)) > 0 then jsonb_array_length(p_parts)
+              when coalesce(p_role, '') = 'stamps' or coalesce(p_test, false)
+              then least(30, greatest(1, coalesce(case when s ->> 'stampsCount' ~ '^[0-9]{1,2}$' then (s ->> 'stampsCount')::int end, 5)))
+              else 1 end;
+$$;
+revoke execute on function _print_kosher_max(jsonb, text, boolean, jsonb) from public, anon, authenticated;
+
 create or replace function print_job_add(p_printer text, p_data text, p_kind text, p_animal integer default null,
                                          p_parts jsonb default '[]'::jsonb, p_token text default null, p_command_id uuid default null) returns jsonb
 language plpgsql security definer set search_path = public, extensions, pg_temp as $$
@@ -7586,10 +7602,11 @@ begin
     if v_e is null and p_kind = 'kosher' then
       if a.id is null or a.slaughter is null or a.slaughter in ('nevela', 'shot') or a.inner_status = 'treif' or a.outer_status = 'treif'
          or not _kosher_ready(a) then v_e := 'not_kosher';
-      elsif v_pq > 1 or v_labels > greatest(1, jsonb_array_length(coalesce(p_parts, '[]'::jsonb))) or v_labels > 30 then v_e := 'too_many';
+      elsif v_pq > 1 or v_labels > 30 or v_labels > _print_kosher_max(p_parts, v_role, v_test, s) then v_e := 'too_many';
       else
         for x in select e from jsonb_array_elements(coalesce(p_parts, '[]'::jsonb)) e loop
           if jsonb_typeof(x) <> 'object' or coalesce(x ->> 'pid', '') !~ '^[a-z][a-z0-9_]{0,40}$' then v_e := 'bad_value'; exit; end if;
+          if coalesce(x ->> 'i', '') !~ '^[0-9]{0,3}$' then v_e := 'bad_value'; exit; end if;   -- (full review S4) a number, or nothing
           v_e := _nikur_refusal(a, _product_def(x ->> 'pid'), _board_epoch(), nullif(x ->> 'i', '')::int);
           if v_e is not null then exit; end if;
         end loop;
@@ -7659,6 +7676,27 @@ begin
 end $$;
 revoke execute on function printers_found(text) from public;
 grant execute on function printers_found(text) to anon, authenticated;
+
+-- ── §41 full review (18.10): safe reads of plant_state values, the plant's own day ──────────
+-- S1: a bad supportAccessUntil value (only possible by hand in the SQL editor) made every session check throw.
+create or replace function _plant_day_start() returns timestamptz
+language sql stable security definer set search_path = public, extensions, pg_temp as $$
+  select date_trunc('day', now() at time zone coalesce(nullif(_gt_settings() ->> 'plantTimezone', ''), 'UTC'))
+         at time zone coalesce(nullif(_gt_settings() ->> 'plantTimezone', ''), 'UTC');
+$$;
+revoke execute on function _plant_day_start() from public, anon, authenticated;
+create or replace function _support_access_open() returns boolean
+language sql stable security definer set search_path = public, extensions, pg_temp as $$
+  select coalesce((select _ts_or_null(value) > now() from plant_state where key = 'supportAccessUntil'), false);
+$$;
+revoke execute on function _support_access_open() from public, anon, authenticated;
+create or replace function _maker_session_end() returns timestamptz
+language sql stable security definer set search_path = public, extensions, pg_temp as $$
+  select case when _support_access_open()
+              then least((select _ts_or_null(value) from plant_state where key = 'supportAccessUntil'), now() + interval '24 hours')
+              else now() + interval '10 minutes' end;
+$$;
+revoke execute on function _maker_session_end() from public, anon, authenticated;
 
 -- ── self-check ──────────────────────────────────────────────────────────────
 do $$
