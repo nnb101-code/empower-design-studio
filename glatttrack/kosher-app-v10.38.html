@@ -19476,9 +19476,21 @@ async function gtCamScanOpen(){
          if(!v) v=_gtZxRead(bm,bm.width,bm.height,0,0,bm.width,bm.height,1600);
          if(v) _gtCamGot(v); else msg.textContent=L('לא נמצא ברקוד בתמונה — צלמו שוב מקרוב.','No code in the photo — take it again closer.','Sin código en la foto.'); }catch(e){ msg.textContent=String(e.message||e); } };
   if(!_gtCam.det && !zx){ msg.textContent=L('המכשיר הזה לא קורא ברקוד.','This device cannot read codes.','Este dispositivo no lee códigos.'); vid.style.display='none'; return; }
+  // the phone gives a LIVE camera only to an app opened from a secure (https) address — opened as a file
+  // (content:// / file://) or from plain http, it only lets you take a photo (that is still read by itself)
+  if(!window.isSecureContext || !(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)){
+    vid.parentNode.style.display='none';
+    msg.style.color='#E8ECF4'; msg.style.fontSize='14px'; msg.style.lineHeight='1.6';
+    msg.innerHTML='<b style="color:#F0A030;">'+escapeHtml(L('סריקה חיה (לכוון וזה נקלט לבד) עובדת רק כשהאפליקציה פתוחה מכתובת https','Live scanning (aim and it is read by itself) works only when the app is opened from an https address','El escaneo en vivo solo funciona si la app se abre desde una dirección https'))+'</b><br>'
+      +escapeHtml(L((location.protocol==='http:'?'עכשיו היא פתוחה מכתובת http (בלי s)':'עכשיו היא פתוחה כקובץ ('+String(location.protocol).replace(':','')+')')+' — הטלפון מרשה רק לצלם תמונה. לוחצים "📷 צלם" — הברקוד בתמונה נקלט לבד.',
+                    (location.protocol==='http:'?'It is open from an http address (no s) now':'It is open as a file ('+String(location.protocol).replace(':','')+') now')+' — the phone only allows a photo. Tap "📷 Photo" — the code in the photo is read by itself.',
+                    'Ahora está abierta como archivo — el teléfono solo permite una foto. Toque "Foto".'));
+    return; }
   try{ _gtCam.stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment', width:{ideal:1920}, height:{ideal:1080}}}); vid.srcObject=_gtCam.stream; await vid.play();
        try{ await _gtCam.stream.getVideoTracks()[0].applyConstraints({advanced:[{focusMode:'continuous'}]}); }catch(e){} }
-  catch(e){ msg.textContent=L('אין גישה למצלמה חיה — "📷 צלם" עובד.','No live camera — "📷 Photo" works.','Sin cámara en vivo — use "Foto".'); vid.style.display='none'; return; }
+  catch(e){ msg.textContent = (e && e.name==='NotAllowedError')
+      ? L('המצלמה חסומה לאפליקציה — מאשרים מצלמה בהגדרות הדפדפן (🔒 ליד הכתובת ← הרשאות ← מצלמה), ואז שוב 📷.','The camera is blocked for the app — allow the camera in the browser (🔒 by the address → Permissions → Camera), then 📷 again.','La cámara está bloqueada — permítala en el navegador.')
+      : L('אין גישה למצלמה חיה — "📷 צלם" עובד.','No live camera — "📷 Photo" works.','Sin cámara en vivo — use "Foto".'); vid.style.display='none'; return; }
   const tr=_gtCam.stream.getVideoTracks()[0]; let torch=false;
   document.getElementById('gtCamTorch').onclick=async()=>{ try{ torch=!torch; await tr.applyConstraints({advanced:[{torch}]}); }catch(e){ msg.textContent=L('אין פנס שאפשר להדליק מכאן.','No light that can be switched on from here.','Sin linterna.'); } };
   // like a hand scanner: aim the green window at the code — it is read by itself, again and again until it is
