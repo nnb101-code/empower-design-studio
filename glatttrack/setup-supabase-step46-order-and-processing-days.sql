@@ -7707,6 +7707,110 @@ create table if not exists plant_app_file (
 alter table plant_app_file enable row level security;
 revoke all on plant_app_file from public, anon, authenticated;
 
+-- ── §42 printers and scanners: online marks, Wi-Fi scanners (v10.38, owner, after the full review) ──────
+-- • The plant server's print relay checks every 30 s that each network printer of the list answers (only a
+--   connection — nothing is sent) → plant_state 'printersOnline'. Tablets and the team leader read it.
+-- • A Wi-Fi scanner is set to "TCP client" → the plant server, port 9300 (scanner-relay). Each code it sends is
+--   kept here for a short time with the scanner's address: the team leader's "search" lists the scanners that
+--   just sent something; the station that the scanner is given to receives its codes as if typed.
+-- • A tablet tells (heartbeat) when its own USB / Bluetooth scanner last scanned → "active · last scan".
+create table if not exists scanner_scans (
+  id bigserial primary key, ip text not null, code text not null, at timestamptz not null default now());
+create index if not exists scanner_scans_ip_id on scanner_scans (ip, id);
+alter table scanner_scans enable row level security;
+revoke all on scanner_scans from public, anon, authenticated;
+revoke all on sequence scanner_scans_id_seq from public, anon, authenticated;
+
+-- the printers' online state (the relay's last check)
+create or replace function printers_status(p_token text default null) returns jsonb
+language plpgsql stable security definer set search_path = public, extensions, pg_temp as $$
+declare v jsonb;
+begin
+  if _call_device(null) is null and not (_manager_session_valid(p_token) and coalesce(_session_role(p_token), '') in ('manager', 'owner', 'manufacturer')) then
+    return jsonb_build_object('ok', false, 'error', 'unauthorized');
+  end if;
+  begin v := (select value::jsonb from plant_state where key = 'printersOnline'); exception when others then v := null; end;
+  return jsonb_build_object('ok', true, 'printers', coalesce(v -> 'printers', '{}'::jsonb), 'at', v -> 'at',
+                            'relay', (select value from plant_state where key = 'printRelayAt'));
+end $$;
+revoke execute on function printers_status(text) from public;
+grant execute on function printers_status(text) to anon, authenticated;
+
+-- the team leader's scanner search: the scanners that sent a code in the last minutes
+create or replace function scanners_heard(p_token text, p_minutes integer default 5) returns jsonb
+language plpgsql stable security definer set search_path = public, extensions, pg_temp as $$
+begin
+  if not (_manager_session_valid(p_token) and coalesce(_session_role(p_token), '') in ('manager', 'manufacturer')) then
+    return jsonb_build_object('ok', false, 'error', 'unauthorized');
+  end if;
+  return jsonb_build_object('ok', true, 'relay', (select value from plant_state where key = 'scannerRelayAt'),
+    'scanners', coalesce((select jsonb_agg(jsonb_build_object('ip', ip, 'code', code, 'at', at, 'n', n) order by at desc)
+       from (select distinct on (ip) ip, code, at, count(*) over (partition by ip) n from scanner_scans
+              where at > now() - make_interval(mins => least(greatest(coalesce(p_minutes, 5), 1), 1440)) order by ip, id desc) x), '[]'::jsonb),
+    'lastSeen', coalesce((select jsonb_object_agg(ip, at) from (select ip, max(at) at from scanner_scans group by ip) y), '{}'::jsonb));
+end $$;
+revoke execute on function scanners_heard(text, integer) from public;
+grant execute on function scanners_heard(text, integer) to anon, authenticated;
+
+-- a station receives the codes of ITS Wi-Fi scanner (one of the plant's list) — only new ones, only fresh ones
+create or replace function scanner_scans_since(p_ip text, p_after bigint default null) returns jsonb
+language plpgsql stable security definer set search_path = public, extensions, pg_temp as $$
+declare s jsonb := _gt_settings();
+begin
+  if _call_device(null) is null then return jsonb_build_object('ok', false, 'error', _no_device_error()); end if;
+  if p_ip is null or not exists (select 1 from jsonb_array_elements(case when jsonb_typeof(s -> 'scanners') = 'array' then s -> 'scanners' else '[]'::jsonb end) x
+                                  where x ->> 'conn' = 'network' and x ->> 'ip' = p_ip) then
+    return jsonb_build_object('ok', false, 'error', 'unknown_scanner');
+  end if;
+  if p_after is null then   -- the start: only where the list stands now
+    return jsonb_build_object('ok', true, 'last', coalesce((select max(id) from scanner_scans where ip = p_ip), 0), 'scans', '[]'::jsonb);
+  end if;
+  return jsonb_build_object('ok', true,
+    'last', greatest(p_after, coalesce((select max(id) from scanner_scans where ip = p_ip), 0)),
+    'scans', coalesce((select jsonb_agg(jsonb_build_object('id', id, 'code', code, 'at', at) order by id)
+                         from (select * from scanner_scans where ip = p_ip and id > p_after and at > now() - interval '30 seconds' order by id limit 20) z), '[]'::jsonb));
+end $$;
+revoke execute on function scanner_scans_since(text, bigint) from public;
+grant execute on function scanner_scans_since(text, bigint) to anon, authenticated;
+
+-- the heartbeat also carries when this tablet's own scanner last scanned ('scanAt')
+create or replace function device_heartbeat(p_device_id text, p_device_name text, p_info jsonb) returns jsonb
+language plpgsql security definer set search_path = public, extensions, pg_temp as $_$
+declare v_info jsonb; v_dev text := _current_device_id(); v_mt text; v_uid uuid := _auth_uid_safe();
+begin
+  -- a team-leader session made before the app session existed is bound to it once (never re-bound)
+  v_mt := _request_headers() ->> 'x-manager-token';
+  if v_mt is not null and v_mt <> '' and v_uid is not null then
+    update manager_sessions set auth_uid = v_uid
+     where token = v_mt and expires_at > now() and auth_uid is null and device_id is not distinct from v_dev;
+  end if;
+
+  if p_device_id is null or p_device_id !~ '^[A-Za-z0-9_-]{6,64}$' then return jsonb_build_object('ok', false); end if;
+  if v_dev is not null and v_dev <> p_device_id then return jsonb_build_object('ok', false, 'error', 'not_this_device'); end if;
+
+  if v_dev is null then
+    if not exists(select 1 from devices_pilot where id = p_device_id
+                   and assigned_role is null and coalesce(device_status, 'active') <> 'retired') then
+      return jsonb_build_object('ok', false, 'error', 'device_auth_required');
+    end if;
+    update devices_pilot set last_seen = now() where id = p_device_id;
+    return jsonb_build_object('ok', true);
+  end if;
+
+  if jsonb_typeof(p_info) = 'object' then
+    select jsonb_object_agg(key, to_jsonb(left(value #>> '{}', 40)))
+      into v_info
+      from jsonb_each(p_info)
+     where key in ('v', 'screen', 'lang', 'local', 'scanAt') and jsonb_typeof(value) in ('string', 'number', 'boolean');
+  end if;
+  update devices_pilot set last_seen = now(), app_info = coalesce(v_info, app_info),
+         auth_uid = coalesce(v_uid, auth_uid)
+   where id = p_device_id;
+  return jsonb_build_object('ok', true);
+end $_$;
+revoke execute on function device_heartbeat(text, text, jsonb) from public;
+grant execute on function device_heartbeat(text, text, jsonb) to anon, authenticated;
+
 -- ── self-check ──────────────────────────────────────────────────────────────
 do $$
 declare problems text[] := '{}';

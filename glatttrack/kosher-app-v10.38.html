@@ -8601,11 +8601,16 @@ function mgrAddDevice(kind){
   const connEl=document.getElementById(kind==='printer'?'newDevConn':'newScanConn');
   const name=nameEl?nameEl.value.trim():'';
   if(!name){ alert(L('כתבו שם / דגם של הסורק ואז "הוסף".','Type the scanner\'s name / model, then "Add".','Escriba el nombre / modelo del escáner y luego "Agregar".')); if(nameEl) nameEl.focus(); return; }
-  const conn=connEl?connEl.value:'bluetooth';
+  let conn=connEl?connEl.value:'bluetooth', ip=null;
+  if(conn==='wifi'){   // (v10.38) a Wi-Fi scanner sends to the plant server — it is known by its address
+    ip=String(prompt(L('כתובת ה-IP של הסורק (מופיעה בהגדרות הסורק). עדיף: "חפש סורק Wi-Fi" למעלה.','The scanner\'s IP address (in the scanner\'s settings). Easier: "Search for a Wi-Fi scanner" above.','La IP del escáner. Más fácil: "Buscar escáner Wi-Fi".'),'')||'').trim();
+    if(!_gtPrivIp(ip)){ if(ip) alert(L('כתובת לא תקינה (כתובת של רשת המפעל).','Not a valid plant-network address.','Dirección no válida.')); return; }
+    conn='network';
+  }
   const s=KS.getSettings();
   const listKey=kind==='printer'?'printers':'scanners';
   const list=s[listKey]||[];
-  list.push({id:'d'+Date.now(),name,conn,status:'disconnected'});
+  list.push(Object.assign({id:'d'+Date.now(),name,conn}, ip?{ip}:{}));
   KS.updateSettings({[listKey]:list});
   if(nameEl)nameEl.value='';
   mgrRenderDevices();
@@ -8645,8 +8650,11 @@ function gtPrAddBoxRender(){
     <div style="font-size:11px;color:var(--muted);line-height:1.5;">${L('אחרי ההוספה: "🧪 מדבקת ניסיון", ואז לשייך את המדפסת למסך — למטה, ב"שיוך לכל מסך".','After adding: "🧪 Test sticker", then give the printer to a screen — below, in "Assign to each screen".','Después: "🧪 Etiqueta de prueba" y luego asignarla a una pantalla — abajo.')}</div>
   </div>`;
   const sc=document.getElementById('gtScTestBox');
-  if(sc) sc.innerHTML=`<button onclick="gtScannerTest()" style="${_gtPrBtnCss}margin-bottom:8px;background:rgba(122,174,255,.12);border:1px solid #7AAEFF;color:#7AAEFF;">🧪 ${L('בדוק סורק — לסרוק מדבקה ולראות שנקלט','Check a scanner — scan a sticker and see it arrive','Probar escáner — escanear y ver que llega')}</button>
-    <div style="font-size:11px;color:var(--muted);margin-bottom:8px;">${L('סורק USB או Bluetooth שמחובר לטאבלט עובד בלי הגדרה (נקלט כמו מקלדת). גם מצלמת הטאבלט סורקת.','A USB or Bluetooth scanner connected to the tablet works with no setup (it types like a keyboard). The tablet camera scans too.','Un escáner USB o Bluetooth conectado funciona sin configurar.')}</div>`;
+  if(sc) sc.innerHTML=`<div style="display:flex;flex-direction:column;gap:7px;margin-bottom:8px;">
+    <button onclick="gtScannerSearchWifi()" style="${_gtPrBtnCss}background:rgba(42,127,255,.15);border:1px solid var(--blue);color:var(--blue);">🔍 ${L('חפש סורק Wi-Fi (רשת)','Search for a Wi-Fi scanner (network)','Buscar escáner Wi-Fi (red)')}</button>
+    <div id="gtScWifiRes"></div>
+    <button onclick="gtScannerSearchLocal()" style="${_gtPrBtnCss}background:rgba(122,174,255,.12);border:1px solid #7AAEFF;color:#7AAEFF;">🔍 ${L('סורק USB / Bluetooth בטאבלט הזה — סרקו מדבקה','A USB / Bluetooth scanner on this tablet — scan a sticker','Escáner USB / Bluetooth en esta tableta — escanee')}</button>
+    <div style="font-size:11px;color:var(--muted);line-height:1.5;">${L('סורק Wi-Fi: מגדירים בסורק "TCP client" לכתובת שרת המפעל, יציאה 9300 — ואז "חפש". סורק USB / Bluetooth עובד כמו מקלדת; "פעיל" = סרק בטאבלט בדקות האחרונות. גם מצלמת הטאבלט סורקת.','Wi-Fi scanner: set it to "TCP client" → the plant server, port 9300 — then "Search". A USB / Bluetooth scanner types like a keyboard; "active" = it scanned on the tablet in the last minutes. The tablet camera scans too.','Escáner Wi-Fi: "TCP client" → servidor, puerto 9300; luego "Buscar". USB / Bluetooth funciona como teclado.')}</div></div>`;
 }
 function _gtPrinterAdd(o){
   const s=KS.getSettings(); const list=(s.printers||[]).slice();
@@ -8670,12 +8678,12 @@ function gtPrinterAddManual(){
 async function gtPrinterScan(){
   const box=document.getElementById('gtPrScanRes'); if(!box) return;
   if(!window.sb){ box.innerHTML='<div style="color:var(--red-light);font-size:12px;">'+escapeHtml(L('אין חיבור לשרת המפעל.','No connection to the plant server.','Sin conexión al servidor.'))+'</div>'; return; }
-  box.innerHTML='<div style="font-size:13px;color:var(--blue);padding:6px 0;">⏳ '+escapeHtml(L('שרת המפעל מחפש מדפסות ברשת… (עד חצי דקה)','The plant server is searching the network… (up to half a minute)','El servidor busca impresoras… (hasta medio minuto)'))+'</div>';
+  _gtSearchBox(box, L('מחפש מדפסות ברשת…','Searching the network for printers…','Buscando impresoras en la red…'), 45);
   const tok=KS.getManagerToken();
   try{ const r=await window.sb.rpc('printer_scan_request',{p_token:tok}); const x=r.data||{}; if(r.error||!x.ok) throw new Error(gtErrText(r.error||x.error)); }
   catch(e){ box.innerHTML='<div style="color:var(--red-light);font-size:12px;">'+escapeHtml(String(e.message||e))+'</div>'; return; }
   const t0=Date.now(); let res=null;
-  while(Date.now()-t0<45000){ await new Promise(z=>setTimeout(z,2000));
+  while(Date.now()-t0<45000){ await new Promise(z=>setTimeout(z,2000)); _gtSearchTick(box, Date.now()-t0);
     try{ const r=await window.sb.rpc('printers_found',{p_token:tok}); res=r.data||{}; }catch(e){ res=null; }
     if(res && res.ok && res.at && res.requestedAt && new Date(res.at)>=new Date(res.requestedAt)) break; res=res&&res.ok?Object.assign(res,{pending:true}):res; }
   if(!res || !res.ok){ box.innerHTML='<div style="color:var(--red-light);font-size:12px;">'+escapeHtml(L('החיפוש נכשל.','The search failed.','La búsqueda falló.'))+'</div>'; return; }
@@ -8688,7 +8696,7 @@ async function gtPrinterScan(){
   box.innerHTML = P.length ? '<div style="font-size:12px;color:var(--muted);margin:4px 0;">'+escapeHtml(L('נמצאו ברשת:','Found on the network:','Encontradas:'))+'</div>'
     + P.map(p=>{ const k=p.ip+':'+(p.port||9100), on=have.includes(k);
         return `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border);">
-          <div><div style="font-size:13px;font-weight:700;color:var(--text);">${escapeHtml(p.model||L('מדפסת מדבקות','Label printer','Impresora'))}</div><div style="font-size:11px;color:var(--muted);direction:ltr;text-align:right;">${escapeHtml(k)}</div></div>
+          <div><div style="font-size:13px;font-weight:700;color:var(--text);">${_gtDot('ok')}${escapeHtml(p.model||L('מדפסת (פורט 9100)','Printer (port 9100)','Impresora (puerto 9100)'))}</div><div style="font-size:11px;color:var(--muted);direction:ltr;text-align:right;">${escapeHtml(k)}</div></div>
           ${on?`<span style="font-size:12px;color:var(--green);">✓ ${escapeHtml(L('ברשימה','On the list','En la lista'))}</span>`
               :`<button onclick='gtPrinterAddFound(${_jsArg(p.ip)},${Number(p.port)||9100},${_jsArg(p.model||'')})' style="padding:7px 12px;border-radius:7px;border:none;background:var(--gold);color:#07090F;font-weight:700;cursor:pointer;">${escapeHtml(L('הוסף','Add','Agregar'))}</button>`}</div>`; }).join('')
     : '<div style="font-size:12px;color:var(--amber,#F0A030);line-height:1.5;">'+escapeHtml(L('לא נמצאה מדפסת מדבקות ברשת. בדקו שהמדפסת דולקת ומחוברת לאותה רשת (Wi-Fi / כבל) כמו שרת המפעל — או הוסיפו לפי כתובת IP. מדפסת משרדית רגילה: דרך "מסך ההדפסה של המכשיר".','No label printer found on the network. Check that it is on and connected to the same network as the plant server — or add it by IP address. An ordinary office printer: through "the device\'s print screen".','No se encontró impresora. Revise que esté encendida y en la misma red — o agréguela por IP.'))+'</div>';
@@ -8743,16 +8751,17 @@ function mgrRenderDevices(){
   const scanners=s.scanners||[];
   const sd=s.screenDevices||{};
   function deviceRow(kind,d){
-    const isP=kind==='printer', _ps=isP?gtPrinterStatusOf(d):d.status, st=_ps==='connected'?'ok':(_ps==='error'?'bad':'');
-    const conn=isP?_gtPrConnLabel(d):escapeHtml(d.conn==='wifi'?L('WiFi/רשת','WiFi/network','WiFi/red'):(CONN_LABELS[d.conn]||d.conn));
+    // (v10.38, owner) the live state: a dot + a line (printer online / not answering; scanner active / last scan)
+    const isP=kind==='printer', lv=isP?gtPrinterLive(d):gtScannerLive(d);
+    const conn=isP?_gtPrConnLabel(d):_gtScConnLabel(d);
     return `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);">
       <div style="min-width:0;">
-        <div style="font-size:13px;color:var(--text);font-weight:700;">${escapeHtml(d.name)} ${st==='ok'?'<span style="color:var(--green);font-size:12px;">✓ '+escapeHtml(L('קיבלה','took it','recibió'))+'</span>':(st==='bad'?'<span style="color:var(--red-light);font-size:12px;">⚠ '+escapeHtml(L('לא הדפיסה','did not print','no imprimió'))+'</span>':'')}</div>
-        <div style="font-size:11px;color:var(--muted);">${isP?escapeHtml(conn):conn}</div>
+        <div style="font-size:13px;color:var(--text);font-weight:700;">${_gtDot(lv.state)}${escapeHtml(d.name)}</div>
+        <div style="font-size:11px;color:${lv.state==='bad'?'var(--red-light)':lv.state==='warn'?'var(--amber,#F0A030)':'var(--muted)'};">${escapeHtml(lv.text+' · '+conn)}</div>
       </div>
       <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
         ${isP?`<button onclick="gtPrinterTest(${_jsArg(d.id)})" style="font-size:12px;font-weight:700;border-radius:8px;padding:6px 10px;cursor:pointer;border:1px solid var(--gold);background:transparent;color:var(--gold);">🧪 ${escapeHtml(L('ניסיון','Test','Prueba'))}</button>`
-             :`<button onclick="mgrToggleDeviceStatus('${kind}',${_jsArg(d.id)})" style="font-size:10px;font-weight:700;border-radius:12px;padding:3px 10px;cursor:pointer;border:1px solid ${d.status==='connected'?'#28C76F':'var(--border)'};background:transparent;color:${d.status==='connected'?'#28C76F':'var(--muted)'};">${d.status==='connected'?L('מחובר','Connected','Conectado'):L('לא מחובר','Not connected','No conectado')}</button>`}
+             :`<button onclick="gtScannerTest()" style="font-size:12px;font-weight:700;border-radius:8px;padding:6px 10px;cursor:pointer;border:1px solid var(--gold);background:transparent;color:var(--gold);">🧪 ${escapeHtml(L('בדיקה','Check','Prueba'))}</button>`}
         <button onclick="if(confirm(L('להסיר?','Remove?','¿Quitar?')))mgrRemoveDevice('${kind}',${_jsArg(d.id)})" style="color:#FF6B6B;background:none;border:none;font-size:16px;cursor:pointer;">✕</button>
       </div>
     </div>`;
@@ -8768,7 +8777,8 @@ function mgrRenderDevices(){
     // v10.34: legs and head split → the head screen has its own printer and scanner
     const _split=(typeof _lgSplit==='function') && _lgSplit();
     const _list=(_split ? [['legs','רגליים'],['head','ראש']].concat(SCREEN_LIST.slice(1)) : SCREEN_LIST)
-      .filter(([k])=>!GT_SUP_SCREENS[k] || gtPlanned(k));          // v10.35: a supervisor screen only when the plant chose it
+      .filter(([k])=>!GT_SUP_SCREENS[k] || gtPlanned(k))          // v10.35: a supervisor screen only when the plant chose it
+      .flatMap(x=>x[0]==='nikur' && KS.getSettings().nikurSmallScreen!==false ? [x,['nikur2','ניקור חלקים קטנים']] : [x]);   // its own scanner
     sa.innerHTML=_list.map(([key,label])=>{
       const cur=sd[key]||{printer:'',scanner:''};
       const pOpts='<option value="">— '+L('מדפסת','Printer','Impresora')+' —</option>'+printers.map(d=>`<option value="${escapeHtml(d.id)}" ${cur.printer===d.id?'selected':''}>${escapeHtml(d.name)}</option>`).join('');
@@ -11695,7 +11705,7 @@ function _gtScreenName(s){
   const M={'שחיטה':['Slaughter','Matanza'],'וושט':['Esophagus','Esófago'],'רגלים':['Legs','Patas'],'ראש':['Head','Cabeza'],
     'פנים':['Inner','Interno'],'חוץ':['Outer','Externo'],'חלקים':['Parts','Partes'],'חותמות':['Stamps','Sellos'],
     'רגלים / ראש':['Legs / Head','Patas / Cabeza'],'חלקים קטנים':['Small parts','Partes pequeñas'],'קולר (עתידי)':['Cooler (future)','Cámara (futuro)'],
-    'קולר':['Cooler','Cámara'],'מנקר':['Nikur','Nikur'],'מליחה':['Salting','Salado'],'שיפינג':['Shipping','Envíos']};
+    'קולר':['Cooler','Cámara'],'מנקר':['Nikur','Nikur'],'ניקור חלקים קטנים':['Small-parts nikur','Nikur de partes pequeñas'],'מליחה':['Salting','Salado'],'שיפינג':['Shipping','Envíos']};
   const m=M[s]; return m?L(s,m[0],m[1]):s;
 }
 // errors caught on THIS device (gtLogError) — count + last 20 + clear
@@ -15983,6 +15993,7 @@ function _kioskInit(sb){
     // on (shown to the manufacturer in "technical support").
     const info = { v: GT_APP_VERSION, screen: (document.querySelector('.screen.active')||{}).id || null,
                    lang: (typeof lang!=='undefined'?lang:null), local: !!window.GT_SERVER };
+    try{ const sa=Number(localStorage.getItem('gt_scan_last'))||0; if(sa) info.scanAt=new Date(sa).toISOString(); }catch(e){}
     sb.rpc('device_heartbeat', { p_device_id: deviceId, p_device_name: deviceName, p_info: info }).then(({error})=>{
       if(!error) return;
       console.warn('[Kiosk] heartbeat failed:', error.message); if(error.code) gtLogError('kiosk.heartbeat', error);
@@ -17610,10 +17621,13 @@ function renderScreenDeviceStatus(){
     const bar=document.getElementById(barId), chips=chipsId?document.getElementById(chipsId):null;
     if(!bar && !chips) return;
     const {p,sc}=_gtDevFor(key);
-    const pOn=!!(p&&gtPrinterStatusOf(p)==='connected'), scOn=!!(sc&&sc.status==='connected');
-    const pChip=p ? _gtChip(pOn?'#28C76F':'#FF8866', '🖨 '+L('מדפסת: ','Printer: ','Impresora: ')+escapeHtml(p.name)+(pOn?'':L(' — לא מחוברת',' — not connected',' — no conectada')))
+    // (v10.38, owner) the live state: the printer online (the plant server checks it) / the scanner active (it scanned)
+    const pl=p?gtPrinterLive(p):null, sl=sc?gtScannerLive(sc,true):null;
+    const pOn=!!(pl&&pl.state!=='bad'), scOn=!!(sl&&sl.state==='ok');
+    const col=st=>st==='ok'?'#28C76F':st==='bad'?'#FF8866':st==='warn'?'#F0A030':'#8A93A6';
+    const pChip=p ? _gtChip(col(pl.state), '🖨 '+L('מדפסת: ','Printer: ','Impresora: ')+escapeHtml(p.name)+' · '+escapeHtml(pl.short))
                   : _gtChip('#F0A030', '🖨 '+L('אין מדפסת מצומדת','No printer paired','Sin impresora emparejada'));
-    const sChip=sc ? _gtChip(scOn?'#7AAEFF':'#FF8866', '📷 '+L('סורק: ','Scanner: ','Escáner: ')+escapeHtml(sc.name)+(scOn?'':L(' — לא מחובר',' — not connected',' — no conectado')), scOn)
+    const sChip=sc ? _gtChip(col(sl.state), '📷 '+L('סורק: ','Scanner: ','Escáner: ')+escapeHtml(sc.name)+' · '+escapeHtml(sl.short))
                    : _gtChip('#6B7D99', '📷 '+L('אין סורק','No scanner','Sin escáner'));
     const btn=((p&&!pOn)||(sc&&!scOn)) ? '<button class="gt-connect-btn" onclick="connectScreenDevices(\''+(key==='legs'?_gtLegsDevKey():key)+'\')">'+L('חבר','Connect','Conectar')+'</button>' : '';
     if(chips){ chips.innerHTML=pChip+sChip+btn; if(bar) bar.innerHTML=''; }
@@ -18749,6 +18763,206 @@ function _gtMaybeWizard(){
   const og = window.goTo;
   window.goTo = function(id){ const r = og.apply(this, arguments); if(id==='scManager') setTimeout(() => { try{ _gtMaybeWizard(); }catch(e){} }, 1500); return r; };
 })();
+</script>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════════
+   v10.38 (owner, after the full review): printers and scanners — LIVE.
+   • A searching sign (spinner + seconds + bar) while the plant server searches.
+   • Online marks: a network printer — the plant server checks every 30 s that it answers (nothing is sent);
+     a Bluetooth / print-screen printer — the last print's result.
+   • Scanners: a Wi-Fi scanner sends its codes to the plant server (port 9300): "Search" lists the scanners that
+     just scanned; the station it is given to receives its codes as if typed. A USB / Bluetooth scanner types
+     like a keyboard: the tablet notices a scan (fast keys + Enter) and tells the server when it last scanned.
+   ═══════════════════════════════════════════════════════════════════ */
+(function(){ const st=document.createElement('style');
+  st.textContent='@keyframes gtSpin{to{transform:rotate(360deg)}}.gt-spin{display:inline-block;width:16px;height:16px;border:3px solid var(--border);border-top-color:#5aa8ff;border-radius:50%;animation:gtSpin .8s linear infinite;vertical-align:middle;margin-inline-end:8px}'
+    +'.gt-sbar{height:6px;background:var(--border);border-radius:3px;margin-top:8px;overflow:hidden}.gt-sbar i{display:block;height:100%;width:0;background:#5aa8ff;transition:width .5s linear}';
+  document.head.appendChild(st); })();
+function _gtDot(state){ const c=state==='ok'?'#28C76F':state==='bad'?'#E03030':state==='warn'?'#F0A030':'#6B7D99';
+  return '<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:'+c+';'+(state==='ok'?'box-shadow:0 0 7px '+c+';':'')+'margin-inline-end:6px;vertical-align:middle;"></span>'; }
+function _gtPrivIp(ip){ return /^(10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3})$/.test(String(ip||'')) && String(ip).split('.').every(x=>Number(x)<=255); }
+function _gtScConnLabel(d){ return d.conn==='network'||d.conn==='wifi' ? L('Wi-Fi / רשת','Wi-Fi / network','Wi-Fi / red')+(d.ip?' · '+d.ip:'') : (d.conn==='usb'?'USB':'Bluetooth'); }
+function _gtAgo(t){ const s=Math.max(0,Math.round((Date.now()-t)/1000));
+  return s<60 ? L('לפני '+s+' שנ׳',s+' s ago','hace '+s+' s') : s<3600 ? L('לפני '+Math.round(s/60)+' דק׳',Math.round(s/60)+' min ago','hace '+Math.round(s/60)+' min') : L('מ-','since ','desde ')+_gtHM(t); }
+function _gtHM(t){ const d=new Date(t); return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); }
+
+// ── the printers' state (from the plant server) ──
+window._gtPrOn=null;
+async function gtPrintersStatusRefresh(){
+  if(!window.sb) return;
+  try{ const r=await window.sb.rpc('printers_status',{p_token:(KS.getManagerToken&&KS.getManagerToken())||null}); if(r && r.data && r.data.ok) window._gtPrOn=Object.assign({},r.data,{got:Date.now()}); }catch(e){}
+}
+function gtPrinterLive(d){
+  const p=_gtPrNorm(d)||{};
+  if(p.conn==='network'){
+    const S=window._gtPrOn, relayAt=S&&S.relay?Date.parse(S.relay):0;
+    if(!S) return {state:'unknown', text:L('בודק…','Checking…','Comprobando…'), short:L('בודק…','checking…','comprobando…')};
+    if(!relayAt || Date.now()-relayAt>120000) return {state:'warn', text:L('שירות ההדפסה בשרת המפעל לא פועל (gt-print-relay)','The printing service on the plant server is not running (gt-print-relay)','El servicio de impresión no funciona'), short:L('שירות ההדפסה כבוי','printing service off','servicio apagado')};
+    const e=(S.printers||{})[(p.ip||'')+':'+(p.port||9100)];
+    if(!e) return {state:'unknown', text:L('עוד לא נבדקה','Not checked yet','Aún sin comprobar'), short:L('עוד לא נבדקה','not checked yet','sin comprobar')};
+    const at=Date.parse(e.at)||Date.now(), since=Date.parse(e.since)||at;
+    return e.ok===true ? {state:'ok', text:L('🟢 אונליין · נבדקה ','🟢 Online · checked ','🟢 En línea · comprobada ')+_gtAgo(at), short:L('🟢 אונליין','🟢 online','🟢 en línea')}
+                       : {state:'bad', text:L('🔴 לא עונה ברשת מ-','🔴 Not answering on the network since ','🔴 No responde desde ')+_gtHM(since), short:L('לא עונה','not answering','no responde')};
+  }
+  const st=gtPrinterStatusOf(d);
+  if(st==='connected') return {state:'ok', text:L('קיבלה את ההדפסה האחרונה','Took the last print','Recibió la última impresión'), short:L('🟢 הדפיסה','🟢 printed','🟢 imprimió')};
+  if(st==='error') return {state:'bad', text:L('לא הדפיסה בפעם האחרונה','Did not print last time','No imprimió la última vez'), short:L('לא הדפיסה','did not print','no imprimió')};
+  return {state:'unknown', text:L('⚪ נבדקת רק כשמדפיסים (Bluetooth / מסך ההדפסה)','⚪ Checked only when printing (Bluetooth / print screen)','⚪ Se comprueba solo al imprimir'), short:L('נבדקת בהדפסה','checked when printing','al imprimir')};
+}
+
+// ── the scanners' state ──
+window._gtScHeard=null; window._gtScDevs=null; window._gtScFeedAt={};
+function _gtScLocalAt(){ try{ return Number(localStorage.getItem('gt_scan_last'))||0; }catch(e){ return 0; } }
+function _gtScMark(){ try{ localStorage.setItem('gt_scan_last', String(Date.now())); }catch(e){} }
+// which tablet serves a screen key of "assign to each screen"
+function _gtKeySlot(k){ return k==='head'?['legs',1] : k==='nikur2'?['nikur',1] : [k,0]; }
+function gtScannerLive(d, here){
+  let t=0;
+  if(d.conn==='network'){
+    t = here ? (window._gtScFeedAt[d.ip]||0) : 0;
+    const H=window._gtScHeard; if(H && H.lastSeen && H.lastSeen[d.ip]) t=Math.max(t, Date.parse(H.lastSeen[d.ip])||0);
+  } else if(here) t=_gtScLocalAt();
+  else {   // the team leader: the tablets of the screens this scanner is given to
+    const sd=KS.getSettings().screenDevices||{};
+    Object.keys(sd).filter(k=>sd[k] && sd[k].scanner===d.id).forEach(k=>{ const [r,i]=_gtKeySlot(k);
+      (window._gtScDevs||[]).filter(x=>x.assigned_role===r && Number(x.assigned_index||0)===i).forEach(x=>{ const a=Date.parse((x.app_info||{}).scanAt||''); if(a>t) t=a; }); });
+  }
+  if(!t) return {state:'unknown', text:d.conn==='network'?L('⚪ עוד לא סרק (Wi-Fi)','⚪ Has not scanned yet (Wi-Fi)','⚪ Aún no escaneó (Wi-Fi)'):L('⚪ עוד לא סרק','⚪ Has not scanned yet','⚪ Aún no escaneó'), short:L('עוד לא סרק','not scanned yet','sin escanear')};
+  if(Date.now()-t < 15*60000) return {state:'ok', text:L('🟢 פעיל · סריקה אחרונה ','🟢 Active · last scan ','🟢 Activo · último escaneo ')+_gtAgo(t), short:L('🟢 פעיל','🟢 active','🟢 activo')};
+  return {state:'warn', text:L('🟠 לא סרק מאז ','🟠 No scan since ','🟠 Sin escanear desde ')+_gtHM(t), short:L('לא סרק מאז ','no scan since ','sin escanear desde ')+_gtHM(t)};
+}
+async function gtScannersStatusRefresh(){
+  const tok=KS.getManagerToken&&KS.getManagerToken(); if(!window.sb || !tok) return;
+  try{ const r=await window.sb.rpc('scanners_heard',{p_token:tok, p_minutes:1440}); if(r && r.data && r.data.ok) window._gtScHeard=r.data; }catch(e){}
+  try{ const r=await window.sb.from('devices_pilot').select('id,assigned_role,assigned_index,app_info,device_status'); if(!r.error) window._gtScDevs=(r.data||[]).filter(x=>x.device_status!=='retired'); }catch(e){}
+}
+// a scan typed by a USB / Bluetooth scanner: fast keys, then Enter
+(function(){ let n=0, last=0;
+  document.addEventListener('keydown', e=>{ const now=Date.now();
+    if(e.key==='Enter'){ if(n>=4 && now-last<150) _gtScMark(); n=0; return; }
+    if(e.key && e.key.length===1){ n = (now-last<60) ? n+1 : 1; last=now; } }, true); })();
+
+// ── the searching sign ──
+function _gtSearchBox(box, title, secs){
+  box.innerHTML='<div style="border:1px solid var(--blue);border-radius:10px;padding:10px;margin:4px 0;background:rgba(42,127,255,.07);">'
+    +'<span class="gt-spin"></span><b style="color:#5aa8ff;">'+escapeHtml(title)+'</b> <span class="gt-sec" style="font-size:12px;color:var(--muted);">0 '+escapeHtml(L('שנ׳','s','s'))+'</span>'
+    +'<div class="gt-sbar"><i></i></div><div class="gt-found"></div></div>';
+  box._gtSecs=secs||45;
+}
+function _gtSearchTick(box, ms){
+  const s=box.querySelector('.gt-sec'); if(s) s.textContent=Math.round(ms/1000)+' '+L('שנ׳','s','s');
+  const i=box.querySelector('.gt-sbar i'); if(i) i.style.width=Math.min(100, ms/10/(box._gtSecs||45))+'%';
+}
+
+// ── Wi-Fi scanner search: scan anything with the scanner, it shows up ──
+let _gtScSearchTok=0;
+async function gtScannerSearchWifi(){
+  const box=document.getElementById('gtScWifiRes'); if(!box) return;
+  const tok=KS.getManagerToken&&KS.getManagerToken();
+  if(!window.sb || !tok){ box.innerHTML='<div style="color:var(--red-light);font-size:12px;">'+escapeHtml(L('אין חיבור לשרת המפעל.','No connection to the plant server.','Sin conexión al servidor.'))+'</div>'; return; }
+  const my=++_gtScSearchTok, t0=Date.now();
+  _gtSearchBox(box, L('ממתין לסורק… סרקו עכשיו מדבקה כלשהי עם הסורק','Waiting for the scanner… scan any sticker with it now','Esperando… escanee cualquier etiqueta ahora'), 60);
+  let res=null;
+  while(Date.now()-t0<60000 && my===_gtScSearchTok){
+    try{ const r=await window.sb.rpc('scanners_heard',{p_token:tok, p_minutes:5}); res=r.data||null; }catch(e){ res=null; }
+    _gtSearchTick(box, Date.now()-t0);
+    const f=box.querySelector('.gt-found');
+    if(res && res.ok){
+      const relayOld=!res.relay || Date.now()-Date.parse(res.relay)>120000;
+      if(relayOld){ box.innerHTML='<div style="color:var(--red-light);font-size:12px;line-height:1.5;">'+escapeHtml(L('שירות הסורקים בשרת המפעל לא פועל (gt-scanner-relay) — אין מי שיקבל את הסורק. צריך להפעיל אותו בשרת (ראו המדריך).','The scanner service on the plant server is not running (gt-scanner-relay). It must be started on the server (see the guide).','El servicio de escáneres no funciona en el servidor.'))+'</div>'; return; }
+      const have=(KS.getSettings().scanners||[]).filter(x=>x.conn==='network').map(x=>x.ip);
+      const L2=(res.scanners||[]).filter(x=>Date.parse(x.at)>=t0-60000);
+      if(f) f.innerHTML=L2.map(x=>`<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:7px 0;border-top:1px solid var(--border);">
+          <div><div style="font-size:13px;font-weight:700;">${_gtDot('ok')}${escapeHtml(L('סורק ','Scanner ','Escáner '))}<span dir="ltr">${escapeHtml(x.ip)}</span></div>
+          <div style="font-size:11px;color:var(--muted);">${escapeHtml(L('נקרא: ','Read: ','Leído: ')+String(x.code).slice(0,40))}</div></div>
+          ${have.includes(x.ip)?`<span style="font-size:12px;color:var(--green);">✓ ${escapeHtml(L('ברשימה','On the list','En la lista'))}</span>`
+            :`<button onclick='gtScannerAddWifi(${_jsArg(x.ip)})' style="padding:7px 12px;border-radius:7px;border:none;background:var(--gold);color:#07090F;font-weight:700;cursor:pointer;">${escapeHtml(L('הוסף','Add','Agregar'))}</button>`}</div>`).join('');
+    }
+    await new Promise(z=>setTimeout(z,2000));
+  }
+  if(my!==_gtScSearchTok) return;
+  const sp=box.querySelector('.gt-spin'); if(sp) sp.remove();
+  const b=box.querySelector('b'); if(b) b.textContent=(box.querySelector('.gt-found')||{}).children && box.querySelector('.gt-found').children.length
+      ? L('החיפוש הסתיים','The search is over','La búsqueda terminó') : L('לא הגיעה סריקה. בדקו שהסורק מוגדר "TCP client" לכתובת שרת המפעל, יציאה 9300, ונסו שוב.','No scan came. Check the scanner is set to "TCP client" → the plant server, port 9300, and try again.','No llegó ningún escaneo. Revise la configuración (TCP client, puerto 9300).');
+}
+function gtScannerAddWifi(ip){
+  if(!_gtPrivIp(ip)) return;
+  const name=String(prompt(L('שם לסורק:','Scanner name:','Nombre del escáner:'), L('סורק ','Scanner ','Escáner ')+ip)||'').trim(); if(!name) return;
+  const s=KS.getSettings(), list=(s.scanners||[]).slice();
+  if(list.some(x=>x.conn==='network' && x.ip===ip)) return;
+  list.push({id:'d'+Date.now(), name:name.slice(0,60), conn:'network', ip});
+  KS.updateSettings({scanners:list}); mgrRenderDevices();
+  alert(L('✅ נוסף. עכשיו משייכים אותו למסך — למטה, ב"שיוך לכל מסך".','✅ Added. Now give it to a screen — below, in "Assign to each screen".','✅ Agregado. Ahora asígnelo a una pantalla.'));
+}
+// a USB / Bluetooth scanner on this tablet: scan a sticker → it works → add it
+function gtScannerSearchLocal(){
+  gtSheet('🔍 '+L('סורק בטאבלט הזה','A scanner on this tablet','Escáner en esta tableta'), L('סרקו עכשיו מדבקה עם הסורק (USB או Bluetooth שמחובר לטאבלט).','Scan a sticker now with the scanner (USB or Bluetooth connected to the tablet).','Escanee una etiqueta ahora.'),
+    '<div id="gtScLocWait" style="padding:8px 0;"><span class="gt-spin"></span><b style="color:#5aa8ff;">'+escapeHtml(L('ממתין לסריקה…','Waiting for a scan…','Esperando…'))+'</b></div>'
+    +'<input id="gtScLocIn" class="gt-in" autocomplete="off" style="width:100%;padding:12px;font-size:16px;direction:ltr;" placeholder="…">'
+    +'<div id="gtScLocOut" style="margin-top:10px;"></div>'
+    +'<div class="gt-row">'+_gtHBtn(L('סגור','Close','Cerrar'),'#9aa4b5','gtSheetClose()')+'</div>');
+  setTimeout(()=>{ const i=document.getElementById('gtScLocIn'); if(!i) return; i.focus();
+    i.addEventListener('keydown',e=>{ if(e.key!=='Enter') return; e.preventDefault(); const v=i.value.trim(); i.value=''; if(!v) return;
+      _gtScMark(); const w=document.getElementById('gtScLocWait'); if(w) w.innerHTML='<b style="color:var(--green);">✅ '+escapeHtml(L('הסורק עובד. נקרא: ','The scanner works. Read: ','El escáner funciona. Leído: ')+v.slice(0,60))+'</b>';
+      const o=document.getElementById('gtScLocOut'); if(!o) return;
+      o.innerHTML='<div style="display:flex;gap:6px;flex-wrap:wrap;"><input id="gtScLocName" class="gt-in" style="flex:2;min-width:120px;padding:9px;" placeholder="'+escapeHtml(L('שם / דגם','Name / model','Nombre / modelo'))+'">'
+        +'<select id="gtScLocConn" class="gt-in" style="padding:9px;"><option value="usb">USB</option><option value="bluetooth">Bluetooth</option></select>'
+        +'<button onclick="gtScannerAddLocal()" style="padding:9px 14px;border-radius:8px;border:none;background:var(--gold);color:#07090F;font-weight:800;cursor:pointer;">'+escapeHtml(L('הוסף לרשימה','Add to the list','Agregar'))+'</button></div>'; }); },150);
+}
+function gtScannerAddLocal(){
+  const n=String((document.getElementById('gtScLocName')||{}).value||'').trim()||L('סורק','Scanner','Escáner');
+  const c=(document.getElementById('gtScLocConn')||{}).value==='bluetooth'?'bluetooth':'usb';
+  const s=KS.getSettings(), list=(s.scanners||[]).slice(); list.push({id:'d'+Date.now(), name:n.slice(0,60), conn:c});
+  KS.updateSettings({scanners:list}); try{ gtSheetClose(); }catch(e){} mgrRenderDevices();
+}
+
+// ── the station: its Wi-Fi scanner's codes arrive as if typed ──
+function _gtStationKey(){
+  const a=(document.querySelector('.screen.active')||{}).id;
+  if(a==='scLegs') return _gtLegsDevKey();
+  if(a==='scParts') return 'parts';
+  if(a==='scStamps') return 'stamps';
+  if(a==='scSup'){ try{ return supRole==='nikur' ? (_nkScreen()==='small'?'nikur2':'nikur') : supRole; }catch(e){ return null; } }
+  return null;
+}
+function _gtFeedScan(code){
+  const scr=document.querySelector('.screen.active'); if(!scr) return;
+  const ids=['lgScanInput','scanInput','stampsScanInput','nkScan'];
+  const inp=ids.map(i=>document.getElementById(i)).find(el=>el && el.closest('.screen')===scr);
+  const tgt=inp||document.body;
+  if(inp){ try{ inp.focus(); }catch(e){} inp.value=code; }
+  const key=(k)=>tgt.dispatchEvent(new KeyboardEvent('keydown',{key:k, keyCode:k==='Enter'?13:0, bubbles:true, cancelable:true}));
+  for(const ch of String(code)) key(ch);
+  key('Enter');
+}
+const _gtScFeed={ip:null, last:null, busy:false};
+async function _gtScFeedTick(){
+  if(_gtScFeed.busy || !window.sb || window._gtNetLocked || document.hidden) return;
+  const k=_gtStationKey(); if(!k){ _gtScFeed.ip=null; return; }
+  const sd=(KS.getSettings().screenDevices||{})[k]||{}, sc=(KS.getSettings().scanners||[]).find(x=>x.id===sd.scanner);
+  if(!sc || sc.conn!=='network' || !sc.ip){ _gtScFeed.ip=null; return; }
+  if(_gtScFeed.ip!==sc.ip){ _gtScFeed.ip=sc.ip; _gtScFeed.last=null; }
+  _gtScFeed.busy=true;
+  try{ const r=await window.sb.rpc('scanner_scans_since',{p_ip:sc.ip, p_after:_gtScFeed.last}); const x=r.data||{};
+       if(x.ok){ _gtScFeed.last=x.last;
+         (x.scans||[]).forEach(z=>{ window._gtScFeedAt[sc.ip]=Date.now(); _gtScMark(); _gtFeedScan(z.code); });
+         if((x.scans||[]).length) try{ renderScreenDeviceStatus(); }catch(e){} } }
+  catch(e){} finally{ _gtScFeed.busy=false; }
+}
+setInterval(_gtScFeedTick, 1000);
+
+// refresh: on the team-leader screen and on the printing / scanning stations, every 30 s
+function _gtLiveRefresh(){
+  if(document.hidden) return;
+  const a=(document.querySelector('.screen.active')||{}).id;
+  const onMgr=a==='scManager', onSt=!!_gtStationKey();
+  if(!onMgr && !onSt) return;
+  Promise.all([gtPrintersStatusRefresh(), onMgr?gtScannersStatusRefresh():null]).then(()=>{
+    try{ if(onMgr){ const l=document.getElementById('mgrPrintersList'); if(l && l.offsetParent!==null) mgrRenderDevices(); } else renderScreenDeviceStatus(); }catch(e){} });
+}
+setInterval(_gtLiveRefresh, 30000); setTimeout(_gtLiveRefresh, 4000);
+(function(){ const og=window.goTo; window.goTo=function(id){ const r=og.apply(this,arguments); setTimeout(_gtLiveRefresh, 300); return r; }; })();
 </script>
 
 </body>

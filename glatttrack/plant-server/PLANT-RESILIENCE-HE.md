@@ -97,6 +97,7 @@ sudo systemctl enable --now gt-sync-watchdog.service gt-backup.timer gt-nightly.
 
 ```bash
 sudo systemctl enable --now gt-print-relay.service
+sudo systemctl enable --now gt-scanner-relay.service   # סורקי Wi-Fi: הסורק מוגדר "TCP client" לכתובת השרת, יציאה 9300
 ```
 
 המדפסות צריכות להיות באותה רשת כמו השרת (Wi-Fi או כבל), ביציאה 9100. אם המדפסות ברשת אחרת של המפעל, כותבים ב-`gt-plant.conf`: `GT_PRINTER_NETS="192.168.10 192.168.11"`.

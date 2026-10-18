@@ -50,11 +50,32 @@ on conflict (key) do update set value = excluded.value, updated_at = now();
 SQL
   gt_log "printer search: $(echo $found | wc -w) found on: $nets"
 }
-last_beat=0
+# (v10.38, owner) is each network printer of the list there? Only a connection is opened — nothing is sent.
+# → plant_state 'printersOnline' {at, printers: {"ip:port": {ok, at, since}}} (since = when it last changed)
+probe_printers(){
+  local list p ok prev now out="" since
+  list="$(gt_psql -c "select string_agg(distinct (x ->> 'ip') || ':' || coalesce(nullif(x ->> 'port', ''), '9100'), ' ')
+                        from settings_pilot, jsonb_array_elements(case when jsonb_typeof(settings -> 'printers') = 'array' then settings -> 'printers' else '[]'::jsonb end) x
+                       where id = 1 and x ->> 'conn' = 'network'")"
+  prev="$(gt_psql -c "select coalesce((select value from plant_state where key = 'printersOnline'), '{}')")"
+  now="$(date -Is)"
+  for p in $list; do
+    [[ "$p" =~ $ADDR_RE ]] || continue
+    if timeout 2 bash -c 'exec 3<>"/dev/tcp/$0/$1"' "${p%:*}" "${p##*:}" 2>/dev/null; then ok=true; else ok=false; fi
+    since="$(printf '%s' "$prev" | python3 -c 'import json,sys
+try:
+  d=json.load(sys.stdin)["printers"][sys.argv[1]]; print(d["since"] if str(d.get("ok")).lower()==sys.argv[2] else "")
+except Exception: print("")' "$p" "$ok" 2>/dev/null)"
+    out="$out${out:+,}\"$p\":{\"ok\":$ok,\"at\":\"$now\",\"since\":\"${since:-$now}\"}"
+  done
+  gt_state printersOnline "{\"at\":\"$now\",\"printers\":{$out}}" >/dev/null
+}
+last_beat=0; last_probe=0
 while true; do
   if [ "$(gt_self_role)" != "primary" ]; then sleep 5; continue; fi
   now=$(date +%s)
   if [ $((now - last_beat)) -ge 30 ]; then gt_state printRelayAt "$(date -Is)" >/dev/null; last_beat=$now; fi
+  if [ $((now - last_probe)) -ge "${GT_PRINTER_PROBE_EVERY:-30}" ]; then ( probe_printers ) & last_probe=$now; fi   # in the background: printing never waits for it
   # (review) a sticker the station already reported as not printed is never printed later; a send cut off by a restart is failed
   gt_psql -c "update print_jobs set status = 'failed', error = 'too old — not printed (the station said so; print again)' where status = 'new' and at < now() - interval '20 seconds';
               update print_jobs set status = 'failed', error = 'interrupted' where status = 'sending' and at < now() - interval '2 minutes'" >/dev/null
