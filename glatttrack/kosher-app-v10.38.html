@@ -5526,7 +5526,8 @@ function nikurRender(el){
         tl.sort((a,b)=>a[0]-b[0]);
         const C={done:['var(--green)','rgba(40,199,111,.15)'],part:['var(--amber)','rgba(255,176,32,.13)'],ready:['var(--gold)','var(--panel)'],cool:['var(--muted)','var(--panel2)'],wait:['var(--muted)','var(--panel2)']};
         const gEl=document.getElementById('nkGrid');
-        if(gEl) gEl.innerHTML=tl.map(([n,k,t])=>`<div onclick="nkNumInfo(${n})" style="cursor:pointer;border:2px solid ${C[k][0]};background:${C[k][1]};border-radius:10px;padding:6px 2px;text-align:center;opacity:${k==='wait'||k==='cool'?.6:1};">`
+        const fl=(_nkFlash&&Date.now()-_nkFlash.t<3500)?_nkFlash.n:0;
+        if(gEl) gEl.innerHTML=tl.map(([n,k,t])=>`<div onclick="nkNumInfo(${n})" style="cursor:pointer;${n===fl?'box-shadow:0 0 0 3px #fff,0 0 16px var(--gold);transform:scale(1.06);':''}border:2px solid ${C[k][0]};background:${C[k][1]};border-radius:10px;padding:6px 2px;text-align:center;opacity:${k==='wait'||k==='cool'?.6:1};">`
           +`<div style="font-size:20px;font-weight:900;color:${k==='wait'||k==='cool'?'var(--muted)':'var(--text)'};">${n}</div><div style="font-size:10px;font-weight:800;color:${C[k][0]};">${t}</div></div>`).join('')
           || `<div class="gt-muted" style="grid-column:1/-1;padding:10px 0;">${E(L('עוד אין בהמות כשרות היום בצד הזה.','No kosher animals on this side today yet.','Aún no hay animales kosher en este lado hoy.'))}</div>`;
         const lg=document.getElementById('nkLegend'); if(lg) lg.innerHTML=[['var(--green)',L('הכל נכנס','All in','Todo dentro')],['var(--amber)',L('התחיל','Started','Empezado')],['var(--gold)',L('מוכן לניקור','Ready','Listo')],['var(--muted)',B.coolerOn&&_nkTab==='big'?L('⏳ עוד לא הגיע / ❄️ לא בקולר','⏳ not here yet / ❄️ not in the cooler','⏳ aún no / ❄️ no en la cámara'):L('⏳ עוד לא הגיע','⏳ not here yet','⏳ aún no')]]
@@ -5554,6 +5555,22 @@ function nkNumInfo(n){
   const t=Object.keys(g).map(p=>nm(p)+' '+g[p][1]+'/'+g[p][0]).join(' · ');
   _nkShow(t&&Object.values(g).every(a=>a[1]>=a[0])?'ok':'dup','#'+n, t || ((B.coming||[]).some(c=>c.n===n) ? L('כשר — עוד לא קיבל מדבקות כשרות','Kosher — no kosher stickers yet','Kosher — aún sin etiquetas') : L('עוד לא נכנס לקולר','Not in the cooler yet','Aún no está en la cámara')));
   setTimeout(nkFocus,50);
+}
+// a number sticker (no part) at the nikur / cooler: today's animal is checked here — not kosher → red + warning
+var _nkFlash={n:0,t:0};
+function _gtNumNotKosher(code,idx){
+  const mB=/\|B:(\d+)/.exec(code), cur=KS.getBoardEpoch?KS.getBoardEpoch():null;
+  if(mB && cur && Number(mB[1])!==Number(cur)) return false;                 // another day: the server decides on the piece
+  const a=KS.getAnimal(idx); if(!a) return false;
+  let why=null;
+  if(!a.slaughter) why=L('לא נשחט','Not slaughtered','No faenado');
+  else if(a.slaughter==='nevela'||a.slaughter==='shot') why=L('נבלה','Nevela','Nevelá');
+  else if(a.innerStatus==='treif'||a.outerStatus==='treif') why=L('טרף','Treif','Treif');
+  else if(!isKosherReady(a)) why=L('אין פסיקה כשרה','No kosher ruling','Sin dictamen kosher');
+  else { try{ const h=gtHeldAt(idx,supRole==='cooler'?'cooler':'nikur')||gtHeldAt(idx,'stamps'); if(h) why=h.kind==='usda'?'USDA HOLD':L('מעוכב (?)','Held (?)','Retenido (?)'); }catch(e){} }
+  if(!why) return false;
+  _nkShow('no','⛔ #'+(idx+1)+' — '+why+L(' — לא להכניס!',' — do not take in!',' — ¡no ingresar!'),L('מדבקת מספר','Number sticker','Etiqueta de número'));
+  return true;
 }
 function nkFocus(){ const i=document.getElementById('nkScan'); if(i) i.focus(); }
 // "?" or USDA at the nikur: the number and its day (the days waiting here, today first)
@@ -5604,7 +5621,7 @@ function _nkShow(kind,big,sub){
   r.style.display='block'; r.style.background=c[0]; r.style.border='3px solid '+c[1];
   r.innerHTML=`<div style="font-size:30px;font-weight:900;color:${c[1]};font-family:'Frank Ruhl Libre',serif;">${escapeHtml(big)}</div><div style="font-size:17px;color:var(--text);margin-top:4px;font-weight:700;">${escapeHtml(sub||'')}</div>`;
   clearTimeout(_nkShow.t); _nkShow.t=setTimeout(()=>{ r.style.display='none'; },kind==='no'?6000:3500);
-  if(kind==='no'){ try{ playBeep('nevela'); }catch(e){} }
+  if(kind==='no') gtWarnSound();
 }
 const GT_NK_REASON={treif:['טרף — לא להכניס!','Treif — do not take in!','Treif — ¡no ingresar!'],nevela:['נבלה — לא להכניס!','Nevela — do not take in!','Nevelá — ¡no ingresar!'],
   no_ruling:['אין פסיקה כשרה — לא להכניס!','No kosher ruling — do not take in!','Sin dictamen kosher — ¡no ingresar!'],held:['מעוכב (USDA / שאלה) — לא להכניס!','Held (USDA / question) — do not take in!','Retenido (USDA / pregunta) — ¡no ingresar!'],
@@ -5616,8 +5633,10 @@ async function nkScan(code, pid, piece){
   const n=_gtCodeNum(code), idx=isNaN(n)?-1:n-1;
   if(idx<0||idx>999){ _nkShow('no',L('ברקוד לא מזוהה','Barcode not recognized','Código no reconocido'),'#'+code); return; }
   if(!pid){ const mP=/\|P:([a-z0-9_]+)/.exec(code), mI=/\|I:(\d+)/.exec(code); if(mP){ pid=mP[1]; piece=mI?parseInt(mI[1],10):1; } }
+  _nkFlash={n:idx+1,t:Date.now()};
+  if(!pid && _gtNumNotKosher(code,idx)) return;
   // v10.38 (owner): every piece has its kosher sticker (with the part on it) — a number sticker alone is not enough
-  if(!pid){ _nkShow('no',L('סרקו את מדבקת הכשרות של החתיכה','Scan the piece\'s kosher sticker','Escanee la etiqueta kosher de la pieza'),L('על המדבקה הזו אין שם חלק','This sticker carries no part','Esta etiqueta no lleva parte')); return; }
+  if(!pid){ _nkShow('dup',L('כשר #','Kosher #','Kosher #')+(idx+1)+' — '+L('סרקו את מדבקת הכשרות של החתיכה','scan the piece\'s kosher sticker','escanee la etiqueta kosher de la pieza'),L('מדבקת מספר לבד לא מכניסה לניקור','A number sticker alone does not go into the nikur','Una etiqueta de número sola no entra al nikur')); return; }
   const mB=/\|B:(\d+)/.exec(code); const ep=mB?Number(mB[1]):(KS.getBoardEpoch?KS.getBoardEpoch():null);   // the day of the sticker
   const prod=gtProducts().find(p=>p.id===pid), pname=gtProductName(prod)||pid, m=prod?Math.max(1,parseInt(prod.m)||0):1;
   if(!window.sb){ _nkShow('no',L('אין חיבור לשרת','No server connection','Sin conexión'),L('לא נרשם — סורקים שוב כשהחיבור חוזר','Not recorded — scan again when the connection is back','No registrado — escanee de nuevo al volver la conexión')); return; }
@@ -5674,7 +5693,9 @@ function coolerRender(el){
       </div>
       <div id="nkResult" style="display:none;border-radius:14px;padding:16px;text-align:center;margin-bottom:10px;"></div>
       <div id="clHolds" style="margin-bottom:10px;"></div>
-      <div id="clList" style="background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:4px 12px;margin-bottom:10px;"></div>
+      <div id="clGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(58px,1fr));gap:6px;margin-bottom:6px;"></div>
+      <div id="clLegend" style="display:flex;gap:10px;flex-wrap:wrap;font-size:11px;color:var(--muted);margin-bottom:10px;"></div>
+      <details class="gt-acc-in" style="margin-bottom:8px;"><summary id="clListSum"></summary><div id="clList" style="padding:0 4px;"></div></details>
       <details class="gt-acc-in" id="clOldDays" style="margin-bottom:8px;"><summary id="clOldSum"></summary><div id="clDays" style="margin-top:8px;"></div></details>
       <details class="gt-acc-in"><summary id="clHowSum"></summary><div id="clSub" style="font-size:12px;color:var(--muted);line-height:1.6;margin-top:6px;"></div></details>`;
     setTimeout(clFocus,200);
@@ -5701,6 +5722,16 @@ function coolerRender(el){
             +`<span style="font-weight:800;color:${usda?'#B39DFF':'#FFC400'};">${usda?'USDA':'?'}${cond?' · '+E(L('נפסל','condemned','condenado')):''}</span><span style="flex:1"></span>`
             +(cond?'':(usda?btn(L('שחרר','Release','Liberar'),'var(--green)','released')+btn(L('נפסל','Condemned','Condenado'),'var(--red)','condemned')
                         :btn(L('נענה — מותר','Answered — ok','Respondida — ok'),'var(--green)','answered')+btn(L('בטל','Cancel','Cancelar'),'var(--muted)','cancelled')))+`</div>`; }).join('')+`</div>` : ''; } }
+  // (owner) the numbers: green all in, amber started, gold waiting to go in, purple held, grey still coming
+  { const tl=rows.map(r=>[r.n, r.held?'held':r.in>=r.exp?'done':r.in>0?'part':'ready', r.held?'⛔':r.in+'/'+r.exp]).concat((B.coming||[]).map(n=>[n,'wait','⏳'])).sort((a,b)=>a[0]-b[0]);
+    const C={done:['var(--green)','rgba(40,199,111,.15)'],part:['var(--amber)','rgba(255,176,32,.13)'],ready:['var(--gold)','var(--panel)'],held:['#B39DFF','rgba(179,157,255,.12)'],wait:['var(--muted)','var(--panel2)']};
+    const fl=(_nkFlash&&Date.now()-_nkFlash.t<3500)?_nkFlash.n:0, g=document.getElementById('clGrid');
+    if(g) g.innerHTML=tl.map(([n,k,t])=>`<div style="${n===fl?'box-shadow:0 0 0 3px #fff,0 0 16px var(--gold);transform:scale(1.06);':''}border:2px solid ${C[k][0]};background:${C[k][1]};border-radius:10px;padding:6px 2px;text-align:center;opacity:${k==='wait'?.6:1};">`
+        +`<div style="font-size:20px;font-weight:900;color:${k==='wait'?'var(--muted)':'var(--text)'};">${n}</div><div style="font-size:10px;font-weight:800;color:${C[k][0]};">${t}</div></div>`).join('')
+      || `<div class="gt-muted" style="grid-column:1/-1;padding:10px 0;">${E(L('עוד אין בהמות כשרות היום.','No kosher animals today yet.','Aún no hay animales kosher hoy.'))}</div>`;
+    const lg=document.getElementById('clLegend'); if(lg) lg.innerHTML=[['var(--green)',L('בקולר — הכל','All in','Todo dentro')],['var(--amber)',L('התחיל','Started','Empezado')],['var(--gold)',L('ממתין לכניסה','Waiting to go in','Esperando')],['#B39DFF',L('מעוכב','Held','Retenido')],['var(--muted)',L('⏳ עוד לא עבר חותמות','⏳ not through the stamps yet','⏳ aún no pasó sellos')]]
+      .map(([c,t])=>`<span><span style="display:inline-block;width:9px;height:9px;border-radius:3px;background:${c};margin-inline-end:4px;"></span>${E(t)}</span>`).join('');
+    set('clListSum','📋 '+L('פירוט','Details','Detalle')); }
   { const box=document.getElementById('clList'); if(box){
       const line=(n,t,c)=>`<div style="display:flex;justify-content:space-between;gap:8px;padding:7px 0;border-bottom:1px solid var(--border);font-size:14px;"><b>#${n}</b><span style="font-weight:800;color:${c};text-align:end;">${t}</span></div>`;
       box.innerHTML=rows.map(r=>r.held ? line(r.n,'⛔ '+E(L('מעוכב','Held','Retenido')),'#B39DFF')
@@ -5718,8 +5749,10 @@ async function clScan(code){
   const n=_gtCodeNum(code), idx=isNaN(n)?-1:n-1;
   if(idx<0||idx>999){ _nkShow('no',L('ברקוד לא מזוהה','Barcode not recognized','Código no reconocido'),'#'+code); return; }
   const mP=/\|P:([a-z0-9_]+)/.exec(code), mI=/\|I:(\d+)/.exec(code), mB=/\|B:(\d+)/.exec(code);
-  if(!mP){ _nkShow('no',L('סרקו את מדבקת הכשרות של החתיכה','Scan the piece\'s kosher sticker','Escanee la etiqueta kosher de la pieza'),L('על המדבקה הזו אין שם חלק','This sticker carries no part','Esta etiqueta no lleva parte')); return; }
+  if(!mP){ _nkFlash={n:idx+1,t:Date.now()}; if(_gtNumNotKosher(code,idx)) return;
+    _nkShow('dup',L('כשר #','Kosher #','Kosher #')+(idx+1)+' — '+L('סרקו את מדבקת הכשרות של החתיכה','scan the piece\'s kosher sticker','escanee la etiqueta kosher'),L('מדבקת מספר לבד לא מכניסה לקולר','A number sticker alone does not go into the cooler','Una etiqueta de número sola no entra')); return; }
   const pid=mP[1], piece=mI?parseInt(mI[1],10):1, ep=mB?Number(mB[1]):(KS.getBoardEpoch?KS.getBoardEpoch():null);
+  _nkFlash={n:idx+1,t:Date.now()};
   const prod=gtProducts().find(p=>p.id===pid), pname=gtProductName(prod)||pid, m=prod?Math.max(1,parseInt(prod.m)||0):1;
   if(!window.sb){ _nkShow('no',L('אין חיבור לשרת','No server connection','Sin conexión'),L('לא נרשם — סורקים שוב כשהחיבור חוזר','Not recorded — scan again when the connection is back','No registrado — escanee de nuevo al volver la conexión')); return; }
   let r=null; try{ r=await _withTimeout(window.sb.rpc('cooler_scan',{p_id:idx,p_product:pid,p_piece:piece,p_epoch:ep,p_command_id:_gtUuid()}),10000); }catch(e){ r={error:e}; }
@@ -8391,6 +8424,7 @@ function lgShowStatus(idx,status){
 }
 
 function lgShowWarn(title,desc){
+  gtWarnSound();
   document.getElementById('lgWarnTitle').textContent=title;
   document.getElementById('lgWarnDesc').textContent=desc||'';
   const modal=document.getElementById('lgWarnModal');
@@ -13716,6 +13750,19 @@ function playBeep(overrideType){
   }catch(e){}
 }
 
+// (owner) a scan that must not go on (treif, nevela, held, not ruled, unknown): a loud warning sound + vibration
+function gtWarnSound(){
+  try{ navigator.vibrate && navigator.vibrate([250,120,250,120,400]); }catch(e){}
+  try{
+    if(!audioCtx) audioCtx=new(window.AudioContext||window.webkitAudioContext)();
+    const go=()=>{ const s=KS.getSettings(), vol=Math.max(0.25,(s.beepVolume!==undefined?s.beepVolume:70)/100*0.6), t0=audioCtx.currentTime;
+      const o=audioCtx.createOscillator(), g=audioCtx.createGain(); o.type='sawtooth'; o.connect(g); g.connect(audioCtx.destination);
+      for(let k=0;k<6;k++) o.frequency.setValueAtTime(k%2?520:980, t0+k*0.22);
+      g.gain.setValueAtTime(vol,t0); g.gain.setValueAtTime(vol,t0+1.25); g.gain.exponentialRampToValueAtTime(0.001,t0+1.4);
+      o.start(t0); o.stop(t0+1.42); };
+    if(audioCtx.state==='suspended') audioCtx.resume().then(go).catch(()=>{}); else go();
+  }catch(e){}
+}
 // ── external light / siren through a network relay on the plant server ──
 // The plant server (nginx) exposes /gt-alarm/<light|siren>/<on|off>, forwarding to the
 // relay set with tools/set-alarm-relay.sh. The relay turns itself off after ~25 s if no
@@ -14727,7 +14774,7 @@ function _gtNoKosherTitle(a){
 function showPartsError(title,desc){
   document.getElementById("partsErrTitle").textContent=title;
   document.getElementById("partsErrDesc").innerHTML=escapeHtml(desc||"").split("\n").join("<br>");
-  document.getElementById("partsErrorModal").classList.add("open");
+  document.getElementById("partsErrorModal").classList.add("open"); gtWarnSound();
   // Also flash scan area red
   const area=document.getElementById("scanArea");
   if(area){area.style.borderColor="var(--red)";setTimeout(()=>{area.style.borderColor="var(--border2)";},1000);}
@@ -15994,7 +16041,7 @@ function stampsDoReprint(){
 function stampsShowError(title,desc){
   document.getElementById("stampsErrTitle").textContent=title;
   document.getElementById("stampsErrDesc").innerHTML=escapeHtml(desc||"").split("\n").join("<br>");
-  document.getElementById("stampsErrorModal").classList.add("open");
+  document.getElementById("stampsErrorModal").classList.add("open"); gtWarnSound();
   const area=document.getElementById("stampsScanArea");
   if(area){area.style.borderColor="var(--red)";setTimeout(()=>{area.style.borderColor="var(--border2,#2A3D5C)";},1000);}
 }
