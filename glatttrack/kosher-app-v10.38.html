@@ -5645,12 +5645,15 @@ async function clLoad(){
 setInterval(()=>{ const s=document.querySelector('.screen.active'); if(s&&s.id==='scSup'&&supRole==='cooler') clLoad(); },8000);
 (function(){ let buf='', last=0;
   document.addEventListener('keydown', e=>{ try{
-    const a=(document.querySelector('.screen.active')||{}).id; if(a!=='scSup' || (supRole!=='nikur' && supRole!=='cooler')) return;
-    const t=e.target; if(t && (t.id==='nkScan'||t.id==='clScan')) return;                      // the field has it
+    const a=(document.querySelector('.screen.active')||{}).id;
+    const go = a==='scSup' ? (supRole==='nikur'?nkScan:supRole==='cooler'?clScan:null)
+             : a==='scStamps' ? stampsProcessScan : a==='scParts' ? processBarcode : a==='scLegs' ? lgProcessSort : null;
+    if(!go) return;
+    const t=e.target; if(t && ['nkScan','clScan','stampsScanInput','scanInput','lgScanInput'].includes(t.id)) return;   // the field has it
     if(t && (t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.tagName==='SELECT'||t.isContentEditable)) return;
-    if(document.querySelector('.gt-sheet.open, #gtCamOv')) return;
+    if(document.querySelector('.gt-sheet.open, #gtCamOv, .overlay.open, .modal.open')) return;
     const now=Date.now(); if(now-last>150) buf=''; last=now;
-    if(e.key==='Enter'){ const v=buf.trim(); buf=''; if(v.length>=3){ e.preventDefault(); supRole==='cooler'?clScan(v):nkScan(v); } return; }
+    if(e.key==='Enter'){ const v=buf.trim(); buf=''; if(v.length>=3){ e.preventDefault(); go(v); } return; }
     if(e.key && e.key.length===1) buf+=e.key;
   }catch(err){} }, true); })();
 function clFocus(){ const i=document.getElementById('clScan'); if(i) i.focus(); }
@@ -8325,6 +8328,7 @@ function lgScanKeyDown(e){
 }
 
 function lgProcessSort(code){
+  code=gtScanUnHeb(code);   // (owner) a hand scanner on a Hebrew keyboard
   let idx=-1;
   const _n=_gtCodeNum(code);
   if(!isNaN(_n))idx=_n-1;
@@ -14624,6 +14628,7 @@ function scanKeyDown(e){
 }
 
 function processBarcode(code){
+  code=gtScanUnHeb(code);   // (owner) a hand scanner on a Hebrew keyboard
   if(partsMode==='sort'){ lgProcessSort(code); return; }   // v10.38: sorting the legs here
   // Barcode format: KSH-XXXX-... or just a number
   let idx=-1;
@@ -15852,6 +15857,7 @@ function gtOcrSyncStamps(){
 })();
 
 function stampsProcessScan(code){
+  code=gtScanUnHeb(code);   // (owner) a hand scanner on a Hebrew keyboard
   // If an animal awaits its weight, treat this scan as a WEIGHT capture.
   if(weightPending()){
     if(looksLikeAnimalCode(code)){
@@ -19398,7 +19404,8 @@ function _gtPhType(){ const v=prompt(L('הקלידו את הקוד / המספר:
    ═══════════════════════════════════════════════════════════════════ */
 const _gtCam={stream:null, timer:null, det:null, busy:false};
 function _gtCamScreenOk(){ const a=(document.querySelector('.screen.active')||{}).id;
-  return a==='scStamps' || a==='scParts' || (a==='scLegs') || (a==='scSup' && typeof supRole!=='undefined' && (supRole==='nikur'||supRole==='cooler')); }
+  return a==='scStamps' || a==='scParts' || (a==='scLegs') || (a==='scSup' && typeof supRole!=='undefined' && (supRole==='nikur'||supRole==='cooler'))
+      || ((a==='scInner'||a==='scOuter') && KS.getSettings().scanInOut===true); }
 function _gtCamBtnSync(){
   let b=document.getElementById('gtCamBtn'); const on=_gtCamScreenOk() && !window._gtPhoneMode;
   if(!on){ if(b) b.style.display='none'; return; }
