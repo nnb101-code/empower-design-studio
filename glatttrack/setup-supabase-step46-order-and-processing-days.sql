@@ -7174,6 +7174,24 @@ create or replace function _nikur_refusal(a animals_pilot, x jsonb, p_ep bigint)
 language sql stable security definer set search_path = public, extensions, pg_temp as $$ select _nikur_refusal(a, x, p_ep, null::integer) $$;
 revoke execute on function _nikur_refusal(animals_pilot, jsonb, bigint) from public, anon, authenticated;
 
+-- (owner, nikur split) which pieces a nikur tablet takes: 'small' = the small-parts tablet (slot 1); slot 0 takes
+-- the large parts when there is a small-parts tablet, otherwise everything ('all' = one screen with two tabs).
+-- The team leader's plan "one nikur screen" (nikurSmallScreen = false) also makes slot 0 take everything.
+create or replace function _nikur_device_screen(p_dev text) returns text
+language plpgsql stable security definer set search_path = public, extensions, pg_temp as $$
+declare v_idx int;
+begin
+  select coalesce(assigned_index, 0) into v_idx from devices_pilot
+   where id = p_dev and assigned_role = 'nikur' and coalesce(device_status, 'active') <> 'retired';
+  if v_idx is null then return null; end if;
+  if v_idx % 2 = 1 then return 'small'; end if;
+  if coalesce(_gt_settings() ->> 'nikurSmallScreen', 'true') = 'false' then return 'all'; end if;
+  if exists (select 1 from devices_pilot where assigned_role = 'nikur' and coalesce(assigned_index, 0) % 2 = 1
+               and coalesce(device_status, 'active') <> 'retired' and id <> p_dev) then return 'big'; end if;
+  return 'all';
+end $$;
+revoke execute on function _nikur_device_screen(text) from public, anon, authenticated;
+
 -- a piece into the nikur: p_epoch = the board of the piece's sticker (B: in the QR), or the tablet's board
 create or replace function nikur_scan(p_id integer, p_product text, p_piece integer, p_epoch bigint, p_command_id uuid default null) returns jsonb
 language plpgsql security definer set search_path = public, extensions, pg_temp as $$
@@ -7210,9 +7228,10 @@ begin
     v_res := jsonb_build_object('ok', false, 'error', 'unknown_part');
     perform _cmd_put(p_command_id, v_dev, 'nikur_scan', v_res); return v_res;
   end if;
-  select case when coalesce(assigned_index, 0) % 2 = 1 then 'small' else 'big' end into v_screen
-    from devices_pilot where id = v_dev and assigned_role = 'nikur';
-  v_screen := coalesce(v_screen, case when coalesce(x ->> 'nikur', 'none') = 'small' then 'small' else 'big' end);   -- (test mode: the team leader)
+  v_screen := _nikur_device_screen(v_dev);
+  if v_screen is null or v_screen = 'all' then              -- one nikur screen (or the team leader in test mode): the part's own side
+    v_screen := case when coalesce(x ->> 'nikur', 'none') = 'small' then 'small' else 'big' end;
+  end if;
   if coalesce(x ->> 'nikur', 'none') <> v_screen then
     v_res := jsonb_build_object('ok', false, 'error', 'wrong_screen', 'nikur', x ->> 'nikur');
     perform _cmd_put(p_command_id, v_dev, 'nikur_scan', v_res); return v_res;
@@ -7323,21 +7342,22 @@ grant execute on function nikur_day_close(text, bigint, text) to anon, authentic
 create or replace function nikur_board() returns jsonb
 language plpgsql stable security definer set search_path = public, extensions, pg_temp as $$
 declare v_dev text; v_screen text; v_cur bigint := _board_epoch(); v_tok text := _request_headers() ->> 'x-manager-token';
-        v_days jsonb := '[]'::jsonb; ep bigint; v_exp int; v_in int; v_miss jsonb;
+        v_days jsonb := '[]'::jsonb; ep bigint; v_exp int; v_in int; v_miss jsonb; v_mode text := 'all'; v_side jsonb; v_all jsonb;
 begin
   if v_tok is not null and _manager_session_valid(v_tok) and coalesce(_session_role(v_tok), '') <> 'manufacturer' then
     v_screen := null;
   else
     v_dev := _current_device_id();
-    select case when coalesce(assigned_index, 0) % 2 = 1 then 'small' else 'big' end into v_screen
-      from devices_pilot where id = v_dev and assigned_role = 'nikur' and coalesce(device_status, 'active') <> 'retired';
+    v_screen := _nikur_device_screen(v_dev);
     if v_screen is null then return jsonb_build_object('ok', false, 'error', 'wrong_station'); end if;
+    v_mode := v_screen;
+    if v_screen = 'all' then v_screen := null; end if;
   end if;
   for ep in select distinct p.board_epoch from animal_pieces p
              where (v_screen is null or p.screen = v_screen) and p.at > now() - interval '45 days'
                and not exists (select 1 from nikur_days_closed z where z.board_epoch = p.board_epoch)
              order by 1 loop
-    with want as (select p.animal_id, p.product, g.i
+    with want as (select p.animal_id, p.product, g.i, p.screen
                     from animal_pieces p join _nikur_day_rows(ep) r on r.id = p.animal_id
                     cross join lateral generate_series(1, p.cnt) g(i)
                    where p.board_epoch = ep and (v_screen is null or p.screen = v_screen)
@@ -7345,17 +7365,36 @@ begin
          got as (select s.animal_id, s.product, s.piece from piece_scans s where s.board_epoch = ep)
     select count(*)::int,
            count(*) filter (where exists (select 1 from got where got.animal_id = w.animal_id and got.product = w.product and got.piece = w.i))::int,
+           jsonb_build_object('big',   jsonb_build_array(count(*) filter (where w.screen = 'big'),   count(*) filter (where w.screen = 'big'   and exists (select 1 from got where got.animal_id = w.animal_id and got.product = w.product and got.piece = w.i))),
+                              'small', jsonb_build_array(count(*) filter (where w.screen = 'small'), count(*) filter (where w.screen = 'small' and exists (select 1 from got where got.animal_id = w.animal_id and got.product = w.product and got.piece = w.i)))),
            coalesce(jsonb_agg(jsonb_build_object('n', w.animal_id + 1, 'p', w.product, 'i', w.i) order by w.animal_id, w.product, w.i)
                       filter (where not exists (select 1 from got where got.animal_id = w.animal_id and got.product = w.product and got.piece = w.i))
-                    , '[]'::jsonb)
-      into v_exp, v_in, v_miss
+                    , '[]'::jsonb),
+           coalesce(jsonb_agg(jsonb_build_object('n', w.animal_id + 1, 'p', w.product, 'i', w.i, 's', w.screen, 'ok', exists (select 1 from got where got.animal_id = w.animal_id and got.product = w.product and got.piece = w.i))
+                              order by w.animal_id, w.product, w.i), '[]'::jsonb)
+      into v_exp, v_in, v_side, v_miss, v_all
       from want w;
     -- a day leaves the list when everything of it is in (today stays while work goes on)
     continue when v_exp = 0 or (v_in >= v_exp and ep <> v_cur);
     v_days := v_days || jsonb_build_object('epoch', ep, 'day', _nikur_day_date(ep), 'today', ep = v_cur,
-                                           'expected', v_exp, 'in', v_in, 'missing', (select coalesce(jsonb_agg(m), '[]'::jsonb) from (select m from jsonb_array_elements(v_miss) m limit 300) q));
+                                           'expected', v_exp, 'in', v_in, 'side', v_side,
+                                           'rows', (select coalesce(jsonb_agg(m), '[]'::jsonb) from (select m from jsonb_array_elements(v_all) m limit 800) q),
+                                           'missing', (select coalesce(jsonb_agg(m), '[]'::jsonb) from (select m from jsonb_array_elements(v_miss) m limit 300) q));
   end loop;
-  return jsonb_build_object('ok', true, 'boardEpoch', v_cur, 'screen', v_screen, 'days', v_days,
+  return jsonb_build_object('ok', true, 'boardEpoch', v_cur, 'screen', v_screen, 'mode', v_mode, 'days', v_days,
+    -- (owner) the kosher animals of today from the ruling on — and those whose pieces did not reach this nikur yet
+    'kosherToday', (select count(*) from animals_pilot a where a.slaughter is not null and _nikur_refusal(a, null, v_cur, null) is null),
+    'coming', coalesce((select jsonb_agg(jsonb_build_object('n', a.id + 1, 's', q.sides) order by a.id)
+                          from animals_pilot a
+                          cross join lateral (select jsonb_agg(distinct e ->> 'nikur') sides
+                                                from jsonb_array_elements(case when jsonb_typeof(_gt_settings() -> 'products') = 'array'
+                                                                               then _gt_settings() -> 'products' else '[]'::jsonb end) e
+                                               where coalesce((e ->> 'on')::boolean, false) and coalesce((e ->> 'm')::int, 0) >= 1
+                                                 and e ->> 'nikur' in ('big', 'small') and (v_screen is null or e ->> 'nikur' = v_screen)
+                                                 and _nikur_refusal(a, e, v_cur, null) is null
+                                                 and not exists (select 1 from animal_pieces p where p.board_epoch = v_cur
+                                                                   and p.animal_id = a.id and p.product = e ->> 'id')) q
+                         where a.slaughter is not null and q.sides is not null), '[]'::jsonb),
     'todayIn', (select count(*) from piece_scans s where (v_screen is null or s.screen = v_screen) and s.at >= _plant_day_start()),   -- (full review S3)
     'pieces', coalesce((select jsonb_agg(jsonb_build_object('n', s.animal_id + 1, 'p', s.product, 'i', s.piece, 's', s.screen, 'e', s.board_epoch,
                                                             'at', s.at, 'by', s.worker) order by s.at)

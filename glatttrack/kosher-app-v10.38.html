@@ -5437,13 +5437,19 @@ function supEnter(){
 // status, chalak and not chalak); a treif / nevela / held / unruled piece is refused by the server.
 function _nkScreen(){ let i=0; try{ i=parseInt(localStorage.getItem('ks_kiosk_index')||'0',10)||0; }catch(e){} return (i%2===1)?'small':'big'; }
 let _nkBoard={pieces:[],at:0}, _nkLast=null;
-function _nkTitle(){ return _nkScreen()==='small'?L('ניקור חלקים קטנים','Small-parts nikur','Nikur de partes pequeñas'):L('ניקור','Nikur','Nikur'); }
+function _nkTitle(){ const m=(_nkBoard||{}).mode || (_nkScreen()==='small'?'small':'all');
+  return m==='small'?L('ניקור חלקים קטנים','Small-parts nikur','Nikur de partes pequeñas'):m==='big'?L('ניקור חלקים גדולים','Large-parts nikur','Nikur de partes grandes'):L('ניקור','Nikur','Nikur'); }
 // v10.38 stage 2 (owner): the nikur is often the next day (after the cooler) — the server keeps every day still
 // waiting at this nikur (what was printed for each animal) and the nikur's own "?" / USDA on any of those days
 function _nkDay(d){ const x=String(d||'').split('-'); return x.length===3 ? x[2]+'/'+x[1] : String(d||''); }
 function _nkDayLong(d){ try{ const t=new Date(String(d)+'T12:00:00'); const w=[L('א׳','Sun','Dom'),L('ב׳','Mon','Lun'),L('ג׳','Tue','Mar'),L('ד׳','Wed','Mié'),L('ה׳','Thu','Jue'),L('ו׳','Fri','Vie'),L('ש׳','Sat','Sáb')][t.getDay()];
   return L('יום ','','')+w+' '+_nkDay(d); }catch(e){ return _nkDay(d); } }
-var _nkOpen={};
+var _nkOpen={}, _nkTab='big';
+// (owner) the screen's side from the server: 'all' = one nikur screen with two tabs; 'big' / 'small' = two tablets
+function _nkMode(){ const m=(_nkBoard||{}).mode; return m==='all'||m==='big'||m==='small' ? m : (_nkScreen()==='small'?'small':'all'); }
+const GT_NK_SIDE={big:['🥩 חלקים גדולים','🥩 Large parts','🥩 Partes grandes'], small:['🍖 חלקים קטנים','🍖 Small parts','🍖 Partes pequeñas']};
+function _nkSideName(sd){ const t=GT_NK_SIDE[sd]||GT_NK_SIDE.big; return L(t[0],t[1],t[2]); }
+function nkTab(sd){ _nkTab=sd==='small'?'small':'big'; supRender(); setTimeout(nkFocus,50); }
 function nikurRender(el){
   if(!document.getElementById('nkScan')){
     el.innerHTML=`<input type="text" id="nkScan" inputmode="none" style="position:absolute;opacity:0;width:1px;height:1px;top:0;left:0;pointer-events:none;" onkeydown="nkKey(event)">
@@ -5452,45 +5458,71 @@ function nikurRender(el){
         <button class="gt-tbb" onclick="nkHoldStart('question')" style="border-color:#FFC400;background:#FFC400;color:#000;font-weight:800;">? ${escapeHtml(L('שאלה','Question','Pregunta'))}</button>
         <button class="gt-tbb gt-tbu" onclick="nkHoldStart('usda')">USDA HOLD</button>
       </div>
-      <div onclick="nkFocus()" id="nkScanArea" style="background:var(--panel2);border:2px dashed var(--border2);border-radius:12px;padding:14px 16px;display:flex;align-items:center;gap:12px;cursor:pointer;margin-bottom:10px;">
-        <div><div style="font-size:15px;font-weight:700;color:var(--text)" id="nkPrompt"></div><div style="font-size:11px;color:var(--muted)" id="nkSub"></div></div>
+      <div id="nkTiles" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;"></div>
+      <div id="nkTabs" style="display:flex;gap:8px;margin-bottom:10px;"></div>
+      <div onclick="nkFocus()" id="nkScanArea" style="background:var(--panel2);border:2px dashed var(--border2);border-radius:12px;padding:12px 16px;display:flex;align-items:center;gap:12px;cursor:pointer;margin-bottom:10px;">
+        <div style="font-size:15px;font-weight:700;color:var(--text)" id="nkPrompt"></div>
         <div style="margin-inline-start:auto;width:10px;height:10px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);animation:pulse 1s infinite;"></div>
       </div>
       <div id="nkResult" style="display:none;border-radius:14px;padding:16px;text-align:center;margin-bottom:10px;"></div>
-      <div id="nkTiles" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;"></div>
       <div id="nkHolds" style="margin-bottom:10px;"></div>
-      <div id="nkDays"></div>`;
+      <div id="nkList" style="background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:4px 12px;margin-bottom:10px;"></div>
+      <details class="gt-acc-in" id="nkOldDays" style="margin-bottom:8px;"><summary id="nkOldSum"></summary><div id="nkDays" style="margin-top:8px;"></div></details>
+      <details class="gt-acc-in"><summary id="nkHowSum"></summary><div id="nkSub" style="font-size:12px;color:var(--muted);line-height:1.6;margin-top:6px;"></div></details>`;
     setTimeout(nkFocus,200);
   }
-  const set=(id,v)=>{ const e=document.getElementById(id); if(e) e.textContent=v; };
+  const E=escapeHtml, set=(id,v)=>{ const e=document.getElementById(id); if(e) e.textContent=v; };
+  const B=_nkBoard||{}, days=B.days||[], holds=B.holds||[], mode=_nkMode();
+  if(mode!=='all') _nkTab=mode;
+  const today=days.find(d=>d.today)||null, old=days.filter(d=>!d.today);
   set('nkTitle','🔪 '+_nkTitle());
   set('nkPrompt',L('סורקים את מדבקת הכשרות של כל חתיכה','Scan the kosher sticker of every piece','Escanee la etiqueta kosher de cada pieza'));
-  set('nkSub',L('החתיכה נבדקת לפי היום שעל המדבקה. כשר נכנס; טרף, נבלה, מעוכב או בלי מדבקה — לא נכנס.','The piece is checked by the day on its sticker. Kosher goes in; treif, nevela, held or not printed — does not.','La pieza se verifica por el día de su etiqueta. Kosher entra; treif, nevelá, retenida o sin etiqueta — no.'));
-  const B=_nkBoard||{}, days=B.days||[], holds=B.holds||[];
-  const tile=(v,l,c)=>`<div style="flex:1;min-width:110px;background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:10px;text-align:center;"><div style="font-size:28px;font-weight:800;color:${c};">${v}</div><div style="font-size:11px;color:var(--muted);">${escapeHtml(l)}</div></div>`;
-  { const t=document.getElementById('nkTiles'); if(t) t.innerHTML=tile(B.todayIn||0,L('חתיכות נכנסו היום','Pieces in today','Piezas hoy'),'var(--glatt)')
-      +tile(days.filter(d=>d.in<d.expected).length,L('ימים שממתינים לניקור','Days waiting','Días pendientes'),'var(--amber)')+tile(holds.length,L('מעוכבים','Held','Retenidos'),'#B39DFF'); }
+  set('nkHowSum','ℹ️ '+L('איך זה עובד','How it works','Cómo funciona'));
+  set('nkSub',L('בהמה כשרה מופיעה מרגע הפסיקה (⏳). אחרי שהחתיכות שלה קיבלו מדבקת כשרות (חותמות / חלקים קטנים) — סורקים כל חתיכה. החתיכה נבדקת לפי היום שעל המדבקה. כשר נכנס; טרף, נבלה, מעוכב או בלי מדבקה — לא נכנס.'+(mode==='all'?' במסך אחד: כל חתיכה נכנסת לבד לצד שלה (גדולים / קטנים).':''),
+    'A kosher animal shows from the ruling on (⏳). Once its pieces got their kosher sticker (stamps / small parts) — scan every piece. The piece is checked by the day on its sticker. Kosher goes in; treif, nevela, held or not printed — does not.'+(mode==='all'?' One screen: each piece goes to its own side (large / small) by itself.':''),
+    'Un animal kosher aparece desde el dictamen (⏳). Cuando sus piezas tienen etiqueta kosher — escanee cada pieza. Kosher entra; treif, nevelá, retenida o sin etiqueta — no.'));
+  // what a side holds today: [expected, in]
+  const side=sd=>{ const v=today&&today.side&&today.side[sd]; return v?[Number(v[0])||0,Number(v[1])||0]:[0,0]; };
+  const coming=(B.coming||[]).filter(c=>(c.s||[]).includes(_nkTab));
+  const ready=new Set(((today&&today.rows)||[]).filter(r=>!r.ok).map(r=>r.n)).size;
+  const tile=(v,l,c)=>`<div style="flex:1;min-width:96px;background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:8px;text-align:center;"><div style="font-size:26px;font-weight:800;color:${c};">${v}</div><div style="font-size:11px;color:var(--muted);">${E(l)}</div></div>`;
+  { const t=document.getElementById('nkTiles'); if(t) t.innerHTML=tile(B.kosherToday||0,L('בהמות כשרות היום','Kosher animals today','Animales kosher hoy'),'var(--green)')
+      +tile(ready,L('מוכנות לניקור','Ready for nikur','Listos para nikur'),'var(--amber)')+tile(holds.filter(h=>h.resolution!=='condemned').length,L('מעוכבים','Held','Retenidos'),'#B39DFF'); }
+  { const t=document.getElementById('nkTabs'); if(t){
+      const tab=sd=>{ const [x,i]=side(sd), on=_nkTab===sd;
+        return `<button onclick="nkTab('${sd}')" style="flex:1;padding:10px;border-radius:12px;font-weight:800;font-size:15px;cursor:${mode==='all'?'pointer':'default'};border:2px solid ${on?'var(--gold)':'var(--border)'};background:${on?'rgba(212,168,67,.12)':'var(--panel)'};color:${on?'var(--gold)':'var(--muted)'};">${E(_nkSideName(sd))} · ${i}/${x}</button>`; };
+      t.innerHTML = mode==='all' ? tab('big')+tab('small') : tab(mode); } }
   // the nikur's holds — released / condemned / answered here
   { const h=document.getElementById('nkHolds'); if(h){
-      h.innerHTML=holds.length ? `<div style="background:var(--panel);border:2px solid #B39DFF;border-radius:12px;padding:12px;"><div style="font-size:14px;font-weight:800;color:#B39DFF;margin-bottom:6px;">${escapeHtml(L('מעוכבים בניקור','Held at the nikur','Retenidos en el nikur'))}</div>`
+      h.innerHTML=holds.length ? `<div style="background:var(--panel);border:2px solid #B39DFF;border-radius:12px;padding:12px;"><div style="font-size:14px;font-weight:800;color:#B39DFF;margin-bottom:6px;">${E(L('מעוכבים בניקור','Held at the nikur','Retenidos en el nikur'))}</div>`
         +holds.map(x=>{ const usda=x.kind==='usda', cond=x.resolution==='condemned';
-          const btn=(t,c,r)=>`<button onclick="nkHoldResolve(${Number(x.id)},'${r}')" style="padding:6px 12px;border-radius:8px;border:1px solid ${c};background:transparent;color:${c};font-weight:700;cursor:pointer;">${escapeHtml(t)}</button>`;
-          return `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:6px 0;border-bottom:1px solid var(--border);"><b style="font-size:16px;">#${x.n}</b><span class="gt-muted">${escapeHtml(_nkDayLong(x.day))}</span>`
-            +`<span style="font-weight:800;color:${usda?'#B39DFF':'#FFC400'};">${usda?'USDA':'?'}${cond?' · '+escapeHtml(L('נפסל','condemned','condenado')):''}</span><span style="flex:1"></span>`
+          const btn=(t,c,r)=>`<button onclick="nkHoldResolve(${Number(x.id)},'${r}')" style="padding:6px 12px;border-radius:8px;border:1px solid ${c};background:transparent;color:${c};font-weight:700;cursor:pointer;">${E(t)}</button>`;
+          return `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:6px 0;border-bottom:1px solid var(--border);"><b style="font-size:16px;">#${x.n}</b><span class="gt-muted">${E(_nkDayLong(x.day))}</span>`
+            +`<span style="font-weight:800;color:${usda?'#B39DFF':'#FFC400'};">${usda?'USDA':'?'}${cond?' · '+E(L('נפסל','condemned','condenado')):''}</span><span style="flex:1"></span>`
             +(cond?'':(usda?btn(L('שחרר','Release','Liberar'),'var(--green)','released')+btn(L('נפסל','Condemned','Condenado'),'var(--red)','condemned')
                         :btn(L('נענה — מותר','Answered — ok','Respondida — ok'),'var(--green)','answered')+btn(L('בטל','Cancel','Cancelar'),'var(--muted)','cancelled')))+`</div>`; }).join('')+`</div>` : ''; } }
-  // the days still waiting at this nikur (today and the days before), what is missing
-  { const box=document.getElementById('nkDays'); if(box){
-      const nm=pid=>gtProductName(gtProducts().find(p=>p.id===pid))||pid;
-      box.innerHTML=days.length ? days.map(d=>{ const left=d.expected-d.in, open=!!_nkOpen[d.epoch];
+  const nm=pid=>gtProductName(gtProducts().find(p=>p.id===pid))||pid;
+  // one line an animal: each part with how many of its pieces are in (green = all in)
+  const animalRows=rows=>{ const g={}; rows.forEach(r=>{ const a=(g[r.n]=g[r.n]||{}); const p=(a[r.p]=a[r.p]||[0,0]); p[0]++; if(r.ok) p[1]++; });
+    return Object.keys(g).map(Number).sort((x,y)=>x-y).map(n=>{ const parts=g[n], done=Object.values(parts).every(p=>p[1]>=p[0]);
+      return `<div style="display:flex;justify-content:space-between;gap:8px;padding:7px 0;border-bottom:1px solid var(--border);font-size:14px;"><b>#${n}</b><span style="text-align:end;font-weight:800;color:${done?'var(--green)':'var(--amber)'};">`
+        +E(Object.keys(parts).map(pid=>nm(pid)+' '+parts[pid][1]+'/'+parts[pid][0]).join(' · '))+(done?' ✓':'')+`</span></div>`; }).join(''); };
+  { const box=document.getElementById('nkList'); if(box){
+      const rows=((today&&today.rows)||[]).filter(r=>r.s===_nkTab);
+      const wait=coming.map(c=>`<div style="display:flex;justify-content:space-between;gap:8px;padding:7px 0;border-bottom:1px solid var(--border);font-size:14px;"><b>#${c.n}</b><span style="color:var(--muted);">⏳ ${E(L('כשר — עוד לא קיבל מדבקות כשרות (חותמות / חלקים קטנים)','Kosher — no kosher stickers yet (stamps / small parts)','Kosher — aún sin etiquetas kosher'))}</span></div>`).join('');
+      box.innerHTML=(animalRows(rows)+wait) || `<div class="gt-muted" style="padding:10px 0;">${E(L('עוד אין בהמות כשרות היום בצד הזה.','No kosher animals on this side today yet.','Aún no hay animales kosher en este lado hoy.'))}</div>`; } }
+  // the days before, still waiting at this nikur (closed section)
+  { const od=document.getElementById('nkOldDays'); if(od) od.style.display=old.length?'':'none';
+    set('nkOldSum','📅 '+L('ימים קודמים שממתינים','Earlier days still waiting','Días anteriores pendientes')+' ('+old.length+')');
+    const box=document.getElementById('nkDays'); if(box){
+      box.innerHTML=old.map(d=>{ const left=d.expected-d.in, open=!!_nkOpen[d.epoch];
           const g={}; (d.missing||[]).forEach(q=>{ ((g[q.n]=g[q.n]||{})[q.p]=(g[q.n][q.p]||[])).push(q.i); });
-          const rows=Object.keys(g).map(n=>`<div style="display:flex;justify-content:space-between;gap:8px;padding:5px 0;border-bottom:1px solid var(--border);font-size:13px;"><b>#${n}</b><span style="color:var(--muted);text-align:end;">${escapeHtml(Object.keys(g[n]).map(pid=>nm(pid)+(g[n][pid].length>1?' ×'+g[n][pid].length:'')).join(' · '))}</span></div>`).join('');
-          return `<div style="background:var(--panel);border:1px solid ${left>0?'var(--amber)':'var(--green)'};border-radius:12px;padding:12px;margin-bottom:8px;">
+          const rows=Object.keys(g).map(n=>`<div style="display:flex;justify-content:space-between;gap:8px;padding:5px 0;border-bottom:1px solid var(--border);font-size:13px;"><b>#${n}</b><span style="color:var(--muted);text-align:end;">${E(Object.keys(g[n]).map(pid=>nm(pid)+(g[n][pid].length>1?' ×'+g[n][pid].length:'')).join(' · '))}</span></div>`).join('');
+          return `<div style="background:var(--panel2);border:1px solid ${left>0?'var(--amber)':'var(--green)'};border-radius:12px;padding:10px;margin-bottom:8px;">
             <div onclick="_nkOpen['${d.epoch}']=!_nkOpen['${d.epoch}'];supRender();" style="display:flex;align-items:center;gap:10px;cursor:pointer;">
-              <b style="font-size:16px;">${escapeHtml(_nkDayLong(d.day))}${d.today?' · '+escapeHtml(L('היום','today','hoy')):''}</b><span style="flex:1"></span>
-              <span style="font-size:18px;font-weight:900;color:${left>0?'var(--amber)':'var(--green)'};">${d.in} / ${d.expected}</span><span class="gt-muted">${open?'▲':'▼'}</span></div>
-            ${open?`<div style="margin-top:8px;">${rows||`<div class="gt-muted">${escapeHtml(L('הכל נכנס.','Everything is in.','Todo está dentro.'))}</div>`}</div>`:''}</div>`; }).join('')
-        : `<div class="gt-muted" style="padding:10px;">${escapeHtml(L('אין חתיכות שממתינות לניקור.','No pieces waiting for the nikur.','No hay piezas pendientes.'))}</div>`; } }
+              <b style="font-size:15px;">${E(_nkDayLong(d.day))}</b><span style="flex:1"></span>
+              <span style="font-size:17px;font-weight:900;color:${left>0?'var(--amber)':'var(--green)'};">${d.in} / ${d.expected}</span><span class="gt-muted">${open?'▲':'▼'}</span></div>
+            ${open?`<div style="margin-top:8px;">${rows||`<div class="gt-muted">${E(L('הכל נכנס.','Everything is in.','Todo está dentro.'))}</div>`}</div>`:''}</div>`; }).join(''); } }
 }
 function nkFocus(){ const i=document.getElementById('nkScan'); if(i) i.focus(); }
 // "?" or USDA at the nikur: the number and its day (the days waiting here, today first)
@@ -5552,7 +5584,9 @@ async function nkScan(code, pid, piece){
   let r=null; try{ r=await _withTimeout(window.sb.rpc('nikur_scan',{p_id:idx,p_product:pid,p_piece:piece||1,p_epoch:ep,p_command_id:_gtUuid()}),10000); }catch(e){ r={error:e}; }
   const d=r&&r.data;
   const what='#'+(idx+1)+' · '+pname+(m>1?' '+(piece||1)+'/'+m:'')+(d&&d.day?' · '+_nkDayLong(d.day):'');
-  if(d&&d.ok){ _nkShow(d.duplicate?'dup':'ok', d.duplicate?L('כבר נסרק','Already scanned','Ya escaneado'):L('✓ נכנס לניקור','✓ Into the nikur','✓ Al nikur'), what+(d.status?' · '+(_gtStatusInfo(d.status).name||d.status):'')); }
+  if(d&&d.ok){ const sd=prod&&prod.nikur==='small'?'small':'big';
+    if(_nkMode()==='all') _nkTab=sd;
+    _nkShow(d.duplicate?'dup':'ok', d.duplicate?L('כבר נסרק','Already scanned','Ya escaneado'):L('✓ נכנס לניקור','✓ Into the nikur','✓ Al nikur'), what+(_nkMode()==='all'?' · '+_nkSideName(sd):'')+(d.status?' · '+(_gtStatusInfo(d.status).name||d.status):'')); }
   else if(d&&d.error==='refused'){ const t=GT_NK_REASON[d.reason]||[d.reason,d.reason,d.reason]; _nkShow('no','⛔ '+L(t[0],t[1],t[2]),what); }
   else if(d&&d.error==='wrong_screen'){ _nkShow('no',L('לא בניקור הזה','Not this nikur','No en este nikur'),what+' — '+(d.nikur==='small'?L('לניקור חלקים קטנים','to the small-parts nikur','al nikur de partes pequeñas'):L('לניקור הרגיל','to the regular nikur','al nikur normal'))); }
   else if(d&&d.error==='worker_login_required'){ _gtHoldNeedsLogin(); }
@@ -8566,7 +8600,8 @@ async function gtPrintGate(key,jobs,commit){
     // owner, 8 hours at most) lets the screens be tried before the printers are there
     let test=window._gtServerTestMode===true;
     try{ if(window.sb){ const r=await window.sb.rpc('server_test_mode'); if(!r.error) test = r.data===true; } }catch(e){}
-    if(test){ commit(); _gtPrintMsg('🧪 '+L('מצב בדיקה — אין מדפסת למסך הזה; סומן בלי הדפסה.','Test mode — no printer for this screen; marked without printing.','Modo de prueba — sin impresora; marcado sin imprimir.'),false); return true; }
+    if(test){ commit(); _gtPrintMsg('🧪 '+L('מצב בדיקה — הודפס וירטואלית (אין מדפסת למסך הזה).','Test mode — printed virtually (no printer for this screen).','Modo de prueba — impreso virtualmente (sin impresora).'),false);
+      gtVirtualPrint(jobs); return true; }
     _gtPrintMsg('🖨 '+L('אין מדפסת למסך הזה — לא סומן. קראו לראש הצוות (הגדרות ← מדפסות ← שיוך לכל מסך).','No printer for this screen — not marked. Call the team leader (Settings → Printers → Assign to each screen).','No hay impresora para esta pantalla — no marcado. Llame al jefe de equipo.'),true+(window.GT_SERVER?'':L(' · לבדיקה בלי מדפסות: להפעיל מצב בדיקה בשרת (test-mode-on.sql) — 8 שעות.',' · Testing without printers: turn on test mode on the server (test-mode-on.sql) — 8 hours.',' · Prueba sin impresoras: active el modo de prueba (test-mode-on.sql).')));
     return false;
   }
@@ -8577,6 +8612,36 @@ async function gtPrintGate(key,jobs,commit){
   if(p.conn==='system' && !confirm(L('המדבקות יצאו מהמדפסת?','Did the stickers come out of the printer?','¿Salieron las etiquetas de la impresora?'))){
     _gtPrintMsg('🖨 '+L('לא סומן — המספר מחכה. הדפיסו שוב.','Not marked — the number waits. Print again.','No marcado — el número espera. Imprima de nuevo.'),true); return false; }
   commit(); return true;
+}
+// (owner) TEST MODE ONLY: no printer for the screen → the stickers come out on the screen ("virtual printer"),
+// with their real barcodes / QR — another device (the nikur's camera) can scan them off this screen.
+const _gtVP={items:[]};
+async function gtVirtualPrint(jobs){
+  try{
+    for(const j of (jobs||[])){ const cv=await gtStickerCanvas(j.idx,j.kind,j.piece,j.sample);
+      for(let c=0;c<Math.max(1,j.copies||1);c++) _gtVP.items.unshift({src:cv.toDataURL('image/png'), t:'#'+(Number(j.idx)+1)+(j.piece&&j.piece.name?' · '+j.piece.name:'')}); }
+    _gtVP.items=_gtVP.items.slice(0,40);
+    _gtVPRender(true);
+  }catch(e){ try{ gtLogError('virtual_print', e); }catch(_){} }
+}
+function _gtVPRender(open){
+  let el=document.getElementById('gtVP');
+  if(!el){ el=document.createElement('div'); el.id='gtVP'; el.setAttribute('data-no-i18n','');
+    el.style.cssText='position:fixed;left:8px;right:8px;bottom:8px;z-index:99990;background:#0E1626;border:2px solid #7AAEFF;border-radius:14px;padding:8px;box-shadow:0 8px 30px rgba(0,0,0,.6);';
+    document.body.appendChild(el); }
+  el.style.display=open?'block':'none';
+  el.innerHTML='<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;color:#fff;font:800 14px Arial;"><span>🧪 '+escapeHtml(L('מדפסת וירטואלית — מצב בדיקה','Virtual printer — test mode','Impresora virtual — modo de prueba'))
+    +'</span><span style="flex:1"></span><button onclick="_gtVPRender(false)" style="background:none;border:1px solid #7AAEFF;color:#fff;border-radius:8px;padding:4px 12px;font-weight:800;cursor:pointer;">✕</button></div>'
+    +'<div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;">'
+    +_gtVP.items.map((it,k)=>'<div style="flex:0 0 auto;text-align:center;"><img src="'+it.src+'" onclick="_gtVPZoom('+k+')" style="height:120px;background:#fff;border-radius:6px;cursor:zoom-in;display:block;"><div style="color:#9fb3d1;font:600 11px Arial;margin-top:2px;">'+escapeHtml(it.t)+'</div></div>').join('')
+    +'</div>';
+}
+function _gtVPZoom(k){
+  const it=_gtVP.items[k]; if(!it) return;
+  const o=document.createElement('div'); o.setAttribute('data-no-i18n','');
+  o.style.cssText='position:fixed;inset:0;z-index:99995;background:rgba(0,0,0,.85);display:flex;align-items:center;justify-content:center;padding:12px;';
+  o.innerHTML='<img src="'+it.src+'" style="max-width:100%;max-height:100%;background:#fff;border-radius:8px;">';
+  o.onclick=()=>o.remove(); document.body.appendChild(o);
 }
 function _gtLgCount(step){ const st=KS.getSettings(); return step==='legs'?(st.legStickerCount!=null?st.legStickerCount:2):(st.headStickerCount!=null?st.headStickerCount:7); }
 function _gtPartsJobs(idx,only){ const held=_partsHeldNow(idx), set=gtAreaPieces('parts');
@@ -16004,7 +16069,7 @@ function _kioskRoleLabels(){
     parts: he?'חלקים קטנים':es?'Partes pequeñas':'Small parts',
     stamps: he?'חותמות':es?'Sellos':'Stamps',
     cooler: he?'משגיח קולר':es?'Supervisor de cámara':'Cooler supervisor',
-    nikur: he?'ניקור':es?'Nikur':'Nikur',
+    nikur: (typeof KS!=='undefined' && KS.getSettings && KS.getSettings().nikurSmallScreen!==false) ? (he?'ניקור חלקים גדולים':es?'Nikur de partes grandes':'Large-parts nikur') : (he?'ניקור':es?'Nikur':'Nikur'),
     'nikur-1': he?'ניקור חלקים קטנים':es?'Nikur de partes pequeñas':'Small-parts nikur',
     salting: he?'משגיח מליחה':es?'Supervisor de salado':'Salting supervisor',
     shipping: he?'משגיח שיפינג':es?'Supervisor de envíos':'Shipping supervisor',
@@ -18337,7 +18402,7 @@ async function mgrRenderPlan(){
     }
     if(on && sc.k==='nikur'){   // (full review A10) one nikur screen, or a second one for the small parts
       x += `<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:8px 32px 0 0;font-size:12px;color:var(--muted);">${L('ניקור:','Nikur:','Nikur:')}
-        ${opt(!D.nikSmall, L('מסך אחד','One screen','Una pantalla'), 'gtPlanNikSmall(false)')} ${opt(D.nikSmall, L('שני מסכים — רגיל · חלקים קטנים','Two screens — regular · small parts','Dos pantallas — normal · partes pequeñas'), 'gtPlanNikSmall(true)')}</div>`;
+        ${opt(!D.nikSmall, L('מסך אחד, מחולק (גדולים · קטנים)','One screen, split (large · small)','Una pantalla, dividida (grandes · pequeñas)'), 'gtPlanNikSmall(false)')} ${opt(D.nikSmall, L('שני מסכים — חלקים גדולים · חלקים קטנים','Two screens — large parts · small parts','Dos pantallas — partes grandes · partes pequeñas'), 'gtPlanNikSmall(true)')}</div>`;
     }
     if(on && sc.k==='legs' && D.legsMode){
       x += `<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:8px 32px 0 0;">

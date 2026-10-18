@@ -3453,6 +3453,41 @@ begin
   update settings_pilot set settings = s0 where id = 1;
 end $$;
 $gt83$;
+    v_step := 'owner: one nikur screen split into large / small parts';
+    execute $gt84$
+do $$
+declare r jsonb; r2 jsonb; r3 jsonb; r4 jsonb; r5 jsonb; ok boolean; s0 jsonb;
+        pr jsonb := '[{"id":"tongue","he":"לשון","on":true,"pre":"head","n":1,"post":"parts","m":1,"nikur":"small","builtin":true},
+                      {"id":"cheeks","he":"לחיים","on":true,"pre":"head","n":2,"post":"parts","m":2,"nikur":"small","builtin":true},
+                      {"id":"sides","he":"צדדים","on":true,"pre":"head","n":2,"post":"stamps","m":6,"nikur":"big","builtin":true},
+                      {"id":"legs","he":"רגליים","on":true,"pre":"legs","n":2,"post":"legs","m":0,"nikur":"none","builtin":true}]';
+begin
+  select settings into s0 from settings_pilot where id = 1;
+  r5 := pg_temp.api(pg_temp.mgr(), format('select push_settings(%L::jsonb, ''x'', %L)', jsonb_build_object('products', pr, 'nikurSmallScreen', false), pg_temp.v('mgr')));
+  perform pg_temp.prep(920, 'outer'); perform pg_temp.prep(921, 'outer');
+  perform set_config('gt.reset_in_progress', 'true', true);
+  update animals_pilot set stamped = true, parts_scanned = true where id = 920;
+  perform set_config('gt.reset_in_progress', 'false', true);
+  -- one nikur screen: the first nikur tablet takes both sides; the small-parts tablet still only its own
+  r  := pg_temp.api(pg_temp.dev('NIK'),  format('select nikur_scan(920, ''tongue'', 1, %s)', pg_temp.ep()));
+  r2 := pg_temp.api(pg_temp.dev('NIK'),  format('select nikur_scan(920, ''sides'', 1, %s)', pg_temp.ep()));
+  r3 := pg_temp.api(pg_temp.dev('NIKS'), format('select nikur_scan(920, ''sides'', 2, %s)', pg_temp.ep()));
+  r4 := pg_temp.api(pg_temp.dev('NIK'), 'select nikur_board()');
+  ok := pg_temp.ok(r) and pg_temp.ok(r2) and r3 ->> 'error' = 'wrong_screen' and r4 ->> 'mode' = 'all'
+        and (select screen from piece_scans where board_epoch = pg_temp.ep() and animal_id = 920 and product = 'tongue') = 'small'
+        and (r4 ->> 'kosherToday')::int >= 2
+        and exists (select 1 from jsonb_array_elements(r4 -> 'coming') c where (c ->> 'n')::int = 922 and c -> 's' ? 'big' and c -> 's' ? 'small')
+        and not exists (select 1 from jsonb_array_elements(r4 -> 'coming') c where (c ->> 'n')::int = 921)
+        and exists (select 1 from jsonb_array_elements(r4 -> 'days') d where (d -> 'side' -> 'small' ->> 1)::int >= 1 and (d -> 'side' -> 'big' ->> 1)::int >= 1);
+  -- two nikur screens again: the first tablet takes the large parts only
+  perform pg_temp.api(pg_temp.mgr(), format('select push_settings(%L::jsonb, ''x'', %L)', '{"nikurSmallScreen":true}', pg_temp.v('mgr')));
+  r5 := pg_temp.api(pg_temp.dev('NIK'),  format('select nikur_scan(920, ''cheeks'', 1, %s)', pg_temp.ep()));
+  ok := ok and r5 ->> 'error' = 'wrong_screen' and (pg_temp.api(pg_temp.dev('NIK'), 'select nikur_board()') ->> 'mode') = 'big';
+  perform pg_temp.rec('owner: one nikur screen takes large + small parts (each to its side), shows the kosher animals still coming; two screens split again', ok,
+    concat_ws(' | ', left(r::text, 60), left(r2::text, 60), r3::text, left((r4 -> 'coming')::text, 80), r5::text));
+  update settings_pilot set settings = s0 where id = 1;
+end $$;
+$gt84$;
     v_step := 'the ACTIVE security surface against the expected manifest';
     execute $gt70$
 -- ── the ACTIVE security surface against the expected manifest ───────────────
