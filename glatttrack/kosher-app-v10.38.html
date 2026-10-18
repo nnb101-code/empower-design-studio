@@ -15111,7 +15111,11 @@ function _gtoMerge(comps){
         par[f(sorted[ii])]=f(sorted[jj]); continue;
       }
       const gap=Math.max(a.y0,b.y0)-Math.min(a.y1,b.y1)-1, mh=Math.max(a.h,b.h);
-      if(gap>0.5*mh) continue;
+      if(gap>0.3*mh) continue;
+      // (owner: "NET WEIGHT" printed above big digits was glued onto them) a much smaller piece a little way off
+      // is a letter of another line — only a dot (i / j) or a touching 7-segment bar joins
+      { const sm=a.h<b.h?a:b, dotLike=sm.w/sm.h>0.5 && sm.w/sm.h<2 && Math.max(sm.w,sm.h)<0.35*mh;
+        if(sm.h<0.45*mh && !dotLike && gap>0.12*mh) continue; }
       if(Math.max(a.h,b.h)>2.2*Math.min(a.h,b.h) && gap<0 && Math.min(a.w,b.w)>0.5*Math.max(a.w,b.w) && Math.min(a.h,b.h)>0.35*mh) continue; // stacked text lines overlapping
       if(isDot(a,b)||isDot(b,a)) continue;
       par[f(sorted[ii])]=f(sorted[jj]); } }
@@ -15331,8 +15335,23 @@ function _gtoLinesFromText(text){
   return String(text||'').split(/\n+/).map(s=>s.trim()).filter(Boolean).map(s=>({text:s,meta:null,H:1}));
 }
 // Built-in engine: returns {value,text,engine:'builtin',confidence}
+// (owner: weak light) a dark or flat picture is stretched (the darkest 1% → black, the brightest 1% → white),
+// a dark one also brightened (gamma) — before anything is read
+function _gtoEnhance(cv){
+  const W=cv.width,H=cv.height,x=cv.getContext('2d',{willReadFrequently:true}), id=x.getImageData(0,0,W,H), d=id.data, n=W*H;
+  const hist=new Uint32Array(256); for(let i=0,j=0;i<n;i++,j+=4) hist[(0.299*d[j]+0.587*d[j+1]+0.114*d[j+2])|0]++;
+  const pct=q=>{ let s=0, lim=n*q; for(let i=0;i<256;i++){ s+=hist[i]; if(s>=lim) return i; } return 255; };
+  const lo=pct(0.01), hi=pct(0.99), med=pct(0.5);
+  if(hi-lo>=150 && med>=80) return null;                       // light enough and clear: nothing to do
+  const span=Math.max(12,hi-lo), gam=med<60?0.55:(med<100?0.75:1);
+  const lut=new Uint8ClampedArray(256); for(let v=0;v<256;v++){ const t=Math.min(1,Math.max(0,(v-lo)/span)); lut[v]=Math.round(255*Math.pow(t,gam)); }
+  const o=document.createElement('canvas'); o.width=W; o.height=H; const ox=o.getContext('2d',{willReadFrequently:true}), od=ox.createImageData(W,H), q=od.data;
+  for(let i=0;i<d.length;i+=4){ q[i]=lut[d[i]]; q[i+1]=lut[d[i+1]]; q[i+2]=lut[d[i+2]]; q[i+3]=255; }
+  ox.putImageData(od,0,0); return o;
+}
 function _gtoPrep(src){
   let cv=_gtoCanvas(src,1400);
+  try{ const e=_gtoEnhance(cv); if(e) cv=e; }catch(e){}
   // deskew once, measured on the first usable binarisation
   try{
     const W=cv.width,H=cv.height, d=cv.getContext('2d',{willReadFrequently:true}).getImageData(0,0,W,H).data;
@@ -15441,7 +15460,8 @@ async function _gtoNativeRead(cv){
 // Read a carcass weight from a photo (canvas / image / video frame).
 // → {value:number|null, text, engine:'native'|'tesseract'|'builtin', confidence:0..1}
 async function _gtoReadRaw(canvasOrImage){
-  const cv=_gtoCanvas(canvasOrImage,1600);
+  let cv=_gtoCanvas(canvasOrImage,1600);
+  try{ const e=_gtoEnhance(cv); if(e) cv=e; }catch(e){}      // weak light
   try{ const n=await _gtoNativeRead(cv); if(n && n.value!=null) return n; }catch(e){ console.warn('native OCR failed',e); }
   let tess=null;
   try{ tess=await _gtoTimeout(_gtoTesseractRead(cv),GT_OCR_TIMEOUT_MS); }
@@ -15526,9 +15546,26 @@ function gtOcrGrabFrame(){
   x.drawImage(v,sx,sy,sw,sh,0,0,c.width,c.height);
   return c;
 }
+// (owner: weak light) 4 frames, 70 ms apart, averaged — the noise of a dark picture mostly cancels out
+async function gtOcrGrabFrameAvg(){
+  const first=gtOcrGrabFrame(); if(!first) return null;
+  const W=first.width,H=first.height, acc=new Float32Array(W*H*4); let n=0;
+  const add=cv=>{ const d=cv.getContext('2d').getImageData(0,0,W,H).data; for(let i=0;i<d.length;i++) acc[i]+=d[i]; n++; };
+  try{ add(first); for(let k=1;k<4;k++){ await new Promise(z=>setTimeout(z,70)); const c=gtOcrGrabFrame(); if(c && c.width===W && c.height===H) add(c); } }catch(e){ return first; }
+  if(n<2) return first;
+  const x=first.getContext('2d'), id=x.createImageData(W,H); for(let i=0;i<acc.length;i++) id.data[i]=acc[i]/n; x.putImageData(id,0,0);
+  return first;
+}
+// the phone's light, from the weight camera
+let _wmTorch=false;
+async function wmTorch(){
+  const t=wmStream && wmStream.getVideoTracks()[0]; if(!t) return;
+  try{ _wmTorch=!_wmTorch; await t.applyConstraints({advanced:[{torch:_wmTorch}]}); }
+  catch(e){ _wmTorch=false; weightToastShow(L('לטאבלט הזה אין פנס שאפשר להדליק מכאן','This tablet\'s light cannot be switched on from here','Sin linterna'),'','🔦'); }
+}
 async function gtOcrCaptureFlow(src){
   if(_gtoUi.busy) return;
-  const shot=src||gtOcrGrabFrame();
+  const shot=src||await gtOcrGrabFrameAvg();
   if(!shot){ weightToastShow(L('המצלמה עוד לא מוכנה','The camera is not ready yet','La cámara aún no está lista'),L('נסה שוב בעוד רגע','Try again in a moment','Inténtelo de nuevo en un momento'),'⏳'); return; }
   const tok=++_gtoUi.tok; _gtoUi.busy=true; _gtoUi.res=null; _gtoUi.shot=shot;
   _gtoShow('busy');
@@ -17549,7 +17586,7 @@ window.addEventListener("touchcancel",function(){isDrawing=false;},true);
     <div style="font-size:15px;color:var(--gold);font-weight:700;margin-bottom:8px;">סריקת משקל</div>
     <div id="wmOcrSideTop" style="font-size:12px;color:var(--muted);margin-bottom:6px;"></div>
     <div id="wmCamWrap" style="display:none;">
-      <div id="wmVidBox" style="position:relative;border-radius:10px;overflow:hidden;background:#000;"><video id="wmVideo" playsinline muted style="width:100%;display:block;background:#000;"></video><div id="wmOcrFrame" style="display:none;position:absolute;left:8%;top:30%;width:84%;height:40%;border:3px dashed var(--gold);border-radius:8px;box-shadow:0 0 0 2000px rgba(0,0,0,.38);pointer-events:none;"></div></div>
+      <div id="wmVidBox" style="position:relative;border-radius:10px;overflow:hidden;background:#000;"><button onclick="wmTorch()" title="🔦" style="position:absolute;top:8px;left:8px;z-index:2;width:44px;height:44px;border-radius:50%;border:1px solid rgba(255,255,255,.5);background:rgba(0,0,0,.45);color:#fff;font-size:20px;cursor:pointer;">🔦</button><video id="wmVideo" playsinline muted style="width:100%;display:block;background:#000;"></video><div id="wmOcrFrame" style="display:none;position:absolute;left:8%;top:30%;width:84%;height:40%;border:3px dashed var(--gold);border-radius:8px;box-shadow:0 0 0 2000px rgba(0,0,0,.38);pointer-events:none;"></div></div>
       <div id="wmCamHint" style="font-size:11px;color:var(--muted);margin-top:6px;">כוון את הברקוד למצלמה</div>
       <button id="wmCaptureBtn" onclick="wmCaptureOCR()" style="display:none;margin-top:8px;width:100%;padding:10px;border-radius:8px;background:var(--gold);border:none;color:#07090F;font-weight:700;cursor:pointer;">צלם משקל</button>
     </div>
@@ -19150,6 +19187,69 @@ function _gtPhType(){ const v=prompt(L('הקלידו את הקוד / המספר:
   if(m) setTimeout(()=>gtPhoneScanStart(m[1]), 50);
   else if(_gtPhTok() && !(typeof _kioskLoadLocal==='function' && _kioskLoadLocal())) setTimeout(()=>gtPhoneScanStart(''), 50);
 })();
+</script>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════════
+   v10.38 (owner): THIS tablet's / phone's camera as the scanner of THIS screen.
+   On a scanning station (stamps, small parts, legs / head, nikur) a 📷 button opens the camera; the barcode /
+   QR it reads goes into the screen exactly like a hand scanner (weight labels too, at the stamps).
+   ═══════════════════════════════════════════════════════════════════ */
+const _gtCam={stream:null, timer:null, det:null, busy:false};
+function _gtCamScreenOk(){ const a=(document.querySelector('.screen.active')||{}).id;
+  return a==='scStamps' || a==='scParts' || (a==='scLegs') || (a==='scSup' && typeof supRole!=='undefined' && supRole==='nikur'); }
+function _gtCamBtnSync(){
+  let b=document.getElementById('gtCamBtn'); const on=_gtCamScreenOk() && !window._gtPhoneMode;
+  if(!on){ if(b) b.style.display='none'; return; }
+  if(!b){ b=document.createElement('button'); b.id='gtCamBtn'; b.setAttribute('data-no-i18n','');
+    b.style.cssText='position:fixed;bottom:76px;left:14px;z-index:800;width:58px;height:58px;border-radius:50%;border:2px solid #28C76F;background:rgba(10,30,18,.92);color:#fff;font-size:26px;box-shadow:0 4px 16px rgba(0,0,0,.5);cursor:pointer;';
+    b.textContent='📷'; b.onclick=gtCamScanOpen; document.body.appendChild(b); }
+  b.title=L('סרוק במצלמה','Scan with the camera','Escanear con la cámara');
+  b.style.display='block';
+}
+setInterval(_gtCamBtnSync, 1000);
+function gtCamScanClose(){
+  clearInterval(_gtCam.timer); _gtCam.timer=null;
+  try{ _gtCam.stream && _gtCam.stream.getTracks().forEach(t=>t.stop()); }catch(e){} _gtCam.stream=null;
+  const o=document.getElementById('gtCamOv'); if(o) o.remove();
+}
+function _gtCamGot(code){
+  code=String(code||'').trim(); if(!code) return;
+  gtCamScanClose(); _gtScMark();
+  try{ navigator.vibrate && navigator.vibrate(60); }catch(e){}
+  setTimeout(()=>_gtFeedScan(code), 60);      // into the screen, like a hand scanner
+}
+async function gtCamScanOpen(){
+  gtCamScanClose();
+  const o=document.createElement('div'); o.id='gtCamOv'; o.setAttribute('data-no-i18n','');
+  o.style.cssText='position:fixed;inset:0;z-index:99000;background:rgba(3,5,10,.96);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:14px;direction:'+(lang==='he'?'rtl':'ltr')+';';
+  o.innerHTML='<div style="width:100%;max-width:520px;">'
+    +'<div style="color:#D4A843;font-weight:900;font-size:18px;text-align:center;margin-bottom:8px;">📷 '+escapeHtml(L('סרוק במצלמה','Scan with the camera','Escanear con la cámara'))+'</div>'
+    +'<div style="position:relative;border-radius:14px;overflow:hidden;background:#1c2028;min-height:200px;">'
+    +'<video id="gtCamVid" playsinline muted autoplay style="width:100%;display:block;max-height:60vh;object-fit:cover;"></video>'
+    +'<div style="position:absolute;left:12%;right:12%;top:28%;height:40%;border:3px solid #28C76F;border-radius:10px;box-shadow:0 0 0 999px rgba(0,0,0,.3);pointer-events:none;"></div>'
+    +'<button id="gtCamTorch" style="position:absolute;top:8px;left:8px;width:44px;height:44px;border-radius:50%;border:1px solid rgba(255,255,255,.5);background:rgba(0,0,0,.45);color:#fff;font-size:20px;">🔦</button></div>'
+    +'<div id="gtCamMsg" style="font-size:13px;color:#F0A030;text-align:center;margin:8px 0;min-height:18px;">'+escapeHtml(L('מכוונים לברקוד / QR — נקלט לבד','Point at the barcode / QR — it is read by itself','Apunte al código — se lee solo'))+'</div>'
+    +'<div style="display:flex;gap:8px;">'
+    +'<button onclick="document.getElementById(\'gtCamFile\').click()" style="flex:1;padding:12px;border-radius:10px;border:1px solid #2A3142;background:#11151F;color:#E8ECF4;font-size:14px;">📷 '+escapeHtml(L('צלם','Photo','Foto'))+'</button>'
+    +'<button onclick="gtCamScanClose()" style="flex:1;padding:12px;border-radius:10px;border:1px solid #2A3142;background:#11151F;color:#E8ECF4;font-size:14px;">'+escapeHtml(L('סגור','Close','Cerrar'))+'</button></div>'
+    +'<input type="file" id="gtCamFile" accept="image/*" capture="environment" style="display:none"></div>';
+  document.body.appendChild(o);
+  const msg=document.getElementById('gtCamMsg'), vid=document.getElementById('gtCamVid');
+  try{ _gtCam.det=('BarcodeDetector' in window) ? new window.BarcodeDetector() : null; }catch(e){ _gtCam.det=null; }
+  document.getElementById('gtCamFile').onchange=async(ev)=>{ const f=ev.target.files&&ev.target.files[0]; ev.target.value=''; if(!f) return;
+    if(!_gtCam.det){ msg.textContent=L('הדפדפן הזה לא קורא ברקוד (מומלץ Chrome באנדרואיד).','This browser cannot read codes (Chrome on Android is best).','Este navegador no lee códigos.'); return; }
+    try{ const r=await _gtCam.det.detect(await createImageBitmap(f)); if(r&&r.length) _gtCamGot(r[0].rawValue); else msg.textContent=L('לא נמצא ברקוד בתמונה — צלמו שוב מקרוב.','No code in the photo — take it again closer.','Sin código en la foto.'); }catch(e){ msg.textContent=String(e.message||e); } };
+  if(!_gtCam.det){ msg.textContent=L('הדפדפן הזה לא קורא ברקוד במצלמה (מומלץ Chrome באנדרואיד).','This browser cannot read codes with the camera (Chrome on Android is best).','Este navegador no lee códigos (mejor Chrome en Android).'); vid.style.display='none'; return; }
+  try{ _gtCam.stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}}); vid.srcObject=_gtCam.stream; await vid.play(); }
+  catch(e){ msg.textContent=L('אין גישה למצלמה חיה — "📷 צלם" עובד.','No live camera — "📷 Photo" works.','Sin cámara en vivo — use "Foto".'); vid.style.display='none'; return; }
+  const tr=_gtCam.stream.getVideoTracks()[0]; let torch=false;
+  document.getElementById('gtCamTorch').onclick=async()=>{ try{ torch=!torch; await tr.applyConstraints({advanced:[{torch}]}); }catch(e){ msg.textContent=L('אין פנס שאפשר להדליק מכאן.','No light that can be switched on from here.','Sin linterna.'); } };
+  _gtCam.timer=setInterval(async()=>{ if(_gtCam.busy || !vid.videoWidth) return; _gtCam.busy=true;
+    try{ const r=await _gtCam.det.detect(vid); if(r&&r.length) _gtCamGot(r[0].rawValue); }catch(e){} finally{ _gtCam.busy=false; } }, 200);
+}
+// the Android back button / leaving the screen closes the camera
+(function(){ const og=window.goTo; window.goTo=function(){ gtCamScanClose(); const r=og.apply(this,arguments); setTimeout(_gtCamBtnSync,50); return r; }; })();
 </script>
 
 </body>
