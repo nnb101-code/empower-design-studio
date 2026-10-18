@@ -6644,7 +6644,7 @@ begin
   end if;
   if not ((h.kind = 'usda' and p_resolution in ('released', 'condemned'))
           or (h.kind = 'question' and (p_resolution = 'cancelled'
-                                       or (p_resolution = 'answered' and h.station in ('legs', 'parts', 'stamps', 'inner', 'nikur'))))) then   -- v10.32: inner — the window of the "?" was decided
+                                       or (p_resolution = 'answered' and h.station in ('legs', 'parts', 'stamps', 'inner', 'nikur', 'cooler'))))) then   -- v10.32: inner — the window of the "?" was decided
     return jsonb_build_object('ok', false, 'error', 'bad_value');
   end if;
   v_actor := _derive_actor(case h.station when 'eso' then 'eso' when 'stamps' then 'stamped' else h.station end, null);
@@ -7249,6 +7249,11 @@ begin
     if v_cnt is null then v_err := 'not_printed';              -- no kosher sticker was printed for this part of this animal
     elsif v_piece > v_cnt then v_err := 'not_printed'; end if;
   end if;
+  -- (owner, §44) with the cooler screen on, the large-parts nikur takes only an animal that went into the cooler
+  if v_err is null and v_screen = 'big' and _cooler_on()
+     and not exists (select 1 from cooler_scans c where c.board_epoch = v_ep and c.animal_id = p_id) then
+    v_err := 'not_in_cooler';
+  end if;
   if v_err is not null then
     perform _gt_event(p_id + 1, 'nikur', 'piece_refused', jsonb_build_object('part', p_product, 'piece', v_piece, 'reason', v_err, 'board', v_ep), v_actor, v_dev);
     v_res := jsonb_build_object('ok', false, 'error', 'refused', 'reason', v_err, 'status', a.outer_status, 'slaughter', a.slaughter,
@@ -7378,10 +7383,11 @@ begin
     continue when v_exp = 0 or (v_in >= v_exp and ep <> v_cur);
     v_days := v_days || jsonb_build_object('epoch', ep, 'day', _nikur_day_date(ep), 'today', ep = v_cur,
                                            'expected', v_exp, 'in', v_in, 'side', v_side,
+                                           'cooled', (select coalesce(jsonb_agg(distinct c.animal_id + 1), '[]'::jsonb) from cooler_scans c where c.board_epoch = ep),
                                            'rows', (select coalesce(jsonb_agg(m), '[]'::jsonb) from (select m from jsonb_array_elements(v_all) m limit 800) q),
                                            'missing', (select coalesce(jsonb_agg(m), '[]'::jsonb) from (select m from jsonb_array_elements(v_miss) m limit 300) q));
   end loop;
-  return jsonb_build_object('ok', true, 'boardEpoch', v_cur, 'screen', v_screen, 'mode', v_mode, 'days', v_days,
+  return jsonb_build_object('ok', true, 'boardEpoch', v_cur, 'screen', v_screen, 'mode', v_mode, 'coolerOn', _cooler_on(), 'days', v_days,
     -- (owner) the kosher animals of today from the ruling on — and those whose pieces did not reach this nikur yet
     'kosherToday', (select count(*) from animals_pilot a where a.slaughter is not null and _nikur_refusal(a, null, v_cur, null) is null),
     'coming', coalesce((select jsonb_agg(jsonb_build_object('n', a.id + 1, 's', q.sides) order by a.id)
@@ -7969,6 +7975,195 @@ begin
 end $$;
 revoke execute on function phone_scanner_remove(text, bigint) from public;
 grant execute on function phone_scanner_remove(text, bigint) to anon, authenticated;
+
+-- ── §44 the cooler (v10.38, owner): the cooler receives the kosher animals; the large-parts nikur takes from it ──
+-- The team leader turns the cooler screen on in the plan (screensPlan.screens has 'cooler'). Then every large part
+-- (a part whose nikur is 'big') is scanned at the cooler door, and the large-parts nikur takes only an animal that
+-- went into the cooler. The small parts go straight from the small-parts screen to the nikur. Without the cooler
+-- screen, the large-parts nikur takes straight from the stamps screen (as before).
+create table if not exists cooler_scans (
+  board_epoch bigint not null,
+  animal_id   integer not null check (animal_id between 0 and 999),
+  product     text not null check (product ~ '^[a-z][a-z0-9_]{0,40}$'),
+  piece       integer not null check (piece between 1 and 20),
+  device_id   text,
+  worker      text,
+  at          timestamptz not null default now(),
+  primary key (board_epoch, animal_id, product, piece));
+create index if not exists cooler_scans_at on cooler_scans (at);
+alter table cooler_scans enable row level security;          -- no policy: only through cooler_scan / cooler_board
+revoke all on cooler_scans from public, anon, authenticated;
+
+alter table animal_holds drop constraint if exists animal_holds_station_check;
+alter table animal_holds add constraint animal_holds_station_check
+  check (station = any (array['slaughter', 'eso', 'inner', 'outer', 'legs', 'parts', 'stamps', 'nikur', 'cooler']));
+
+create or replace function _hold_station_of_role(p_role text) returns text
+language sql immutable set search_path = public, extensions, pg_temp as $$
+  select case p_role when 'slaughter' then 'slaughter' when 'esophagus' then 'eso' when 'inner' then 'inner'
+                     when 'outer' then 'outer' when 'legs' then 'legs' when 'parts' then 'parts' when 'stamps' then 'stamps'
+                     when 'nikur' then 'nikur' when 'cooler' then 'cooler' end;
+$$;
+revoke execute on function _hold_station_of_role(text) from public, anon, authenticated;
+
+create or replace function _cooler_on() returns boolean
+language sql stable security definer set search_path = public, extensions, pg_temp as $$
+  select coalesce(jsonb_typeof(_gt_settings() #> '{screensPlan,screens}') = 'array'
+                  and (_gt_settings() #> '{screensPlan,screens}') ? 'cooler', false);
+$$;
+revoke execute on function _cooler_on() from public, anon, authenticated;
+
+-- a large part into the cooler: p_epoch = the board of the piece's sticker (B: in the QR), or the tablet's board
+create or replace function cooler_scan(p_id integer, p_product text, p_piece integer, p_epoch bigint, p_command_id uuid default null) returns jsonb
+language plpgsql security definer set search_path = public, extensions, pg_temp as $$
+declare v_dev text; v_res jsonb; v_err text; v_ep bigint; v_cur bigint; x jsonb; v_cnt int; a animals_pilot;
+        v_actor text; v_new bigint; v_piece int := coalesce(p_piece, 1);
+begin
+  if p_id is null or p_id < 0 or p_id > 999 then return jsonb_build_object('ok', false, 'error', 'bad_id'); end if;
+  if p_product is null or p_product !~ '^[a-z][a-z0-9_]{0,40}$' or v_piece not between 1 and 20 then
+    return jsonb_build_object('ok', false, 'error', 'bad_value');
+  end if;
+  v_dev := _call_device(null);
+  if v_dev is null then return jsonb_build_object('ok', false, 'error', _no_device_error()); end if;
+  v_err := _hold_caller_error('cooler');                 -- only a cooler tablet (its worker logged in)
+  if v_err is not null then return jsonb_build_object('ok', false, 'error', v_err); end if;
+  v_res := _cmd_get(p_command_id, v_dev, 'cooler_scan');
+  if v_res is not null then return v_res; end if;
+  perform _board_write_lock();
+  v_cur := _board_epoch();
+  v_ep := coalesce(p_epoch, v_cur);
+  if v_cur is not null and v_ep > v_cur then
+    v_res := jsonb_build_object('ok', false, 'error', 'stale_board', 'boardEpoch', v_cur);
+    perform _cmd_put(p_command_id, v_dev, 'cooler_scan', v_res); return v_res;
+  end if;
+  x := _product_def(p_product);
+  if x = '{}'::jsonb then
+    v_res := jsonb_build_object('ok', false, 'error', 'unknown_part');
+    perform _cmd_put(p_command_id, v_dev, 'cooler_scan', v_res); return v_res;
+  end if;
+  if coalesce(x ->> 'nikur', 'none') <> 'big' then          -- the small parts go straight to the nikur
+    v_res := jsonb_build_object('ok', false, 'error', 'not_cooler_part', 'nikur', x ->> 'nikur');
+    perform _cmd_put(p_command_id, v_dev, 'cooler_scan', v_res); return v_res;
+  end if;
+  if v_ep = v_cur then select * into a from animals_pilot where id = p_id for share;
+  else select * into a from _nikur_day_rows(v_ep) r where r.id = p_id limit 1; end if;
+  v_actor := _derive_actor('cooler', null);
+  v_err := _nikur_refusal(a, x, v_ep, v_piece);
+  if v_err is null then
+    select cnt into v_cnt from animal_pieces where board_epoch = v_ep and animal_id = p_id and product = p_product;
+    if v_cnt is null or v_piece > v_cnt then v_err := 'not_printed'; end if;
+  end if;
+  if v_err is not null then
+    perform _gt_event(p_id + 1, 'cooler', 'piece_refused', jsonb_build_object('part', p_product, 'piece', v_piece, 'reason', v_err, 'board', v_ep), v_actor, v_dev);
+    v_res := jsonb_build_object('ok', false, 'error', 'refused', 'reason', v_err, 'status', a.outer_status, 'day', _nikur_day_date(v_ep));
+    perform _cmd_put(p_command_id, v_dev, 'cooler_scan', v_res); return v_res;
+  end if;
+  insert into cooler_scans (board_epoch, animal_id, product, piece, device_id, worker)
+  values (v_ep, p_id, p_product, v_piece, v_dev, v_actor)
+  on conflict (board_epoch, animal_id, product, piece) do nothing
+  returning 1 into v_new;
+  if v_new is not null then
+    perform _gt_event(p_id + 1, 'cooler', 'piece_in', jsonb_build_object('part', p_product, 'piece', v_piece, 'board', v_ep), v_actor, v_dev);
+  end if;
+  v_res := jsonb_build_object('ok', true, 'duplicate', v_new is null, 'status', a.outer_status, 'day', _nikur_day_date(v_ep),
+                              'animalIn', (select count(*) from cooler_scans where board_epoch = v_ep and animal_id = p_id),
+                              'animalExp', (select coalesce(sum(cnt), 0) from animal_pieces where board_epoch = v_ep and animal_id = p_id and screen = 'big'));
+  perform _cmd_put(p_command_id, v_dev, 'cooler_scan', v_res);
+  return v_res;
+end $$;
+revoke execute on function cooler_scan(integer, text, integer, bigint, uuid) from public;
+grant execute on function cooler_scan(integer, text, integer, bigint, uuid) to anon, authenticated;
+
+-- a "?" / USDA at the cooler (the whole animal, of any day still in the cooler) — released / answered at the cooler
+create or replace function cooler_hold(p_id integer, p_epoch bigint, p_kind text, p_command_id uuid default null) returns jsonb
+language plpgsql security definer set search_path = public, extensions, pg_temp as $$
+declare v_dev text; v_res jsonb; v_err text; v_ep bigint; a animals_pilot; v_id bigint; v_actor text;
+begin
+  if p_id is null or p_id < 0 or p_id > 999 then return jsonb_build_object('ok', false, 'error', 'bad_id'); end if;
+  if p_kind is null or p_kind not in ('question', 'usda') then return jsonb_build_object('ok', false, 'error', 'bad_value'); end if;
+  v_dev := _call_device(null);
+  if v_dev is null then return jsonb_build_object('ok', false, 'error', _no_device_error()); end if;
+  v_err := _hold_caller_error('cooler');
+  if v_err is not null then return jsonb_build_object('ok', false, 'error', v_err); end if;
+  v_res := _cmd_get(p_command_id, v_dev, 'cooler_hold');
+  if v_res is not null then return v_res; end if;
+  perform _board_write_lock();
+  v_ep := coalesce(p_epoch, _board_epoch());
+  if _board_epoch() is not null and v_ep > _board_epoch() then
+    v_res := jsonb_build_object('ok', false, 'error', 'stale_board', 'boardEpoch', _board_epoch());
+    perform _cmd_put(p_command_id, v_dev, 'cooler_hold', v_res); return v_res;
+  end if;
+  if v_ep = _board_epoch() then select * into a from animals_pilot where id = p_id for update;
+  else select * into a from _nikur_day_rows(v_ep) r where r.id = p_id limit 1; end if;
+  if a.id is null or a.slaughter is null then
+    v_res := jsonb_build_object('ok', false, 'error', 'bad_id');
+    perform _cmd_put(p_command_id, v_dev, 'cooler_hold', v_res); return v_res;
+  end if;
+  v_actor := _derive_actor('cooler', null);
+  insert into animal_holds (board_epoch, animal_id, station, kind, part, created_by, created_by_device)
+  values (v_ep, p_id, 'cooler', p_kind, 'whole', v_actor, v_dev)
+  on conflict (board_epoch, animal_id, station, kind, part) where resolved_at is null do nothing
+  returning id into v_id;
+  if v_id is null then
+    select id into v_id from animal_holds where board_epoch = v_ep and animal_id = p_id and station = 'cooler'
+       and kind = p_kind and part = 'whole' and resolved_at is null;
+  else
+    perform _gt_event(p_id + 1, 'cooler', 'hold_set', jsonb_build_object('kind', p_kind, 'part', 'whole', 'hold', v_id, 'board', v_ep), v_actor, v_dev);
+  end if;
+  v_res := jsonb_build_object('ok', true, 'hold', (select to_jsonb(h) from animal_holds h where h.id = v_id));
+  perform _cmd_put(p_command_id, v_dev, 'cooler_hold', v_res);
+  return v_res;
+end $$;
+revoke execute on function cooler_hold(integer, bigint, text, uuid) from public;
+grant execute on function cooler_hold(integer, bigint, text, uuid) to anon, authenticated;
+
+-- the cooler board: today's kosher animals (from the ruling on) and what of their large parts went in; the days
+-- before still in the cooler (their large parts not all at the nikur yet); the cooler's holds
+create or replace function cooler_board() returns jsonb
+language plpgsql stable security definer set search_path = public, extensions, pg_temp as $$
+declare v_dev text; v_cur bigint := _board_epoch(); v_tok text := _request_headers() ->> 'x-manager-token';
+begin
+  if not (v_tok is not null and _manager_session_valid(v_tok) and coalesce(_session_role(v_tok), '') <> 'manufacturer') then
+    v_dev := _current_device_id();
+    if not exists (select 1 from devices_pilot where id = v_dev and assigned_role = 'cooler' and coalesce(device_status, 'active') <> 'retired') then
+      return jsonb_build_object('ok', false, 'error', 'wrong_station');
+    end if;
+  end if;
+  return jsonb_build_object('ok', true, 'boardEpoch', v_cur, 'day', _nikur_day_date(v_cur), 'on', _cooler_on(),
+    'kosherToday', (select count(*) from animals_pilot a where a.slaughter is not null and _nikur_refusal(a, null, v_cur, null) is null),
+    -- today: every animal whose large parts got their kosher stickers — expected / in the cooler
+    'rows', coalesce((select jsonb_agg(jsonb_build_object('n', p.animal_id + 1, 'exp', p.exp,
+                                                          'in', (select count(*) from cooler_scans c where c.board_epoch = v_cur and c.animal_id = p.animal_id),
+                                                          'held', _nikur_refusal(a, null, v_cur, null) = 'held') order by p.animal_id)
+                        from (select animal_id, sum(cnt)::int exp from animal_pieces where board_epoch = v_cur and screen = 'big' group by animal_id) p
+                        join animals_pilot a on a.id = p.animal_id), '[]'::jsonb),
+    -- kosher animals whose large parts did not get their kosher stickers yet (not through the stamps screen)
+    'coming', coalesce((select jsonb_agg(a.id + 1 order by a.id) from animals_pilot a
+                         where a.slaughter is not null and _nikur_refusal(a, null, v_cur, null) is null
+                           and exists (select 1 from jsonb_array_elements(case when jsonb_typeof(_gt_settings() -> 'products') = 'array'
+                                                                               then _gt_settings() -> 'products' else '[]'::jsonb end) e
+                                        where coalesce((e ->> 'on')::boolean, false) and coalesce((e ->> 'm')::int, 0) >= 1 and e ->> 'nikur' = 'big'
+                                          and _nikur_refusal(a, e, v_cur, null) is null)
+                           and not exists (select 1 from animal_pieces p where p.board_epoch = v_cur and p.animal_id = a.id and p.screen = 'big')), '[]'::jsonb),
+    -- the days before: animals still in the cooler (their large parts not all scanned at the nikur)
+    'days', coalesce((select jsonb_agg(jsonb_build_object('epoch', d.board_epoch, 'day', _nikur_day_date(d.board_epoch), 'animals', d.animals, 'left', d.lft) order by d.board_epoch desc)
+                        from (select c.board_epoch, count(distinct c.animal_id)::int animals,
+                                     count(distinct c.animal_id) filter (where exists (
+                                        select 1 from animal_pieces p cross join lateral generate_series(1, p.cnt) g(i)
+                                         where p.board_epoch = c.board_epoch and p.animal_id = c.animal_id and p.screen = 'big'
+                                           and not exists (select 1 from piece_scans s where s.board_epoch = p.board_epoch and s.animal_id = p.animal_id
+                                                             and s.product = p.product and s.piece = g.i)))::int lft
+                                from cooler_scans c
+                               where c.board_epoch <> coalesce(v_cur, -1) and c.at > now() - interval '45 days'
+                                 and not exists (select 1 from nikur_days_closed z where z.board_epoch = c.board_epoch)
+                               group by c.board_epoch) d where d.lft > 0), '[]'::jsonb),
+    'holds', coalesce((select jsonb_agg(jsonb_build_object('id', h.id, 'n', h.animal_id + 1, 'kind', h.kind, 'epoch', h.board_epoch,
+                                                           'day', _nikur_day_date(h.board_epoch), 'resolution', h.resolution, 'at', h.created_at) order by h.created_at)
+                         from animal_holds h where h.station = 'cooler' and (h.resolved_at is null or h.resolution = 'condemned')
+                           and h.created_at > now() - interval '45 days'), '[]'::jsonb));
+end $$;
+revoke execute on function cooler_board() from public;
+grant execute on function cooler_board() to anon, authenticated;
 
 -- ── self-check ──────────────────────────────────────────────────────────────
 do $$

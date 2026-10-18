@@ -3488,6 +3488,55 @@ begin
   update settings_pilot set settings = s0 where id = 1;
 end $$;
 $gt84$;
+    v_step := 'owner: the cooler receives the kosher animals; the large-parts nikur takes from the cooler';
+    execute $gt85$
+do $$
+declare r jsonb; r2 jsonb; r3 jsonb; r4 jsonb; r5 jsonb; r6 jsonb; r7 jsonb; ok boolean; s0 jsonb; h bigint;
+        pr jsonb := '[{"id":"tongue","he":"לשון","on":true,"pre":"head","n":1,"post":"parts","m":1,"nikur":"small","builtin":true},
+                      {"id":"sides","he":"צדדים","on":true,"pre":"head","n":2,"post":"stamps","m":6,"nikur":"big","builtin":true},
+                      {"id":"legs","he":"רגליים","on":true,"pre":"legs","n":2,"post":"legs","m":0,"nikur":"none","builtin":true}]';
+begin
+  select settings into s0 from settings_pilot where id = 1;
+  perform pg_temp.api(pg_temp.mgr(), format('select push_settings(%L::jsonb, ''x'', %L)',
+    jsonb_build_object('products', pr, 'screensPlan', jsonb_build_object('decided', true, 'screens', jsonb_build_array('slaughter','inner','outer','parts','stamps','cooler','nikur'))), pg_temp.v('mgr')));
+  perform pg_temp.prep(930, 'outer'); perform pg_temp.prep(931, 'outer'); perform pg_temp.prep(932, 'outer');
+  perform set_config('gt.reset_in_progress', 'true', true);
+  update animals_pilot set stamped = true, parts_scanned = true where id in (930, 931);
+  perform set_config('gt.reset_in_progress', 'false', true);
+  -- the cooler: a large part goes in; a small part / a station / the nikur cannot use it; an unstamped animal is refused
+  r  := pg_temp.api(pg_temp.dev('COOL'), format('select cooler_scan(930, ''sides'', 1, %s)', pg_temp.ep()));
+  r2 := pg_temp.api(pg_temp.dev('COOL'), format('select cooler_scan(930, ''tongue'', 1, %s)', pg_temp.ep()));
+  r3 := pg_temp.api(pg_temp.dev('STAMPS'), format('select cooler_scan(930, ''sides'', 2, %s)', pg_temp.ep()));
+  r4 := pg_temp.api(pg_temp.dev('COOL'), format('select cooler_scan(932, ''sides'', 1, %s)', pg_temp.ep()));
+  r5 := pg_temp.api(pg_temp.dev('COOL'), 'select cooler_board()');
+  r6 := pg_temp.api(pg_temp.dev('NIK'), 'select cooler_board()');
+  ok := pg_temp.ok(r) and r2 ->> 'error' = 'not_cooler_part' and r3 ->> 'error' = 'wrong_station' and r4 ->> 'reason' = 'not_printed'
+        and pg_temp.ok(r5) and r6 ->> 'error' = 'wrong_station'
+        and exists (select 1 from jsonb_array_elements(r5 -> 'rows') x where (x ->> 'n')::int = 931 and (x ->> 'in')::int = 1 and (x ->> 'exp')::int = 6)
+        and (r5 -> 'coming') @> '[933]'::jsonb and has_table_privilege('anon', 'cooler_scans', 'select') = false;
+  -- the large-parts nikur takes only what went into the cooler; the small parts straight
+  r  := pg_temp.api(pg_temp.dev('NIK'),  format('select nikur_scan(930, ''sides'', 1, %s)', pg_temp.ep()));
+  r2 := pg_temp.api(pg_temp.dev('NIK'),  format('select nikur_scan(931, ''sides'', 1, %s)', pg_temp.ep()));
+  r3 := pg_temp.api(pg_temp.dev('NIKS'), format('select nikur_scan(931, ''tongue'', 1, %s)', pg_temp.ep()));
+  ok := ok and pg_temp.ok(r) and r2 ->> 'reason' = 'not_in_cooler' and pg_temp.ok(r3);
+  -- a "?" at the cooler stops the animal at the nikur too, until the cooler answers it
+  r  := pg_temp.api(pg_temp.dev('COOL'), format('select cooler_hold(930, %s, ''question'')', pg_temp.ep()));
+  h  := (r #>> '{hold,id}')::bigint;
+  r2 := pg_temp.api(pg_temp.dev('NIK'),  format('select nikur_scan(930, ''sides'', 2, %s)', pg_temp.ep()));
+  r3 := pg_temp.api(pg_temp.dev('NIK'),  format('select hold_resolve(%s, ''answered'')', h));
+  r4 := pg_temp.api(pg_temp.dev('COOL'), format('select hold_resolve(%s, ''answered'')', h));
+  r5 := pg_temp.api(pg_temp.dev('NIK'),  format('select nikur_scan(930, ''sides'', 2, %s)', pg_temp.ep()));
+  ok := ok and pg_temp.ok(r) and r2 ->> 'reason' = 'held' and r3 ->> 'error' = 'wrong_station' and pg_temp.ok(r4) and pg_temp.ok(r5);
+  -- without the cooler screen: the large-parts nikur takes straight from the stamps screen
+  perform pg_temp.api(pg_temp.mgr(), format('select push_settings(%L::jsonb, ''x'', %L)',
+    jsonb_build_object('screensPlan', jsonb_build_object('decided', true, 'screens', jsonb_build_array('slaughter','inner','outer','parts','stamps','nikur'))), pg_temp.v('mgr')));
+  r7 := pg_temp.api(pg_temp.dev('NIK'),  format('select nikur_scan(931, ''sides'', 1, %s)', pg_temp.ep()));
+  ok := ok and pg_temp.ok(r7);
+  perform pg_temp.rec('owner: the cooler takes the large parts of kosher animals; the large-parts nikur takes only from the cooler (small parts straight); a cooler "?" holds the nikur; no cooler screen → from the stamps', ok,
+    concat_ws(' | ', left(r::text, 60), left(r2::text, 60), r3::text, left(r4::text, 40), left(r5::text, 40), left(r7::text, 60)));
+  update settings_pilot set settings = s0 where id = 1;
+end $$;
+$gt85$;
     v_step := 'the ACTIVE security surface against the expected manifest';
     execute $gt70$
 -- ── the ACTIVE security surface against the expected manifest ───────────────
@@ -3590,7 +3639,7 @@ begin
                 'eso_change(integer,text,text,bigint)', 'eso_change(integer,text,text,bigint,uuid)', 'event_append(jsonb)',
                 'lung_drawing_get(integer)', 'lung_drawing_set(integer,bigint,text)', 'manager_add(text,text,text)',
                 'manager_add_owner(text,text,text)', 'manager_deactivate(text,uuid)', 'manager_list(text)', 'manager_login(text)',
-                'manager_logout(text)', 'manager_session_check(text)', 'leader_recovery_code_new(text)', 'leader_recovery_status(text)', 'leader_device_replace(text,text)', 'plant_server_status(text)', 'animal_card(text,date,integer)', 'seal_set(text,text,text)', 'seals_get(text,bigint)', 'hold_set(integer,text,text,text,bigint,uuid)', 'hold_resolve(bigint,text,uuid)', 'nikur_scan(integer,text,integer,bigint,uuid)', 'nikur_board()', 'nikur_hold(integer,bigint,text,uuid)', 'nikur_day_close(text,bigint,text)', 'support_issue_add(text,text)', 'support_tickets(text)', 'maker_changes(text)', 'print_job_add(text,text,text,integer,jsonb,text,uuid)', 'print_job_status(bigint)', 'printer_scan_request(text)', 'printers_found(text)', 'printers_status(text)', 'scanners_heard(text,integer)', 'scanner_scans_since(text,bigint)', 'phone_scanner_invite(text)', 'phone_scanner_join(text,text)', 'phone_scanner_status(text)', 'phone_scan(text,text)', 'phone_scanner_remove(text,bigint)', 'board_flags(text)', 'change_ack(text,bigint)', 'manufacturer_set_billing(text,boolean,numeric,text,text)',
+                'manager_logout(text)', 'manager_session_check(text)', 'leader_recovery_code_new(text)', 'leader_recovery_status(text)', 'leader_device_replace(text,text)', 'plant_server_status(text)', 'animal_card(text,date,integer)', 'seal_set(text,text,text)', 'seals_get(text,bigint)', 'hold_set(integer,text,text,text,bigint,uuid)', 'hold_resolve(bigint,text,uuid)', 'nikur_scan(integer,text,integer,bigint,uuid)', 'nikur_board()', 'nikur_hold(integer,bigint,text,uuid)', 'cooler_scan(integer,text,integer,bigint,uuid)', 'cooler_hold(integer,bigint,text,uuid)', 'cooler_board()', 'nikur_day_close(text,bigint,text)', 'support_issue_add(text,text)', 'support_tickets(text)', 'maker_changes(text)', 'print_job_add(text,text,text,integer,jsonb,text,uuid)', 'print_job_status(bigint)', 'printer_scan_request(text)', 'printers_found(text)', 'printers_status(text)', 'scanners_heard(text,integer)', 'scanner_scans_since(text,bigint)', 'phone_scanner_invite(text)', 'phone_scanner_join(text,text)', 'phone_scanner_status(text)', 'phone_scan(text,text)', 'phone_scanner_remove(text,bigint)', 'board_flags(text)', 'change_ack(text,bigint)', 'manufacturer_set_billing(text,boolean,numeric,text,text)',
                 'outer_open(integer,bigint,boolean,text)', 'outer_open(integer,bigint,boolean,text,uuid)', 'plant_status_snapshot()', 'plant_setup_needed()',
                 'push_settings(jsonb,text,text,text)', 'request_daily_rollover()', 'reset_daily_board(text,text)', 'security_summary(text)',
                 'processing_board(text)', 'carry_push(bigint,jsonb,uuid)', 'carry_claim(bigint,integer,text,uuid)',

@@ -5421,6 +5421,7 @@ function supTitles(){
   const set=(id,v)=>{const e=document.getElementById(id); if(e) e.textContent=v;};
   set('supLTitle', t); set('supTitle', t);
   set('supLSub', supRole==='nikur' ? L('סריקת כל חתיכה לפני הניקור','Scan every piece before the nikur','Escanear cada pieza antes del nikur')
+               : supRole==='cooler' ? L('סריקת החלקים הגדולים בכניסה לקולר','Scan the large parts at the cooler door','Escanear las partes grandes al entrar a la cámara')
                                    : L('המסך בהכנה — כניסה ותצוגה בלבד','Screen in preparation — login and view only','Pantalla en preparación — solo acceso y vista'));
   set('supWelcome', L('ברוך הבא','Welcome','Bienvenido'));
 }
@@ -5430,7 +5431,7 @@ function supEnter(){
   supTitles();
   let nm=null; try{ nm=(JSON.parse(localStorage.getItem('gt_active_users')||'{}'))[supRole]||null; }catch(e){}
   const c=GT_SUP_SCREENS[supRole]; const u=document.getElementById('supUser'); if(u) u.textContent=nm||(c?L(c.w[0],c.w[1],c.w[2]):'');
-  goTo('scSup'); supRender(); if(supRole==='nikur') nkLoad();
+  goTo('scSup'); supRender(); if(supRole==='nikur') nkLoad(); if(supRole==='cooler') clLoad();
 }
 // ── v10.38 (owner): THE NIKUR — every piece is scanned before the nikur ──
 // slot 0 = the nikur (large parts), slot 1 = the small-parts nikur. Every kosher piece goes in (every kashrut
@@ -5508,9 +5509,14 @@ function nikurRender(el){
       return `<div style="display:flex;justify-content:space-between;gap:8px;padding:7px 0;border-bottom:1px solid var(--border);font-size:14px;"><b>#${n}</b><span style="text-align:end;font-weight:800;color:${done?'var(--green)':'var(--amber)'};">`
         +E(Object.keys(parts).map(pid=>nm(pid)+' '+parts[pid][1]+'/'+parts[pid][0]).join(' · '))+(done?' ✓':'')+`</span></div>`; }).join(''); };
   { const box=document.getElementById('nkList'); if(box){
-      const rows=((today&&today.rows)||[]).filter(r=>r.s===_nkTab);
+      let rows=((today&&today.rows)||[]).filter(r=>r.s===_nkTab);
+      // (owner, §44) with the cooler screen: the large parts come from the cooler — an animal not in it yet waits
+      let notCool=[];
+      if(B.coolerOn && _nkTab==='big'){ const c=new Set((today&&today.cooled)||[]);
+        notCool=[...new Set(rows.filter(r=>!c.has(r.n)).map(r=>r.n))]; rows=rows.filter(r=>c.has(r.n)); }
+      const waitCool=notCool.map(n=>`<div style="display:flex;justify-content:space-between;gap:8px;padding:7px 0;border-bottom:1px solid var(--border);font-size:14px;"><b>#${n}</b><span style="color:var(--muted);">⏳ ${E(L('עוד לא נכנס לקולר','Not in the cooler yet','Aún no está en la cámara'))}</span></div>`).join('');
       const wait=coming.map(c=>`<div style="display:flex;justify-content:space-between;gap:8px;padding:7px 0;border-bottom:1px solid var(--border);font-size:14px;"><b>#${c.n}</b><span style="color:var(--muted);">⏳ ${E(L('כשר — עוד לא קיבל מדבקות כשרות (חותמות / חלקים קטנים)','Kosher — no kosher stickers yet (stamps / small parts)','Kosher — aún sin etiquetas kosher'))}</span></div>`).join('');
-      box.innerHTML=(animalRows(rows)+wait) || `<div class="gt-muted" style="padding:10px 0;">${E(L('עוד אין בהמות כשרות היום בצד הזה.','No kosher animals on this side today yet.','Aún no hay animales kosher en este lado hoy.'))}</div>`; } }
+      box.innerHTML=(animalRows(rows)+waitCool+wait) || `<div class="gt-muted" style="padding:10px 0;">${E(L('עוד אין בהמות כשרות היום בצד הזה.','No kosher animals on this side today yet.','Aún no hay animales kosher en este lado hoy.'))}</div>`; } }
   // the days before, still waiting at this nikur (closed section)
   { const od=document.getElementById('nkOldDays'); if(od) od.style.display=old.length?'':'none';
     set('nkOldSum','📅 '+L('ימים קודמים שממתינים','Earlier days still waiting','Días anteriores pendientes')+' ('+old.length+')');
@@ -5530,6 +5536,12 @@ function nkHoldStart(kind){
   const B=_nkBoard||{}, days=(B.days||[]).slice().reverse();
   const opts=days.map(d=>`<option value="${d.epoch}">${escapeHtml(_nkDayLong(d.day))}${d.today?' · '+escapeHtml(L('היום','today','hoy')):''}</option>`).join('')
             || `<option value="">${escapeHtml(L('היום','Today','Hoy'))}</option>`;
+  const _cl=supRole==='cooler', B0=_cl?(_clBoard||{}):null;
+  if(_cl){ const ds=[{epoch:B0.boardEpoch,day:B0.day,today:true}].concat(B0.days||[]);
+    return gtSheet((kind==='usda'?'USDA HOLD':'? '+L('שאלה','Question','Pregunta'))+' — '+L('קולר','Cooler','Cámara'),
+      L('על איזה מספר, ומאיזה יום? הבהמה לא תיכנס לניקור עד שמשחררים / עונים כאן בקולר.','Which number, from which day? The animal does not go into the nikur until it is released / answered here at the cooler.','¿Qué número y de qué día? No entra al nikur hasta liberar / responder aquí.'),
+      _gtNumInput(-1)+`<select id="nkHoldDay" class="gt-in" style="width:100%;margin:8px 0;padding:10px;font-size:15px;">${ds.map(d=>`<option value="${d.epoch}">${escapeHtml(_nkDayLong(d.day))}${d.today?' · '+escapeHtml(L('היום','today','hoy')):''}</option>`).join('')}</select>`
+      +'<div class="gt-row">'+_gtHBtn(kind==='usda'?'USDA':L('סמן ?','Mark ?','Marcar ?'),kind==='usda'?'#B39DFF':'#FFC400',`nkHoldDo('${kind}')`)+_gtHBtn(L('ביטול','Cancel','Cancelar'),'#9aa4b5','gtSheetClose()')+'</div>'); }
   gtSheet((kind==='usda'?'USDA HOLD':'? '+L('שאלה','Question','Pregunta'))+' — '+L('ניקור','Nikur','Nikur'),
     L('על איזה מספר, ומאיזה יום? החתיכות שלו לא ייכנסו עד שמשחררים / עונים כאן.','Which number, from which day? Its pieces do not go in until it is released / answered here.','¿Qué número y de qué día? Sus piezas no entran hasta liberar / responder aquí.'),
     _gtNumInput(-1)+`<select id="nkHoldDay" class="gt-in" style="width:100%;margin:8px 0;padding:10px;font-size:15px;">${opts}</select>`
@@ -5539,18 +5551,19 @@ async function nkHoldDo(kind){
   const idx=_gtReadNum(); if(idx<0){ KS.notice(L('מספר לא תקין','Invalid number','Número inválido')); return; }
   const sel=document.getElementById('nkHoldDay'); const ep=sel&&sel.value?Number(sel.value):(KS.getBoardEpoch?KS.getBoardEpoch():null);
   gtSheetClose();
-  let r=null; try{ r=await _withTimeout(window.sb.rpc('nikur_hold',{p_id:idx,p_epoch:ep,p_kind:kind,p_command_id:_gtUuid()}),10000); }catch(e){ r={error:e}; }
+  const _cl=supRole==='cooler';
+  let r=null; try{ r=await _withTimeout(window.sb.rpc(_cl?'cooler_hold':'nikur_hold',{p_id:idx,p_epoch:ep,p_kind:kind,p_command_id:_gtUuid()}),10000); }catch(e){ r={error:e}; }
   const d=r&&r.data;
-  if(d&&d.ok) KS.notice((kind==='usda'?'USDA':'?')+' #'+(idx+1)+L(' — מעוכב בניקור',' — held at the nikur',' — retenido en el nikur'));
+  if(d&&d.ok) KS.notice((kind==='usda'?'USDA':'?')+' #'+(idx+1)+(_cl?L(' — מעוכב בקולר',' — held at the cooler',' — retenido en la cámara'):L(' — מעוכב בניקור',' — held at the nikur',' — retenido en el nikur')));
   else if(d&&d.error==='worker_login_required') _gtHoldNeedsLogin();
   else ATalert(gtErrText((d&&d.error)||(r&&r.error)||'network'));
-  nkLoad();
+  if(_cl) clLoad(); else nkLoad();
 }
 async function nkHoldResolve(id, res){
   if(res==='condemned' && !(await ATconfirm(L('לסמן כנפסל? החתיכות לא ייכנסו לניקור.','Mark as condemned? The pieces will not go into the nikur.','¿Marcar como condenado? Las piezas no entrarán al nikur.')))) return;
   let r=null; try{ r=await _withTimeout(window.sb.rpc('hold_resolve',{p_hold:id,p_resolution:res,p_command_id:_gtUuid()}),10000); }catch(e){ r={error:e}; }
   const d=r&&r.data; if(!(d&&d.ok)) ATalert(gtErrText((d&&d.error)||(r&&r.error)||'network'));
-  nkLoad();
+  if(supRole==='cooler') clLoad(); else nkLoad();
 }
 // (older calls)
 function nkQuestion(){ nkHoldStart('question'); }
@@ -5571,7 +5584,8 @@ function _nkShow(kind,big,sub){
 const GT_NK_REASON={treif:['טרף — לא להכניס!','Treif — do not take in!','Treif — ¡no ingresar!'],nevela:['נבלה — לא להכניס!','Nevela — do not take in!','Nevelá — ¡no ingresar!'],
   no_ruling:['אין פסיקה כשרה — לא להכניס!','No kosher ruling — do not take in!','Sin dictamen kosher — ¡no ingresar!'],held:['מעוכב (USDA / שאלה) — לא להכניס!','Held (USDA / question) — do not take in!','Retenido (USDA / pregunta) — ¡no ingresar!'],
   not_glatt:['לא נלקח מבהמה גלאט','Not taken from a glatt animal','No se toma de un animal glatt'],not_printed:['לא הודפסה מדבקה כשרה לחתיכה הזו','No kosher sticker was printed for this piece','No se imprimió etiqueta kosher para esta pieza'],
-  not_slaughtered:['לא נשחט','Not slaughtered','No faenado'],day_closed:['היום הזה נסגר בניקור','This day was closed at the nikur','Este día se cerró en el nikur']};
+  not_slaughtered:['לא נשחט','Not slaughtered','No faenado'],day_closed:['היום הזה נסגר בניקור','This day was closed at the nikur','Este día se cerró en el nikur'],
+  not_in_cooler:['לא נכנס לקולר — לא להכניס לניקור!','Not in the cooler — do not take into the nikur!','No entró a la cámara — ¡no ingresar al nikur!']};
 async function nkScan(code, pid, piece){
   const n=_gtCodeNum(code), idx=isNaN(n)?-1:n-1;
   if(idx<0||idx>999){ _nkShow('no',L('ברקוד לא מזוהה','Barcode not recognized','Código no reconocido'),'#'+code); return; }
@@ -5594,11 +5608,96 @@ async function nkScan(code, pid, piece){
   nkLoad(); setTimeout(nkFocus,100);
 }
 setInterval(()=>{ const s=document.querySelector('.screen.active'); if(s&&s.id==='scSup'&&supRole==='nikur') nkLoad(); },8000);
+// ── v10.38 (owner): THE COOLER — receives the kosher animals; every large part is scanned at the cooler door, and the
+// large-parts nikur takes only what went in. The small parts go straight from the small-parts screen to the nikur.
+let _clBoard={}, _clOpen=false;
+async function clLoad(){
+  if(!window.sb) return;
+  try{ const r=await window.sb.rpc('cooler_board'); if(r&&r.data&&r.data.ok) _clBoard=Object.assign({},r.data,{at:Date.now()}); }catch(e){}
+  const s=document.querySelector('.screen.active'); if(s&&s.id==='scSup'&&supRole==='cooler') supRender();
+}
+setInterval(()=>{ const s=document.querySelector('.screen.active'); if(s&&s.id==='scSup'&&supRole==='cooler') clLoad(); },8000);
+function clFocus(){ const i=document.getElementById('clScan'); if(i) i.focus(); }
+function clKey(e){ if(e.key==='Enter'||e.keyCode===13){ const v=e.target.value.trim(); e.target.value=''; if(v) clScan(v); } }
+function coolerRender(el){
+  if(!document.getElementById('clScan')){
+    el.innerHTML=`<input type="text" id="clScan" inputmode="none" style="position:absolute;opacity:0;width:1px;height:1px;top:0;left:0;pointer-events:none;" onkeydown="clKey(event)">
+      <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+        <div id="clTitle" style="flex:1;font-size:20px;font-weight:900;color:var(--gold);"></div>
+        <button class="gt-tbb" onclick="nkHoldStart('question')" style="border-color:#FFC400;background:#FFC400;color:#000;font-weight:800;">? ${escapeHtml(L('שאלה','Question','Pregunta'))}</button>
+        <button class="gt-tbb gt-tbu" onclick="nkHoldStart('usda')">USDA HOLD</button>
+      </div>
+      <div id="clOff" style="display:none;background:rgba(255,176,32,.12);border:1px solid var(--amber);border-radius:12px;padding:10px 12px;margin-bottom:10px;font-size:13px;color:var(--amber);font-weight:700;"></div>
+      <div id="clTiles" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;"></div>
+      <div onclick="clFocus()" style="background:var(--panel2);border:2px dashed var(--border2);border-radius:12px;padding:12px 16px;display:flex;align-items:center;gap:12px;cursor:pointer;margin-bottom:10px;">
+        <div style="font-size:15px;font-weight:700;color:var(--text)" id="clPrompt"></div>
+        <div style="margin-inline-start:auto;width:10px;height:10px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);animation:pulse 1s infinite;"></div>
+      </div>
+      <div id="nkResult" style="display:none;border-radius:14px;padding:16px;text-align:center;margin-bottom:10px;"></div>
+      <div id="clHolds" style="margin-bottom:10px;"></div>
+      <div id="clList" style="background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:4px 12px;margin-bottom:10px;"></div>
+      <details class="gt-acc-in" id="clOldDays" style="margin-bottom:8px;"><summary id="clOldSum"></summary><div id="clDays" style="margin-top:8px;"></div></details>
+      <details class="gt-acc-in"><summary id="clHowSum"></summary><div id="clSub" style="font-size:12px;color:var(--muted);line-height:1.6;margin-top:6px;"></div></details>`;
+    setTimeout(clFocus,200);
+  }
+  const E=escapeHtml, set=(id,v)=>{ const e=document.getElementById(id); if(e) e.textContent=v; };
+  const B=_clBoard||{}, rows=B.rows||[], holds=B.holds||[], days=B.days||[];
+  set('clTitle','❄️ '+L('קולר','Cooler','Cámara'));
+  set('clPrompt',L('סורקים מדבקת כשרות של החלקים הגדולים בכניסה לקולר','Scan the kosher sticker of the large parts at the cooler door','Escanee la etiqueta kosher de las partes grandes al entrar'));
+  set('clHowSum','ℹ️ '+L('איך זה עובד','How it works','Cómo funciona'));
+  set('clSub',L('בהמה כשרה מופיעה מרגע הפסיקה (⏳). אחרי החותמות — סורקים את מדבקות הכשרות של החלקים הגדולים בכניסה לקולר. הניקור של החלקים הגדולים מקבל רק בהמה שנכנסה לקולר. החלקים הקטנים הולכים ישר לניקור. "?" או USDA כאן עוצרים את הבהמה גם בניקור, עד שמשחררים כאן.',
+    'A kosher animal shows from the ruling on (⏳). After the stamps — scan the large parts\' kosher stickers at the cooler door. The large-parts nikur takes only an animal that went into the cooler. The small parts go straight to the nikur. A "?" or USDA here stops the animal at the nikur too, until it is released here.',
+    'Un animal kosher aparece desde el dictamen (⏳). Tras los sellos — escanee las etiquetas kosher de las partes grandes al entrar. El nikur de partes grandes solo recibe lo que entró a la cámara. Las partes pequeñas van directo al nikur.'));
+  { const o=document.getElementById('clOff'); if(o){ o.style.display=B.on===false?'block':'none';
+      o.textContent='⚠ '+L('מסך הקולר לא מופעל בתוכנית של ראש הצוות — הניקור מקבל עכשיו ישר מהחותמות.','The cooler screen is not on in the team leader\'s plan — the nikur takes straight from the stamps now.','La pantalla de cámara no está activada en el plan — el nikur recibe directo de los sellos.'); } }
+  const inC=rows.filter(r=>r.in>0).length, notIn=rows.filter(r=>!(r.in>0)).length+(B.coming||[]).length;
+  const tile=(v,l,c)=>`<div style="flex:1;min-width:96px;background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:8px;text-align:center;"><div style="font-size:26px;font-weight:800;color:${c};">${v}</div><div style="font-size:11px;color:var(--muted);">${E(l)}</div></div>`;
+  { const t=document.getElementById('clTiles'); if(t) t.innerHTML=tile(B.kosherToday||0,L('בהמות כשרות היום','Kosher animals today','Animales kosher hoy'),'var(--green)')
+      +tile(inC,L('נכנסו לקולר','In the cooler','En la cámara'),'#7AAEFF')+tile(notIn,L('עוד לא נכנסו','Not in yet','Aún no entraron'),'var(--amber)'); }
+  { const h=document.getElementById('clHolds'); if(h){
+      h.innerHTML=holds.length ? `<div style="background:var(--panel);border:2px solid #B39DFF;border-radius:12px;padding:12px;"><div style="font-size:14px;font-weight:800;color:#B39DFF;margin-bottom:6px;">${E(L('מעוכבים בקולר','Held at the cooler','Retenidos en la cámara'))}</div>`
+        +holds.map(x=>{ const usda=x.kind==='usda', cond=x.resolution==='condemned';
+          const btn=(t,c,r)=>`<button onclick="nkHoldResolve(${Number(x.id)},'${r}')" style="padding:6px 12px;border-radius:8px;border:1px solid ${c};background:transparent;color:${c};font-weight:700;cursor:pointer;">${E(t)}</button>`;
+          return `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:6px 0;border-bottom:1px solid var(--border);"><b style="font-size:16px;">#${x.n}</b><span class="gt-muted">${E(_nkDayLong(x.day))}</span>`
+            +`<span style="font-weight:800;color:${usda?'#B39DFF':'#FFC400'};">${usda?'USDA':'?'}${cond?' · '+E(L('נפסל','condemned','condenado')):''}</span><span style="flex:1"></span>`
+            +(cond?'':(usda?btn(L('שחרר','Release','Liberar'),'var(--green)','released')+btn(L('נפסל','Condemned','Condenado'),'var(--red)','condemned')
+                        :btn(L('נענה — מותר','Answered — ok','Respondida — ok'),'var(--green)','answered')+btn(L('בטל','Cancel','Cancelar'),'var(--muted)','cancelled')))+`</div>`; }).join('')+`</div>` : ''; } }
+  { const box=document.getElementById('clList'); if(box){
+      const line=(n,t,c)=>`<div style="display:flex;justify-content:space-between;gap:8px;padding:7px 0;border-bottom:1px solid var(--border);font-size:14px;"><b>#${n}</b><span style="font-weight:800;color:${c};text-align:end;">${t}</span></div>`;
+      box.innerHTML=rows.map(r=>r.held ? line(r.n,'⛔ '+E(L('מעוכב','Held','Retenido')),'#B39DFF')
+          : r.in>=r.exp ? line(r.n,'❄️ '+E(L('בקולר','In the cooler','En la cámara'))+' · '+r.in+'/'+r.exp+' ✓','var(--green)')
+          : r.in>0 ? line(r.n,'❄️ '+r.in+'/'+r.exp,'var(--amber)') : line(r.n,E(L('ממתין לכניסה','Waiting to go in','Esperando entrar'))+' · 0/'+r.exp,'var(--amber)')).join('')
+        +(B.coming||[]).map(n=>line(n,'⏳ '+E(L('כשר — עוד לא עבר חותמות','Kosher — not through the stamps yet','Kosher — aún no pasó sellos')),'var(--muted)')).join('')
+        || `<div class="gt-muted" style="padding:10px 0;">${E(L('עוד אין בהמות כשרות היום.','No kosher animals today yet.','Aún no hay animales kosher hoy.'))}</div>`; } }
+  { const od=document.getElementById('clOldDays'); if(od) od.style.display=days.length?'':'none';
+    set('clOldSum','📅 '+L('בקולר מימים קודמים','In the cooler from earlier days','En la cámara de días anteriores')+' ('+days.length+')');
+    const box=document.getElementById('clDays'); if(box) box.innerHTML=days.map(d=>`<div style="display:flex;justify-content:space-between;gap:8px;padding:7px 0;border-bottom:1px solid var(--border);font-size:14px;"><b>${E(_nkDayLong(d.day))}</b><span style="color:var(--amber);font-weight:800;">${E(L(d.left+' בהמות עוד לא בניקור',d.left+' animals not at the nikur yet',d.left+' animales aún no en el nikur'))}</span></div>`).join(''); }
+}
+const GT_CL_REASON={not_cooler_part:['חלק קטן — הולך ישר לניקור, לא לקולר','A small part — straight to the nikur, not the cooler','Parte pequeña — directo al nikur, no a la cámara']};
+async function clScan(code){
+  const n=_gtCodeNum(code), idx=isNaN(n)?-1:n-1;
+  if(idx<0||idx>999){ _nkShow('no',L('ברקוד לא מזוהה','Barcode not recognized','Código no reconocido'),'#'+code); return; }
+  const mP=/\|P:([a-z0-9_]+)/.exec(code), mI=/\|I:(\d+)/.exec(code), mB=/\|B:(\d+)/.exec(code);
+  if(!mP){ _nkShow('no',L('סרקו את מדבקת הכשרות של החתיכה','Scan the piece\'s kosher sticker','Escanee la etiqueta kosher de la pieza'),L('על המדבקה הזו אין שם חלק','This sticker carries no part','Esta etiqueta no lleva parte')); return; }
+  const pid=mP[1], piece=mI?parseInt(mI[1],10):1, ep=mB?Number(mB[1]):(KS.getBoardEpoch?KS.getBoardEpoch():null);
+  const prod=gtProducts().find(p=>p.id===pid), pname=gtProductName(prod)||pid, m=prod?Math.max(1,parseInt(prod.m)||0):1;
+  if(!window.sb){ _nkShow('no',L('אין חיבור לשרת','No server connection','Sin conexión'),L('לא נרשם — סורקים שוב כשהחיבור חוזר','Not recorded — scan again when the connection is back','No registrado — escanee de nuevo al volver la conexión')); return; }
+  let r=null; try{ r=await _withTimeout(window.sb.rpc('cooler_scan',{p_id:idx,p_product:pid,p_piece:piece,p_epoch:ep,p_command_id:_gtUuid()}),10000); }catch(e){ r={error:e}; }
+  const d=r&&r.data, what='#'+(idx+1)+' · '+pname+(m>1?' '+piece+'/'+m:'')+(d&&d.day?' · '+_nkDayLong(d.day):'');
+  if(d&&d.ok) _nkShow(d.duplicate?'dup':'ok', d.duplicate?L('כבר נסרק','Already scanned','Ya escaneado'):L('✓ נכנס לקולר','✓ Into the cooler','✓ A la cámara'), what+' · ❄️ '+d.animalIn+'/'+d.animalExp);
+  else if(d&&d.error==='refused'){ const t=GT_NK_REASON[d.reason]||[d.reason,d.reason,d.reason]; _nkShow('no','⛔ '+L(t[0],t[1],t[2]),what); }
+  else if(d&&GT_CL_REASON[d.error]){ const t=GT_CL_REASON[d.error]; _nkShow('no',L(t[0],t[1],t[2]),what); }
+  else if(d&&d.error==='worker_login_required'){ _gtHoldNeedsLogin(); }
+  else _nkShow('no',L('לא נרשם','Not recorded','No registrado'),gtErrText((d&&d.error)||(r&&r.error)||'network'));
+  clLoad(); setTimeout(clFocus,100);
+}
+
 // read-only: what reached this part of the line today (after the outer ruling)
 function supRender(){
   const el=document.getElementById('supBody'); if(!el) return;
-  if(supRole==='nikur'){ nikurRender(el); return; }
-  { const ni=document.getElementById('nkScan'); if(ni) el.innerHTML=''; }
+  if(supRole==='nikur'){ { const ci=document.getElementById('clScan'); if(ci) el.innerHTML=''; } nikurRender(el); return; }
+  if(supRole==='cooler'){ { const ni=document.getElementById('nkScan'); if(ni) el.innerHTML=''; } coolerRender(el); return; }
+  { const ni=document.getElementById('nkScan')||document.getElementById('clScan'); if(ni) el.innerHTML=''; }
   const a=KS.getAnimals()||[];
   const slaughtered=a.filter(x=>x.slaughter==='slaughtered').length;
   const ruled=a.filter(x=>x.outerStatus);
@@ -18293,7 +18392,7 @@ const GT_PLAN_SCREENS = [
   { k:'outer', t:['בדיקת חוץ (פסיקה)','Outer check (ruling)','Chequeo externo (dictamen)'], d:['','',''] },
   { k:'parts', t:['חלקים קטנים','Small parts','Partes pequeñas'], d:['','',''] },
   { k:'stamps', t:['חותמות ושקילה','Stamps & weight','Sellos y peso'], d:['','',''] },
-  { k:'cooler', t:['משגיח קולר (קירור)','Cooler supervisor','Supervisor de cámara'], d:['מסך חדש — בהכנה (צימוד, עובדים וכניסה מוכנים)','New screen — in preparation (pairing, workers and login ready)','Pantalla nueva — en preparación'] },
+  { k:'cooler', t:['משגיח קולר (קירור)','Cooler supervisor','Supervisor de cámara'], d:['סורקים את החלקים הגדולים בכניסה לקולר; ניקור החלקים הגדולים מקבל רק מהקולר. בלי מסך קולר — הניקור מקבל ישר מהחותמות.','The large parts are scanned at the cooler door; the large-parts nikur takes only from the cooler. Without it — the nikur takes straight from the stamps.','Las partes grandes se escanean al entrar a la cámara; el nikur de partes grandes recibe solo de la cámara. Sin ella — directo de los sellos.'] },
   { k:'nikur', t:['ניקור','Nikur','Nikur'], d:['סורקים כל חתיכה לפני הניקור — מסך רגיל ומסך חלקים קטנים.','Every piece is scanned before the nikur — regular screen and small-parts screen.','Se escanea cada pieza antes del nikur — pantalla normal y de partes pequeñas.'] },
   { k:'salting', t:['משגיח מליחה','Salting supervisor','Supervisor de salado'], d:['מסך חדש — בהכנה (צימוד, עובדים וכניסה מוכנים)','New screen — in preparation (pairing, workers and login ready)','Pantalla nueva — en preparación'] },
   { k:'shipping', t:['משגיח שיפינג','Shipping supervisor','Supervisor de envíos'], d:['מסך חדש — בהכנה (צימוד, עובדים וכניסה מוכנים)','New screen — in preparation (pairing, workers and login ready)','Pantalla nueva — en preparación'] },
@@ -19051,7 +19150,7 @@ function _gtStationKey(){
 }
 function _gtFeedScan(code){
   const scr=document.querySelector('.screen.active'); if(!scr) return;
-  const ids=['lgScanInput','scanInput','stampsScanInput','nkScan'];
+  const ids=['lgScanInput','scanInput','stampsScanInput','nkScan','clScan'];
   const inp=ids.map(i=>document.getElementById(i)).find(el=>el && el.closest('.screen')===scr);
   const tgt=inp||document.body;
   if(inp){ try{ inp.focus(); }catch(e){} inp.value=code; }
@@ -19262,7 +19361,7 @@ function _gtPhType(){ const v=prompt(L('הקלידו את הקוד / המספר:
    ═══════════════════════════════════════════════════════════════════ */
 const _gtCam={stream:null, timer:null, det:null, busy:false};
 function _gtCamScreenOk(){ const a=(document.querySelector('.screen.active')||{}).id;
-  return a==='scStamps' || a==='scParts' || (a==='scLegs') || (a==='scSup' && typeof supRole!=='undefined' && supRole==='nikur'); }
+  return a==='scStamps' || a==='scParts' || (a==='scLegs') || (a==='scSup' && typeof supRole!=='undefined' && (supRole==='nikur'||supRole==='cooler')); }
 function _gtCamBtnSync(){
   let b=document.getElementById('gtCamBtn'); const on=_gtCamScreenOk() && !window._gtPhoneMode;
   if(!on){ if(b) b.style.display='none'; return; }
