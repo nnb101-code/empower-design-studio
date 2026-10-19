@@ -8718,10 +8718,25 @@ $$;
 revoke execute on function _ticket_new() from public, anon, authenticated;
 
 -- what goes into the barcode of a ticketed sticker (the nikur / cooler read N, P, I, B and T)
+-- (owner, 19.10) the whole way of the animal: the slaughter (day, time, shochet), the inner check (who, when), the
+-- outer check (who, when), then the part, the piece, the kashrut and the print number
+create or replace function _qr_name(p text) returns text
+language sql immutable set search_path = public, extensions, pg_temp as $$
+  select left(regexp_replace(coalesce(p, ''), '[|\r\n]', '/', 'g'), 24);
+$$;
+revoke execute on function _qr_name(text) from public, anon, authenticated;
+create or replace function _qr_time(p_ms bigint) returns text
+language sql stable security definer set search_path = public, extensions, pg_temp as $$
+  select coalesce(to_char(to_timestamp(p_ms / 1000.0) at time zone _plant_tz(), 'HH24:MI'), '');
+$$;
+revoke execute on function _qr_time(bigint) from public, anon, authenticated;
 create or replace function _ticket_payload(a animals_pilot, p_pid text, p_i integer, p_epoch bigint, p_t text, p_mark text) returns text
 language sql stable security definer set search_path = public, extensions, pg_temp as $$
   select 'BH|N:' || (a.id + 1)
          || '|D:' || coalesce(to_char(to_timestamp(a.slaughter_time / 1000.0) at time zone _plant_tz(), 'YYYY-MM-DD'), '')
+         || '|TM:' || _qr_time(a.slaughter_time) || '|SH:' || _qr_name(a.slaughtered_by)
+         || '|IN:' || _qr_name(a.inner_by) || '|IT:' || _qr_time(a.inner_time)
+         || '|OUT:' || _qr_name(a.outer_by) || '|OT:' || _qr_time(a.outer_time)
          || coalesce('|P:' || p_pid || '|I:' || coalesce(p_i, 1), '') || '|B:' || p_epoch || '|S:' || p_mark || '|T:' || p_t;
 $$;
 revoke execute on function _ticket_payload(animals_pilot, text, integer, bigint, text, text) from public, anon, authenticated;
@@ -8776,11 +8791,12 @@ end $$;
 revoke execute on function print_tickets_take(integer, jsonb, integer, uuid) from public;
 grant execute on function print_tickets_take(integer, jsonb, integer, uuid) to anon, authenticated;
 
--- the size of a QR in modules for a byte payload (error level M, versions 1–10)
+-- the size of a QR in modules for a byte payload (error level M, versions 1–15: long names of the shochet and inspectors)
 create or replace function _qr_modules(p_len integer) returns integer
 language sql immutable set search_path = public, extensions, pg_temp as $$
-  select 17 + 4 * coalesce((select v from (values (1,14),(2,26),(3,42),(4,62),(5,84),(6,106),(7,122),(8,152),(9,180),(10,213)) c(v, cap)
-                             where cap >= p_len order by v limit 1), 10);
+  select 17 + 4 * coalesce((select v from (values (1,14),(2,26),(3,42),(4,62),(5,84),(6,106),(7,122),(8,152),(9,180),(10,213),
+                                              (11,251),(12,287),(13,331),(14,362),(15,412)) c(v, cap)
+                             where cap >= p_len order by v limit 1), 15);
 $$;
 revoke execute on function _qr_modules(integer) from public, anon, authenticated;
 

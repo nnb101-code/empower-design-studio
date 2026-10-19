@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict fINoUE14w0VDAG67tblav8zZWwTh0ojqQFGubhT2fJyfVvrW7qfhLtdnGCgTlDH
+\restrict naL4m3mXztvbtIg7REsx8GyR4QC0oHxEd9Tyr2ZvnjqqdLRNmVrm03uuc6twf65
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -3625,12 +3625,41 @@ CREATE FUNCTION public._qr_modules(p_len integer) RETURNS integer
     LANGUAGE sql IMMUTABLE
     SET search_path TO 'public', 'extensions', 'pg_temp'
     AS $$
-  select 17 + 4 * coalesce((select v from (values (1,14),(2,26),(3,42),(4,62),(5,84),(6,106),(7,122),(8,152),(9,180),(10,213)) c(v, cap)
-                             where cap >= p_len order by v limit 1), 10);
+  select 17 + 4 * coalesce((select v from (values (1,14),(2,26),(3,42),(4,62),(5,84),(6,106),(7,122),(8,152),(9,180),(10,213),
+                                              (11,251),(12,287),(13,331),(14,362),(15,412)) c(v, cap)
+                             where cap >= p_len order by v limit 1), 15);
 $$;
 
 
 ALTER FUNCTION public._qr_modules(p_len integer) OWNER TO postgres;
+
+--
+-- Name: _qr_name(text); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public._qr_name(p text) RETURNS text
+    LANGUAGE sql IMMUTABLE
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $$
+  select left(regexp_replace(coalesce(p, ''), '[|\r\n]', '/', 'g'), 24);
+$$;
+
+
+ALTER FUNCTION public._qr_name(p text) OWNER TO postgres;
+
+--
+-- Name: _qr_time(bigint); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public._qr_time(p_ms bigint) RETURNS text
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $$
+  select coalesce(to_char(to_timestamp(p_ms / 1000.0) at time zone _plant_tz(), 'HH24:MI'), '');
+$$;
+
+
+ALTER FUNCTION public._qr_time(p_ms bigint) OWNER TO postgres;
 
 --
 -- Name: _raise_correction(text, text); Type: FUNCTION; Schema: public; Owner: postgres
@@ -4772,6 +4801,9 @@ CREATE FUNCTION public._ticket_payload(a public.animals_pilot, p_pid text, p_i i
     AS $$
   select 'BH|N:' || (a.id + 1)
          || '|D:' || coalesce(to_char(to_timestamp(a.slaughter_time / 1000.0) at time zone _plant_tz(), 'YYYY-MM-DD'), '')
+         || '|TM:' || _qr_time(a.slaughter_time) || '|SH:' || _qr_name(a.slaughtered_by)
+         || '|IN:' || _qr_name(a.inner_by) || '|IT:' || _qr_time(a.inner_time)
+         || '|OUT:' || _qr_name(a.outer_by) || '|OT:' || _qr_time(a.outer_time)
          || coalesce('|P:' || p_pid || '|I:' || coalesce(p_i, 1), '') || '|B:' || p_epoch || '|S:' || p_mark || '|T:' || p_t;
 $$;
 
@@ -13146,6 +13178,20 @@ REVOKE ALL ON FUNCTION public._qr_modules(p_len integer) FROM PUBLIC;
 
 
 --
+-- Name: FUNCTION _qr_name(p text); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public._qr_name(p text) FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION _qr_time(p_ms bigint); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public._qr_time(p_ms bigint) FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION _raise_correction(p_err text, p_stage text); Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -14513,5 +14559,5 @@ GRANT ALL ON TABLE public.system_flags TO service_role;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict fINoUE14w0VDAG67tblav8zZWwTh0ojqQFGubhT2fJyfVvrW7qfhLtdnGCgTlDH
+\unrestrict naL4m3mXztvbtIg7REsx8GyR4QC0oHxEd9Tyr2ZvnjqqdLRNmVrm03uuc6twf65
 

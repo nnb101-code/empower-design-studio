@@ -3512,6 +3512,15 @@ begin
     perform pg_temp.rec('§47 a kashrut mark changed (a new picture) is made again for the printer; the old picture is not used',
       exists (select 1 from jsonb_array_elements((pg_temp.api('{}', format('select print_marks_needed(%L)', pg_temp.v('mgr')))) -> 'needed') x where x ->> 'status' = v_mark)
       and not exists (select 1 from print_marks where status = v_mark and fp = _print_mark_fp(v_mark)));   -- (print_kosher_add takes only a current one)
+    -- (owner) the kosher barcode carries the whole way: slaughter (time, shochet), inner and outer check (who, when)
+    perform set_config('gt.reset_in_progress', 'true', true);
+    update animals_pilot set slaughtered_by = 'משה|כהן', inner_by = 'יוסף לוי', outer_by = 'דוד', slaughter_time = 1792400000000,
+                             inner_time = 1792400600000, outer_time = 1792401200000 where id = 910;
+    perform set_config('gt.reset_in_progress', 'false', true);
+    perform pg_temp.rec('owner: the kosher sticker''s barcode has the shochet and slaughter time, the inner and the outer inspector with their times',
+      _ticket_payload(pg_temp.ar(910), 'cheeks', 1, 1, 'ABCDEFGHJK', 'glatt')
+        ~ '^BH\|N:911\|D:[0-9-]{10}\|TM:[0-9]{2}:[0-9]{2}\|SH:משה/כהן\|IN:יוסף לוי\|IT:[0-9]{2}:[0-9]{2}\|OUT:דוד\|OT:[0-9]{2}:[0-9]{2}\|P:cheeks\|I:1\|B:1\|S:glatt\|T:ABCDEFGHJK$',
+      _ticket_payload(pg_temp.ar(910), 'cheeks', 1, 1, 'ABCDEFGHJK', 'glatt'));
     perform pg_temp.rec('§47 nikur / cooler: a piece with tickets goes in only with one of its own (no ticket / a made-up one refused); a piece printed without tickets as before',
       _ticket_refusal(_board_epoch(), 910, 'cheeks', 1, null) = 'no_ticket'
       and _ticket_refusal(_board_epoch(), 910, 'cheeks', 1, t1 #>> '{tickets,0,t}') is null
