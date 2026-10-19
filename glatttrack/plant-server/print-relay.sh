@@ -70,6 +70,16 @@ except Exception: print("")' "$p" "$ok" 2>/dev/null)"
   done
   gt_state printersOnline "{\"at\":\"$now\",\"printers\":{$out}}" >/dev/null
 }
+# (round-2 review P-pr1) each printer has its own sender in the background: a printer that does not answer (15 s
+# a job) never holds up the stickers of the other printers; the search runs in the background too
+send_printer(){   # $1 = ip:port — every new job of this printer, oldest first, until none is left
+  local id last=""
+  while id="$(gt_psql -v p="$1" <<'SQL'
+select id from print_jobs where status = 'new' and printer = :'p' and at >= now() - interval '20 seconds' order by id limit 1;
+SQL
+)" && [ -n "$id" ] && [ "$id" != "$last" ]; do send_job "$id" "$1"; last="$id"; done
+}
+declare -A SENDER=(); scan_pid=""
 last_beat=0; last_probe=0
 while true; do
   if [ "$(gt_self_role)" != "primary" ]; then sleep 5; continue; fi
@@ -79,11 +89,15 @@ while true; do
   # (review) a sticker the station already reported as not printed is never printed later; a send cut off by a restart is failed
   gt_psql -c "update print_jobs set status = 'failed', error = 'too old — not printed (the station said so; print again)' where status = 'new' and at < now() - interval '20 seconds';
               update print_jobs set status = 'failed', error = 'interrupted' where status = 'sending' and at < now() - interval '2 minutes'" >/dev/null
-  while read -r id printer; do [ -n "$id" ] && send_job "$id" "$printer"; done \
-    < <(gt_psql -c "select id || ' ' || printer from print_jobs where status = 'new' and at >= now() - interval '20 seconds' order by id limit 50")
-  if [ "$(gt_psql -c "select coalesce((select value::timestamptz from plant_state where key = 'printerScanRequestedAt')
+  while read -r printer; do
+    [ -n "$printer" ] || continue
+    pid="${SENDER[$printer]:-}"
+    if [ -z "$pid" ] || ! kill -0 "$pid" 2>/dev/null; then ( send_printer "$printer" ) & SENDER[$printer]=$!; fi
+  done < <(gt_psql -c "select distinct printer from print_jobs where status = 'new' and at >= now() - interval '20 seconds'")
+  if { [ -z "$scan_pid" ] || ! kill -0 "$scan_pid" 2>/dev/null; } \
+     && [ "$(gt_psql -c "select coalesce((select value::timestamptz from plant_state where key = 'printerScanRequestedAt')
                         > coalesce((select (value::jsonb ->> 'at')::timestamptz from plant_state where key = 'printersFound'), '-infinity'), false)")" = "t" ]; then
-    scan
+    ( scan ) & scan_pid=$!
   fi
   sleep "${GT_PRINT_POLL:-0.5}"
 done

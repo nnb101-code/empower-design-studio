@@ -6745,7 +6745,7 @@ const savedPages=(()=>{
 function _savePages(){try{localStorage.setItem('ks_pages',JSON.stringify(savedPages));}catch(e){}}
 function goTo(id){
   setTimeout(()=>{ try{ _gtScreenTitleUpdate(); }catch(e){} }, 0);   // v10.38: the screen's name at the top
-  if(/^sc(Slaughter|Esophagus|Legs|Inner|Outer|Parts|Stamps)Login$/.test(id) && typeof _gtWorkerLogout==='function') _gtWorkerLogout();   // worker logout (step41)
+  if(/^sc(Slaughter|Esophagus|Legs|Inner|Outer|Parts|Stamps|Sup)Login$/.test(id) && typeof _gtWorkerLogout==='function') _gtWorkerLogout();   // worker logout (step41; round-2 review A-sup2: the nikur / cooler too)
   // A device that isn't paired to a station (and has no manager logged in on
   // it) never gets the home menu — it shows its pairing code instead.
   if(id==="scNav" && typeof _needsPairing==='function' && _needsPairing()) id="scPair";

@@ -3168,6 +3168,14 @@ begin
         and not exists (select 1 from animal_pieces where board_epoch = e0 and animal_id = 881 and product = 'tail');
   perform pg_temp.rec('v10.38 closing a part mid-day: a piece printed before still goes into the nikur; after the close it is not taken (not expected, refused)', ok,
     concat_ws(' | ', left(r::text, 80), left(r2::text, 80), left(r3::text, 80)));
+  -- (round-2 review S-pc1) the tail switched ON again: 881 (stamped while it was off) is not given a tail piece
+  perform pg_temp.api(pg_temp.mgr(), format('select push_settings(%L::jsonb, ''x'', %L)', jsonb_build_object('products', pr), pg_temp.v('mgr')));
+  perform set_config('gt.reset_in_progress', 'true', true);
+  update animals_pilot set weight_right = 120 where id = 881;                -- a later change of the row adds nothing either
+  perform set_config('gt.reset_in_progress', 'false', true);
+  perform pg_temp.rec('round-2 review: a part switched on mid-day is not counted as printed for animals that already passed',
+    not exists (select 1 from animal_pieces where board_epoch = e0 and animal_id = 881 and product = 'tail')
+    and exists (select 1 from animal_pieces where board_epoch = e0 and animal_id = 880 and product = 'tail'));
 
   -- a "?" of the nikur on day A; the day is reset; the nikur works on day A the next day
   r  := pg_temp.api(pg_temp.dev('NIK'), format('select nikur_hold(881, %s, ''question'')', e0));
@@ -3330,6 +3338,15 @@ begin
         and exists (select 1 from jsonb_array_elements(r4 -> 'days') d where (d ->> 'epoch')::bigint = e0 and (d ->> 'expected')::int = 2 and (d ->> 'in')::int = 1);   -- cheek 1 + liver (tongue condemned, cheek 2 held)
   perform pg_temp.rec('round 23: a held / condemned part blocks only itself (tongue / one cheek); the other kosher parts go in and count', ok,
     concat_ws(' | ', left(r::text, 80), left(r2::text, 60), left(r3::text, 80), left((r4 -> 'days')::text, 160)));
+  -- (round-2 review S-pt1) a set of 4 (tongue + 2 cheeks + liver) with the tongue on USDA hold: the 3 other
+  -- stickers print; the whole set (4) and the tongue's own flag wait for the release
+  perform pg_temp.prep(912, 'outer');
+  insert into animal_holds (board_epoch, animal_id, station, kind, part, created_by) values (e0, 912, 'parts', 'usda', 'tongue', 'selftest');
+  r  := pg_temp.api(pg_temp.dev('PARTS'), pg_temp.q_push(912, '{"parts_print_count":3,"cheek_sticker":true,"parts_printed_as":"glatt"}'));
+  r2 := pg_temp.api(pg_temp.dev('PARTS'), pg_temp.q_push(912, '{"parts_print_count":4,"tongue_sticker":true}'));
+  perform pg_temp.rec('round-2 review: a small-parts set of 4 with the tongue held — the 3 other stickers print; the full set waits',
+    _parts_expected() = 4 and pg_temp.ok(r) and (pg_temp.ar(912)).parts_print_count = 3 and r2 ->> 'error' = 'held'
+    and not coalesce((pg_temp.ar(912)).tongue_sticker, false), concat_ws(' | ', left(r::text, 80), left(r2::text, 80)));
   -- (round 24) a print job is checked for what it is: the right screen, the animal's state, the part's holds, the copies
   update settings_pilot set settings = settings || '{"printers":[{"id":"p1","name":"Zebra","conn":"network","ip":"192.168.1.50","port":9100}]}'::jsonb where id = 1;
   perform pg_temp.prep(911, 'slaughter');

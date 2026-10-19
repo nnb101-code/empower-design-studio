@@ -6281,7 +6281,7 @@ begin
     v := coalesce(_hold_block(p_epoch, p_id, 'parts', 'cheek1'), _hold_block(p_epoch, p_id, 'parts', 'cheek2'));
     if v is not null then return v; end if;
   end if;
-  if coalesce(n_count, 0) > coalesce(o_count, 0) and coalesce(n_count, 0) >= least(3, greatest(_parts_expected(), 1)) then   -- v10.38: the whole set
+  if coalesce(n_count, 0) > coalesce(o_count, 0) and coalesce(n_count, 0) >= greatest(_parts_expected(), 1) then   -- v10.38: the whole set (round-2 review S-pt1: also a set of 4+, not 3)
     v := coalesce(_hold_block(p_epoch, p_id, 'parts', 'tongue'), _hold_block(p_epoch, p_id, 'parts', 'cheek1'),
                   _hold_block(p_epoch, p_id, 'parts', 'cheek2'));
     if v is not null then return v; end if;
@@ -8278,6 +8278,81 @@ update animal_holds h set resolved_at = null, resolution = null
  where h.station = 'cooler' and h.resolution = 'board_closed' and h.created_at > now() - interval '45 days'
    and not exists (select 1 from animal_holds o where o.board_epoch = h.board_epoch and o.animal_id = h.animal_id
                      and o.station = h.station and o.kind = h.kind and o.part = h.part and o.resolved_at is null);
+
+-- S-pc1: a change of the cuts list filled in pieces for EVERY part of the new list — a part switched on mid-day
+-- (or given kosher stickers now) was recorded as printed for animals that never got its sticker, so the nikur
+-- waited for pieces that do not exist. Now a change fills in only the parts whose kosher stickers were already
+-- printed in the same area before the change (e.g. the team leader gives the nikur value to a part already
+-- printed); a part that is new, or new to its area, is counted only from now on (by the row trigger).
+create or replace function _products_list_defaults(v jsonb) returns jsonb
+language sql immutable set search_path = public, extensions, pg_temp as $$
+  select coalesce(jsonb_agg(e || jsonb_build_object('m', coalesce(e -> 'm', d -> 'm', '0'::jsonb),
+                                                    'nikur', coalesce(e -> 'nikur', d -> 'nikur', '"none"'::jsonb)) order by o), '[]'::jsonb)
+    from jsonb_array_elements(case when jsonb_typeof(v) = 'array' then v else '[]'::jsonb end) with ordinality t(e, o)
+    left join jsonb_array_elements('[{"id":"tongue","m":1,"nikur":"small"},{"id":"cheeks","m":2,"nikur":"small"},{"id":"sides","m":6,"nikur":"big"},{"id":"lung","m":0,"nikur":"none"},{"id":"hook","m":0,"nikur":"none"},{"id":"legs","m":0,"nikur":"none"},{"id":"tail","m":1,"nikur":"small"},{"id":"liver","m":1,"nikur":"small"},{"id":"skirt_out","m":1,"nikur":"small"},{"id":"skirt_in","m":1,"nikur":"small"},{"id":"hanger","m":1,"nikur":"small"}]'::jsonb) d on d ->> 'id' = e ->> 'id';
+$$;
+revoke execute on function _products_list_defaults(jsonb) from public, anon, authenticated;
+
+create or replace function _animal_pieces_fill(p_ids text[]) returns integer
+language plpgsql security definer set search_path = public, extensions, pg_temp as $$
+declare n int;
+begin
+  insert into animal_pieces (board_epoch, animal_id, product, cnt, screen)
+  select coalesce(a.board_epoch, _board_epoch()), a.id, x ->> 'id', least((x ->> 'm')::int, 20), x ->> 'nikur'
+    from animals_pilot a cross join lateral jsonb_array_elements(_gt_products()) x
+   where a.slaughter is not null and coalesce(a.board_epoch, _board_epoch()) is not null
+     and (p_ids is null or x ->> 'id' = any(p_ids))
+     and coalesce((x ->> 'on')::boolean, false) and x ->> 'nikur' in ('big', 'small') and coalesce((x ->> 'm')::int, 0) >= 1
+     and _animal_piece_done(a, x)
+  on conflict (board_epoch, animal_id, product) do nothing;
+  get diagnostics n = row_count;
+  return n;
+end $$;
+revoke execute on function _animal_pieces_fill(text[]) from public, anon, authenticated;
+
+create or replace function _settings_pieces_fill() returns trigger
+language plpgsql security definer set search_path = public, extensions, pg_temp as $$
+declare v_ids text[];
+begin
+  if new.settings -> 'products' is distinct from old.settings -> 'products' then
+    if jsonb_typeof(old.settings -> 'products') is distinct from 'array' then
+      perform _animal_pieces_fill(null::text[]);          -- the first list: what passed before it is filled in
+    else
+      select coalesce(array_agg(n ->> 'id'), '{}') into v_ids
+        from jsonb_array_elements(_products_list_defaults(new.settings -> 'products')) n
+        join jsonb_array_elements(_products_list_defaults(old.settings -> 'products')) o on o ->> 'id' = n ->> 'id'
+       where coalesce((o ->> 'on')::boolean, false) and coalesce((o ->> 'm')::int, 0) >= 1
+         and o ->> 'post' is not distinct from n ->> 'post';
+      if cardinality(v_ids) > 0 then perform _animal_pieces_fill(v_ids); end if;
+    end if;
+  end if;
+  return null;
+end $$;
+revoke execute on function _settings_pieces_fill() from public, anon, authenticated;
+
+-- (S-pc1) the row trigger, too: a part is recorded at the moment its area finishes (not on any later change of
+-- the row — a part switched on after that never counts for this animal)
+create or replace function _animal_pieces_track() returns trigger
+language plpgsql security definer set search_path = public, extensions, pg_temp as $$
+declare x jsonb; v_ep bigint;
+begin
+  if new.slaughter is null then return null; end if;                -- (the daily reset clears the marks: nothing is recorded then)
+  v_ep := coalesce(new.board_epoch, _board_epoch());
+  if v_ep is null then return null; end if;
+  for x in select e from jsonb_array_elements(_gt_products()) e loop
+    continue when not coalesce((x ->> 'on')::boolean, false) or coalesce(x ->> 'nikur', 'none') not in ('big', 'small')
+                  or coalesce((x ->> 'm')::int, 0) < 1;
+    if _animal_piece_done(new, x) and (tg_op = 'INSERT' or not _animal_piece_done(old, x)) then
+      insert into animal_pieces (board_epoch, animal_id, product, cnt, screen)
+      values (v_ep, new.id, x ->> 'id', least((x ->> 'm')::int, 20), x ->> 'nikur')
+      on conflict (board_epoch, animal_id, product) do nothing;
+    end if;
+  end loop;
+  return null;
+end $$;
+revoke execute on function _animal_pieces_track() from public, anon, authenticated;
+
+-- S-pt1 (see _parts_print_block above): the whole small-parts set, also a set of 4 or more, decides the "held" check
 
 -- ── self-check ──────────────────────────────────────────────────────────────
 do $$
