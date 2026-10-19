@@ -102,6 +102,14 @@ sudo cp gt-release-public.pem /etc/glatttrack/release-public.pem
 
 בלי הקובץ הזה השרת לא מתקין שום עדכון (ומסך הבריאות של היצרן מראה "not signed").
 
+- **כשהיצרן מחליף מפתח:** הוא שולח גם מפתח "הבא". מעתיקים אותו ל-`/etc/glatttrack/release-public-next.pem`, ומדליקים ב-`gt-plant.conf` את השורה `GT_RELEASE_PUBKEY_NEXT`. בסוף ההחלפה היצרן אומר מתי להעביר אותו למקום של הראשי. (פירוט: מדריך מרכז השירות, סעיף 5.)
+- **בעלות על הקבצים:** הסקריפטים רצים כ-root ומריצים את `gt-plant.conf` כקוד. לכן הם מסרבים לעבוד אם `gt-plant.conf`, התיקייה שלו, תיקיית הסקריפטים או אחד הסקריפטים לא שייכים ל-root, או שמישהו אחר יכול לכתוב אליהם. אם מופיעה השגיאה "must belong to root":
+```bash
+sudo chown -R root:root /etc/glatttrack /opt/glatttrack/plant-server
+sudo chmod -R go-w /etc/glatttrack /opt/glatttrack/plant-server
+```
+- **חזרה לגרסה קודמת (`update-app.sh --rollback`)** מחזירה רק את האפליקציה. השינוי בשרת נשאר, והוא בנוי לעבוד גם עם האפליקציה הקודמת.
+
 **הדפסת מדבקות (v10.38):** שירות שמעביר את המדבקות מהטאבלטים למדפסות הרשת, ומחפש מדפסות כשראש הצוות מבקש:
 
 ```bash

@@ -3,6 +3,16 @@
 set -euo pipefail
 GT_CONF="${GT_CONF:-/etc/glatttrack/gt-plant.conf}"
 [ -f "$GT_CONF" ] || { echo "missing $GT_CONF" >&2; exit 2; }
+# (audit) root runs the settings file and these scripts as code: they (and their folders) must belong to root and
+# nobody else may change them — otherwise another user could run commands as root
+gt_owner_ok(){ local f u a; for f in "$@"; do
+  read -r u a < <(stat -c '%u %a' "$f" 2>/dev/null) || { echo "ERROR: cannot check $f" >&2; return 1; }
+  [ "$u" = "0" ] && [ $(( 8#$a & 8#022 )) -eq 0 ] || { echo "ERROR: $f must belong to root and be writable only by root (now: user $u, mode $a)" >&2; return 1; }
+done; }
+if [ "$(id -u)" = "0" ]; then
+  _gt_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  gt_owner_ok "$GT_CONF" "$(dirname "$GT_CONF")" "$_gt_dir" $(compgen -G "$_gt_dir/*.sh") $(compgen -G "$_gt_dir/*.py") || exit 2
+fi
 # shellcheck disable=SC1090
 . "$GT_CONF"
 GT_PGHOST="${GT_PGHOST:-/var/run/postgresql}"
@@ -52,11 +62,16 @@ SQL
 # (round-2 review P-up1) is this release signed by the manufacturer? $1 = the signed text, $2 = the signature (base64).
 # The manufacturer's public key: GT_RELEASE_PUBKEY (default /etc/glatttrack/release-public.pem). No key = no update.
 gt_release_verify(){
-  local key="${GT_RELEASE_PUBKEY:-/etc/glatttrack/release-public.pem}" t rc
-  [ -f "$key" ] || { gt_log "release: no manufacturer key ($key) — updates are not installed"; return 1; }
+  # (audit) a key change: the manufacturer's NEXT public key may sit beside the current one for a while
+  # (GT_RELEASE_PUBKEY_NEXT); a release signed with either is installed — see PLANT-RESILIENCE-HE.md
+  local key="${GT_RELEASE_PUBKEY:-/etc/glatttrack/release-public.pem}" next="${GT_RELEASE_PUBKEY_NEXT:-}" t rc=1 k
+  [ -f "$key" ] || [ -n "$next" -a -f "$next" ] || { gt_log "release: no manufacturer key ($key) — updates are not installed"; return 1; }
   [ -n "$1" ] && [[ "$2" =~ ^[A-Za-z0-9+/]{86}==$ ]] || return 1
   t="$(mktemp -d)"
   printf '%s' "$1" > "$t/m"; printf '%s' "$2" | base64 -d > "$t/s" 2>/dev/null
-  openssl pkeyutl -verify -pubin -inkey "$key" -rawin -in "$t/m" -sigfile "$t/s" >/dev/null 2>&1; rc=$?
+  for k in "$key" "$next"; do
+    [ -n "$k" ] && [ -f "$k" ] || continue
+    openssl pkeyutl -verify -pubin -inkey "$k" -rawin -in "$t/m" -sigfile "$t/s" >/dev/null 2>&1 && { rc=0; break; }
+  done
   rm -rf "$t"; return $rc
 }

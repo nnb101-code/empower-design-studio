@@ -22,7 +22,8 @@ if [ "${1:-}" = "--rollback" ]; then
   cp -f "$APP.prev" "$APP.tmp" && mv -f "$APP.tmp" "$APP"
   gt_state appVersion "$(ver_of "$APP")"; gt_state appUpdatedAt "$(date -Is)"
   store_file "$APP" "$(ver_of "$APP")"
-  say "rolled back to $(ver_of "$APP") — the tablets go back by themselves"; exit 0
+  # (audit) only the app goes back; the server part (02) stays — every 02 is made to work with the previous app
+  say "rolled back to $(ver_of "$APP") — the tablets go back by themselves (the server part stays; it works with this app)"; exit 0
 fi
 
 NEW="${1:?usage: update-app.sh <new-app.html> [<new-02.sql>] | --rollback}"; SQL="${2:-}"
