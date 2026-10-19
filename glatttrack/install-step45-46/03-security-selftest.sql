@@ -3219,23 +3219,26 @@ begin
         and exists (select 1 from jsonb_array_elements(d -> 'days') x where (x ->> 'epoch')::bigint = e0 and (x ->> 'in')::int = 2 and (x ->> 'expected')::int = 12);
   perform pg_temp.rec('v10.38 nikur after the cooler: a piece is scanned with ITS day (yesterday''s 880 is not today''s 880); the nikur''s "?" stays over the daily reset; the board lists the day still waiting', ok,
     concat_ws(' | ', left(r::text, 60), left(r2::text, 80), left(r3::text, 80), left(r4::text, 80), left(r6::text, 60), left((d -> 'days')::text, 160)));
-  -- (§46, owner) the settings of each day: on day B the team leader renames the cheeks — day A's cheeks still go in
-  -- (small parts always go to the small-parts nikur), the board names them as on day A; day A's kashrut status
-  -- stays "in use" while day A is still in the nikur
+  -- (§46, owner) the settings of each day: a part the plant added itself ("בשר צלעות") was taken on day A and is
+  -- deleted from the list on day B — day A's pieces of it still go into the small-parts nikur, named as on day A;
+  -- day A's kashrut status stays "in use" while day A is still in the nikur
+  update settings_snapshots set settings = jsonb_set(settings, '{products}', (settings -> 'products')
+           || '[{"id":"p_ribs","he":"בשר צלעות","on":true,"pre":"none","n":0,"post":"stamps","m":1,"nikur":"small"}]'::jsonb)
+   where id = (select max(id) from settings_snapshots where board_epoch = e0);                      -- day A had the part
+  insert into animal_pieces (board_epoch, animal_id, product, cnt, screen) values (e0, 880, 'p_ribs', 1, 'small');   -- printed on day A
   perform set_config('gt.reset_in_progress', 'true', true);
-  update settings_pilot set settings = jsonb_set(settings, '{products,1,he}', '"לחיים חדש"') where id = 1;
   update animals_pilot set outer_status = null, outer_time = null where outer_status = 'glatt';   -- nothing glatt on day B
   perform set_config('gt.reset_in_progress', 'false', true);
-  r  := pg_temp.api(pg_temp.dev('NIKS'), format('select nikur_scan(880, ''cheeks'', 1, %s)', e0));   -- day A: the small-parts nikur
-  r2 := pg_temp.api(pg_temp.dev('NIK'),  format('select nikur_scan(880, ''cheeks'', 2, %s)', e0));   -- day A on the large-parts nikur: no
+  r  := pg_temp.api(pg_temp.dev('NIKS'), format('select nikur_scan(880, ''p_ribs'', 1, %s)', e0));   -- day A's piece: in
+  r2 := pg_temp.api(pg_temp.dev('NIKS'), format('select nikur_scan(880, ''p_ribs'', 1, %s)', e1));   -- day B: no such part any more
   d  := pg_temp.api(pg_temp.dev('NIKS'), 'select nikur_board()');
-  perform pg_temp.rec('§46 each day''s settings: an earlier day is processed with ITS parts list (its names) after the list changed today; its status stays in use; a copy at each day start and change',
-    pg_temp.ok(r) and r2 ->> 'error' = 'wrong_screen'
+  perform pg_temp.rec('§46 each day''s settings: a part the plant added and deleted today — the earlier day''s pieces of it still go in, named as on that day; its status stays in use; a copy at each day start and change',
+    pg_temp.ok(r) and r2 ->> 'error' = 'unknown_part'
+    and not exists (select 1 from jsonb_array_elements(_gt_products()) e where e ->> 'id' = 'p_ribs')
     and exists (select 1 from jsonb_array_elements(d -> 'days') x, jsonb_array_elements(x -> 'parts') p
-                 where (x ->> 'epoch')::bigint = e0 and p ->> 'id' = 'cheeks' and p ->> 'he' = 'לחיים')
+                 where (x ->> 'epoch')::bigint = e0 and p ->> 'id' = 'p_ribs' and p ->> 'he' = 'בשר צלעות')
     and 'glatt' = any(_statuses_in_use())
     and exists (select 1 from settings_snapshots where board_epoch = e1 and reason = 'day_start')
-    and exists (select 1 from settings_snapshots where board_epoch = e1 and reason = 'change' and settings #>> '{products,1,he}' = 'לחיים חדש')
     and not exists (select 1 from settings_snapshots where settings ? 'customSeals' or settings ? 'installationCode'),
     concat_ws(' | ', left(r::text, 80), left(r2::text, 80), (select string_agg(board_epoch || ':' || reason, ',') from settings_snapshots where board_epoch in (e0, e1))));
 
