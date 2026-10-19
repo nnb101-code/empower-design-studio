@@ -5658,6 +5658,11 @@ let _nkPassed={days:[]}, _nkPassedAt=0;
 function _nkPassedToday(){ const ep=(_nkBoard||{}).boardEpoch; const d=(_nkPassed.days||[]).find(x=>String(x.epoch)===String(ep)); return d?(mode=>(_nkMode()==='all'?(d.passed||[]):(d[_nkMode()]||[])))():[]; }
 async function nkLoad(){
   if(!window.sb) return;
+  if(nkLoad._busy){ nkLoad._again=true; return; }        // (round-2 review S-perf1) one board read at a time; one more after it
+  nkLoad._busy=true; try{ await _nkLoadOnce(); }finally{ nkLoad._busy=false; }
+  if(nkLoad._again){ nkLoad._again=false; setTimeout(nkLoad,300); }
+}
+async function _nkLoadOnce(){
   if(Date.now()-_nkPassedAt>30000 || nkLoad._afterScan){ nkLoad._afterScan=false; _nkPassedAt=Date.now();
     try{ const r=await window.sb.rpc('nikur_passed',{p_days:14}); if(r&&r.data&&r.data.ok) _nkPassed=r.data; }catch(e){} }
   try{ const r=await window.sb.rpc('nikur_board'); if(r&&r.data&&r.data.ok){ _nkBoard=Object.assign({},r.data,{at:Date.now()}); } }catch(e){}

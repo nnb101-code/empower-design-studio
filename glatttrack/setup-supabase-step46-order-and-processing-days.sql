@@ -8273,6 +8273,94 @@ end $$;
 revoke execute on function nikur_day_close(text, bigint, text) from public;
 grant execute on function nikur_day_close(text, bigint, text) to anon, authenticated;
 
+-- S-perf1: finding a day in the archive (the nikur / cooler of an earlier day) read every archived board — an index
+create index if not exists daily_board_archive_board_gin on daily_board_archive using gin (board jsonb_path_ops);
+-- S-perf1: the nikur board (polled by every nikur tablet) took about a second for each day still waiting
+create or replace function nikur_board() returns jsonb
+language plpgsql stable security definer set search_path = public, extensions, pg_temp as $$
+declare v_dev text; v_screen text; v_cur bigint := _board_epoch(); v_tok text := _request_headers() ->> 'x-manager-token';
+        v_days jsonb := '[]'::jsonb; ep bigint; v_exp int; v_in int; v_miss jsonb; v_mode text := 'all'; v_side jsonb; v_all jsonb; v_prods jsonb := _gt_products();
+begin
+  if v_tok is not null and _manager_session_valid(v_tok) and coalesce(_session_role(v_tok), '') <> 'manufacturer' then
+    v_screen := null;
+  else
+    v_dev := _current_device_id();
+    v_screen := _nikur_device_screen(v_dev);
+    if v_screen is null then return jsonb_build_object('ok', false, 'error', 'wrong_station'); end if;
+    v_mode := v_screen;
+    if v_screen = 'all' then v_screen := null; end if;
+  end if;
+  for ep in select distinct p.board_epoch from animal_pieces p
+             where (v_screen is null or p.screen = v_screen) and p.at > now() - interval '45 days'
+               and not exists (select 1 from nikur_days_closed z where z.board_epoch = p.board_epoch)
+             order by 1 loop
+    -- (round-2 review S-perf1) a day whose every piece is in is skipped without the checks; the checks run once a
+    -- part (per piece only for a part on hold); the day's rows are read once
+    if ep <> coalesce(v_cur, -1)
+       and (select count(*) from piece_scans s where s.board_epoch = ep and (v_screen is null or s.screen = v_screen))
+           >= (select coalesce(sum(p.cnt), 0) from animal_pieces p where p.board_epoch = ep and (v_screen is null or p.screen = v_screen)) then
+      continue;
+    end if;
+    --   (the animal's own state once; the part's check only for an animal with a "?" / USDA of that day)
+    with rr as materialized (select r, _nikur_refusal(r, null, ep, null) base,
+                                    exists (select 1 from animal_holds h where h.board_epoch = ep and h.animal_id = (r).id and h.kind in ('usda', 'question')) hh
+                               from _nikur_day_rows(ep) r),
+         pr as (select e ->> 'id' id, e from jsonb_array_elements(v_prods) e),
+         ref as materialized (select p.animal_id, p.product, p.cnt, p.screen, x.r, coalesce(pr.e, '{}'::jsonb) xe,
+                                     case when x.base is not null then x.base
+                                          when x.hh then _nikur_refusal(x.r, coalesce(pr.e, '{}'::jsonb), ep, null)
+                                          when coalesce((pr.e ->> 'notGlatt')::boolean, false) and (x.r).outer_status = 'glatt' then 'not_glatt' end f
+                                from animal_pieces p join rr x on (x.r).id = p.animal_id left join pr on pr.id = p.product
+                               where p.board_epoch = ep and (v_screen is null or p.screen = v_screen)),
+         got as materialized (select s.animal_id, s.product, s.piece from piece_scans s where s.board_epoch = ep),
+         w as (select ref.animal_id, ref.product, g.i, ref.screen,
+                      exists (select 1 from got where got.animal_id = ref.animal_id and got.product = ref.product and got.piece = g.i) ok
+                 from ref cross join lateral generate_series(1, ref.cnt) g(i)
+                where ref.f is null or (ref.f = 'held' and _nikur_refusal(ref.r, ref.xe, ep, g.i) is null))
+    select count(*)::int,
+           count(*) filter (where w.ok)::int,
+           jsonb_build_object('big',   jsonb_build_array(count(*) filter (where w.screen = 'big'),   count(*) filter (where w.screen = 'big'   and w.ok)),
+                              'small', jsonb_build_array(count(*) filter (where w.screen = 'small'), count(*) filter (where w.screen = 'small' and w.ok))),
+           coalesce(jsonb_agg(jsonb_build_object('n', w.animal_id + 1, 'p', w.product, 'i', w.i) order by w.animal_id, w.product, w.i)
+                      filter (where not w.ok), '[]'::jsonb),
+           case when ep = v_cur then coalesce(jsonb_agg(jsonb_build_object('n', w.animal_id + 1, 'p', w.product, 'i', w.i, 's', w.screen, 'ok', w.ok)
+                              order by w.animal_id, w.product, w.i), '[]'::jsonb) else '[]'::jsonb end   -- (the tiles: today only)
+      into v_exp, v_in, v_side, v_miss, v_all
+      from w;
+    -- a day leaves the list when everything of it is in (today stays while work goes on)
+    continue when v_exp = 0 or (v_in >= v_exp and ep <> v_cur);
+    v_days := v_days || jsonb_build_object('epoch', ep, 'day', _nikur_day_date(ep), 'today', ep = v_cur,
+                                           'expected', v_exp, 'in', v_in, 'side', v_side,
+                                           'cooled', case when ep = v_cur then (select coalesce(jsonb_agg(distinct c.animal_id + 1), '[]'::jsonb) from cooler_scans c where c.board_epoch = ep) else '[]'::jsonb end,
+                                           'rows', (select coalesce(jsonb_agg(m), '[]'::jsonb) from (select m from jsonb_array_elements(v_all) m limit 800) q),
+                                           'missing', (select coalesce(jsonb_agg(m), '[]'::jsonb) from (select m from jsonb_array_elements(v_miss) m limit 300) q));
+  end loop;
+  return jsonb_build_object('ok', true, 'boardEpoch', v_cur, 'screen', v_screen, 'mode', v_mode, 'coolerOn', _cooler_on(), 'days', v_days,
+    'productsSaved', exists (select 1 from jsonb_array_elements(_gt_products()) e where e ->> 'nikur' in ('big', 'small') and coalesce((e ->> 'm')::int, 0) >= 1),
+    -- (owner) the kosher animals of today from the ruling on — and those whose pieces did not reach this nikur yet
+    'kosherToday', (select count(*) from animals_pilot a where a.slaughter is not null and _nikur_refusal(a, null, v_cur, null) is null),
+    'coming', coalesce((select jsonb_agg(jsonb_build_object('n', a.id + 1, 's', q.sides) order by a.id)
+                          from animals_pilot a
+                          cross join lateral (select jsonb_agg(distinct e ->> 'nikur') sides
+                                                from jsonb_array_elements(_gt_products()) e
+                                               where coalesce((e ->> 'on')::boolean, false) and coalesce((e ->> 'm')::int, 0) >= 1
+                                                 and e ->> 'nikur' in ('big', 'small') and (v_screen is null or e ->> 'nikur' = v_screen)
+                                                 and _nikur_refusal(a, e, v_cur, null) is null
+                                                 and not exists (select 1 from animal_pieces p where p.board_epoch = v_cur
+                                                                   and p.animal_id = a.id and p.product = e ->> 'id')) q
+                         where a.slaughter is not null and q.sides is not null), '[]'::jsonb),
+    'todayIn', (select count(*) from piece_scans s where (v_screen is null or s.screen = v_screen) and s.at >= _plant_day_start()),   -- (full review S3)
+    'pieces', coalesce((select jsonb_agg(jsonb_build_object('n', s.animal_id + 1, 'p', s.product, 'i', s.piece, 's', s.screen, 'e', s.board_epoch,
+                                                            'at', s.at, 'by', s.worker) order by s.at)
+                          from piece_scans s where s.board_epoch = v_cur and (v_screen is null or s.screen = v_screen)), '[]'::jsonb),
+    'holds', coalesce((select jsonb_agg(jsonb_build_object('id', h.id, 'n', h.animal_id + 1, 'kind', h.kind, 'epoch', h.board_epoch,
+                                                           'day', _nikur_day_date(h.board_epoch), 'resolution', h.resolution, 'at', h.created_at) order by h.created_at)
+                         from animal_holds h where h.station = 'nikur' and (h.resolved_at is null or h.resolution = 'condemned')
+                           and h.created_at > now() - interval '45 days'), '[]'::jsonb));
+end $$;
+revoke execute on function nikur_board() from public;
+grant execute on function nikur_board() to anon, authenticated;
+
 -- S-pt1 (see _parts_print_block above): the whole small-parts set, also a set of 4 or more, decides the "held" check
 
 -- ── self-check ──────────────────────────────────────────────────────────────
