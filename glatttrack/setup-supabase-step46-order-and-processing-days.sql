@@ -6832,7 +6832,7 @@ begin
   perform _do_board_reset('daily-rollover', null);
   v_kept := _proc_close_kept_days('closed by the daily rollover');
   update animal_holds set resolved_at = null, resolution = null
-   where station = 'nikur' and resolution = 'board_closed' and resolved_at = now();   -- v10.38: the nikur's holds stay (the meat is in the cooler)
+   where station in ('nikur', 'cooler') and resolution = 'board_closed' and resolved_at = now();   -- v10.38: the nikur's and the cooler's holds stay (the meat is in the cooler) — round-2 review S-cl1: the cooler's too
   update plant_state set value = today::text, updated_at = now() where key = 'lastRolloverDate';
   delete from plant_state where key = 'rolloverWaitingSince';
   return jsonb_build_object('ok', true, 'done', true, 'status', 'rolled_over', 'plantDate', today, 'timezone', tz,
@@ -6863,7 +6863,7 @@ begin
   perform _do_board_reset('manual', null);
   v_kept := _proc_close_kept_days('closed by the team leader''s reset');
   update animal_holds set resolved_at = null, resolution = null
-   where station = 'nikur' and resolution = 'board_closed' and resolved_at = now();   -- v10.38: the nikur's holds stay (the meat is in the cooler)
+   where station in ('nikur', 'cooler') and resolution = 'board_closed' and resolved_at = now();   -- v10.38: the nikur's and the cooler's holds stay (the meat is in the cooler) — round-2 review S-cl1: the cooler's too
   tz := coalesce(nullif(_gt_settings() ->> 'plantTimezone', ''), 'UTC');
   if not exists (select 1 from pg_timezone_names where name = tz) then tz := 'UTC'; end if;
   insert into plant_state (key, value) values ('lastRolloverDate', ((now() at time zone tz)::date)::text)
@@ -8269,6 +8269,15 @@ drop trigger if exists zz_settings_pieces_fill on settings_pilot;
 create trigger zz_settings_pieces_fill after update on settings_pilot for each row execute function _settings_pieces_fill();
 
 select _animal_pieces_fill();
+
+-- ── §45 round-2 review fixes (19.10) ─────────────────────────────────────────
+-- S-cl1: a cooler "?" / USDA closed by an earlier daily reset ('board_closed') kept the meat blocked at the nikur
+-- with no screen to release it. The reset now keeps the cooler's holds open (above); once, now: the ones already
+-- closed that way are opened again (not when the same hold is open again already).
+update animal_holds h set resolved_at = null, resolution = null
+ where h.station = 'cooler' and h.resolution = 'board_closed' and h.created_at > now() - interval '45 days'
+   and not exists (select 1 from animal_holds o where o.board_epoch = h.board_epoch and o.animal_id = h.animal_id
+                     and o.station = h.station and o.kind = h.kind and o.part = h.part and o.resolved_at is null);
 
 -- ── self-check ──────────────────────────────────────────────────────────────
 do $$

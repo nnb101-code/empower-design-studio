@@ -38,9 +38,20 @@ if [ -n "${GT_API_URL:-}" ]; then
   fake="203.0.113.77"
   curl -s -m 8 -o /dev/null -X POST -H 'Content-Type: application/json' ${GT_API_KEY:+-H "apikey: $GT_API_KEY"} \
        -H "X-GT-Client-IP: $fake" "$GT_API_URL/rest/v1/rpc/manager_login" -d '{"p_code":"gt-nightly-ip-check"}' >/dev/null 2>&1
-  seen="$(PSQLV -c "select ip from login_attempts where not ok and at > now() - interval '1 minute' order by at desc limit 1" 2>/dev/null)"
+  # (round-2 review P-nc1) the server records a wrong team-leader code as 'm:<address>:<device>' — the address is
+  # the part between the first and the last ':'. The values go in as psql variables (the address is text a tablet
+  # could write when nginx is wrong — never put into the SQL itself).
+  seen="$(PSQLV -v fake="$fake" <<'SQL' 2>/dev/null
+select case when ip like 'm:%:%' then regexp_replace(ip, '^m:(.*):[^:]*$', '\1') else ip end
+  from login_attempts where not ok and at > now() - interval '1 minute' order by at desc limit 1;
+SQL
+)"
   # (full review P6) remove only the ONE test attempt (the newest one) — not a real tablet's wrong code of the same minute
-  PSQLV -c "delete from login_attempts where ctid = (select ctid from login_attempts where not ok and at > now() - interval '1 minute' and ip in ('$fake', '${seen:-x}') order by at desc limit 1)" >/dev/null 2>&1
+  #   (this check sends no device key: its row ends with ':-')
+  PSQLV -v fake="$fake" -v seen="${seen:-x}" >/dev/null 2>&1 <<'SQL'
+delete from login_attempts where ctid = (select ctid from login_attempts where not ok and at > now() - interval '1 minute'
+   and ip in (:'fake', 'm:' || :'fake' || ':-', 'm:' || :'seen' || ':-') order by at desc limit 1);
+SQL
   if [ "$seen" = "$fake" ]; then bad "כתובת הטאבלט" "שרת האינטרנט מעביר כתובת שהטאבלט כתב — להוסיף ב-nginx: proxy_set_header X-GT-Client-IP \$remote_addr;"
   elif [ -z "$seen" ]; then ok "כתובת הטאבלט" "לא נבדק (אין תשובה)"
   else ok "כתובת הטאבלט" "השרת רושם את הכתובת האמיתית"; fi

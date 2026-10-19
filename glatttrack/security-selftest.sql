@@ -3552,6 +3552,21 @@ begin
   ok := ok and pg_temp.ok(r7);
   perform pg_temp.rec('owner: the cooler takes the large parts of kosher animals; the large-parts nikur takes only from the cooler (small parts straight); a cooler "?" holds the nikur; no cooler screen → from the stamps', ok,
     concat_ws(' | ', left(r::text, 60), left(r2::text, 60), r3::text, left(r4::text, 40), left(r5::text, 40), left(r7::text, 60)));
+  -- (round-2 review S-cl1) a cooler USDA stays open over the daily reset: the cooler still sees it and releases it
+  declare e0 bigint := pg_temp.ep();
+  begin
+    r  := pg_temp.api(pg_temp.dev('COOL'), format('select cooler_hold(931, %s, ''usda'')', e0));
+    h  := (r #>> '{hold,id}')::bigint;
+    perform pg_temp.api('{}', format('select reset_daily_board(%L, ''selftest: cooler hold over the reset'')', pg_temp.v('mgr')));
+    r2 := pg_temp.api(pg_temp.dev('COOL'), 'select cooler_board()');
+    r3 := pg_temp.api(pg_temp.dev('NIK'),  format('select nikur_scan(931, ''sides'', 2, %s)', e0));
+    r4 := pg_temp.api(pg_temp.dev('COOL'), format('select hold_resolve(%s, ''released'')', h));
+    r5 := pg_temp.api(pg_temp.dev('NIK'),  format('select nikur_scan(931, ''sides'', 2, %s)', e0));
+    perform pg_temp.rec('round-2 review: a cooler USDA stays open over the daily reset — the cooler still sees it, the nikur waits, the cooler releases it',
+      pg_temp.ok(r) and pg_temp.ep() > e0 and exists (select 1 from jsonb_array_elements(r2 -> 'holds') x where (x ->> 'id')::bigint = h)
+      and r3 ->> 'reason' = 'held' and pg_temp.ok(r4) and pg_temp.ok(r5),
+      concat_ws(' | ', left(r::text, 60), left((r2 -> 'holds')::text, 80), left(r3::text, 60), left(r4::text, 60), left(r5::text, 60)));
+  end;
   update settings_pilot set settings = s0 where id = 1;
 end $$;
 $gt85$;
