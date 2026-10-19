@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict naL4m3mXztvbtIg7REsx8GyR4QC0oHxEd9Tyr2ZvnjqqdLRNmVrm03uuc6twf65
+\restrict ehjdyl0xLrKDZK37BAyy3aw2DDx293UJZxnOSyyNIWXyhGqGpeBB5V9drfpNFPi
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -4500,6 +4500,30 @@ end $$;
 ALTER FUNCTION public._status_change_error(p_old jsonb, p_new jsonb) OWNER TO postgres;
 
 --
+-- Name: _status_sticker_label(text); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public._status_sticker_label(p_key text) RETURNS text
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $$
+  with b(k, he, en) as (values ('glatt', 'גלאט', 'Glatt'), ('beit', 'בית יוסף', 'Beit Yosef'), ('kosher', 'כשר', 'Kosher'),
+                               ('mk', 'MK', 'MK'), ('rabChalak', 'רבנות חלק', 'Rabbinate Chalak')),
+       c as (select x from jsonb_array_elements(case when jsonb_typeof(_gt_settings() -> 'customStatuses') = 'array'
+                                                     then _gt_settings() -> 'customStatuses' else '[]'::jsonb end) x
+              where x ->> 'key' = p_key limit 1),
+       n as (select _gt_settings() -> 'statusNames' -> p_key o),
+       v as (select coalesce(nullif(trim((select o ->> 'stickerHe' from n)), ''), nullif(trim((select o ->> 'he' from n)), ''),
+                             nullif(trim((select x ->> 'stickerHe' from c)), ''), (select x ->> 'he' from c),
+                             (select he from b where k = p_key), p_key) he,
+                    coalesce((select o ->> 'en' from n), (select x ->> 'en' from c), (select en from b where k = p_key), '') en)
+  select left(regexp_replace(he || case when trim(en) <> '' and trim(en) <> he then ' · ' || trim(en) else '' end, '[|\r\n]', '/', 'g'), 48) from v;
+$$;
+
+
+ALTER FUNCTION public._status_sticker_label(p_key text) OWNER TO postgres;
+
+--
 -- Name: _statuses_in_use(); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -4804,7 +4828,8 @@ CREATE FUNCTION public._ticket_payload(a public.animals_pilot, p_pid text, p_i i
          || '|TM:' || _qr_time(a.slaughter_time) || '|SH:' || _qr_name(a.slaughtered_by)
          || '|IN:' || _qr_name(a.inner_by) || '|IT:' || _qr_time(a.inner_time)
          || '|OUT:' || _qr_name(a.outer_by) || '|OT:' || _qr_time(a.outer_time)
-         || coalesce('|P:' || p_pid || '|I:' || coalesce(p_i, 1), '') || '|B:' || p_epoch || '|S:' || p_mark || '|T:' || p_t;
+         || coalesce('|P:' || p_pid || '|I:' || coalesce(p_i, 1), '') || '|B:' || p_epoch
+         || '|K:' || _status_sticker_label(p_mark) || '|S:' || p_mark || '|T:' || p_t;   -- K: the kashrut in words; S: its key
 $$;
 
 
@@ -13413,6 +13438,13 @@ REVOKE ALL ON FUNCTION public._status_change_error(p_old jsonb, p_new jsonb) FRO
 
 
 --
+-- Name: FUNCTION _status_sticker_label(p_key text); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public._status_sticker_label(p_key text) FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION _statuses_in_use(); Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -14559,5 +14591,5 @@ GRANT ALL ON TABLE public.system_flags TO service_role;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict naL4m3mXztvbtIg7REsx8GyR4QC0oHxEd9Tyr2ZvnjqqdLRNmVrm03uuc6twf65
+\unrestrict ehjdyl0xLrKDZK37BAyy3aw2DDx293UJZxnOSyyNIWXyhGqGpeBB5V9drfpNFPi
 

@@ -3498,7 +3498,7 @@ begin
       and m1 ->> 'error' = 'stale' and m2 ->> 'error' = 'bad_value' and m3 ->> 'error' = 'unauthorized' and pg_temp.ok(m4)
       and pg_temp.ok(t1) and t1 ->> 'mark' = v_mark and (t1 #>> '{tickets,0,payload}') like '%|T:' || (t1 #>> '{tickets,0,t}')
       and k1 ->> 'reason' = 'mark_missing' and pg_temp.ok(k2) and k3 ->> 'reason' = 'bad_ticket'
-      and zz like '%^BQN,2,%^FDMA,BH|N:911|D:%|P:cheeks|I:1|B:%|S:' || v_mark || '|T:' || (t1 #>> '{tickets,0,t}') || '^FS%'
+      and zz like '%^BQN,2,%^FDMA,BH|N:911|D:%|P:cheeks|I:1|B:%|K:%|S:' || v_mark || '|T:' || (t1 #>> '{tickets,0,t}') || '^FS%'
       and zz like '%^GFA,%,' || repeat('0F', v_bpr * v_band) || '^FS%' and zz like '%' || repeat('F0', v_bpr * 10) || '%'
       and (select job_id from print_tickets where t = t1 #>> '{tickets,0,t}') = (k2 ->> 'id')::bigint
       and t2 ->> 'reason' = 'held' and t3 ->> 'reason' = 'wrong_station' and k4 ->> 'reason' = 'bad_value' and k5 ->> 'reason' = 'bad_ticket'
@@ -3517,9 +3517,9 @@ begin
     update animals_pilot set slaughtered_by = 'משה|כהן', inner_by = 'יוסף לוי', outer_by = 'דוד', slaughter_time = 1792400000000,
                              inner_time = 1792400600000, outer_time = 1792401200000 where id = 910;
     perform set_config('gt.reset_in_progress', 'false', true);
-    perform pg_temp.rec('owner: the kosher sticker''s barcode has the shochet and slaughter time, the inner and the outer inspector with their times',
+    perform pg_temp.rec('owner: the kosher sticker''s barcode has the shochet and slaughter time, the inner and the outer inspector with their times, and the kashrut in words',
       _ticket_payload(pg_temp.ar(910), 'cheeks', 1, 1, 'ABCDEFGHJK', 'glatt')
-        ~ '^BH\|N:911\|D:[0-9-]{10}\|TM:[0-9]{2}:[0-9]{2}\|SH:משה/כהן\|IN:יוסף לוי\|IT:[0-9]{2}:[0-9]{2}\|OUT:דוד\|OT:[0-9]{2}:[0-9]{2}\|P:cheeks\|I:1\|B:1\|S:glatt\|T:ABCDEFGHJK$',
+        ~ '^BH\|N:911\|D:[0-9-]{10}\|TM:[0-9]{2}:[0-9]{2}\|SH:משה/כהן\|IN:יוסף לוי\|IT:[0-9]{2}:[0-9]{2}\|OUT:דוד\|OT:[0-9]{2}:[0-9]{2}\|P:cheeks\|I:1\|B:1\|K:גלאט · Glatt\|S:glatt\|T:ABCDEFGHJK$',
       _ticket_payload(pg_temp.ar(910), 'cheeks', 1, 1, 'ABCDEFGHJK', 'glatt'));
     perform pg_temp.rec('§47 nikur / cooler: a piece with tickets goes in only with one of its own (no ticket / a made-up one refused); a piece printed without tickets as before',
       _ticket_refusal(_board_epoch(), 910, 'cheeks', 1, null) = 'no_ticket'

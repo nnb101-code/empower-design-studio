@@ -8719,7 +8719,7 @@ revoke execute on function _ticket_new() from public, anon, authenticated;
 
 -- what goes into the barcode of a ticketed sticker (the nikur / cooler read N, P, I, B and T)
 -- (owner, 19.10) the whole way of the animal: the slaughter (day, time, shochet), the inner check (who, when), the
--- outer check (who, when), then the part, the piece, the kashrut and the print number
+-- outer check (who, when), then the part, the piece, the kashrut (in words, and its key) and the print number
 create or replace function _qr_name(p text) returns text
 language sql immutable set search_path = public, extensions, pg_temp as $$
   select left(regexp_replace(coalesce(p, ''), '[|\r\n]', '/', 'g'), 24);
@@ -8730,6 +8730,22 @@ language sql stable security definer set search_path = public, extensions, pg_te
   select coalesce(to_char(to_timestamp(p_ms / 1000.0) at time zone _plant_tz(), 'HH24:MI'), '');
 $$;
 revoke execute on function _qr_time(bigint) from public, anon, authenticated;
+-- the kashrut in words, as on the sticker: the plant's sticker name (or its name), Hebrew · English
+create or replace function _status_sticker_label(p_key text) returns text
+language sql stable security definer set search_path = public, extensions, pg_temp as $$
+  with b(k, he, en) as (values ('glatt', 'גלאט', 'Glatt'), ('beit', 'בית יוסף', 'Beit Yosef'), ('kosher', 'כשר', 'Kosher'),
+                               ('mk', 'MK', 'MK'), ('rabChalak', 'רבנות חלק', 'Rabbinate Chalak')),
+       c as (select x from jsonb_array_elements(case when jsonb_typeof(_gt_settings() -> 'customStatuses') = 'array'
+                                                     then _gt_settings() -> 'customStatuses' else '[]'::jsonb end) x
+              where x ->> 'key' = p_key limit 1),
+       n as (select _gt_settings() -> 'statusNames' -> p_key o),
+       v as (select coalesce(nullif(trim((select o ->> 'stickerHe' from n)), ''), nullif(trim((select o ->> 'he' from n)), ''),
+                             nullif(trim((select x ->> 'stickerHe' from c)), ''), (select x ->> 'he' from c),
+                             (select he from b where k = p_key), p_key) he,
+                    coalesce((select o ->> 'en' from n), (select x ->> 'en' from c), (select en from b where k = p_key), '') en)
+  select left(regexp_replace(he || case when trim(en) <> '' and trim(en) <> he then ' · ' || trim(en) else '' end, '[|\r\n]', '/', 'g'), 48) from v;
+$$;
+revoke execute on function _status_sticker_label(text) from public, anon, authenticated;
 create or replace function _ticket_payload(a animals_pilot, p_pid text, p_i integer, p_epoch bigint, p_t text, p_mark text) returns text
 language sql stable security definer set search_path = public, extensions, pg_temp as $$
   select 'BH|N:' || (a.id + 1)
@@ -8737,7 +8753,8 @@ language sql stable security definer set search_path = public, extensions, pg_te
          || '|TM:' || _qr_time(a.slaughter_time) || '|SH:' || _qr_name(a.slaughtered_by)
          || '|IN:' || _qr_name(a.inner_by) || '|IT:' || _qr_time(a.inner_time)
          || '|OUT:' || _qr_name(a.outer_by) || '|OT:' || _qr_time(a.outer_time)
-         || coalesce('|P:' || p_pid || '|I:' || coalesce(p_i, 1), '') || '|B:' || p_epoch || '|S:' || p_mark || '|T:' || p_t;
+         || coalesce('|P:' || p_pid || '|I:' || coalesce(p_i, 1), '') || '|B:' || p_epoch
+         || '|K:' || _status_sticker_label(p_mark) || '|S:' || p_mark || '|T:' || p_t;   -- K: the kashrut in words; S: its key
 $$;
 revoke execute on function _ticket_payload(animals_pilot, text, integer, bigint, text, text) from public, anon, authenticated;
 

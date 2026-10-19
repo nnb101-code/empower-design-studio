@@ -178,7 +178,7 @@ psql:security-selftest.sql:3910: NOTICE:  PASS  audit A1: legs / head on two scr
 psql:security-selftest.sql:3910: NOTICE:  PASS  audit: the print log keeps every request — kind, animal, day, device, copies, the refusal reason; the printer's result follows the job; closed to the API
 psql:security-selftest.sql:3910: NOTICE:  PASS  §47 kosher sticker: the server gives a one-time number and the kashrut from the ruling; it puts the team leader's mark and the barcode itself; a ticket prints once; held / other screen / too tall / another tablet's ticket / ruling changed refused
 psql:security-selftest.sql:3910: NOTICE:  PASS  §47 a kashrut mark changed (a new picture) is made again for the printer; the old picture is not used
-psql:security-selftest.sql:3910: NOTICE:  PASS  owner: the kosher sticker's barcode has the shochet and slaughter time, the inner and the outer inspector with their times
+psql:security-selftest.sql:3910: NOTICE:  PASS  owner: the kosher sticker's barcode has the shochet and slaughter time, the inner and the outer inspector with their times, and the kashrut in words
 psql:security-selftest.sql:3910: NOTICE:  PASS  §47 nikur / cooler: a piece with tickets goes in only with one of its own (no ticket / a made-up one refused); a piece printed without tickets as before
 psql:security-selftest.sql:3910: NOTICE:  PASS  full review S1/S2: a bad supportAccessUntil / sealsVersion value breaks no session check and no seals read
 psql:security-selftest.sql:3910: NOTICE:  PASS  full review S5: the printer / scanner lists must be a list of devices
