@@ -8171,6 +8171,39 @@ end $$;
 revoke execute on function cooler_board() from public;
 grant execute on function cooler_board() to anon, authenticated;
 
+-- (owner, 19.10) what passed the nikur: for each day (the last p_days days), which numbers had ALL their pieces
+-- scanned into the nikur — the whole animal, and per side (large / small parts). Kept in piece_scans; nothing is lost.
+create or replace function nikur_passed(p_days integer default 14) returns jsonb
+language plpgsql stable security definer set search_path = public, extensions, pg_temp as $$
+declare v_dev text; v_screen text; v_tok text := _request_headers() ->> 'x-manager-token'; v_days int := least(greatest(coalesce(p_days, 14), 1), 45);
+begin
+  if v_tok is not null and _manager_session_valid(v_tok) and coalesce(_session_role(v_tok), '') <> 'manufacturer' then
+    v_screen := null;
+  else
+    v_dev := _current_device_id();
+    v_screen := _nikur_device_screen(v_dev);
+    if v_screen is null then return jsonb_build_object('ok', false, 'error', 'wrong_station'); end if;
+    if v_screen = 'all' then v_screen := null; end if;
+  end if;
+  return jsonb_build_object('ok', true, 'screen', v_screen, 'days', coalesce((
+    with p as (select board_epoch ep, animal_id, screen, sum(cnt)::int exp from animal_pieces
+                where at > now() - make_interval(days => v_days) and (v_screen is null or screen = v_screen) group by 1, 2, 3),
+         s as (select board_epoch ep, animal_id, screen, count(*)::int got from piece_scans
+                where at > now() - make_interval(days => v_days + 3) group by 1, 2, 3),
+         j as (select p.ep, p.animal_id, p.screen, p.exp, coalesce(s.got, 0) got from p left join s using (ep, animal_id, screen)),
+         a as (select ep, animal_id, bool_and(got >= exp) done,
+                      bool_and(got >= exp) filter (where screen = 'big') big, bool_and(got >= exp) filter (where screen = 'small') small
+                 from j group by 1, 2)
+    select jsonb_agg(x order by (x ->> 'epoch')::bigint desc) from (
+      select jsonb_build_object('epoch', ep, 'day', _nikur_day_date(ep), 'animals', count(*),
+               'passed', coalesce(jsonb_agg(animal_id + 1 order by animal_id) filter (where done), '[]'::jsonb),
+               'big', coalesce(jsonb_agg(animal_id + 1 order by animal_id) filter (where big), '[]'::jsonb),
+               'small', coalesce(jsonb_agg(animal_id + 1 order by animal_id) filter (where small), '[]'::jsonb)) x
+        from a group by ep) q), '[]'::jsonb));
+end $$;
+revoke execute on function nikur_passed(integer) from public;
+grant execute on function nikur_passed(integer) to anon, authenticated;
+
 -- ── self-check ──────────────────────────────────────────────────────────────
 do $$
 declare problems text[] := '{}';

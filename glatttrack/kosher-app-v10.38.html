@@ -5472,6 +5472,7 @@ function nikurRender(el){
       <div id="nkLegend" style="display:flex;gap:10px;flex-wrap:wrap;font-size:11px;color:var(--muted);margin-bottom:10px;"></div>
       <details class="gt-acc-in" id="nkListBox" style="margin-bottom:8px;"><summary id="nkListSum"></summary>
         <div id="nkList" style="padding:0 4px;"></div></details>
+      <details class="gt-acc-in" id="nkPassBox" style="margin-bottom:8px;"><summary id="nkPassSum"></summary><div id="nkPass" style="margin-top:8px;"></div></details>
       <details class="gt-acc-in" id="nkOldDays" style="margin-bottom:8px;"><summary id="nkOldSum"></summary><div id="nkDays" style="margin-top:8px;"></div></details>
       <details class="gt-acc-in"><summary id="nkHowSum"></summary><div id="nkSub" style="font-size:12px;color:var(--muted);line-height:1.6;margin-top:6px;"></div></details>`;
     setTimeout(nkFocus,200);
@@ -5492,9 +5493,20 @@ function nikurRender(el){
   const side=sd=>{ const v=today&&today.side&&today.side[sd]; return v?[Number(v[0])||0,Number(v[1])||0]:[0,0]; };
   const coming=(B.coming||[]).filter(c=>(c.s||[]).includes(_nkTab));
   const ready=new Set(((today&&today.rows)||[]).filter(r=>!r.ok).map(r=>r.n)).size;
-  const tile=(v,l,c)=>`<div style="flex:1;min-width:96px;background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:8px;text-align:center;"><div style="font-size:26px;font-weight:800;color:${c};">${v}</div><div style="font-size:11px;color:var(--muted);">${E(l)}</div></div>`;
+  const tile=(v,l,c)=>`<div style="flex:1;min-width:70px;background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:8px 4px;text-align:center;"><div style="font-size:24px;font-weight:800;color:${c};">${v}</div><div style="font-size:11px;color:var(--muted);">${E(l)}</div></div>`;
   { const t=document.getElementById('nkTiles'); if(t) t.innerHTML=tile(B.kosherToday||0,L('בהמות כשרות היום','Kosher animals today','Animales kosher hoy'),'var(--green)')
-      +tile(ready,L('מוכנות לניקור','Ready for nikur','Listos para nikur'),'var(--amber)')+tile(holds.filter(h=>h.resolution!=='condemned').length,L('מעוכבים','Held','Retenidos'),'#B39DFF'); }
+      +tile(ready,L('מוכנות לניקור','Ready for nikur','Listos para nikur'),'var(--amber)')
+      +tile(_nkPassedToday().length,L('עברו ניקור היום','Passed the nikur today','Pasaron el nikur hoy'),'var(--green)')
+      +tile(holds.filter(h=>h.resolution!=='condemned').length,L('מעוכבים','Held','Retenidos'),'#B39DFF'); }
+  // (owner) what passed the nikur — kept by day: how many and which numbers (all their pieces in)
+  { const P=(_nkPassed.days||[]); set('nkPassSum','✅ '+L('עברו ניקור','Passed the nikur','Pasaron el nikur')+' ('+_nkPassedToday().length+' '+L('היום','today','hoy')+')');
+    const box=document.getElementById('nkPass'); if(box){
+      const nums=a=>a.length?a.map(n=>`<span style="display:inline-block;min-width:30px;padding:3px 6px;margin:2px;border-radius:7px;background:rgba(40,199,111,.15);border:1px solid var(--green);color:var(--text);font-weight:800;text-align:center;">${n}</span>`).join(''):`<span class="gt-muted">—</span>`;
+      box.innerHTML=P.length ? P.map(d=>{ const all=d.passed||[];
+          return `<div style="padding:8px 0;border-bottom:1px solid var(--border);"><div style="display:flex;justify-content:space-between;gap:8px;margin-bottom:4px;"><b>${E(_nkDayLong(d.day))}</b>`
+            +`<span style="color:var(--green);font-weight:800;">${all.length} / ${d.animals} ${E(L('בהמות','animals','animales'))}</span></div>${nums(all)}`
+            +(mode==='all'?`<div style="font-size:11px;color:var(--muted);margin-top:4px;">${E(_nkSideName('big'))}: ${(d.big||[]).length} · ${E(_nkSideName('small'))}: ${(d.small||[]).length}</div>`:'')+`</div>`; }).join('')
+        : `<div class="gt-muted">${E(L('עוד אין בהמות שעברו ניקור.','No animals passed the nikur yet.','Aún ningún animal pasó el nikur.'))}</div>`; } }
   { const t=document.getElementById('nkTabs'); if(t){
       const tab=sd=>{ const [x,i]=side(sd), on=_nkTab===sd;
         return `<button onclick="nkTab('${sd}')" style="flex:1;padding:10px;border-radius:12px;font-weight:800;font-size:15px;cursor:${mode==='all'?'pointer':'default'};border:2px solid ${on?'var(--gold)':'var(--border)'};background:${on?'rgba(212,168,67,.12)':'var(--panel)'};color:${on?'var(--gold)':'var(--muted)'};">${E(_nkSideName(sd))} · ${i}/${x}</button>`; };
@@ -5629,8 +5641,13 @@ async function nkHoldResolve(id, res){
 // (older calls)
 function nkQuestion(){ nkHoldStart('question'); }
 function nkKey(e){ if(e.key==='Enter'||e.keyCode===13){ const v=e.target.value.trim(); e.target.value=''; if(v) nkScan(v); } }
+// (owner) what passed the nikur — every 30 s and after each scan
+let _nkPassed={days:[]}, _nkPassedAt=0;
+function _nkPassedToday(){ const ep=(_nkBoard||{}).boardEpoch; const d=(_nkPassed.days||[]).find(x=>String(x.epoch)===String(ep)); return d?(mode=>(_nkMode()==='all'?(d.passed||[]):(d[_nkMode()]||[])))():[]; }
 async function nkLoad(){
   if(!window.sb) return;
+  if(Date.now()-_nkPassedAt>30000 || nkLoad._afterScan){ nkLoad._afterScan=false; _nkPassedAt=Date.now();
+    try{ const r=await window.sb.rpc('nikur_passed',{p_days:14}); if(r&&r.data&&r.data.ok) _nkPassed=r.data; }catch(e){} }
   try{ const r=await window.sb.rpc('nikur_board'); if(r&&r.data&&r.data.ok){ _nkBoard=Object.assign({},r.data,{at:Date.now()}); } }catch(e){}
   const s=document.querySelector('.screen.active'); if(s&&s.id==='scSup'&&supRole==='nikur') supRender();
 }
@@ -5669,7 +5686,7 @@ async function nkScan(code, pid, piece){
   else if(d&&d.error==='wrong_screen'){ _nkShow('no',L('לא בניקור הזה','Not this nikur','No en este nikur'),what+' — '+(d.nikur==='small'?L('לניקור חלקים קטנים','to the small-parts nikur','al nikur de partes pequeñas'):L('לניקור הרגיל','to the regular nikur','al nikur normal'))); }
   else if(d&&d.error==='worker_login_required'){ _gtHoldNeedsLogin(); }
   else { _nkShow('no',L('לא נרשם','Not recorded','No registrado'),gtErrText((d&&d.error)||(r&&r.error)||'network')); }
-  nkLoad(); setTimeout(nkFocus,100);
+  nkLoad._afterScan=true; nkLoad(); setTimeout(nkFocus,100);
 }
 setInterval(()=>{ const s=document.querySelector('.screen.active'); if(s&&s.id==='scSup'&&supRole==='nikur') nkLoad(); },8000);
 // ── v10.38 (owner): THE COOLER — receives the kosher animals; every large part is scanned at the cooler door, and the
