@@ -3219,17 +3219,17 @@ begin
         and exists (select 1 from jsonb_array_elements(d -> 'days') x where (x ->> 'epoch')::bigint = e0 and (x ->> 'in')::int = 2 and (x ->> 'expected')::int = 12);
   perform pg_temp.rec('v10.38 nikur after the cooler: a piece is scanned with ITS day (yesterday''s 880 is not today''s 880); the nikur''s "?" stays over the daily reset; the board lists the day still waiting', ok,
     concat_ws(' | ', left(r::text, 60), left(r2::text, 80), left(r3::text, 80), left(r4::text, 80), left(r6::text, 60), left((d -> 'days')::text, 160)));
-  -- (§46, owner) the settings of each day: on day B the parts list is changed (the cheeks go to the large-parts
-  -- nikur, under a new name) — day A's cheeks still go in as on day A (the small-parts nikur), the board names
-  -- them as on day A; day A's kashrut status stays "in use" while day A is still in the nikur
+  -- (§46, owner) the settings of each day: on day B the team leader renames the cheeks — day A's cheeks still go in
+  -- (small parts always go to the small-parts nikur), the board names them as on day A; day A's kashrut status
+  -- stays "in use" while day A is still in the nikur
   perform set_config('gt.reset_in_progress', 'true', true);
-  update settings_pilot set settings = jsonb_set(jsonb_set(settings, '{products,1,nikur}', '"big"'), '{products,1,he}', '"לחיים חדש"') where id = 1;
+  update settings_pilot set settings = jsonb_set(settings, '{products,1,he}', '"לחיים חדש"') where id = 1;
   update animals_pilot set outer_status = null, outer_time = null where outer_status = 'glatt';   -- nothing glatt on day B
   perform set_config('gt.reset_in_progress', 'false', true);
   r  := pg_temp.api(pg_temp.dev('NIKS'), format('select nikur_scan(880, ''cheeks'', 1, %s)', e0));   -- day A: the small-parts nikur
   r2 := pg_temp.api(pg_temp.dev('NIK'),  format('select nikur_scan(880, ''cheeks'', 2, %s)', e0));   -- day A on the large-parts nikur: no
   d  := pg_temp.api(pg_temp.dev('NIKS'), 'select nikur_board()');
-  perform pg_temp.rec('§46 each day''s settings: an earlier day is processed with ITS parts list (side, name) after the list changed today; its status stays in use; a copy at each day start and change',
+  perform pg_temp.rec('§46 each day''s settings: an earlier day is processed with ITS parts list (its names) after the list changed today; its status stays in use; a copy at each day start and change',
     pg_temp.ok(r) and r2 ->> 'error' = 'wrong_screen'
     and exists (select 1 from jsonb_array_elements(d -> 'days') x, jsonb_array_elements(x -> 'parts') p
                  where (x ->> 'epoch')::bigint = e0 and p ->> 'id' = 'cheeks' and p ->> 'he' = 'לחיים')
@@ -3465,6 +3465,7 @@ begin
     txt  := encode(convert_to('^FO0,0^GFA,' || v_bpr * 10 || ',' || v_bpr * 10 || ',' || v_bpr || ',' || repeat('F0', v_bpr * 10) || '^FS', 'LATIN1'), 'base64');
     tall := encode(convert_to('^FO0,0^GFA,' || v_bpr * ((g ->> 'top')::int + 5) || ',' || v_bpr * ((g ->> 'top')::int + 5) || ',' || v_bpr || ','
                               || repeat('00', v_bpr * ((g ->> 'top')::int + 5)) || '^FS', 'LATIN1'), 'base64');
+    delete from print_marks;                                    -- (a clean start; all of it is undone at the end)
     -- the team leader's tablet: what to make; a picture for an older mark / a wrong size / not the team leader: no
     nd := pg_temp.api('{}', format('select print_marks_needed(%L)', pg_temp.v('mgr')));
     m1 := pg_temp.api('{}', format('select print_mark_set(%L, %L, ''old'', %s, %s, %L)', pg_temp.v('mgr'), v_mark, v_bpr, v_band, repeat('0F', v_bpr * v_band)));
