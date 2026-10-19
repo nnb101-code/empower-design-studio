@@ -1,4 +1,4 @@
-# GlattTrack — חשמל, רשת ושרת חלופי במפעל (v10.16)
+# GlattTrack — חשמל, רשת ושרת חלופי במפעל (v10.38)
 
 מטרה: **הפסקת חשמל, שרת שנשרף או מתג שנפל לא מאבדים פסיקה, ואף פעם אין שני שרתים ראשיים.**
 
@@ -91,6 +91,7 @@ sudo systemctl enable --now keepalived
 sudo cp /opt/glatttrack/plant-server/systemd/* /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now gt-sync-watchdog.service gt-backup.timer gt-nightly.timer
+sudo systemctl enable --now gt-report.timer     # דיווח למרכז השירות כל 5 דקות (צריך GT_CENTER_URL ושאר הפרטים ב-gt-plant.conf)
 ```
 
 **הדפסת מדבקות (v10.38):** שירות שמעביר את המדבקות מהטאבלטים למדפסות הרשת, ומחפש מדפסות כשראש הצוות מבקש:
@@ -227,7 +228,7 @@ sudo /opt/glatttrack/plant-server/nightly-check.sh     # הרצה ראשונה �
 | 1 | מצב רגיל | רק A יכול להחזיק את הכתובת |
 | 2 | **A↔B מנותקים, שניהם רואים את המפעל** | B **לא** משתלט, ולא מחזיק את הכתובת |
 | 3 | `strict`: B כבוי | הכתיבה מחכה ולא מאושרת. כש-B חוזר, היא נמצאת בשני השרתים |
-| 4 | `available`: B כבוי | A מאשר לבד אחרי כ-3 שניות. במסך הבריאות: standby_down |
+| 4 | `available`: B כבוי | A מאשר לבד אחרי כ-6 שניות. במסך הבריאות: standby_down |
 | 5 | A נפל, אף אחד לא אישר | B נשאר גיבוי, אף שרת לא מחזיק את הכתובת |
 | 6 | אדם אישר ש-A כבוי (`takeover.sh`) | B ראשי ומחזיק את הכתובת |
 | 7 | A עלה לבד כראשי ישן | עצר את עצמו, ולא מחזיק את הכתובת |

@@ -131,8 +131,10 @@ begin
   update sc_alerts set resolved_at = now() where code = p_code and resolved_at is null and text = 'no_report';
   -- what the plant should do: the current release, and commands from the support center
   select coalesce(jsonb_agg(jsonb_build_object('id', id, 'cmd', cmd) order by id), '[]'::jsonb) into v_cmds
-    from sc_commands where code = p_code and delivered_at is null;
-  update sc_commands set delivered_at = now() where code = p_code and delivered_at is null;
+    from sc_commands where code = p_code and done_at is null
+                       and (delivered_at is null or delivered_at < now() - interval '15 minutes');   -- (round-2 review C-cmd1) an answer lost on the way: sent again
+  update sc_commands set delivered_at = now() where code = p_code and done_at is null
+                       and (delivered_at is null or delivered_at < now() - interval '15 minutes');
   select * into r from sc_release where id = 1;
   return jsonb_build_object('ok', true, 'level', lv.level, 'commands', v_cmds,
     'release', case when r.version is not null then jsonb_build_object('version', r.version, 'appUrl', r.app_url, 'appSha256', r.app_sha256,
@@ -443,8 +445,10 @@ begin
   update sc_alerts set resolved_at = now() where code = p_code and resolved_at is null and text = 'no_report';
   v_tickets := _sc_take_report_extras(p_code, p_report);
   select coalesce(jsonb_agg(jsonb_build_object('id', id, 'cmd', cmd) order by id), '[]'::jsonb) into v_cmds
-    from sc_commands where code = p_code and delivered_at is null;
-  update sc_commands set delivered_at = now() where code = p_code and delivered_at is null;
+    from sc_commands where code = p_code and done_at is null
+                       and (delivered_at is null or delivered_at < now() - interval '15 minutes');   -- (round-2 review C-cmd1) an answer lost on the way: sent again
+  update sc_commands set delivered_at = now() where code = p_code and done_at is null
+                       and (delivered_at is null or delivered_at < now() - interval '15 minutes');
   select * into r from sc_release where id = 1;
   return jsonb_build_object('ok', true, 'level', lv.level, 'commands', v_cmds, 'tickets', v_tickets,
     -- (full review C4) a plant held out of the automatic release gets it only by "update this plant now" (the release is sent with that command)
@@ -688,6 +692,7 @@ declare w text := _sc_staff(p_token); s sc_staff;
 begin
   if not _sc_can(p_token, 'staff') then return jsonb_build_object('ok', false, 'error', 'unauthorized'); end if;
   if p_role is not null and p_role not in ('admin', 'support', 'finance', 'viewer') then return jsonb_build_object('ok', false, 'error', 'bad_value'); end if;
+  perform pg_advisory_xact_lock(hashtext('sc_staff_admins'));   -- (round-2 review C-adm1) two admins at the same moment: one after the other
   select * into s from sc_staff where id = p_id for update;
   if s.id is null then return jsonb_build_object('ok', false, 'error', 'bad_id'); end if;
   -- the last active admin stays an active admin (nobody locks the center out)

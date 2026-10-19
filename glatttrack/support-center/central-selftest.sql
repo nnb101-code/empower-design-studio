@@ -1,5 +1,5 @@
 -- GlattTrack support center — self-test. Changes nothing (every change is undone inside it).
--- Expected result (one row): PASSED — 27 of 27 support-center checks (nothing was changed)
+-- Expected result (one row): PASSED — 28 of 28 support-center checks (nothing was changed)
 -- ONE statement (one DO block), no temporary table: the Supabase SQL Editor runs it like psql does
 -- (the same way as the plant's 03). Works on an empty center and on one that already has plants and staff.
 do $$
@@ -67,6 +67,15 @@ begin
   r := sc_command_done('9001', 'bad', cid, 'x'); r2 := sc_command_done('9001', sec, cid, 'restarted');
   perform pg_temp.rec('command done only with the plant secret', r ->> 'error' = 'unauthorized'
     and (select result from sc_commands where id = cid) = 'restarted');
+  -- (round-2 review C-cmd1) a command whose answer was lost is sent again after 15 minutes; a done one never
+  r2 := sc_command_add(tok, '9001', 'reload_tablets'); v := (r2 ->> 'id')::bigint;
+  perform sc_report('9001', sec, '{"attention":[]}');
+  update sc_commands set delivered_at = now() - interval '20 minutes' where id in (v, cid);
+  r := sc_report('9001', sec, '{"attention":[]}');
+  perform pg_temp.rec('round-2 review: a command not answered is sent again after 15 minutes; a done one is not',
+    exists (select 1 from jsonb_array_elements(r -> 'commands') c where (c ->> 'id')::bigint = v)
+    and not exists (select 1 from jsonb_array_elements(r -> 'commands') c where (c ->> 'id')::bigint = cid), r::text);
+  perform sc_command_done('9001', sec, v, 'ok');
   -- notifications: e-mail / SMS / WhatsApp, each on or off
   r := sc_notify_set(tok, '{"email":{"on":true,"to":["not-an-email"]}}');
   r2 := sc_notify_set(tok, '{"email":{"on":true,"to":["support@example.com"]},"sms":{"on":false,"to":["+972501234567"]},"whatsapp":{"on":true,"to":["+972501234567"]},"minLevel":"warn"}');

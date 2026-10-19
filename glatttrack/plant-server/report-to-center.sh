@@ -36,7 +36,10 @@ select 'supportTickets', coalesce(nullif(:'r', '')::jsonb -> 'tickets', '[]'::js
 on conflict (key) do update set value = excluded.value, updated_at = now();
 SQL
 
-done_cmd(){ printf '%s' "{\"p_code\":\"$GT_PLANT_CODE\",\"p_secret\":\"$GT_PLANT_SECRET\",\"p_id\":$1,\"p_result\":\"$2\"}" | RPC sc_command_done >/dev/null; }
+# (round-2 review P-js1) the answer is built by the database (every value escaped)
+done_cmd(){ J -v code="$GT_PLANT_CODE" -v sec="$GT_PLANT_SECRET" -v id="$1" -v res="$2" <<'SQL' | RPC sc_command_done >/dev/null; }
+select jsonb_build_object('p_code', :'code', 'p_secret', :'sec', 'p_id', nullif(:'id', '')::bigint, 'p_result', :'res');
+SQL
 working(){ [ "$(J -c "select exists (select 1 from animals_pilot where updated_at > now() - interval '10 minutes')")" = "t" ]; }
 
 # the release: install when it is new (the app at once — tablets ask / wait themselves; a server part only when nobody works)

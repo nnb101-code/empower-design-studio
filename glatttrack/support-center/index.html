@@ -137,7 +137,7 @@ async function showPlant(code){
       <button class="ghost" onclick="cmd('update_now')">⬆ עדכן מפעל זה</button><button class="ghost" onclick="hold(${d.holdUpdates ? 'false' : 'true'})">${d.holdUpdates ? '▶ החזר לעדכון האוטומטי' : '⏸ עצור עדכון אוטומטי למפעל זה'}</button><button class="ghost" onclick="cmd('run_nightly_check')">🩺 הרץ בדיקת לילה</button></div>
       <div class="n w" style="margin-top:6px">הפקודה מתבצעת בדיווח הבא של המפעל (עד 5 דקות). רענון / עדכון של טאבלט לא מפריע לעבודה — טאבלט בשימוש שואל את העובד.</div></div></div>`;
   h += `<div class="cols"><div class="card"><div class="t" style="color:var(--gold);margin-bottom:6px">התראות</div>${(d.alerts||[]).map(a => row(new Date(a.created_at).toLocaleString('he-IL') + ' · ' + tx(a.text), a.resolved_at ? '✓ נסגר' : 'פתוח', a.resolved_at ? 'g' : (a.level === 'bad' ? 'r' : 'a'))).join('') || '<div class="n">אין</div>'}</div>
-     <div class="card"><div class="t" style="color:var(--gold);margin-bottom:6px">פקודות</div>${(d.commands||[]).map(c => row(new Date(c.created_at).toLocaleString('he-IL') + ' · ' + c.cmd, c.done_at ? (c.result || '✓') : (c.delivered_at ? (Date.now() - new Date(c.delivered_at).getTime() > 30*60000 ? 'נשלח — המפעל לא ענה' : 'נשלח למפעל') : 'ממתין'))).join('') || '<div class="n">אין</div>'}</div></div>`;
+     <div class="card"><div class="t" style="color:var(--gold);margin-bottom:6px">פקודות</div>${(d.commands||[]).map(c => row(new Date(c.created_at).toLocaleString('he-IL') + ' · ' + c.cmd, c.done_at ? (c.result || '✓') : (c.delivered_at ? (Date.now() - new Date(c.created_at).getTime() > 30*60000 ? 'נשלח — המפעל לא ענה (נשלח שוב כל 15 דקות)' : 'נשלח למפעל') : 'ממתין'))).join('') || '<div class="n">אין</div>'}</div></div>`;
   const b = d.bill;
   h += `<div class="cols"><div class="card"><div class="t" style="color:var(--gold);margin-bottom:6px">🛠 תקלות של המפעל (${myT.filter(t => t.status !== 'closed').length} פתוחות)</div>${ticketRows(myT, false)}</div>
      ${b ? `<div class="card"><div class="t" style="color:var(--gold);margin-bottom:6px">💰 החודש (${E(b.month)})</div>
@@ -210,7 +210,8 @@ async function bset(i){
 }
 async function paid(i, on){ const d = await rpc('sc_paid_set', { p_token: TOK, p_code: BROWS[i].code, p_month: BM, p_paid: on }); if(!d.ok) alert('נכשל: ' + er(d.error)); showBilling(); }
 function csv(){
-  const q = x => '"' + String(x == null ? '' : x).replace(/"/g, '""') + '"';
+  // (round-2 review C-csv1) a cell that starts with = + - @ is not a formula in Excel
+  const q = x => { let v = String(x == null ? '' : x); if(/^[=+\-@]/.test(v) && isNaN(Number(v))) v = "'" + v; return '"' + v.replace(/"/g, '""') + '"'; };
   const lines = [['מפעל','שם','חודש','בהמות','ק"ג','שיטה','תעריף','מינימום','מטבע','לתשלום','שולם'].map(q).join(',')]
     .concat(BROWS.map(r => [r.code, r.name, BM, r.animals, r.kg, MODE[r.mode], r.rate, r.monthlyMin, r.currency, r.amount, r.paid ? 'כן' : 'לא'].map(q).join(',')));
   const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['\ufeff' + lines.join('\r\n')], { type:'text/csv;charset=utf-8' }));
