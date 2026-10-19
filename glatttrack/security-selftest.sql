@@ -3456,6 +3456,64 @@ begin
       and not has_table_privilege('anon', 'print_log', 'select') and not has_table_privilege('authenticated', 'print_log', 'select'),
       (select string_agg(kind || ':' || coalesce(animal_id::text, '-') || ':' || result, ', ' order by id) from (select * from print_log order by id desc limit 6) x));
   end;
+  -- (§47) the kashrut part of a kosher sticker from the server: a one-time print number for each sticker, the
+  -- kashrut from the ruling, the mark the team leader's tablet made, the barcode by the printer
+  declare g jsonb := _kosher_geom(); nd jsonb; m1 jsonb; m2 jsonb; m3 jsonb; m4 jsonb; t1 jsonb; t2 jsonb; t3 jsonb; k1 jsonb; k2 jsonb; k3 jsonb;
+          k4 jsonb; k5 jsonb; k6 jsonb; v_mark text := _printed_as_key(pg_temp.ar(910)); v_bpr int; v_band int; txt text; tall text; zz text; tk text;
+  begin
+    v_bpr := ceil((g ->> 'w')::int / 8.0); v_band := (g ->> 'band')::int;
+    txt  := encode(convert_to('^FO0,0^GFA,' || v_bpr * 10 || ',' || v_bpr * 10 || ',' || v_bpr || ',' || repeat('F0', v_bpr * 10) || '^FS', 'LATIN1'), 'base64');
+    tall := encode(convert_to('^FO0,0^GFA,' || v_bpr * ((g ->> 'top')::int + 5) || ',' || v_bpr * ((g ->> 'top')::int + 5) || ',' || v_bpr || ','
+                              || repeat('00', v_bpr * ((g ->> 'top')::int + 5)) || '^FS', 'LATIN1'), 'base64');
+    -- the team leader's tablet: what to make; a picture for an older mark / a wrong size / not the team leader: no
+    nd := pg_temp.api('{}', format('select print_marks_needed(%L)', pg_temp.v('mgr')));
+    m1 := pg_temp.api('{}', format('select print_mark_set(%L, %L, ''old'', %s, %s, %L)', pg_temp.v('mgr'), v_mark, v_bpr, v_band, repeat('0F', v_bpr * v_band)));
+    m2 := pg_temp.api('{}', format('select print_mark_set(%L, %L, %L, %s, %s, %L)', pg_temp.v('mgr'), v_mark, _print_mark_fp(v_mark), v_bpr, v_band - 1, repeat('0F', v_bpr * (v_band - 1))));
+    m3 := pg_temp.api(pg_temp.dev('PARTS'), format('select print_mark_set(null, %L, %L, %s, %s, %L)', v_mark, _print_mark_fp(v_mark), v_bpr, v_band, repeat('0F', v_bpr * v_band)));
+    -- the station before the mark is made: tickets yes, the network print waits for the mark
+    t1 := pg_temp.api(pg_temp.dev('PARTS'), 'select print_tickets_take(910, ''[{"pid":"cheeks","i":1}]'')');
+    k1 := pg_temp.api(pg_temp.dev('PARTS'), format('select print_kosher_add(%L, %L::text[], %L::text[])', '192.168.1.50:9100', array[t1 #>> '{tickets,0,t}'], array[txt]));
+    m4 := pg_temp.api('{}', format('select print_mark_set(%L, %L, %L, %s, %s, %L)', pg_temp.v('mgr'), v_mark, _print_mark_fp(v_mark), v_bpr, v_band, repeat('0F', v_bpr * v_band)));
+    -- now: the label is the tablet's text + the server's mark + the printer's barcode with the ticket; once only
+    k2 := pg_temp.api(pg_temp.dev('PARTS'), format('select print_kosher_add(%L, %L::text[], %L::text[])', '192.168.1.50:9100', array[t1 #>> '{tickets,0,t}'], array[txt]));
+    k3 := pg_temp.api(pg_temp.dev('PARTS'), format('select print_kosher_add(%L, %L::text[], %L::text[])', '192.168.1.50:9100', array[t1 #>> '{tickets,0,t}'], array[txt]));
+    zz := convert_from(decode((select data from print_jobs where id = (k2 ->> 'id')::bigint), 'base64'), 'UTF8');
+    -- refused: a held part, another screen, a text taller than its place, another tablet's ticket, the ruling changed
+    t2 := pg_temp.api(pg_temp.dev('PARTS'), 'select print_tickets_take(910, ''[{"pid":"tongue","i":1}]'')');
+    t3 := pg_temp.api(pg_temp.dev('LEGS'),  'select print_tickets_take(910, ''[{"pid":"cheeks","i":1}]'')');
+    tk := (pg_temp.api(pg_temp.dev('PARTS'), 'select print_tickets_take(910, ''[{"pid":"cheeks","i":1}]'')')) #>> '{tickets,0,t}';
+    k4 := pg_temp.api(pg_temp.dev('PARTS'), format('select print_kosher_add(%L, %L::text[], %L::text[])', '192.168.1.50:9100', array[tk], array[tall]));
+    k5 := pg_temp.api(pg_temp.dev('STAMPS'), format('select print_kosher_add(%L, %L::text[], %L::text[])', '192.168.1.50:9100', array[tk], array[txt]));
+    perform set_config('gt.reset_in_progress', 'true', true);
+    update animals_pilot set outer_status = case when outer_status = 'kosher' then 'glatt' else 'kosher' end where id = 910;
+    perform set_config('gt.reset_in_progress', 'false', true);
+    k6 := pg_temp.api(pg_temp.dev('PARTS'), format('select print_kosher_add(%L, %L::text[], %L::text[])', '192.168.1.50:9100', array[tk], array[txt]));
+    perform pg_temp.rec('§47 kosher sticker: the server gives a one-time number and the kashrut from the ruling; it puts the team leader''s mark and the barcode itself; a ticket prints once; held / other screen / too tall / another tablet''s ticket / ruling changed refused',
+      pg_temp.ok(nd) and exists (select 1 from jsonb_array_elements(nd -> 'needed') x where x ->> 'status' = v_mark)
+      and m1 ->> 'error' = 'stale' and m2 ->> 'error' = 'bad_value' and m3 ->> 'error' = 'unauthorized' and pg_temp.ok(m4)
+      and pg_temp.ok(t1) and t1 ->> 'mark' = v_mark and (t1 #>> '{tickets,0,payload}') like '%|T:' || (t1 #>> '{tickets,0,t}')
+      and k1 ->> 'reason' = 'mark_missing' and pg_temp.ok(k2) and k3 ->> 'reason' = 'bad_ticket'
+      and zz like '%^BQN,2,%^FDMA,BH|N:911|D:%|P:cheeks|I:1|B:%|S:' || v_mark || '|T:' || (t1 #>> '{tickets,0,t}') || '^FS%'
+      and zz like '%^GFA,%,' || repeat('0F', v_bpr * v_band) || '^FS%' and zz like '%' || repeat('F0', v_bpr * 10) || '%'
+      and (select job_id from print_tickets where t = t1 #>> '{tickets,0,t}') = (k2 ->> 'id')::bigint
+      and t2 ->> 'reason' = 'held' and t3 ->> 'reason' = 'wrong_station' and k4 ->> 'reason' = 'bad_value' and k5 ->> 'reason' = 'bad_ticket'
+      and k6 ->> 'reason' = 'ruling_changed',
+      concat_ws(' | ', left(nd::text, 80), m1 ->> 'error', m2 ->> 'error', m3 ->> 'error', left(t1::text, 120), k1 ->> 'reason', left(k2::text, 40), k3 ->> 'reason',
+                t2 ->> 'reason', t3 ->> 'reason', k4 ->> 'reason', k5 ->> 'reason', k6 ->> 'reason', left(zz, 120)));
+    -- the nikur / cooler: a piece whose stickers got tickets goes in only with its own ticket
+    -- a new mark uploaded (the seals the server keeps): the server asks the team leader's tablet for it again
+    insert into kashrut_seals (key, image, updated_at, updated_by) values (v_mark, 'data:image/png;base64,QUFB', now(), 'selftest')
+      on conflict (key) do update set image = excluded.image || 'QQ==';
+    perform pg_temp.rec('§47 a kashrut mark changed (a new picture) is made again for the printer; the old picture is not used',
+      exists (select 1 from jsonb_array_elements((pg_temp.api('{}', format('select print_marks_needed(%L)', pg_temp.v('mgr')))) -> 'needed') x where x ->> 'status' = v_mark)
+      and not exists (select 1 from print_marks where status = v_mark and fp = _print_mark_fp(v_mark)));   -- (print_kosher_add takes only a current one)
+    perform pg_temp.rec('§47 nikur / cooler: a piece with tickets goes in only with one of its own (no ticket / a made-up one refused); a piece printed without tickets as before',
+      _ticket_refusal(_board_epoch(), 910, 'cheeks', 1, null) = 'no_ticket'
+      and _ticket_refusal(_board_epoch(), 910, 'cheeks', 1, t1 #>> '{tickets,0,t}') is null
+      and _ticket_refusal(_board_epoch(), 910, 'cheeks', 1, 'ABCDEFGHJK') = 'bad_ticket'
+      and _ticket_refusal(_board_epoch(), 910, 'cheeks', 2, null) is null
+      and not has_table_privilege('anon', 'print_tickets', 'select') and not has_table_privilege('anon', 'print_marks', 'select'));
+  end;
   update settings_pilot set settings = s0 where id = 1;
 end $$;
 $gt80$;
@@ -3753,7 +3811,7 @@ begin
                 'eso_change(integer,text,text,bigint)', 'eso_change(integer,text,text,bigint,uuid)', 'event_append(jsonb)',
                 'lung_drawing_get(integer)', 'lung_drawing_set(integer,bigint,text)', 'manager_add(text,text,text)',
                 'manager_add_owner(text,text,text)', 'manager_deactivate(text,uuid)', 'manager_list(text)', 'manager_login(text)',
-                'manager_logout(text)', 'manager_session_check(text)', 'leader_recovery_code_new(text)', 'leader_recovery_status(text)', 'leader_device_replace(text,text)', 'plant_server_status(text)', 'animal_card(text,date,integer)', 'seal_set(text,text,text)', 'seals_get(text,bigint)', 'hold_set(integer,text,text,text,bigint,uuid)', 'hold_resolve(bigint,text,uuid)', 'nikur_scan(integer,text,integer,bigint,uuid)', 'nikur_board()', 'nikur_hold(integer,bigint,text,uuid)', 'cooler_scan(integer,text,integer,bigint,uuid)', 'cooler_hold(integer,bigint,text,uuid)', 'cooler_board()', 'nikur_passed(integer)', 'nikur_day_close(text,bigint,text)', 'support_issue_add(text,text)', 'support_tickets(text)', 'maker_changes(text)', 'print_job_add(text,text,text,integer,jsonb,text,uuid)', 'print_job_status(bigint)', 'printer_scan_request(text)', 'printers_found(text)', 'printers_status(text)', 'scanners_heard(text,integer)', 'scanner_scans_since(text,bigint)', 'board_flags(text)', 'change_ack(text,bigint)', 'manufacturer_set_billing(text,boolean,numeric,text,text)',
+                'manager_logout(text)', 'manager_session_check(text)', 'leader_recovery_code_new(text)', 'leader_recovery_status(text)', 'leader_device_replace(text,text)', 'plant_server_status(text)', 'animal_card(text,date,integer)', 'seal_set(text,text,text)', 'seals_get(text,bigint)', 'hold_set(integer,text,text,text,bigint,uuid)', 'hold_resolve(bigint,text,uuid)', 'nikur_scan(integer,text,integer,bigint,uuid,text)', 'nikur_board()', 'nikur_hold(integer,bigint,text,uuid)', 'cooler_scan(integer,text,integer,bigint,uuid,text)', 'cooler_hold(integer,bigint,text,uuid)', 'cooler_board()', 'nikur_passed(integer)', 'nikur_day_close(text,bigint,text)', 'support_issue_add(text,text)', 'support_tickets(text)', 'maker_changes(text)', 'print_job_add(text,text,text,integer,jsonb,text,uuid)', 'print_marks_needed(text)', 'print_mark_set(text,text,text,integer,integer,text)', 'print_tickets_take(integer,jsonb,integer,uuid)', 'print_kosher_add(text,text[],text[],uuid)', 'print_job_status(bigint)', 'printer_scan_request(text)', 'printers_found(text)', 'printers_status(text)', 'scanners_heard(text,integer)', 'scanner_scans_since(text,bigint)', 'board_flags(text)', 'change_ack(text,bigint)', 'manufacturer_set_billing(text,boolean,numeric,text,text)',
                 'outer_open(integer,bigint,boolean,text)', 'outer_open(integer,bigint,boolean,text,uuid)', 'plant_status_snapshot()', 'plant_setup_needed()',
                 'push_settings(jsonb,text,text,text)', 'request_daily_rollover()', 'reset_daily_board(text,text)', 'security_summary(text)',
                 'processing_board(text)', 'carry_push(bigint,jsonb,uuid)', 'carry_claim(bigint,integer,text,uuid)',

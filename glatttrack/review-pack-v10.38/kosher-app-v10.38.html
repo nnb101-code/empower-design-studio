@@ -5682,7 +5682,12 @@ const GT_NK_REASON={treif:['טרף — לא להכניס!','Treif — do not tak
   no_ruling:['אין פסיקה כשרה — לא להכניס!','No kosher ruling — do not take in!','Sin dictamen kosher — ¡no ingresar!'],held:['מעוכב (USDA / שאלה) — לא להכניס!','Held (USDA / question) — do not take in!','Retenido (USDA / pregunta) — ¡no ingresar!'],
   not_glatt:['לא נלקח מבהמה גלאט','Not taken from a glatt animal','No se toma de un animal glatt'],not_printed:['לא הודפסה מדבקה כשרה לחתיכה הזו','No kosher sticker was printed for this piece','No se imprimió etiqueta kosher para esta pieza'],
   not_slaughtered:['לא נשחט','Not slaughtered','No faenado'],day_closed:['היום הזה נסגר בניקור','This day was closed at the nikur','Este día se cerró en el nikur'],
-  not_in_cooler:['לא נכנס לקולר — לא להכניס לניקור!','Not in the cooler — do not take into the nikur!','No entró a la cámara — ¡no ingresar al nikur!']};
+  not_in_cooler:['לא נכנס לקולר — לא להכניס לניקור!','Not in the cooler — do not take into the nikur!','No entró a la cámara — ¡no ingresar al nikur!'],
+  // (§47) a sticker without the server's one-time number, or with one the server did not give
+  no_ticket:['מדבקה לא מוכרת (בלי מספר הדפסה) — לא להכניס! לקרוא לראש הצוות','Sticker not recognized (no print number) — do not take in! Call the team leader','Etiqueta no reconocida — ¡no ingresar! Llame al jefe de equipo'],
+  bad_ticket:['מדבקה לא מוכרת (מספר הדפסה לא נכון) — לא להכניס! לקרוא לראש הצוות','Sticker not recognized (wrong print number) — do not take in! Call the team leader','Etiqueta no reconocida — ¡no ingresar! Llame al jefe de equipo']};
+// (§47) the one-time print number in a kosher sticker's barcode
+function _gtCodeTicket(code){ const m=/\|T:([A-Z2-9]{10})(?:\||$)/.exec(String(code||'').toUpperCase()); return m?m[1]:null; }
 async function nkScan(code, pid, piece){
   code=gtScanUnHeb(code);
   const n=_gtCodeNum(code), idx=isNaN(n)?-1:n-1;
@@ -5695,7 +5700,7 @@ async function nkScan(code, pid, piece){
   const mB=/\|B:(\d+)/.exec(code); const ep=mB?Number(mB[1]):(KS.getBoardEpoch?KS.getBoardEpoch():null);   // the day of the sticker
   const prod=gtProducts().find(p=>p.id===pid), pname=gtProductName(prod)||pid, m=prod?Math.max(1,parseInt(prod.m)||0):1;
   if(!window.sb){ _nkShow('no',L('אין חיבור לשרת','No server connection','Sin conexión'),L('לא נרשם — סורקים שוב כשהחיבור חוזר','Not recorded — scan again when the connection is back','No registrado — escanee de nuevo al volver la conexión')); return; }
-  let r=null; try{ r=await _withTimeout(window.sb.rpc('nikur_scan',{p_id:idx,p_product:pid,p_piece:piece||1,p_epoch:ep,p_command_id:_gtUuid()}),10000); }catch(e){ r={error:e}; }
+  let r=null; try{ r=await _withTimeout(window.sb.rpc('nikur_scan',Object.assign({p_id:idx,p_product:pid,p_piece:piece||1,p_epoch:ep,p_command_id:_gtUuid()}, _gtCodeTicket(code)?{p_ticket:_gtCodeTicket(code)}:{})),10000); }catch(e){ r={error:e}; }
   const d=r&&r.data;
   const what='#'+(idx+1)+' · '+pname+(m>1?' '+(piece||1)+'/'+m:'')+(d&&d.day?' · '+_nkDayLong(d.day):'');
   if(d&&d.ok){ const sd=prod&&prod.nikur==='small'?'small':'big';
@@ -5809,7 +5814,7 @@ async function clScan(code){
   _nkFlash={n:idx+1,t:Date.now()};
   const prod=gtProducts().find(p=>p.id===pid), pname=gtProductName(prod)||pid, m=prod?Math.max(1,parseInt(prod.m)||0):1;
   if(!window.sb){ _nkShow('no',L('אין חיבור לשרת','No server connection','Sin conexión'),L('לא נרשם — סורקים שוב כשהחיבור חוזר','Not recorded — scan again when the connection is back','No registrado — escanee de nuevo al volver la conexión')); return; }
-  let r=null; try{ r=await _withTimeout(window.sb.rpc('cooler_scan',{p_id:idx,p_product:pid,p_piece:piece,p_epoch:ep,p_command_id:_gtUuid()}),10000); }catch(e){ r={error:e}; }
+  let r=null; try{ r=await _withTimeout(window.sb.rpc('cooler_scan',Object.assign({p_id:idx,p_product:pid,p_piece:piece,p_epoch:ep,p_command_id:_gtUuid()}, _gtCodeTicket(code)?{p_ticket:_gtCodeTicket(code)}:{})),10000); }catch(e){ r={error:e}; }
   const d=r&&r.data, what='#'+(idx+1)+' · '+pname+(m>1?' '+piece+'/'+m:'')+(d&&d.day?' · '+_nkDayLong(d.day):'');
   if(d&&d.ok) _nkShow(d.duplicate?'dup':'ok', d.duplicate?L('כבר נסרק','Already scanned','Ya escaneado'):L('✓ נכנס לקולר','✓ Into the cooler','✓ A la cámara'), what+' · ❄️ '+d.animalIn+'/'+d.animalExp);
   else if(d&&d.error==='refused'){ const t=GT_NK_REASON[d.reason]||[d.reason,d.reason,d.reason]; _nkShow('no','⛔ '+L(t[0],t[1],t[2]),what); }
@@ -8628,13 +8633,88 @@ function gtPrinterFor(key){ try{ return _gtPrNorm(_gtDevFor(key).p); }catch(e){ 
 function _gtLoadImg(src){ return new Promise(r=>{ if(!src) return r(null); const i=new Image(); i.onload=()=>r(i); i.onerror=()=>r(null); i.src=src; }); }
 function _gtFit(ctx,text,maxW,size,weight){ let f=size; do{ ctx.font=(weight||'')+' '+f+'px Arial, "Noto Sans Hebrew", sans-serif'; if(ctx.measureText(text).width<=maxW) break; f-=1; }while(f>8); return f; }
 // the sticker as a black-and-white picture, wMM × hMM at 203 dpi
-async function gtStickerCanvas(idx,kind,piece,sample){
+// (§47) the kosher sticker in printer dots — the same numbers as the server's _kosher_geom(): the band at the
+// bottom (the kashrut name + mark) is the server's part, the QR (top left) is drawn by the printer from the server
+function gtKosherGeom(wMM,hMM){
+  const cl=v=>Math.min(200,Math.max(10,Number(v)||50));
+  const W=Math.max(160,Math.round(8*cl(wMM))), H=Math.max(120,Math.round(8*cl(hMM)));
+  const pad=Math.round(Math.min(W,H)*0.04), band=Math.round(H*0.42), top=H-band;
+  return {W,H,pad,band,top,qr:Math.min(top-pad*2,Math.round(W*0.42))};
+}
+// the kashrut name of a status as on the stickers: [Hebrew, English]
+function _gtStatusPill(stRaw){
+  const stMap={glatt:['גלאט','Glatt'],beit:['בית יוסף','Beit Yosef'],kosher:['כשר','Kosher'],mk:['MK','MK'],rabChalak:['רבנות חלק','Rabbinate Chalak']};
+  let st=stMap[stRaw]||[(typeof statusDisplayName==='function'&&statusDisplayName(stRaw))||stRaw||'—',(typeof statusEnglishName==='function'&&statusEnglishName(stRaw))||''];
+  try{ const sn=_gtStickerNames(stRaw); if(sn) st=[sn.he,sn.en]; }catch(e){}
+  return String(st[0]||'')+(st[1]&&st[1]!==st[0]?' · '+st[1]:'');
+}
+// (§47) the kashrut band of a kosher sticker: the kashrut name and the mark the team leader uploaded. The team
+// leader's tablet makes it once for the server (print_mark_set); a Bluetooth / print-screen sticker draws the same
+async function gtKashrutBandCanvas(stRaw,W,band){
+  const cv=document.createElement('canvas'); cv.width=W; cv.height=band;
+  const c=cv.getContext('2d'); c.fillStyle='#fff'; c.fillRect(0,0,W,band); c.fillStyle='#000'; c.strokeStyle='#000';
+  const pad=Math.round(Math.min(W,band)*0.06), pillH=Math.round(band*0.26), t=_gtStatusPill(stRaw);
+  c.textAlign='center'; c.textBaseline='middle';
+  const f=_gtFit(c,t,W-pad*4,Math.round(pillH*0.8),'bold'); c.direction=/[֐-׿]/.test(t)?'rtl':'ltr';
+  const mw=Math.min(W-pad*2, c.measureText(t).width+pad*2);
+  c.fillRect((W-mw)/2, pad/2, mw, pillH); c.fillStyle='#fff'; c.fillText(t, W/2, pad/2+pillH/2); c.fillStyle='#000';
+  const sy=pad/2+pillH+pad/2, sh=band-sy-pad/2;
+  let seal=null; try{ const sm=(KS.getSettings().customSeals)||{}; seal=sm[stRaw]?await _gtLoadImg(_safeImg(sm[stRaw])):null; }catch(e){ seal=null; }
+  if(seal){ const r=Math.min((W-pad*2)/seal.width, sh/seal.height); const w2=seal.width*r, h2=seal.height*r; c.drawImage(seal,(W-w2)/2,sy+(sh-h2)/2,w2,h2); }
+  else { c.setLineDash([pad,pad/2]); c.lineWidth=Math.max(2,pad/3); c.strokeRect(pad,sy,W-pad*2,sh); c.setLineDash([]);
+    c.direction='rtl'; _gtFit(c,'חסר סימן כשרות',W-pad*4,Math.round(sh*0.3),'bold'); c.fillText('חסר סימן כשרות',W/2,sy+sh*0.35);
+    c.direction='ltr'; _gtFit(c,'NO KASHRUT MARK',W-pad*4,Math.round(sh*0.24),'bold'); c.fillText('NO KASHRUT MARK',W/2,sy+sh*0.7); }
+  return cv;
+}
+// (§47) the team leader's tablet makes each status's kashrut band for the plant server, by itself: when the team
+// leader's screen is open, after a mark is uploaded, and once a minute (only what the server says is missing / old)
+let _gtMarksBusy=false;
+async function gtMarksSync(){
+  if(_gtMarksBusy || !window.sb) return; const tok=(KS.getManagerToken&&KS.getManagerToken())||null; if(!tok) return;
+  _gtMarksBusy=true;
+  try{
+    const r=await window.sb.rpc('print_marks_needed',{p_token:tok}); const x=r.data||{};
+    if(r.error||!x.ok) return;
+    for(const n of (x.needed||[])){
+      const cv=await gtKashrutBandCanvas(n.status, x.w, x.band), g=_gtGfa(cv);
+      await window.sb.rpc('print_mark_set',{p_token:tok, p_status:n.status, p_fp:n.fp, p_bpr:g.bpr, p_rows:g.rows, p_gfa:g.hex});
+    }
+  }catch(e){ try{ gtLogError('marks_sync', e); }catch(_){} }
+  finally{ _gtMarksBusy=false; }
+}
+setInterval(()=>{ try{ gtMarksSync(); }catch(e){} }, 60000);
+// o (§47): {payload, mark} — the server's barcode text and kashrut for this sticker; {textOnly:true} — only the
+// tablet's part of a kosher sticker (number, part, dates) for the plant server to complete
+async function gtStickerCanvas(idx,kind,piece,sample,o){
+  o=o||{};
   const D=_gtStickerData(idx,kind,sample,piece);
+  const isK=kind==='kosher';
+  if(isK){
+    const G=gtKosherGeom(D.wMM,D.hMM), W=G.W, H=o.textOnly?G.top:G.H, pad=G.pad;
+    const cv=document.createElement('canvas'); cv.width=W; cv.height=H;
+    const c=cv.getContext('2d'); c.fillStyle='#fff'; c.fillRect(0,0,W,H); c.fillStyle='#000'; c.strokeStyle='#000';
+    const pl=o.payload||D.payload;
+    if(!o.textOnly && D.opt.showQR && window.QRGen){ const t=document.createElement('canvas'); t.width=G.qr; t.height=G.qr;
+      try{ if(window.QRGen.draw(t, pl, 1)){ const k=Math.max(1,Math.floor(G.qr/t.width)), q2=t.width*k; c.imageSmoothingEnabled=false;
+             c.drawImage(t, pad+Math.floor((G.qr-q2)/2), pad+Math.floor((G.qr-q2)/2), q2, q2); } }catch(e){} }
+    const x0=pad*2+G.qr, tw=W-x0-pad, cx=x0+tw/2, th=G.top-pad*2;   // the QR's place stays empty for the printer's barcode
+    const lines=[{t:String(D.num), w:'bold', r:0.42}];
+    if(piece&&piece.name) lines.push({t:String(piece.name), w:'bold', r:0.18});
+    if(D.heb) lines.push({t:D.heb, r:0.13});
+    if(D.greg) lines.push({t:D.greg, r:0.13, ltr:true});
+    const tot=lines.reduce((a,l)=>a+l.r,0)||1, unit=th/tot*0.94; let y=pad+(th-tot*unit)/2;
+    c.textAlign='center'; c.textBaseline='middle';
+    lines.forEach(l=>{ const h=l.r*unit; _gtFit(c,l.t,tw,Math.round(h*0.9),l.w); c.direction=(!l.ltr&&/[֐-׿]/.test(l.t))?'rtl':'ltr'; c.fillText(l.t,cx,y+h/2); y+=h; });
+    if(!o.textOnly){
+      c.drawImage(await gtKashrutBandCanvas(o.mark||D.stRaw, W, G.band), 0, G.top);
+      c.lineWidth=Math.max(2,Math.round(pad/4)); c.strokeRect(c.lineWidth/2, c.lineWidth/2, W-c.lineWidth, H-c.lineWidth);
+    }
+    return cv;
+  }
   const W=Math.max(160,Math.round(D.wMM*GT_DPMM)), H=Math.max(120,Math.round(D.hMM*GT_DPMM));
   const cv=document.createElement('canvas'); cv.width=W; cv.height=H;
   const c=cv.getContext('2d'); c.fillStyle='#fff'; c.fillRect(0,0,W,H); c.fillStyle='#000'; c.strokeStyle='#000';
   const pad=Math.round(Math.min(W,H)*0.04);
-  const isK=kind==='kosher';
   const seal=isK ? await _gtLoadImg(_safeImg(D.sealImg)) : null;
   const sealH=isK ? Math.round(H*0.32) : 0;
   const topH=H-pad*2-(sealH?sealH+pad:0);
@@ -8673,13 +8753,44 @@ async function gtStickerCanvas(idx,kind,piece,sample){
   return cv;
 }
 // the picture in the label printer's language (ZPL ^GFA: one bit a dot, 1 = black)
-function gtZplFromCanvas(cv,copies){
+function _gtGfa(cv){
   const w=cv.width, h=cv.height, bpr=Math.ceil(w/8), d=cv.getContext('2d').getImageData(0,0,w,h).data, HX='0123456789ABCDEF', out=new Array(h);
   for(let y=0;y<h;y++){ let row=''; for(let bx=0;bx<bpr;bx++){ let b=0;
       for(let k=0;k<8;k++){ const x=bx*8+k; if(x<w){ const i=(y*w+x)*4; const lum=d[i]*0.3+d[i+1]*0.59+d[i+2]*0.11; if(d[i+3]>127 && lum<150) b|=(128>>k); } }
       row+=HX[b>>4]+HX[b&15]; } out[y]=row; }
-  const n=bpr*h;
-  return '^XA^PW'+w+'^LL'+h+'^LH0,0^FO0,0^GFA,'+n+','+n+','+bpr+','+out.join('')+'^FS^PQ'+Math.max(1,Math.min(99,copies|0||1))+'^XZ';
+  return {bpr, rows:h, hex:out.join('')};
+}
+function gtZplFromCanvas(cv,copies){
+  const g=_gtGfa(cv), n=g.bpr*g.rows;
+  return '^XA^PW'+cv.width+'^LL'+cv.height+'^LH0,0^FO0,0^GFA,'+n+','+n+','+g.bpr+','+g.hex+'^FS^PQ'+Math.max(1,Math.min(99,copies|0||1))+'^XZ';
+}
+// (§47) the kosher stickers' one-time print numbers and kashrut, from the server (null: an older server — as before)
+async function _gtKosherTickets(jobs){
+  const kj=jobs.filter(j=>j.kind==='kosher'&&!j.sample); if(!kj.length) return null;
+  if(!window.sb) throw new Error(L('אין חיבור לשרת המפעל','No connection to the plant server','Sin conexión al servidor'));
+  const parts=kj.filter(j=>j.piece&&j.piece.pid).map(j=>({pid:j.piece.pid,i:j.piece.i||1}));
+  const r=await window.sb.rpc('print_tickets_take',{p_animal:kj[0].idx, p_parts:parts, p_count:kj.length, p_command_id:_gtUuid()});
+  if(r.error && (r.error.code==='PGRST202'||r.status===404)) return null;
+  const x=r.data||{};
+  if(x.error==='refused'){ const t=GT_PRINT_REFUSED[x.reason]; throw new Error(t?L(t[0],t[1],t[2]):String(x.reason||'refused')); }
+  if(r.error||!x.ok) throw new Error(gtErrText(r.error||x.error||'server_error'));
+  const tk=(x.tickets||[]).slice();
+  kj.forEach((j,k)=>{ let t=null;
+    if(j.piece&&j.piece.pid){ const q=tk.findIndex(z=>z.pid===j.piece.pid&&Number(z.i)===Number(j.piece.i||1)); if(q>=0) t=tk.splice(q,1)[0]; }
+    else t=tk.shift()||null;
+    j.tk=t?{t:t.t, payload:t.payload, mark:x.mark}:null; });
+  return {mark:x.mark, markReady:!!x.markReady};
+}
+// (§47) a network printer: the tablet's part of each sticker; the plant server adds the kashrut band and the barcode
+async function _gtPrintNetKosher(p,jobs){
+  const kj=jobs.filter(j=>j.tk), texts=[];
+  for(const j of kj){ const cv=await gtStickerCanvas(j.idx,'kosher',j.piece,false,{textOnly:true}); const g=_gtGfa(cv), n=g.bpr*g.rows;
+    texts.push(_gtB64('^FO0,0^GFA,'+n+','+n+','+g.bpr+','+g.hex+'^FS')); }
+  const r=await window.sb.rpc('print_kosher_add',{p_printer:(p.ip||'')+':'+(p.port||9100), p_tickets:kj.map(j=>j.tk.t), p_texts:texts, p_command_id:_gtUuid()});
+  const x=r.data||{};
+  if(x && x.error==='refused'){ const t=GT_PRINT_REFUSED[x.reason]; throw new Error(t?L(t[0],t[1],t[2]):String(x.reason||'refused')); }
+  if(r.error||!x.ok) throw new Error(gtErrText(r.error||x.error||'server_error'));
+  return _gtPollJob(x.id);
 }
 function _gtB64(str){ const b=new TextEncoder().encode(str); let s=''; for(let i=0;i<b.length;i+=0x8000) s+=String.fromCharCode.apply(null,b.subarray(i,i+0x8000)); return btoa(s); }
 // a big message on the station when stickers did not come out (a kashrut matter — it must be seen)
@@ -8706,7 +8817,11 @@ const GT_PRINT_REFUSED={ wrong_station:['המסך הזה לא מדפיס מדב�
   held:['החלק מעוכב (USDA / "?") — לא מודפס','The part is held (USDA / "?") — not printed','La parte está retenida — no se imprime'],
   not_glatt:['החלק הזה לא נלקח מבהמה גלאט','This part is not taken from a glatt animal','Esta parte no se toma de un animal glatt'],
   too_many:['יותר מדבקות ממה שמוגדר במפעל','More stickers than the plant\'s setting','Más etiquetas que lo configurado'],
-  unauthorized:['רק ראש הצוות מדפיס מדבקת ניסיון','Only the team leader prints a test sticker','Solo el jefe de equipo imprime una prueba'] };
+  unauthorized:['רק ראש הצוות מדפיס מדבקת ניסיון','Only the team leader prints a test sticker','Solo el jefe de equipo imprime una prueba'],
+  // (§47)
+  mark_missing:['סימן הכשרות עוד לא הוכן להדפסה — ראש הצוות פותח את המסך שלו (זה נעשה לבד), ואז מדפיסים שוב','The kashrut mark is not ready for printing yet — the team leader opens his screen (it is done by itself), then print again','La marca kosher aún no está lista — el jefe de equipo abre su pantalla, luego imprima de nuevo'],
+  ruling_changed:['הפסיקה השתנתה עכשיו — הדפיסו שוב','The ruling just changed — print again','El dictamen acaba de cambiar — imprima de nuevo'],
+  bad_ticket:['מספר ההדפסה לא תקין — הדפיסו שוב','The print number is not valid — print again','El número de impresión no es válido — imprima de nuevo'] };
 async function _gtPrintNet(p,zpl,meta){
   if(!window.sb) throw new Error(L('אין חיבור לשרת המפעל','No connection to the plant server','Sin conexión al servidor'));
   meta=meta||{};
@@ -8715,9 +8830,12 @@ async function _gtPrintNet(p,zpl,meta){
   const x=r.data||{};
   if(x && x.error==='refused'){ const t=GT_PRINT_REFUSED[x.reason]; throw new Error(t?L(t[0],t[1],t[2]):String(x.reason||'refused')); }   // (round 24) the server checked it
   if(r.error||!x.ok) throw new Error(gtErrText(r.error||x.error||'server_error'));
+  return _gtPollJob(x.id);
+}
+async function _gtPollJob(id){
   // (review) up to 24 s: the server prints a job only within its first 20 s, so after that the answer is final
   for(const w of [1500,2500,4000,6000,6000,4000]){ await new Promise(z=>setTimeout(z,w));
-    const q=await window.sb.rpc('print_job_status',{p_id:x.id}); const y=q.data||{};
+    const q=await window.sb.rpc('print_job_status',{p_id:id}); const y=q.data||{};
     if(y.status==='sent') return true;
     if(y.status==='failed') throw new Error(L('המדפסת לא ענתה','The printer did not answer','La impresora no respondió')+(y.error?' ('+y.error+')':'')); }
   throw new Error(L('שרת המפעל עוד לא שלח למדפסת — בדקו ששירות ההדפסה פועל (gt-print-relay)','The plant server has not sent it yet — check the printing service (gt-print-relay)','El servidor aún no lo envió — revise el servicio de impresión'));
@@ -8771,7 +8889,12 @@ async function gtPrintStickers(key,jobs,o){
   const p=o.printer?_gtPrNorm(o.printer):gtPrinterFor(key);
   if(!p){ if(!o.quiet) _gtPrintMsg(L('🖨 אין מדפסת למסך הזה — המדבקות לא הודפסו. ראש הצוות משייך מדפסת: הגדרות ← מדפסות.','🖨 No printer for this screen — the stickers were not printed. The team leader sets one: Settings → Printers.','🖨 No hay impresora para esta pantalla — no se imprimió. El jefe de equipo la asigna: Ajustes → Impresoras.'),true); return {ok:false,error:'no_printer'}; }
   try{
-    const items=[]; for(const j of jobs){ const Dj=_gtStickerData(j.idx,j.kind,j.sample,j.piece); items.push({cv:await gtStickerCanvas(j.idx,j.kind,j.piece,j.sample), copies:j.copies||1, kind:j.kind, wMM:Dj&&Dj.wMM, hMM:Dj&&Dj.hMM}); }
+    // (§47) kosher stickers: the server gives each one its print number and kashrut; a network printer gets the
+    // kashrut band and the barcode from the plant server itself
+    const T=o.test ? null : await _gtKosherTickets(jobs);
+    if(T && p.conn==='network'){ await _gtPrintNetKosher(p,jobs); _gtPrinterStatus(p,true); return {ok:true}; }
+    const items=[]; for(const j of jobs){ const Dj=_gtStickerData(j.idx,j.kind,j.sample,j.piece);
+      items.push({cv:await gtStickerCanvas(j.idx,j.kind,j.piece,j.sample,j.tk?{payload:j.tk.payload,mark:j.tk.mark}:{}), copies:j.copies||1, kind:j.kind, wMM:Dj&&Dj.wMM, hMM:Dj&&Dj.hMM}); }
     if(!items.length) return {ok:true};
     const D=_gtStickerData(jobs[0].idx,jobs[0].kind,jobs[0].sample,jobs[0].piece);
     if(p.conn==='system') _gtPrintSystem(items,D.wMM,D.hMM);
@@ -8837,7 +8960,8 @@ async function gtPrintGate(key,jobs,commit){
 const _gtVP={items:[]};
 async function gtVirtualPrint(jobs){
   try{
-    for(const j of (jobs||[])){ const cv=await gtStickerCanvas(j.idx,j.kind,j.piece,j.sample);
+    await _gtKosherTickets(jobs||[]);                      // (§47) the same print numbers as a real print
+    for(const j of (jobs||[])){ const cv=await gtStickerCanvas(j.idx,j.kind,j.piece,j.sample,j.tk?{payload:j.tk.payload,mark:j.tk.mark}:{});
       for(let c=0;c<Math.max(1,j.copies||1);c++) _gtVP.items.unshift({src:cv.toDataURL('image/png'), t:'#'+(Number(j.idx)+1)+(j.piece&&j.piece.name?' · '+j.piece.name:'')}); }
     _gtVP.items=_gtVP.items.slice(0,40);
     _gtVPRender(true);
@@ -11203,6 +11327,7 @@ function gtPrintPanel(id){
   setTimeout(done, 60000);
 }
 function mgrTab(tab){
+  setTimeout(()=>{ try{ gtMarksSync(); }catch(e){} }, 1500);   // (§47)
   if(tab==='summaries'||tab==='reports') tab='analysis';                 // step 46: one summaries tab
   if(tab==='settings' && typeof _isOwnerSession==='function' && _isOwnerSession()) tab='monitor';   // the owner only watches
   mgrCurrentTab=tab;
@@ -12681,6 +12806,7 @@ function mgrUploadSeal(type,input){
       KS.updateSettings({customSeals:s.customSeals});
       mgrUpdateStatusToggles(); // refresh the per-status previews
       try{ mgrUpdateSealUploads(); mgrRenderPrintPreview(); }catch(x){}
+      setTimeout(()=>{ try{ gtMarksSync(); }catch(x){} }, 6000);   // (§47) the server's copy of the mark
     };
     img.onerror=function(){
       // Not decodable as image — store raw and still refresh
@@ -17675,6 +17801,7 @@ function _gtSealPush(k, img){
     }
     _gtSealsSynced = Object.assign({}, _gtSealsSynced || {}); if(img) _gtSealsSynced[k] = img; else delete _gtSealsSynced[k];
     try{ localStorage.setItem('gt_seals_ver', String(r.data.version)); }catch(x){}
+    setTimeout(()=>{ try{ gtMarksSync(); }catch(x){} }, 500);   // (§47) the printer's copy of the new mark
   }).catch(()=>{});
 }
 async function _gtSealsPull(){

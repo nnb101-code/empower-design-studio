@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict R06SozyjXBkFC9x1CwSOSDZhIzg9J8fRkyuZfyterv0JfxR2QaHkgUsYa3Nr2HA
+\restrict XTRhzNeU8i2yD9zhIENMerTMUFy1aLRCoWHDi9HZyaYMxfzGjVuxm6hTjiCTdWu
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -2272,6 +2272,28 @@ $$;
 ALTER FUNCTION public._jstr_ok(v jsonb, maxlen integer) OWNER TO postgres;
 
 --
+-- Name: _kosher_geom(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public._kosher_geom() RETURNS jsonb
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $_$
+  with sz as (select greatest(160, round(8 * least(200, greatest(10, coalesce(case when s ->> 'kosherW' ~ '^[0-9]{1,3}(\.[0-9]+)?$' then (s ->> 'kosherW')::numeric end,
+                                                                       case when s ->> 'stickerW' ~ '^[0-9]{1,3}(\.[0-9]+)?$' then (s ->> 'stickerW')::numeric end, 50)))))::int w,
+                     greatest(120, round(8 * least(200, greatest(10, coalesce(case when s ->> 'kosherH' ~ '^[0-9]{1,3}(\.[0-9]+)?$' then (s ->> 'kosherH')::numeric end,
+                                                                       case when s ->> 'stickerH' ~ '^[0-9]{1,3}(\.[0-9]+)?$' then (s ->> 'stickerH')::numeric end, 50)))))::int h
+                from (select _gt_settings() s) x),
+       g as (select w, h, round(least(w, h) * 0.04)::int pad, round(h * 0.42)::int band from sz)
+  select jsonb_build_object('w', w, 'h', h, 'pad', pad, 'band', band, 'top', h - band,
+                            'qr', least(h - band - pad * 2, round(w * 0.42)::int))
+    from g;
+$_$;
+
+
+ALTER FUNCTION public._kosher_geom() OWNER TO postgres;
+
+--
 -- Name: _kosher_ready(public.animals_pilot); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -3004,6 +3026,21 @@ end $$;
 ALTER FUNCTION public._plant_state_test_mode_trg() OWNER TO postgres;
 
 --
+-- Name: _plant_tz(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public._plant_tz() RETURNS text
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $$
+  select case when exists (select 1 from pg_timezone_names where name = nullif(_gt_settings() ->> 'plantTimezone', ''))
+              then _gt_settings() ->> 'plantTimezone' else 'UTC' end;
+$$;
+
+
+ALTER FUNCTION public._plant_tz() OWNER TO postgres;
+
+--
 -- Name: _plant_usage(); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -3063,6 +3100,32 @@ $_$;
 ALTER FUNCTION public._print_kosher_max(p_parts jsonb, p_role text, p_test boolean, s jsonb) OWNER TO postgres;
 
 --
+-- Name: _print_kosher_refusal(public.animals_pilot, jsonb, text, boolean, integer); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public._print_kosher_refusal(a public.animals_pilot, p_parts jsonb, p_role text, p_test boolean, p_labels integer) RETURNS text
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $_$
+declare x jsonb; v_e text;
+begin
+  if not p_test and coalesce(p_role, '') not in ('parts', 'stamps') then return 'wrong_station'; end if;
+  if a.id is null or a.slaughter is null or a.slaughter in ('nevela', 'shot') or a.inner_status = 'treif' or a.outer_status = 'treif'
+     or not _kosher_ready(a) then return 'not_kosher'; end if;
+  if p_labels < 1 or p_labels > 30 or p_labels > _print_kosher_max(p_parts, p_role, p_test, _gt_settings()) then return 'too_many'; end if;
+  for x in select e from jsonb_array_elements(coalesce(p_parts, '[]'::jsonb)) e loop
+    if jsonb_typeof(x) <> 'object' or coalesce(x ->> 'pid', '') !~ '^[a-z][a-z0-9_]{0,40}$' or coalesce(x ->> 'i', '') !~ '^[0-9]{0,3}$' then return 'bad_value'; end if;
+    v_e := _nikur_refusal(a, _product_def(x ->> 'pid'), _board_epoch(), nullif(x ->> 'i', '')::int);
+    if v_e is not null then return v_e; end if;
+  end loop;
+  if jsonb_array_length(coalesce(p_parts, '[]'::jsonb)) = 0 then return _nikur_refusal(a, null, _board_epoch(), null); end if;
+  return null;
+end $_$;
+
+
+ALTER FUNCTION public._print_kosher_refusal(a public.animals_pilot, p_parts jsonb, p_role text, p_test boolean, p_labels integer) OWNER TO postgres;
+
+--
 -- Name: _print_log_add(text, text, integer, jsonb, integer, integer, text, bigint, text); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -3100,6 +3163,25 @@ end $$;
 
 
 ALTER FUNCTION public._print_log_result() OWNER TO postgres;
+
+--
+-- Name: _print_mark_fp(text); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public._print_mark_fp(p_status text) RETURNS text
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $$
+  select md5(coalesce((select k.image from kashrut_seals k where k.key = p_status), _gt_settings() -> 'customSeals' ->> p_status, '') || '|'
+             || coalesce((_gt_settings() -> 'statusNames' -> p_status)::text, '') || '|'
+             || coalesce((select x::text from jsonb_array_elements(case when jsonb_typeof(_gt_settings() -> 'customStatuses') = 'array'
+                                                                         then _gt_settings() -> 'customStatuses' else '[]'::jsonb end) x
+                           where x ->> 'key' = p_status limit 1), '') || '|'
+             || (_kosher_geom() ->> 'w') || 'x' || (_kosher_geom() ->> 'band'));
+$$;
+
+
+ALTER FUNCTION public._print_mark_fp(p_status text) OWNER TO postgres;
 
 --
 -- Name: _printed_as_key(public.animals_pilot); Type: FUNCTION; Schema: public; Owner: postgres
@@ -3515,6 +3597,21 @@ end $_$;
 
 
 ALTER FUNCTION public._push_is_correction(p_rows jsonb) OWNER TO postgres;
+
+--
+-- Name: _qr_modules(integer); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public._qr_modules(p_len integer) RETURNS integer
+    LANGUAGE sql IMMUTABLE
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $$
+  select 17 + 4 * coalesce((select v from (values (1,14),(2,26),(3,42),(4,62),(5,84),(6,106),(7,122),(8,152),(9,180),(10,213)) c(v, cap)
+                             where cap >= p_len order by v limit 1), 10);
+$$;
+
+
+ALTER FUNCTION public._qr_modules(p_len integer) OWNER TO postgres;
 
 --
 -- Name: _raise_correction(text, text); Type: FUNCTION; Schema: public; Owner: postgres
@@ -4630,6 +4727,56 @@ $$;
 
 
 ALTER FUNCTION public._test_mode_on_at() OWNER TO postgres;
+
+--
+-- Name: _ticket_new(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public._ticket_new() RETURNS text
+    LANGUAGE sql
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $$
+  select string_agg(substr('ABCDEFGHJKLMNPQRSTUVWXYZ23456789', 1 + (get_byte(b, i) % 32), 1), '' order by i)
+    from (select gen_random_bytes(10) b) x, generate_series(0, 9) i;
+$$;
+
+
+ALTER FUNCTION public._ticket_new() OWNER TO postgres;
+
+--
+-- Name: _ticket_payload(public.animals_pilot, text, integer, bigint, text, text); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public._ticket_payload(a public.animals_pilot, p_pid text, p_i integer, p_epoch bigint, p_t text, p_mark text) RETURNS text
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $$
+  select 'BH|N:' || (a.id + 1)
+         || '|D:' || coalesce(to_char(to_timestamp(a.slaughter_time / 1000.0) at time zone _plant_tz(), 'YYYY-MM-DD'), '')
+         || coalesce('|P:' || p_pid || '|I:' || coalesce(p_i, 1), '') || '|B:' || p_epoch || '|S:' || p_mark || '|T:' || p_t;
+$$;
+
+
+ALTER FUNCTION public._ticket_payload(a public.animals_pilot, p_pid text, p_i integer, p_epoch bigint, p_t text, p_mark text) OWNER TO postgres;
+
+--
+-- Name: _ticket_refusal(bigint, integer, text, integer, text); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public._ticket_refusal(p_epoch bigint, p_id integer, p_product text, p_piece integer, p_ticket text) RETURNS text
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $$
+  select case
+    when p_ticket is not null and not exists (select 1 from print_tickets t where t.t = upper(p_ticket) and t.board_epoch = p_epoch
+                                               and t.animal_id = p_id and t.product = p_product and t.piece = p_piece) then 'bad_ticket'
+    when p_ticket is null and exists (select 1 from print_tickets t where t.board_epoch = p_epoch and t.animal_id = p_id
+                                       and t.product = p_product and t.piece = p_piece) then 'no_ticket'
+  end;
+$$;
+
+
+ALTER FUNCTION public._ticket_refusal(p_epoch bigint, p_id integer, p_product text, p_piece integer, p_ticket text) OWNER TO postgres;
 
 --
 -- Name: _ts_or_null(text); Type: FUNCTION; Schema: public; Owner: postgres
@@ -5793,10 +5940,10 @@ end $$;
 ALTER FUNCTION public.cooler_hold(p_id integer, p_epoch bigint, p_kind text, p_command_id uuid) OWNER TO postgres;
 
 --
--- Name: cooler_scan(integer, text, integer, bigint, uuid); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: cooler_scan(integer, text, integer, bigint, uuid, text); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
-CREATE FUNCTION public.cooler_scan(p_id integer, p_product text, p_piece integer, p_epoch bigint, p_command_id uuid DEFAULT NULL::uuid) RETURNS jsonb
+CREATE FUNCTION public.cooler_scan(p_id integer, p_product text, p_piece integer, p_epoch bigint, p_command_id uuid DEFAULT NULL::uuid, p_ticket text DEFAULT NULL::text) RETURNS jsonb
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public', 'extensions', 'pg_temp'
     AS $_$
@@ -5837,6 +5984,7 @@ begin
     select cnt into v_cnt from animal_pieces where board_epoch = v_ep and animal_id = p_id and product = p_product;
     if v_cnt is null or v_piece > v_cnt then v_err := 'not_printed'; end if;
   end if;
+  if v_err is null then v_err := _ticket_refusal(v_ep, p_id, p_product, v_piece, nullif(trim(p_ticket), '')); end if;   -- (§47)
   if v_err is not null then
     perform _gt_event(p_id + 1, 'cooler', 'piece_refused', jsonb_build_object('part', p_product, 'piece', v_piece, 'reason', v_err, 'board', v_ep), v_actor, v_dev);
     v_res := jsonb_build_object('ok', false, 'error', 'refused', 'reason', v_err, 'status', a.outer_status, 'day', _nikur_day_date(v_ep));
@@ -5857,7 +6005,7 @@ begin
 end $_$;
 
 
-ALTER FUNCTION public.cooler_scan(p_id integer, p_product text, p_piece integer, p_epoch bigint, p_command_id uuid) OWNER TO postgres;
+ALTER FUNCTION public.cooler_scan(p_id integer, p_product text, p_piece integer, p_epoch bigint, p_command_id uuid, p_ticket text) OWNER TO postgres;
 
 --
 -- Name: create_first_manager(text, text, text); Type: FUNCTION; Schema: public; Owner: postgres
@@ -7482,10 +7630,10 @@ end $$;
 ALTER FUNCTION public.nikur_passed(p_days integer) OWNER TO postgres;
 
 --
--- Name: nikur_scan(integer, text, integer, bigint, uuid); Type: FUNCTION; Schema: public; Owner: postgres
+-- Name: nikur_scan(integer, text, integer, bigint, uuid, text); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
-CREATE FUNCTION public.nikur_scan(p_id integer, p_product text, p_piece integer, p_epoch bigint, p_command_id uuid DEFAULT NULL::uuid) RETURNS jsonb
+CREATE FUNCTION public.nikur_scan(p_id integer, p_product text, p_piece integer, p_epoch bigint, p_command_id uuid DEFAULT NULL::uuid, p_ticket text DEFAULT NULL::text) RETURNS jsonb
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public', 'extensions', 'pg_temp'
     AS $_$
@@ -7543,6 +7691,7 @@ begin
     if v_cnt is null then v_err := 'not_printed';              -- no kosher sticker was printed for this part of this animal
     elsif v_piece > v_cnt then v_err := 'not_printed'; end if;
   end if;
+  if v_err is null then v_err := _ticket_refusal(v_ep, p_id, p_product, v_piece, nullif(trim(p_ticket), '')); end if;   -- (§47)
   -- (owner, §44) with the cooler screen on, the large-parts nikur takes only an animal that went into the cooler
   if v_err is null and v_screen = 'big' and _cooler_on()
      and not exists (select 1 from cooler_scans c where c.board_epoch = v_ep and c.animal_id = p_id) then
@@ -7569,7 +7718,7 @@ begin
 end $_$;
 
 
-ALTER FUNCTION public.nikur_scan(p_id integer, p_product text, p_piece integer, p_epoch bigint, p_command_id uuid) OWNER TO postgres;
+ALTER FUNCTION public.nikur_scan(p_id integer, p_product text, p_piece integer, p_epoch bigint, p_command_id uuid, p_ticket text) OWNER TO postgres;
 
 --
 -- Name: outer_open(integer, bigint, boolean, text); Type: FUNCTION; Schema: public; Owner: postgres
@@ -7856,6 +8005,186 @@ end $$;
 
 
 ALTER FUNCTION public.print_job_status(p_id bigint) OWNER TO postgres;
+
+--
+-- Name: print_kosher_add(text, text[], text[], uuid); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.print_kosher_add(p_printer text, p_tickets text[], p_texts text[], p_command_id uuid DEFAULT NULL::uuid) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $_$
+declare v_dev text; v_res jsonb; g jsonb := _kosher_geom(); s jsonb := _gt_settings(); a animals_pilot; v_role text; v_e text;
+        v_test boolean := _test_mode_on(); tk print_tickets; m print_marks; v_zpl text := ''; v_txt text; v_n int; v_id bigint;
+        v_w int; v_h int; v_pad int; v_band int; v_qr int; v_mag int; v_pl text; v_parts jsonb := '[]'::jsonb; v_bpr int; v_rows int; i int;
+begin
+  v_dev := _call_device(null);
+  if v_dev is null then return jsonb_build_object('ok', false, 'error', _no_device_error()); end if;
+  v_res := _cmd_get(p_command_id, v_dev, 'print_kosher_add');
+  if v_res is not null then return v_res; end if;
+  v_w := (g ->> 'w')::int; v_h := (g ->> 'h')::int; v_pad := (g ->> 'pad')::int; v_band := (g ->> 'band')::int; v_qr := (g ->> 'qr')::int;
+  if not _printer_addr_ok(p_printer)
+     or not exists (select 1 from jsonb_array_elements(case when jsonb_typeof(s -> 'printers') = 'array' then s -> 'printers' else '[]'::jsonb end) pr
+                     where pr ->> 'conn' = 'network' and (pr ->> 'ip') || ':' || coalesce(nullif(pr ->> 'port', ''), '9100') = p_printer) then
+    return jsonb_build_object('ok', false, 'error', 'unknown_printer');
+  end if;
+  v_n := coalesce(array_length(p_tickets, 1), 0);
+  if v_n < 1 or v_n > 30 or v_n <> coalesce(array_length(p_texts, 1), 0) then return jsonb_build_object('ok', false, 'error', 'bad_value'); end if;
+  perform _board_write_lock();
+  for i in 1 .. v_n loop
+    select * into tk from print_tickets where t = p_tickets[i] for update;
+    if tk.t is null or tk.device_id <> v_dev or tk.job_id is not null or tk.board_epoch is distinct from _board_epoch()
+       or (i > 1 and tk.animal_id <> a.id) then v_e := 'bad_ticket'; exit; end if;
+    if i = 1 then select * into a from animals_pilot where id = tk.animal_id for share; end if;
+    if tk.mark is distinct from _printed_as_key(a) then v_e := 'ruling_changed'; exit; end if;   -- the ruling changed since the ticket
+    if tk.product is not null then v_parts := v_parts || jsonb_build_object('pid', tk.product, 'i', tk.piece); end if;
+    -- the tablet's part: one picture field, no wider than the sticker, no taller than the part above the band
+    begin v_txt := convert_from(decode(p_texts[i], 'base64'), 'LATIN1'); exception when others then v_e := 'bad_value'; exit; end;
+    if v_txt !~ '^\^FO0,0\^GFA,[0-9]{1,7},[0-9]{1,7},[0-9]{1,4},[0-9A-F]+\^FS$' then v_e := 'bad_value'; exit; end if;
+    v_bpr := (regexp_match(v_txt, '^\^FO0,0\^GFA,[0-9]+,[0-9]+,([0-9]+),'))[1]::int;
+    v_rows := length((regexp_match(v_txt, ',([0-9A-F]+)\^FS$'))[1]) / 2 / greatest(v_bpr, 1);
+    if v_bpr > ceil(v_w / 8.0) or v_rows > v_h - v_band then v_e := 'bad_value'; exit; end if;
+  end loop;
+  v_role := (select assigned_role from devices_pilot where id = v_dev and coalesce(device_status, 'active') <> 'retired');
+  if v_e is null then v_e := _print_kosher_refusal(a, v_parts, v_role, v_test, v_n); end if;   -- checked again now
+  if v_e is null then
+    select * into m from print_marks where status = tk.mark and fp = _print_mark_fp(tk.mark);
+    if m.status is null then v_e := 'mark_missing'; end if;                                   -- the team leader's tablet makes it
+  end if;
+  if v_e is not null then
+    v_res := jsonb_build_object('ok', false, 'error', 'refused', 'reason', v_e);
+    perform _print_log_add(v_dev, 'kosher', a.id, v_parts, v_n, 1, p_printer, null, 'refused:' || v_e);
+    perform _cmd_put(p_command_id, v_dev, 'print_kosher_add', v_res); return v_res;
+  end if;
+  if (select count(*) from print_jobs where device_id = v_dev and at > now() - interval '1 minute') >= 120 then
+    return jsonb_build_object('ok', false, 'error', 'too_many');
+  end if;
+  for i in 1 .. v_n loop
+    select * into tk from print_tickets where t = p_tickets[i];
+    v_pl := _ticket_payload(a, tk.product, tk.piece, tk.board_epoch, tk.t, tk.mark);
+    v_mag := least(10, greatest(1, floor(v_qr / _qr_modules(octet_length(v_pl)))::int));
+    v_zpl := v_zpl || '^XA^CI28^PW' || v_w || '^LL' || v_h || '^LH0,0'
+             || convert_from(decode(p_texts[i], 'base64'), 'LATIN1')
+             || '^FO0,' || (v_h - v_band) || '^GFA,' || (m.bpr * m.rows_n) || ',' || (m.bpr * m.rows_n) || ',' || m.bpr || ',' || m.gfa || '^FS'
+             || '^FO' || v_pad || ',' || v_pad || '^BQN,2,' || v_mag || '^FDMA,' || v_pl || '^FS'
+             || '^FO0,0^GB' || v_w || ',' || v_h || ',' || greatest(2, round(v_pad / 4.0)::int) || '^FS'
+             || '^PQ1^XZ' || E'\n';
+  end loop;
+  insert into print_jobs (device_id, printer, data) values (v_dev, p_printer, encode(convert_to(v_zpl, 'UTF8'), 'base64')) returning id into v_id;
+  update print_tickets set job_id = v_id where t = any(p_tickets);
+  perform _print_log_add(v_dev, 'kosher', a.id, v_parts, v_n, 1, p_printer, v_id, 'queued');
+  v_res := jsonb_build_object('ok', true, 'id', v_id);
+  perform _cmd_put(p_command_id, v_dev, 'print_kosher_add', v_res);
+  return v_res;
+end $_$;
+
+
+ALTER FUNCTION public.print_kosher_add(p_printer text, p_tickets text[], p_texts text[], p_command_id uuid) OWNER TO postgres;
+
+--
+-- Name: print_mark_set(text, text, text, integer, integer, text); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.print_mark_set(p_token text, p_status text, p_fp text, p_bpr integer, p_rows integer, p_gfa text) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $_$
+declare g jsonb := _kosher_geom();
+begin
+  if not _manager_session_valid(p_token) or coalesce(_session_role(p_token), '') not in ('manager') then
+    return jsonb_build_object('ok', false, 'error', 'unauthorized');
+  end if;
+  if p_status is null or not (p_status = any(_kosher_statuses())) then return jsonb_build_object('ok', false, 'error', 'bad_value'); end if;
+  if p_fp is distinct from _print_mark_fp(p_status) then return jsonb_build_object('ok', false, 'error', 'stale'); end if;   -- made for an older mark / size
+  if p_bpr is null or p_rows is null or p_gfa is null or p_gfa !~ '^[0-9A-F]+$' or length(p_gfa) <> p_bpr * p_rows * 2
+     or p_bpr <> ceil((g ->> 'w')::int / 8.0) or p_rows <> (g ->> 'band')::int then
+    return jsonb_build_object('ok', false, 'error', 'bad_value');
+  end if;
+  insert into print_marks (status, fp, bpr, rows_n, gfa, updated_by) values (p_status, p_fp, p_bpr, p_rows, p_gfa, _session_name(p_token))
+    on conflict (status) do update set fp = excluded.fp, bpr = excluded.bpr, rows_n = excluded.rows_n, gfa = excluded.gfa,
+                                       updated_at = now(), updated_by = excluded.updated_by;
+  perform _admin_audit(p_token, 'print_mark_set', 'print_marks', jsonb_build_object('status', p_status));
+  return jsonb_build_object('ok', true);
+end $_$;
+
+
+ALTER FUNCTION public.print_mark_set(p_token text, p_status text, p_fp text, p_bpr integer, p_rows integer, p_gfa text) OWNER TO postgres;
+
+--
+-- Name: print_marks_needed(text); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.print_marks_needed(p_token text) RETURNS jsonb
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $$
+declare g jsonb := _kosher_geom();
+begin
+  if not _manager_session_valid(p_token) or coalesce(_session_role(p_token), '') not in ('manager') then
+    return jsonb_build_object('ok', false, 'error', 'unauthorized');
+  end if;
+  return jsonb_build_object('ok', true, 'w', (g ->> 'w')::int, 'band', (g ->> 'band')::int,
+    'needed', coalesce((select jsonb_agg(jsonb_build_object('status', k, 'fp', _print_mark_fp(k)) order by k)
+                          from unnest(_kosher_statuses()) k
+                         where not exists (select 1 from print_marks m where m.status = k and m.fp = _print_mark_fp(k))), '[]'::jsonb));
+end $$;
+
+
+ALTER FUNCTION public.print_marks_needed(p_token text) OWNER TO postgres;
+
+--
+-- Name: print_tickets_take(integer, jsonb, integer, uuid); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.print_tickets_take(p_animal integer, p_parts jsonb DEFAULT '[]'::jsonb, p_count integer DEFAULT NULL::integer, p_command_id uuid DEFAULT NULL::uuid) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $$
+declare v_dev text; v_res jsonb; a animals_pilot; v_role text; v_e text; v_test boolean := _test_mode_on(); v_n int; v_ep bigint := _board_epoch();
+        v_mark text; v_out jsonb := '[]'::jsonb; x jsonb; v_t text; g jsonb := _kosher_geom();
+begin
+  v_dev := _call_device(null);
+  if v_dev is null then return jsonb_build_object('ok', false, 'error', _no_device_error()); end if;
+  v_res := _cmd_get(p_command_id, v_dev, 'print_tickets_take');
+  if v_res is not null then return v_res; end if;
+  if p_animal is null or p_animal < 0 or p_animal > 999 or (p_parts is not null and jsonb_typeof(p_parts) <> 'array') then
+    return jsonb_build_object('ok', false, 'error', 'bad_value');
+  end if;
+  perform _board_write_lock();
+  select * into a from animals_pilot where id = p_animal for share;
+  v_role := (select assigned_role from devices_pilot where id = v_dev and coalesce(device_status, 'active') <> 'retired');
+  v_n := case when jsonb_array_length(coalesce(p_parts, '[]'::jsonb)) > 0 then jsonb_array_length(p_parts) else greatest(1, coalesce(p_count, 1)) end;
+  v_e := _print_kosher_refusal(a, p_parts, v_role, v_test, v_n);
+  if v_e is null and (select count(*) from print_tickets where device_id = v_dev and at > now() - interval '1 minute') >= 200 then v_e := 'too_many'; end if;
+  if v_e is not null then
+    v_res := jsonb_build_object('ok', false, 'error', 'refused', 'reason', v_e);
+    perform _print_log_add(v_dev, 'kosher', p_animal, p_parts, v_n, 1, null, null, 'refused:' || v_e);
+    perform _cmd_put(p_command_id, v_dev, 'print_tickets_take', v_res); return v_res;
+  end if;
+  v_mark := _printed_as_key(a);
+  if jsonb_array_length(coalesce(p_parts, '[]'::jsonb)) > 0 then
+    for x in select e from jsonb_array_elements(p_parts) e loop
+      v_t := _ticket_new();
+      insert into print_tickets (t, board_epoch, animal_id, product, piece, mark, device_id)
+      values (v_t, v_ep, p_animal, x ->> 'pid', coalesce(nullif(x ->> 'i', '')::int, 1), v_mark, v_dev);
+      v_out := v_out || jsonb_build_object('t', v_t, 'pid', x ->> 'pid', 'i', coalesce(nullif(x ->> 'i', '')::int, 1),
+                                           'payload', _ticket_payload(a, x ->> 'pid', coalesce(nullif(x ->> 'i', '')::int, 1), v_ep, v_t, v_mark));
+    end loop;
+  else
+    for k in 1 .. v_n loop
+      v_t := _ticket_new();
+      insert into print_tickets (t, board_epoch, animal_id, mark, device_id) values (v_t, v_ep, p_animal, v_mark, v_dev);
+      v_out := v_out || jsonb_build_object('t', v_t, 'payload', _ticket_payload(a, null, null, v_ep, v_t, v_mark));
+    end loop;
+  end if;
+  v_res := jsonb_build_object('ok', true, 'mark', v_mark, 'tickets', v_out, 'geom', g,
+                              'markReady', exists (select 1 from print_marks m where m.status = v_mark and m.fp = _print_mark_fp(v_mark)));
+  perform _cmd_put(p_command_id, v_dev, 'print_tickets_take', v_res);
+  return v_res;
+end $$;
+
+
+ALTER FUNCTION public.print_tickets_take(p_animal integer, p_parts jsonb, p_count integer, p_command_id uuid) OWNER TO postgres;
 
 --
 -- Name: printer_scan_request(text); Type: FUNCTION; Schema: public; Owner: postgres
@@ -9742,6 +10071,50 @@ ALTER SEQUENCE public.print_log_id_seq OWNED BY public.print_log.id;
 
 
 --
+-- Name: print_marks; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.print_marks (
+    status text NOT NULL,
+    fp text NOT NULL,
+    bpr integer NOT NULL,
+    rows_n integer NOT NULL,
+    gfa text NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by text,
+    CONSTRAINT print_marks_bpr_check CHECK (((bpr >= 1) AND (bpr <= 250))),
+    CONSTRAINT print_marks_gfa_check CHECK ((gfa ~ '^[0-9A-F]+$'::text)),
+    CONSTRAINT print_marks_rows_n_check CHECK (((rows_n >= 1) AND (rows_n <= 1600))),
+    CONSTRAINT print_marks_status_check CHECK ((status ~ '^[A-Za-z0-9_-]{1,48}$'::text))
+);
+
+
+ALTER TABLE public.print_marks OWNER TO postgres;
+
+--
+-- Name: print_tickets; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.print_tickets (
+    t text NOT NULL,
+    board_epoch bigint NOT NULL,
+    animal_id integer NOT NULL,
+    product text,
+    piece integer,
+    mark text NOT NULL,
+    device_id text NOT NULL,
+    at timestamp with time zone DEFAULT now() NOT NULL,
+    job_id bigint,
+    CONSTRAINT print_tickets_animal_id_check CHECK (((animal_id >= 0) AND (animal_id <= 999))),
+    CONSTRAINT print_tickets_piece_check CHECK (((piece >= 1) AND (piece <= 20))),
+    CONSTRAINT print_tickets_product_check CHECK ((product ~ '^[a-z][a-z0-9_]{0,40}$'::text)),
+    CONSTRAINT print_tickets_t_check CHECK ((t ~ '^[A-Z2-9]{10}$'::text))
+);
+
+
+ALTER TABLE public.print_tickets OWNER TO postgres;
+
+--
 -- Name: problem_reports; Type: TABLE; Schema: public; Owner: postgres
 --
 
@@ -10434,6 +10807,22 @@ ALTER TABLE ONLY public.print_log
 
 
 --
+-- Name: print_marks print_marks_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.print_marks
+    ADD CONSTRAINT print_marks_pkey PRIMARY KEY (status);
+
+
+--
+-- Name: print_tickets print_tickets_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.print_tickets
+    ADD CONSTRAINT print_tickets_pkey PRIMARY KEY (t);
+
+
+--
 -- Name: problem_reports problem_reports_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -10740,6 +11129,13 @@ CREATE INDEX print_log_animal ON public.print_log USING btree (board_epoch, anim
 --
 
 CREATE INDEX print_log_job ON public.print_log USING btree (job_id) WHERE (job_id IS NOT NULL);
+
+
+--
+-- Name: print_tickets_piece; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX print_tickets_piece ON public.print_tickets USING btree (board_epoch, animal_id, product, piece);
 
 
 --
@@ -11474,6 +11870,18 @@ ALTER TABLE public.print_jobs ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE public.print_log ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: print_marks; Type: ROW SECURITY; Schema: public; Owner: postgres
+--
+
+ALTER TABLE public.print_marks ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: print_tickets; Type: ROW SECURITY; Schema: public; Owner: postgres
+--
+
+ALTER TABLE public.print_tickets ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: problem_reports; Type: ROW SECURITY; Schema: public; Owner: postgres
@@ -12250,6 +12658,13 @@ REVOKE ALL ON FUNCTION public._jstr_ok(v jsonb, maxlen integer) FROM PUBLIC;
 
 
 --
+-- Name: FUNCTION _kosher_geom(); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public._kosher_geom() FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION _kosher_ready(a public.animals_pilot); Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -12520,6 +12935,13 @@ REVOKE ALL ON FUNCTION public._plant_state_test_mode_trg() FROM PUBLIC;
 
 
 --
+-- Name: FUNCTION _plant_tz(); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public._plant_tz() FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION _plant_usage(); Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -12541,6 +12963,13 @@ REVOKE ALL ON FUNCTION public._print_kosher_max(p_parts jsonb, p_role text, p_te
 
 
 --
+-- Name: FUNCTION _print_kosher_refusal(a public.animals_pilot, p_parts jsonb, p_role text, p_test boolean, p_labels integer); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public._print_kosher_refusal(a public.animals_pilot, p_parts jsonb, p_role text, p_test boolean, p_labels integer) FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION _print_log_add(p_dev text, p_kind text, p_animal integer, p_parts jsonb, p_labels integer, p_copies integer, p_printer text, p_job bigint, p_result text); Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -12552,6 +12981,13 @@ REVOKE ALL ON FUNCTION public._print_log_add(p_dev text, p_kind text, p_animal i
 --
 
 REVOKE ALL ON FUNCTION public._print_log_result() FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION _print_mark_fp(p_status text); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public._print_mark_fp(p_status text) FROM PUBLIC;
 
 
 --
@@ -12678,6 +13114,13 @@ REVOKE ALL ON FUNCTION public._products_list_defaults(v jsonb) FROM PUBLIC;
 --
 
 REVOKE ALL ON FUNCTION public._push_is_correction(p_rows jsonb) FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION _qr_modules(p_len integer); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public._qr_modules(p_len integer) FROM PUBLIC;
 
 
 --
@@ -12965,6 +13408,27 @@ REVOKE ALL ON FUNCTION public._test_mode_on_at() FROM PUBLIC;
 
 
 --
+-- Name: FUNCTION _ticket_new(); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public._ticket_new() FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION _ticket_payload(a public.animals_pilot, p_pid text, p_i integer, p_epoch bigint, p_t text, p_mark text); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public._ticket_payload(a public.animals_pilot, p_pid text, p_i integer, p_epoch bigint, p_t text, p_mark text) FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION _ticket_refusal(p_epoch bigint, p_id integer, p_product text, p_piece integer, p_ticket text); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public._ticket_refusal(p_epoch bigint, p_id integer, p_product text, p_piece integer, p_ticket text) FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION _ts_or_null(p text); Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -13143,12 +13607,12 @@ GRANT ALL ON FUNCTION public.cooler_hold(p_id integer, p_epoch bigint, p_kind te
 
 
 --
--- Name: FUNCTION cooler_scan(p_id integer, p_product text, p_piece integer, p_epoch bigint, p_command_id uuid); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION cooler_scan(p_id integer, p_product text, p_piece integer, p_epoch bigint, p_command_id uuid, p_ticket text); Type: ACL; Schema: public; Owner: postgres
 --
 
-REVOKE ALL ON FUNCTION public.cooler_scan(p_id integer, p_product text, p_piece integer, p_epoch bigint, p_command_id uuid) FROM PUBLIC;
-GRANT ALL ON FUNCTION public.cooler_scan(p_id integer, p_product text, p_piece integer, p_epoch bigint, p_command_id uuid) TO anon;
-GRANT ALL ON FUNCTION public.cooler_scan(p_id integer, p_product text, p_piece integer, p_epoch bigint, p_command_id uuid) TO authenticated;
+REVOKE ALL ON FUNCTION public.cooler_scan(p_id integer, p_product text, p_piece integer, p_epoch bigint, p_command_id uuid, p_ticket text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.cooler_scan(p_id integer, p_product text, p_piece integer, p_epoch bigint, p_command_id uuid, p_ticket text) TO anon;
+GRANT ALL ON FUNCTION public.cooler_scan(p_id integer, p_product text, p_piece integer, p_epoch bigint, p_command_id uuid, p_ticket text) TO authenticated;
 
 
 --
@@ -13484,12 +13948,12 @@ GRANT ALL ON FUNCTION public.nikur_passed(p_days integer) TO authenticated;
 
 
 --
--- Name: FUNCTION nikur_scan(p_id integer, p_product text, p_piece integer, p_epoch bigint, p_command_id uuid); Type: ACL; Schema: public; Owner: postgres
+-- Name: FUNCTION nikur_scan(p_id integer, p_product text, p_piece integer, p_epoch bigint, p_command_id uuid, p_ticket text); Type: ACL; Schema: public; Owner: postgres
 --
 
-REVOKE ALL ON FUNCTION public.nikur_scan(p_id integer, p_product text, p_piece integer, p_epoch bigint, p_command_id uuid) FROM PUBLIC;
-GRANT ALL ON FUNCTION public.nikur_scan(p_id integer, p_product text, p_piece integer, p_epoch bigint, p_command_id uuid) TO anon;
-GRANT ALL ON FUNCTION public.nikur_scan(p_id integer, p_product text, p_piece integer, p_epoch bigint, p_command_id uuid) TO authenticated;
+REVOKE ALL ON FUNCTION public.nikur_scan(p_id integer, p_product text, p_piece integer, p_epoch bigint, p_command_id uuid, p_ticket text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.nikur_scan(p_id integer, p_product text, p_piece integer, p_epoch bigint, p_command_id uuid, p_ticket text) TO anon;
+GRANT ALL ON FUNCTION public.nikur_scan(p_id integer, p_product text, p_piece integer, p_epoch bigint, p_command_id uuid, p_ticket text) TO authenticated;
 
 
 --
@@ -13552,6 +14016,42 @@ GRANT ALL ON FUNCTION public.print_job_add(p_printer text, p_data text, p_kind t
 REVOKE ALL ON FUNCTION public.print_job_status(p_id bigint) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.print_job_status(p_id bigint) TO anon;
 GRANT ALL ON FUNCTION public.print_job_status(p_id bigint) TO authenticated;
+
+
+--
+-- Name: FUNCTION print_kosher_add(p_printer text, p_tickets text[], p_texts text[], p_command_id uuid); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public.print_kosher_add(p_printer text, p_tickets text[], p_texts text[], p_command_id uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.print_kosher_add(p_printer text, p_tickets text[], p_texts text[], p_command_id uuid) TO anon;
+GRANT ALL ON FUNCTION public.print_kosher_add(p_printer text, p_tickets text[], p_texts text[], p_command_id uuid) TO authenticated;
+
+
+--
+-- Name: FUNCTION print_mark_set(p_token text, p_status text, p_fp text, p_bpr integer, p_rows integer, p_gfa text); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public.print_mark_set(p_token text, p_status text, p_fp text, p_bpr integer, p_rows integer, p_gfa text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.print_mark_set(p_token text, p_status text, p_fp text, p_bpr integer, p_rows integer, p_gfa text) TO anon;
+GRANT ALL ON FUNCTION public.print_mark_set(p_token text, p_status text, p_fp text, p_bpr integer, p_rows integer, p_gfa text) TO authenticated;
+
+
+--
+-- Name: FUNCTION print_marks_needed(p_token text); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public.print_marks_needed(p_token text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.print_marks_needed(p_token text) TO anon;
+GRANT ALL ON FUNCTION public.print_marks_needed(p_token text) TO authenticated;
+
+
+--
+-- Name: FUNCTION print_tickets_take(p_animal integer, p_parts jsonb, p_count integer, p_command_id uuid); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public.print_tickets_take(p_animal integer, p_parts jsonb, p_count integer, p_command_id uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.print_tickets_take(p_animal integer, p_parts jsonb, p_count integer, p_command_id uuid) TO anon;
+GRANT ALL ON FUNCTION public.print_tickets_take(p_animal integer, p_parts jsonb, p_count integer, p_command_id uuid) TO authenticated;
 
 
 --
@@ -13991,5 +14491,5 @@ GRANT ALL ON TABLE public.system_flags TO service_role;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict R06SozyjXBkFC9x1CwSOSDZhIzg9J8fRkyuZfyterv0JfxR2QaHkgUsYa3Nr2HA
+\unrestrict XTRhzNeU8i2yD9zhIENMerTMUFy1aLRCoWHDi9HZyaYMxfzGjVuxm6hTjiCTdWu
 
