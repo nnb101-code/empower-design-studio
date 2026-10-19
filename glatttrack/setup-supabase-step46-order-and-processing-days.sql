@@ -8204,6 +8204,72 @@ end $$;
 revoke execute on function nikur_passed(integer) from public;
 grant execute on function nikur_passed(integer) to anon, authenticated;
 
+-- (owner, 19.10) "the small-parts nikur takes straight from the small parts": a small part reaches the nikur the
+-- moment its kosher sticker is out at the small-parts screen — the tongue with its sticker, the cheeks with theirs —
+-- not only when the whole set is done. And what passed BEFORE the cuts list had its nikur values (or before this
+-- version) is filled in now, and again whenever the team leader changes the cuts list.
+create or replace function _animal_piece_done(a animals_pilot, x jsonb) returns boolean
+language sql immutable set search_path = public, extensions, pg_temp as $$
+  select case x ->> 'post'
+           when 'stamps' then coalesce(a.stamped, false)
+           when 'parts'  then coalesce(a.parts_scanned, false)
+                              or (x ->> 'id' = 'tongue' and coalesce(a.tongue_sticker, false))
+                              or (x ->> 'id' = 'cheeks' and coalesce(a.cheek_sticker, false))
+           when 'legs'   then coalesce(a.legs_sorted, false)
+           else false end;
+$$;
+revoke execute on function _animal_piece_done(animals_pilot, jsonb) from public, anon, authenticated;
+
+create or replace function _animal_pieces_track() returns trigger
+language plpgsql security definer set search_path = public, extensions, pg_temp as $$
+declare x jsonb; v_ep bigint;
+begin
+  if new.slaughter is null then return null; end if;                -- (the daily reset clears the marks: nothing is recorded then)
+  v_ep := coalesce(new.board_epoch, _board_epoch());
+  if v_ep is null then return null; end if;
+  for x in select e from jsonb_array_elements(_gt_products()) e loop
+    continue when not coalesce((x ->> 'on')::boolean, false) or coalesce(x ->> 'nikur', 'none') not in ('big', 'small')
+                  or coalesce((x ->> 'm')::int, 0) < 1;
+    -- (a part not taken from a glatt animal is still recorded: the ruling may change after printing — the scan decides)
+    if _animal_piece_done(new, x) then
+      insert into animal_pieces (board_epoch, animal_id, product, cnt, screen)
+      values (v_ep, new.id, x ->> 'id', least((x ->> 'm')::int, 20), x ->> 'nikur')
+      on conflict (board_epoch, animal_id, product) do nothing;
+    end if;
+  end loop;
+  return null;
+end $$;
+revoke execute on function _animal_pieces_track() from public, anon, authenticated;
+
+-- today's board: every part whose kosher sticker is already out, recorded (nothing is ever removed here)
+create or replace function _animal_pieces_fill() returns integer
+language plpgsql security definer set search_path = public, extensions, pg_temp as $$
+declare n int;
+begin
+  insert into animal_pieces (board_epoch, animal_id, product, cnt, screen)
+  select coalesce(a.board_epoch, _board_epoch()), a.id, x ->> 'id', least((x ->> 'm')::int, 20), x ->> 'nikur'
+    from animals_pilot a cross join lateral jsonb_array_elements(_gt_products()) x
+   where a.slaughter is not null and coalesce(a.board_epoch, _board_epoch()) is not null
+     and coalesce((x ->> 'on')::boolean, false) and x ->> 'nikur' in ('big', 'small') and coalesce((x ->> 'm')::int, 0) >= 1
+     and _animal_piece_done(a, x)
+  on conflict (board_epoch, animal_id, product) do nothing;
+  get diagnostics n = row_count;
+  return n;
+end $$;
+revoke execute on function _animal_pieces_fill() from public, anon, authenticated;
+
+create or replace function _settings_pieces_fill() returns trigger
+language plpgsql security definer set search_path = public, extensions, pg_temp as $$
+begin
+  if new.settings -> 'products' is distinct from old.settings -> 'products' then perform _animal_pieces_fill(); end if;
+  return null;
+end $$;
+revoke execute on function _settings_pieces_fill() from public, anon, authenticated;
+drop trigger if exists zz_settings_pieces_fill on settings_pilot;
+create trigger zz_settings_pieces_fill after update on settings_pilot for each row execute function _settings_pieces_fill();
+
+select _animal_pieces_fill();
+
 -- ── self-check ──────────────────────────────────────────────────────────────
 do $$
 declare problems text[] := '{}';

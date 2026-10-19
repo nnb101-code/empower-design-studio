@@ -3494,6 +3494,13 @@ begin
   r2 := pg_temp.api(pg_temp.dev('STAMPS'), 'select nikur_passed(7)');
   ok := ok and pg_temp.ok(r) and r2 ->> 'error' = 'wrong_station'
         and exists (select 1 from jsonb_array_elements(r -> 'days') d where (d ->> 'epoch')::bigint = pg_temp.ep() and d -> 'small' @> '[921]'::jsonb and not (d -> 'passed' @> '[921]'::jsonb));
+  -- (owner) the small-parts nikur takes a small part the moment its sticker is out (the tongue before the cheeks)
+  perform set_config('gt.reset_in_progress', 'true', true);
+  update animals_pilot set tongue_sticker = true where id = 921;
+  perform set_config('gt.reset_in_progress', 'false', true);
+  r  := pg_temp.api(pg_temp.dev('NIKS'), format('select nikur_scan(921, ''tongue'', 1, %s)', pg_temp.ep()));
+  r2 := pg_temp.api(pg_temp.dev('NIKS'), format('select nikur_scan(921, ''cheeks'', 1, %s)', pg_temp.ep()));
+  ok := ok and pg_temp.ok(r) and r2 ->> 'reason' = 'not_printed';
   perform pg_temp.rec('owner: one nikur screen takes large + small parts (each to its side), shows the kosher animals still coming; two screens split again', ok,
     concat_ws(' | ', left(r::text, 60), left(r2::text, 60), r3::text, left((r4 -> 'coming')::text, 80), r5::text));
   update settings_pilot set settings = s0 where id = 1;
