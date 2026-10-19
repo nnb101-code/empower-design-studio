@@ -2276,11 +2276,22 @@ language sql immutable set search_path = public, extensions, pg_temp as $$
 $$;
 revoke execute on function _products_counts(jsonb) from public, anon, authenticated;
 
+-- (owner, 19.10) the plant's cuts list as the app sees it: a list saved before stage 2 has no m / nikur on its
+-- built-in parts — they take the built-in values (as in the app), so the nikur / cooler get their pieces
+create or replace function _gt_products() returns jsonb
+language sql stable security definer set search_path = public, extensions, pg_temp as $$
+  select coalesce(jsonb_agg(e || jsonb_build_object('m', coalesce(e -> 'm', d -> 'm', '0'::jsonb),
+                                                    'nikur', coalesce(e -> 'nikur', d -> 'nikur', '"none"'::jsonb)) order by o), '[]'::jsonb)
+    from jsonb_array_elements(case when jsonb_typeof(_gt_settings() -> 'products') = 'array' then _gt_settings() -> 'products' else '[]'::jsonb end)
+         with ordinality t(e, o)
+    left join jsonb_array_elements('[{"id":"tongue","m":1,"nikur":"small"},{"id":"cheeks","m":2,"nikur":"small"},{"id":"sides","m":6,"nikur":"big"},{"id":"lung","m":0,"nikur":"none"},{"id":"hook","m":0,"nikur":"none"},{"id":"legs","m":0,"nikur":"none"},{"id":"tail","m":1,"nikur":"small"},{"id":"liver","m":1,"nikur":"small"},{"id":"skirt_out","m":1,"nikur":"small"},{"id":"skirt_in","m":1,"nikur":"small"},{"id":"hanger","m":1,"nikur":"small"}]'::jsonb) d on d ->> 'id' = e ->> 'id';
+$$;
+revoke execute on function _gt_products() from public, anon, authenticated;
+
 -- (stage 2) where the legs are sorted: the legs screen, or with the small parts
 create or replace function _legs_sort_station() returns text
 language sql stable security definer set search_path = public, extensions, pg_temp as $$
-  select case when exists (select 1 from jsonb_array_elements(case when jsonb_typeof(_gt_settings() -> 'products') = 'array'
-                                                                   then _gt_settings() -> 'products' else '[]'::jsonb end) x
+  select case when exists (select 1 from jsonb_array_elements(_gt_products()) x
                             where x ->> 'id' = 'legs' and x ->> 'post' = 'parts') then 'parts' else 'legs' end;
 $$;
 revoke execute on function _legs_sort_station() from public, anon, authenticated;
@@ -2295,7 +2306,7 @@ revoke execute on function _legs_sort_pending(animals_pilot) from public, anon, 
 create or replace function _parts_expected() returns integer
 language sql stable security definer set search_path = public, extensions, pg_temp as $$
   select case when jsonb_typeof(_gt_settings() -> 'products') = 'array'
-              then coalesce((_products_counts(_gt_settings() -> 'products') ->> 'partsStickerCount')::int, 0) else 3 end;
+              then coalesce((_products_counts(_gt_products()) ->> 'partsStickerCount')::int, 0) else 3 end;
 $$;
 revoke execute on function _parts_expected() from public, anon, authenticated;
 
@@ -6700,8 +6711,7 @@ begin
   if v_ep is not null and (p_epoch is null or p_epoch < v_ep) then
     return jsonb_build_object('ok', false, 'error', 'stale_board', 'boardEpoch', v_ep);
   end if;
-  select e into x from jsonb_array_elements(case when jsonb_typeof(_gt_settings() -> 'products') = 'array'
-                                                 then _gt_settings() -> 'products' else '[]'::jsonb end) e
+  select e into x from jsonb_array_elements(_gt_products()) e
    where e ->> 'id' = p_product and coalesce((e ->> 'on')::boolean, false) limit 1;
   if x is null then return jsonb_build_object('ok', false, 'error', 'unknown_part'); end if;
   select case when coalesce(assigned_index, 0) % 2 = 1 then 'small' else 'big' end into v_screen
@@ -7067,8 +7077,7 @@ begin
   if new.slaughter is null then return null; end if;                -- (the daily reset clears the marks: nothing is recorded then)
   v_ep := coalesce(new.board_epoch, _board_epoch());
   if v_ep is null then return null; end if;
-  for x in select e from jsonb_array_elements(case when jsonb_typeof(_gt_settings() -> 'products') = 'array'
-                                                   then _gt_settings() -> 'products' else '[]'::jsonb end) e loop
+  for x in select e from jsonb_array_elements(_gt_products()) e loop
     continue when not coalesce((x ->> 'on')::boolean, false) or coalesce(x ->> 'nikur', 'none') not in ('big', 'small');
     v_m := coalesce((x ->> 'm')::int, 0);
     continue when v_m < 1;
@@ -7123,8 +7132,7 @@ revoke execute on function _nikur_day_rows(bigint) from public, anon, authentica
 -- the plant's definition of one part (or an empty object)
 create or replace function _product_def(p_id text) returns jsonb
 language sql stable security definer set search_path = public, extensions, pg_temp as $$
-  select coalesce((select e from jsonb_array_elements(case when jsonb_typeof(_gt_settings() -> 'products') = 'array'
-                                                          then _gt_settings() -> 'products' else '[]'::jsonb end) e
+  select coalesce((select e from jsonb_array_elements(_gt_products()) e
                     where e ->> 'id' = p_id limit 1), '{}'::jsonb);
 $$;
 revoke execute on function _product_def(text) from public, anon, authenticated;
@@ -7221,8 +7229,7 @@ begin
     perform _cmd_put(p_command_id, v_dev, 'nikur_scan', v_res); return v_res;
   end if;
   -- the part as the plant has it (also a part closed since: what was printed still goes in)
-  select e into x from jsonb_array_elements(case when jsonb_typeof(_gt_settings() -> 'products') = 'array'
-                                                 then _gt_settings() -> 'products' else '[]'::jsonb end) e
+  select e into x from jsonb_array_elements(_gt_products()) e
    where e ->> 'id' = p_product limit 1;
   if x is null then
     v_res := jsonb_build_object('ok', false, 'error', 'unknown_part');
@@ -7388,13 +7395,13 @@ begin
                                            'missing', (select coalesce(jsonb_agg(m), '[]'::jsonb) from (select m from jsonb_array_elements(v_miss) m limit 300) q));
   end loop;
   return jsonb_build_object('ok', true, 'boardEpoch', v_cur, 'screen', v_screen, 'mode', v_mode, 'coolerOn', _cooler_on(), 'days', v_days,
+    'productsSaved', exists (select 1 from jsonb_array_elements(_gt_products()) e where e ->> 'nikur' in ('big', 'small') and coalesce((e ->> 'm')::int, 0) >= 1),
     -- (owner) the kosher animals of today from the ruling on — and those whose pieces did not reach this nikur yet
     'kosherToday', (select count(*) from animals_pilot a where a.slaughter is not null and _nikur_refusal(a, null, v_cur, null) is null),
     'coming', coalesce((select jsonb_agg(jsonb_build_object('n', a.id + 1, 's', q.sides) order by a.id)
                           from animals_pilot a
                           cross join lateral (select jsonb_agg(distinct e ->> 'nikur') sides
-                                                from jsonb_array_elements(case when jsonb_typeof(_gt_settings() -> 'products') = 'array'
-                                                                               then _gt_settings() -> 'products' else '[]'::jsonb end) e
+                                                from jsonb_array_elements(_gt_products()) e
                                                where coalesce((e ->> 'on')::boolean, false) and coalesce((e ->> 'm')::int, 0) >= 1
                                                  and e ->> 'nikur' in ('big', 'small') and (v_screen is null or e ->> 'nikur' = v_screen)
                                                  and _nikur_refusal(a, e, v_cur, null) is null
@@ -8140,8 +8147,7 @@ begin
     -- kosher animals whose large parts did not get their kosher stickers yet (not through the stamps screen)
     'coming', coalesce((select jsonb_agg(a.id + 1 order by a.id) from animals_pilot a
                          where a.slaughter is not null and _nikur_refusal(a, null, v_cur, null) is null
-                           and exists (select 1 from jsonb_array_elements(case when jsonb_typeof(_gt_settings() -> 'products') = 'array'
-                                                                               then _gt_settings() -> 'products' else '[]'::jsonb end) e
+                           and exists (select 1 from jsonb_array_elements(_gt_products()) e
                                         where coalesce((e ->> 'on')::boolean, false) and coalesce((e ->> 'm')::int, 0) >= 1 and e ->> 'nikur' = 'big'
                                           and _nikur_refusal(a, e, v_cur, null) is null)
                            and not exists (select 1 from animal_pieces p where p.board_epoch = v_cur and p.animal_id = a.id and p.screen = 'big')), '[]'::jsonb),

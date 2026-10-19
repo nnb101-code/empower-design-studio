@@ -5467,6 +5467,7 @@ function nikurRender(el){
       </div>
       <div id="nkResult" style="display:none;border-radius:14px;padding:16px;text-align:center;margin-bottom:10px;"></div>
       <div id="nkHolds" style="margin-bottom:10px;"></div>
+      <div id="nkNoList" style="display:none;background:rgba(255,176,32,.12);border:1px solid var(--amber);border-radius:12px;padding:10px 12px;margin-bottom:10px;font-size:13px;color:var(--amber);font-weight:700;"></div>
       <div id="nkGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(58px,1fr));gap:6px;margin-bottom:6px;"></div>
       <div id="nkLegend" style="display:flex;gap:10px;flex-wrap:wrap;font-size:11px;color:var(--muted);margin-bottom:10px;"></div>
       <details class="gt-acc-in" id="nkListBox" style="margin-bottom:8px;"><summary id="nkListSum"></summary>
@@ -5478,6 +5479,8 @@ function nikurRender(el){
   const E=escapeHtml, set=(id,v)=>{ const e=document.getElementById(id); if(e) e.textContent=v; };
   const B=_nkBoard||{}, days=B.days||[], holds=B.holds||[], mode=_nkMode();
   if(mode!=='all') _nkTab=mode;
+  { const w=document.getElementById('nkNoList'); if(w){ w.style.display=B.productsSaved===false?'block':'none';
+      w.textContent='⚠ '+L('ברשימת החלקים של המפעל אין חלק שהולך לניקור — החתיכות לא יגיעו לכאן. ראש הצוות: הגדרות ← חלקי פנים וחוץ ← לכל חלק "ניקור" / "ניקור חלקים קטנים" ושומרים.','The plant\'s cuts list has no part that goes to the nikur — no pieces will come here. Team leader: Settings → Inner & outer cuts → set "Nikur" / "Small-parts nikur" and save.','La lista de cortes no tiene partes para el nikur. Jefe de equipo: Ajustes → Cortes → "Nikur" y guardar.'); } }
   const today=days.find(d=>d.today)||null, old=days.filter(d=>!d.today);
   set('nkTitle','🔪 '+_nkTitle());
   set('nkPrompt',L('סורקים את מדבקת הכשרות של כל חתיכה','Scan the kosher sticker of every piece','Escanee la etiqueta kosher de cada pieza'));
@@ -5523,14 +5526,14 @@ function nikurRender(el){
       { const g={}; rows.forEach(r=>{ const a=(g[r.n]=g[r.n]||[0,0]); a[0]++; if(r.ok) a[1]++; });
         const tl=[]; Object.keys(g).map(Number).forEach(n=>{ const [x,i]=g[n]; tl.push([n, i>=x?'done':i>0?'part':'ready', i+'/'+x]); });
         notCool.forEach(n=>tl.push([n,'cool','❄️'])); coming.forEach(c=>tl.push([c.n,'wait','⏳']));
+        _gtDayTiles(tl);
         tl.sort((a,b)=>a[0]-b[0]);
-        const C={done:['var(--green)','rgba(40,199,111,.15)'],part:['var(--amber)','rgba(255,176,32,.13)'],ready:['var(--gold)','var(--panel)'],cool:['var(--muted)','var(--panel2)'],wait:['var(--muted)','var(--panel2)']};
+        const C=_GT_TILE_C;
         const gEl=document.getElementById('nkGrid');
         const fl=(_nkFlash&&Date.now()-_nkFlash.t<3500)?_nkFlash.n:0;
-        if(gEl) gEl.innerHTML=tl.map(([n,k,t])=>`<div onclick="nkNumInfo(${n})" style="cursor:pointer;${n===fl?'box-shadow:0 0 0 3px #fff,0 0 16px var(--gold);transform:scale(1.06);':''}border:2px solid ${C[k][0]};background:${C[k][1]};border-radius:10px;padding:6px 2px;text-align:center;opacity:${k==='wait'||k==='cool'?.6:1};">`
-          +`<div style="font-size:20px;font-weight:900;color:${k==='wait'||k==='cool'?'var(--muted)':'var(--text)'};">${n}</div><div style="font-size:10px;font-weight:800;color:${C[k][0]};">${t}</div></div>`).join('')
-          || `<div class="gt-muted" style="grid-column:1/-1;padding:10px 0;">${E(L('עוד אין בהמות כשרות היום בצד הזה.','No kosher animals on this side today yet.','Aún no hay animales kosher en este lado hoy.'))}</div>`;
-        const lg=document.getElementById('nkLegend'); if(lg) lg.innerHTML=[['var(--green)',L('הכל נכנס','All in','Todo dentro')],['var(--amber)',L('התחיל','Started','Empezado')],['var(--gold)',L('מוכן לניקור','Ready','Listo')],['var(--muted)',B.coolerOn&&_nkTab==='big'?L('⏳ עוד לא הגיע / ❄️ לא בקולר','⏳ not here yet / ❄️ not in the cooler','⏳ aún no / ❄️ no en la cámara'):L('⏳ עוד לא הגיע','⏳ not here yet','⏳ aún no')]]
+        if(gEl) gEl.innerHTML=tl.map(([n,k,t])=>_gtTileHtml(n,k,t,fl,`nkNumInfo(${n})`)).join('')
+          || `<div class="gt-muted" style="grid-column:1/-1;padding:10px 0;">${E(L('עוד אין בהמות היום.','No animals today yet.','Aún no hay animales hoy.'))}</div>`;
+        const lg=document.getElementById('nkLegend'); if(lg) lg.innerHTML=[['var(--red)',L('לא כשר','Not kosher','No kosher')],['var(--green)',L('הכל נכנס','All in','Todo dentro')],['var(--amber)',L('התחיל','Started','Empezado')],['var(--gold)',L('מוכן לניקור','Ready','Listo')],['var(--muted)',B.coolerOn&&_nkTab==='big'?L('⏳ עוד לא הגיע / ❄️ לא בקולר','⏳ not here yet / ❄️ not in the cooler','⏳ aún no / ❄️ no en la cámara'):L('⏳ עוד לא הגיע','⏳ not here yet','⏳ aún no')]]
           .map(([c,t])=>`<span><span style="display:inline-block;width:9px;height:9px;border-radius:3px;background:${c};margin-inline-end:4px;"></span>${E(t)}</span>`).join('');
         set('nkListSum','📋 '+L('פירוט לפי חלקים','Details by part','Detalle por parte')); }
       box.innerHTML=(animalRows(rows)+waitCool+wait) || `<div class="gt-muted" style="padding:10px 0;">${E(L('עוד אין בהמות כשרות היום בצד הזה.','No kosher animals on this side today yet.','Aún no hay animales kosher en este lado hoy.'))}</div>`; } }
@@ -5547,6 +5550,22 @@ function nikurRender(el){
               <span style="font-size:17px;font-weight:900;color:${left>0?'var(--amber)':'var(--green)'};">${d.in} / ${d.expected}</span><span class="gt-muted">${open?'▲':'▼'}</span></div>
             ${open?`<div style="margin-top:8px;">${rows||`<div class="gt-muted">${E(L('הכל נכנס.','Everything is in.','Todo está dentro.'))}</div>`}</div>`:''}</div>`; }).join(''); } }
 }
+// (owner) the number tiles of the nikur / cooler: every number of today's board — the kosher ones by what reached
+// this screen, the others in red (treif / nevela) or grey (not ruled yet), like the station screens
+const _GT_TILE_C={done:['var(--green)','rgba(40,199,111,.15)'],part:['var(--amber)','rgba(255,176,32,.13)'],ready:['var(--gold)','var(--panel)'],
+  held:['#B39DFF','rgba(179,157,255,.12)'],cool:['var(--muted)','var(--panel2)'],wait:['var(--muted)','var(--panel2)'],
+  bad:['var(--red)','rgba(224,48,48,.14)'],none:['var(--muted)','var(--panel2)']};
+function _gtDayTiles(tl){
+  const have=new Set(tl.map(x=>x[0])); let a=[]; try{ a=KS.getAnimals()||[]; }catch(e){}
+  a.forEach((x,i)=>{ const n=i+1; if(!x||!x.slaughter||have.has(n)) return;
+    if(x.slaughter==='nevela'||x.slaughter==='shot') tl.push([n,'bad',L('נבלה','Nevela','Nevelá')]);
+    else if(x.innerStatus==='treif'||x.outerStatus==='treif') tl.push([n,'bad',L('טרף','Treif','Treif')]);
+    else if(!isKosherReady(x)) tl.push([n,'none','…']);
+    else tl.push([n,'wait','⏳']); });
+}
+function _gtTileHtml(n,k,t,fl,click){ const C=_GT_TILE_C[k]||_GT_TILE_C.none, dim=(k==='wait'||k==='cool'||k==='none');
+  return `<div ${click?`onclick="${click}"`:''} style="${click?'cursor:pointer;':''}${n===fl?'box-shadow:0 0 0 3px #fff,0 0 16px var(--gold);transform:scale(1.06);':''}border:2px solid ${C[0]};background:${C[1]};border-radius:10px;padding:6px 2px;text-align:center;opacity:${dim?.6:1};">`
+    +`<div style="font-size:20px;font-weight:900;color:${dim?'var(--muted)':k==='bad'?'var(--red)':'var(--text)'};${k==='bad'?'text-decoration:line-through;':''}">${n}</div><div style="font-size:10px;font-weight:800;color:${C[0]};">${escapeHtml(t)}</div></div>`; }
 // a tap on a number: what of it is in / missing
 function nkNumInfo(n){
   const B=_nkBoard||{}, today=(B.days||[]).find(d=>d.today), nm=pid=>gtProductName(gtProducts().find(p=>p.id===pid))||pid;
@@ -5723,13 +5742,12 @@ function coolerRender(el){
             +(cond?'':(usda?btn(L('שחרר','Release','Liberar'),'var(--green)','released')+btn(L('נפסל','Condemned','Condenado'),'var(--red)','condemned')
                         :btn(L('נענה — מותר','Answered — ok','Respondida — ok'),'var(--green)','answered')+btn(L('בטל','Cancel','Cancelar'),'var(--muted)','cancelled')))+`</div>`; }).join('')+`</div>` : ''; } }
   // (owner) the numbers: green all in, amber started, gold waiting to go in, purple held, grey still coming
-  { const tl=rows.map(r=>[r.n, r.held?'held':r.in>=r.exp?'done':r.in>0?'part':'ready', r.held?'⛔':r.in+'/'+r.exp]).concat((B.coming||[]).map(n=>[n,'wait','⏳'])).sort((a,b)=>a[0]-b[0]);
-    const C={done:['var(--green)','rgba(40,199,111,.15)'],part:['var(--amber)','rgba(255,176,32,.13)'],ready:['var(--gold)','var(--panel)'],held:['#B39DFF','rgba(179,157,255,.12)'],wait:['var(--muted)','var(--panel2)']};
+  { const tl=rows.map(r=>[r.n, r.held?'held':r.in>=r.exp?'done':r.in>0?'part':'ready', r.held?'⛔':r.in+'/'+r.exp]).concat((B.coming||[]).map(n=>[n,'wait','⏳']));
+    _gtDayTiles(tl); tl.sort((a,b)=>a[0]-b[0]);
     const fl=(_nkFlash&&Date.now()-_nkFlash.t<3500)?_nkFlash.n:0, g=document.getElementById('clGrid');
-    if(g) g.innerHTML=tl.map(([n,k,t])=>`<div style="${n===fl?'box-shadow:0 0 0 3px #fff,0 0 16px var(--gold);transform:scale(1.06);':''}border:2px solid ${C[k][0]};background:${C[k][1]};border-radius:10px;padding:6px 2px;text-align:center;opacity:${k==='wait'?.6:1};">`
-        +`<div style="font-size:20px;font-weight:900;color:${k==='wait'?'var(--muted)':'var(--text)'};">${n}</div><div style="font-size:10px;font-weight:800;color:${C[k][0]};">${t}</div></div>`).join('')
-      || `<div class="gt-muted" style="grid-column:1/-1;padding:10px 0;">${E(L('עוד אין בהמות כשרות היום.','No kosher animals today yet.','Aún no hay animales kosher hoy.'))}</div>`;
-    const lg=document.getElementById('clLegend'); if(lg) lg.innerHTML=[['var(--green)',L('בקולר — הכל','All in','Todo dentro')],['var(--amber)',L('התחיל','Started','Empezado')],['var(--gold)',L('ממתין לכניסה','Waiting to go in','Esperando')],['#B39DFF',L('מעוכב','Held','Retenido')],['var(--muted)',L('⏳ עוד לא עבר חותמות','⏳ not through the stamps yet','⏳ aún no pasó sellos')]]
+    if(g) g.innerHTML=tl.map(([n,k,t])=>_gtTileHtml(n,k,t,fl,'')).join('')
+      || `<div class="gt-muted" style="grid-column:1/-1;padding:10px 0;">${E(L('עוד אין בהמות היום.','No animals today yet.','Aún no hay animales hoy.'))}</div>`;
+    const lg=document.getElementById('clLegend'); if(lg) lg.innerHTML=[['var(--red)',L('לא כשר','Not kosher','No kosher')],['var(--green)',L('בקולר — הכל','All in','Todo dentro')],['var(--amber)',L('התחיל','Started','Empezado')],['var(--gold)',L('ממתין לכניסה','Waiting to go in','Esperando')],['#B39DFF',L('מעוכב','Held','Retenido')],['var(--muted)',L('⏳ עוד לא עבר חותמות','⏳ not through the stamps yet','⏳ aún no pasó sellos')]]
       .map(([c,t])=>`<span><span style="display:inline-block;width:9px;height:9px;border-radius:3px;background:${c};margin-inline-end:4px;"></span>${E(t)}</span>`).join('');
     set('clListSum','📋 '+L('פירוט','Details','Detalle')); }
   { const box=document.getElementById('clList'); if(box){

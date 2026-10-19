@@ -3080,6 +3080,7 @@ declare r jsonb; r2 jsonb; r3 jsonb; r4 jsonb; r5 jsonb; r6 jsonb; r7 jsonb; r8 
 begin
   select settings into s0 from settings_pilot where id = 1;
   perform pg_temp.api(pg_temp.mgr(), format('select push_settings(%L::jsonb, ''x'', %L)', jsonb_build_object('products', pr), pg_temp.v('mgr')));
+  update settings_pilot set settings = settings - 'screensPlan' || jsonb_build_object('nikurSmallScreen', true) where id = 1;   -- (these checks: two nikur screens, no cooler screen)
   -- 870 glatt, stamped; 871 treif; 872 not ruled; 873 kosher, stamped (not glatt)
   perform pg_temp.prep(870, 'outer'); perform pg_temp.prep(871, 'inner'); perform pg_temp.prep(872, 'slaughter'); perform pg_temp.prep(873, 'outer');
   perform set_config('gt.reset_in_progress', 'true', true);
@@ -3148,6 +3149,7 @@ begin
   select settings into s0 from settings_pilot where id = 1;
   perform pg_temp.api('{}', format('select reset_daily_board(%L, ''selftest'')', pg_temp.v('mgr')));
   perform pg_temp.api(pg_temp.mgr(), format('select push_settings(%L::jsonb, ''x'', %L)', jsonb_build_object('products', pr), pg_temp.v('mgr')));
+  update settings_pilot set settings = settings - 'screensPlan' || jsonb_build_object('nikurSmallScreen', true) where id = 1;   -- (these checks: two nikur screens, no cooler screen)
   -- day A: 880 stamped with the tail on; then the tail is closed; 881 stamped after that (no tail)
   perform pg_temp.prep(880, 'outer'); perform pg_temp.prep(881, 'outer');
   perform set_config('gt.reset_in_progress', 'true', true);
@@ -3304,6 +3306,7 @@ begin
   -- the nikur: a "?" on a day closed at the nikur / on a future day is refused
   perform pg_temp.api('{}', format('select reset_daily_board(%L, ''selftest r23'')', pg_temp.v('mgr')));
   perform pg_temp.api(pg_temp.mgr(), format('select push_settings(%L::jsonb, ''x'', %L)', jsonb_build_object('products', pr), pg_temp.v('mgr')));
+  update settings_pilot set settings = settings - 'screensPlan' || jsonb_build_object('nikurSmallScreen', true) where id = 1;   -- (these checks: two nikur screens, no cooler screen)
   e0 := _board_epoch();
   perform pg_temp.prep(910, 'outer');
   perform set_config('gt.reset_in_progress', 'true', true);
@@ -3464,6 +3467,7 @@ declare r jsonb; r2 jsonb; r3 jsonb; r4 jsonb; r5 jsonb; ok boolean; s0 jsonb;
 begin
   select settings into s0 from settings_pilot where id = 1;
   r5 := pg_temp.api(pg_temp.mgr(), format('select push_settings(%L::jsonb, ''x'', %L)', jsonb_build_object('products', pr, 'nikurSmallScreen', false), pg_temp.v('mgr')));
+  update settings_pilot set settings = settings - 'screensPlan' where id = 1;   -- (no cooler screen in this check)
   perform pg_temp.prep(920, 'outer'); perform pg_temp.prep(921, 'outer');
   perform set_config('gt.reset_in_progress', 'true', true);
   update animals_pilot set stamped = true, parts_scanned = true where id = 920;
