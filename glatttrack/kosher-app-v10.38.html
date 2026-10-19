@@ -12610,12 +12610,13 @@ function mgrUpdateSealUploads(){
     {key:'rabChalak',he:'רבנות חלק',en:'Rabbinate Chalak',color:'#16A085'},
   ];
   const s=KS.getSettings();
-  (s.customStatuses||[]).filter(c=>c&&!c.removed).forEach(c=>sealTypes.push({key:c.key,he:c.he||c.key,en:c.en||'',color:c.color||'#888'}));
+  // (audit XSS) a plant's own status: only a plain key and a #colour; its name is shown as text
+  (s.customStatuses||[]).filter(c=>c&&!c.removed&&/^[A-Za-z0-9_-]{1,40}$/.test(String(c.key||''))).forEach(c=>sealTypes.push({key:c.key,he:c.he||c.key,en:c.en||'',color:/^#[0-9A-Fa-f]{3,8}$/.test(String(c.color||''))?c.color:'#888'}));
   const seals=s.customSeals||{};
   // Each seal uses a unique input id - label wraps it directly (Android safe)
   let html='';
   sealTypes.forEach(st=>{
-    const label=st.he;
+    const label=escapeHtml(String(st.he));
     const hasSeal=!!seals[st.key];
     const inputId='sealInp_'+st.key;
     html+=`<div style="display:flex;flex-direction:column;align-items:center;gap:5px;padding:8px 4px;border-radius:10px;border:1.5px dashed ${hasSeal?st.color:'var(--border)'};background:var(--panel2);position:relative;">
@@ -12937,6 +12938,9 @@ function mgrConfirmAddStatus(){
   const en=document.getElementById('newStatusEn')?.value?.trim();
   const color=document.getElementById('newStatusColor')?.value?.trim()||'#FF6B35';
   if(!he){alert(L('חובה למלא שם','Name required','El nombre es obligatorio'));return;}
+  // (audit) the server takes a #RRGGBB colour and names without < >
+  if(!/^#[0-9A-Fa-f]{3,8}$/.test(color)){ alert(L('צבע: למשל ‎#FF6B35','Colour: e.g. #FF6B35','Color: p. ej. #FF6B35')); return; }
+  if(/[<>]/.test(he+' '+(en||'')+' '+(document.getElementById('newStatusStickerHe')?.value||''))){ alert(L('בלי הסימנים < >','Without the signs < >','Sin los signos < >')); return; }
   const key='custom_'+Date.now();
   const s=KS.getSettings();
   const custom=s.customStatuses||[];

@@ -2264,6 +2264,21 @@ begin
          '{"customStatuses":[{"key":"custom_dup46","he":"a","kosher":true},{"key":"custom_dup46","he":"b","kosher":false}]}', pg_temp.v('mgr')));
   perform pg_temp.rec('step 46 statuses: two statuses with the same key are refused',
     r ->> 'error' = 'bad_settings' and r ->> 'key' = 'customStatuses', r::text);
+  -- (audit XSS) no HTML in a name, a status colour only #hex — the same save with a clean name goes through
+  declare x1 jsonb; x2 jsonb; x3 jsonb; x4 jsonb;
+  begin
+    x1 := pg_temp.api(pg_temp.mgr(), format('select push_settings(%L::jsonb, ''x'', %L)',
+            '{"customStatuses":[{"key":"custom_x1","he":"<img src=x onerror=alert(1)>","kosher":true}]}', pg_temp.v('mgr')));
+    x2 := pg_temp.api(pg_temp.mgr(), format('select push_settings(%L::jsonb, ''x'', %L)',
+            '{"customStatuses":[{"key":"custom_x1","he":"ok","color":"red;\"><svg onload=alert(1)>","kosher":true}]}', pg_temp.v('mgr')));
+    x3 := pg_temp.api(pg_temp.mgr(), format('select push_settings(%L::jsonb, ''x'', %L)',
+            '{"printers":[{"id":"p1","name":"<b>Zebra</b>","conn":"network","ip":"192.168.1.50","port":9100}]}', pg_temp.v('mgr')));
+    x4 := pg_temp.api(pg_temp.mgr(), format('select push_settings(%L::jsonb, ''x'', %L)',
+            '{"customStatuses":[{"key":"custom_x1","he":"מגן דוד","color":"#FF6B35","kosher":true}]}', pg_temp.v('mgr')));
+    perform pg_temp.rec('audit XSS: a name with < > (status, printer) and a status colour that is not #hex are refused by the server; a clean one is saved',
+      x1 ->> 'error' = 'bad_settings' and x2 ->> 'error' = 'bad_settings' and x3 ->> 'error' = 'bad_settings' and pg_temp.ok(x4),
+      concat_ws(' | ', left(x1::text, 80), left(x2::text, 80), left(x3::text, 80), left(x4::text, 60)));
+  end;
 
   -- every writer of today's board takes the reset lock (shared; the reset takes it exclusively)
   perform pg_temp.rec('step 46 reset lock: every writer of today''s board takes the shared reset lock; the reset takes it exclusively',
@@ -3128,6 +3143,15 @@ begin
   r3 := pg_temp.api(pg_temp.dev('NIK'), format('select hold_resolve(%s, ''answered'')', (r #>> '{hold,id}')::bigint));
   r4 := pg_temp.api(pg_temp.dev('NIK'), format('select nikur_scan(870, ''sides'', 3, %s)', pg_temp.ep()));
   ok := ok and pg_temp.ok(r) and r2 ->> 'reason' = 'held' and pg_temp.ok(r3) and pg_temp.ok(r4);
+  -- (audit) an old sticker: the animal's pieces were printed while it was kosher, then the ruling became treif —
+  -- the nikur checks the ruling of NOW, so a piece still in the hall is refused
+  perform set_config('gt.reset_in_progress', 'true', true);
+  update animals_pilot set outer_status = 'treif' where id = 870;
+  perform set_config('gt.reset_in_progress', 'false', true);
+  r5 := pg_temp.api(pg_temp.dev('NIK'), format('select nikur_scan(870, ''sides'', 4, %s)', pg_temp.ep()));
+  perform pg_temp.rec('audit: a sticker printed while the animal was kosher is refused at the nikur after the ruling became treif',
+    r5 ->> 'reason' = 'treif' and not exists (select 1 from piece_scans where board_epoch = pg_temp.ep() and animal_id = 870 and product = 'sides' and piece = 4),
+    left(r5::text, 120));
   update settings_pilot set settings = s0 where id = 1;
   perform pg_temp.rec('v10.38 nikur: a kosher piece is scanned in once, on its own nikur screen only; treif / unruled / Inside Skirt of glatt / unknown refused and recorded; a nikur USDA hold / "?" stops it until the nikur releases / answers it; each nikur tablet sees its own pieces', ok,
     concat_ws(' | ', left(r::text, 60), r2 ->> 'reason', left(r3::text, 60), r4 ->> 'error', r4 ->> 'reason', left(r5::text, 60), left(r6::text, 60), left(r7::text, 80), left(r8::text, 60)));
@@ -3377,7 +3401,7 @@ begin
   -- (audit A1) legs and head on two screens: the legs screen prints only legs stickers, the head screen only head
   -- stickers (also by a direct call); one screen again → the legs screen prints both. A refused one leaves no job.
   declare zl text := encode(convert_to('^XA^PW16^LL16^LH0,0^FO0,0^GFA,4,4,2,FF00FF00^FS^PQ2^XZ', 'LATIN1'), 'base64');
-          q9 jsonb; q10 jsonb; q11 jsonb; q12 jsonb; q13 jsonb; n0 bigint; n1 bigint;
+          q9 jsonb; q10 jsonb; q11 jsonb; q12 jsonb; q13 jsonb; q14 jsonb; q15 jsonb; n0 bigint; n1 bigint; c1 uuid := gen_random_uuid();
   begin
     perform set_config('gt.reset_in_progress', 'true', true);
     update settings_pilot set settings = (settings - 'legsPaused') || '{"legsHeadSplit":true,"legsMode":true}'::jsonb where id = 1;
@@ -3385,7 +3409,10 @@ begin
     update devices_pilot set assigned_index = 0 where id = pg_temp.devid('LEGS');
     perform set_config('gt.reset_in_progress', 'false', true);
     select count(*) into n0 from print_jobs;
-    q9  := pg_temp.api(pg_temp.dev('LEGS'), format('select print_job_add(%L, %L, ''head'', 911)', '192.168.1.50:9100', zl));   -- legs screen, head sticker: no
+    q9  := pg_temp.api(pg_temp.dev('LEGS'), format('select print_job_add(%L, %L, ''head'', 911, ''[]'', null, %L)', '192.168.1.50:9100', zl, c1));   -- legs screen, head sticker: no
+    -- (audit) the same refused request sent again (same command id → the same answer; a new command id → refused again)
+    q14 := pg_temp.api(pg_temp.dev('LEGS'), format('select print_job_add(%L, %L, ''head'', 911, ''[]'', null, %L)', '192.168.1.50:9100', zl, c1));
+    q15 := pg_temp.api(pg_temp.dev('LEGS'), format('select print_job_add(%L, %L, ''head'', 911, ''[]'', null, %L)', '192.168.1.50:9100', zl, gen_random_uuid()));
     q10 := pg_temp.api(pg_temp.dev('LEGS'), format('select print_job_add(%L, %L, ''legs'', 911)', '192.168.1.50:9100', zl));   -- legs screen, legs sticker: yes
     update devices_pilot set assigned_index = 1 where id = pg_temp.devid('LEGS');                                                  -- now the head screen
     q11 := pg_temp.api(pg_temp.dev('LEGS'), format('select print_job_add(%L, %L, ''head'', 911)', '192.168.1.50:9100', zl));   -- head screen, head sticker: yes
@@ -3396,8 +3423,9 @@ begin
     update devices_pilot set assigned_index = 0 where id = pg_temp.devid('LEGS');
     perform set_config('gt.reset_in_progress', 'false', true);
     q13 := pg_temp.api(pg_temp.dev('LEGS'), format('select print_job_add(%L, %L, ''head'', 911)', '192.168.1.50:9100', zl));   -- one screen: the head too
-    perform pg_temp.rec('audit A1: legs / head on two screens — each screen prints only its own stickers, also by a direct call; a refused print leaves no job; one screen prints both',
-      q9 ->> 'reason' = 'wrong_screen' and pg_temp.ok(q10) and pg_temp.ok(q11) and q12 ->> 'reason' = 'wrong_screen' and n1 = n0 + 2 and pg_temp.ok(q13),
+    perform pg_temp.rec('audit A1: legs / head on two screens — each screen prints only its own stickers, also by a direct call and sent again with a new command id; a refused print leaves no job; one screen prints both',
+      q9 ->> 'reason' = 'wrong_screen' and q14 = q9 || '{"replayed":true}'::jsonb and q15 ->> 'reason' = 'wrong_screen'
+      and pg_temp.ok(q10) and pg_temp.ok(q11) and q12 ->> 'reason' = 'wrong_screen' and n1 = n0 + 2 and pg_temp.ok(q13),
       concat_ws(' | ', q9 ->> 'reason', left(q10::text, 40), left(q11::text, 40), q12 ->> 'reason', n1 - n0, left(q13::text, 40)));
     -- (audit) the print log: each request with what it was for and the server's answer; the printer's result follows
     update print_jobs set status = 'sent', sent_at = now() where id = (q10 ->> 'id')::bigint;

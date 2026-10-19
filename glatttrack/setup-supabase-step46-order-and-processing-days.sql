@@ -2319,6 +2319,15 @@ declare t text := jsonb_typeof(v); e jsonb; s text;
 begin
   if v is null or t = 'null' then return null; end if;
   if length(v::text) > 1500000 then return 'too_large'; end if;
+  -- (audit XSS) names shown on every screen: never a < or > (no HTML can hide in a name); a status colour is #hex only
+  if p_key in ('customStatuses', 'statusNames', 'products', 'users', 'printers', 'scanners', 'ncStatuses') and v::text ~ '[<>]' then
+    return 'no < or > in names';
+  end if;
+  if p_key = 'customStatuses' and t = 'array'
+     and exists (select 1 from jsonb_array_elements(v) x where jsonb_typeof(x) = 'object' and x ? 'color'
+                   and jsonb_typeof(x -> 'color') <> 'null' and coalesce(x ->> 'color', '') !~ '^#[0-9A-Fa-f]{3,8}$') then
+    return 'a status colour is #RRGGBB';
+  end if;
   -- times
   if p_key = 'autoResetTime' then
     if t = 'string' and ((v #>> '{}') = '' or (v #>> '{}') ~ '^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$') then return null; end if;
