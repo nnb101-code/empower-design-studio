@@ -1,9 +1,9 @@
 == 1. plant state =======================================================
     key     |     value     |          updated_at           
 ------------+---------------+-------------------------------
- boardEpoch | 1792437840158 | 2026-10-19 19:24:00.157595+00
- schemaStep | 46            | 2026-10-19 19:24:01.594837+00
- testMode   | off           | 2026-10-19 19:24:00.804784+00
+ boardEpoch | 1792452556139 | 2026-10-19 23:29:16.138456+00
+ schemaStep | 46            | 2026-10-19 23:29:17.780873+00
+ testMode   | off           | 2026-10-19 23:29:16.926871+00
 (3 rows)
 
 == 2. functions (public, gt_rls) ========================================
@@ -113,6 +113,7 @@
  public | _animals_nc_outer_value()                                                          | trigger  | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _animals_nc_plain()                                                                | trigger  | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _animals_outer_open_guard()                                                        | trigger  | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _animals_shochet_time()                                                            | trigger  | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _animals_stage_guard()                                                             | trigger  | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _archive_keep_intake()                                                             | trigger  | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _audit_device_event(text,text,text,integer,text,text,uuid,text)                    | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
@@ -287,6 +288,7 @@
  public | _ticket_new()                                                                      | function | f                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _ticket_payload(animals_pilot,text,integer,bigint,text,text)                       | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _ticket_refusal(bigint,integer,text,integer,text)                                  | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _tickets_from()                                                                    | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _ts_or_null(text)                                                                  | function | f                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _usda_zone(animals_pilot)                                                          | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _worker_code_hash(text)                                                            | function | f                | public, extensions, pg_temp | postgres | f    | f             | f           | f
@@ -302,7 +304,7 @@
  public | leader_account_remove(text)                                                        | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | leader_device_recovery(text)                                                       | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | manufacturer_set_code(text,text)                                                   | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
-(293 rows)
+(295 rows)
 
 == 2b. API surface: functions the app roles can run ======================
                        callable_by_app                       | security_definer 
@@ -411,6 +413,7 @@
  animals_pilot       | trg_animals_pilot_advance_cursor    | animals_pilot_advance_cursor          | AFTER INSERT/UPDATE ROW               | enabled | t
  animals_pilot       | trg_animals_pilot_guard_corrections | animals_pilot_guard_corrections       | BEFORE UPDATE ROW                     | enabled | t
  animals_pilot       | zz_animal_pieces_track              | _animal_pieces_track                  | AFTER INSERT/UPDATE ROW               | enabled | t
+ animals_pilot       | zz_animals_shochet_time             | _animals_shochet_time                 | BEFORE INSERT/UPDATE ROW              | enabled | t
  animals_pilot       | zz_device_write_guard               | _device_write_guard                   | BEFORE INSERT/UPDATE/DELETE STATEMENT | enabled | t
  animals_pilot       | zzz_nc_outer_guard                  | _animals_nc_outer_guard               | BEFORE INSERT/UPDATE ROW              | enabled | t
  animals_pilot       | zzz_outer_open_guard                | _animals_outer_open_guard             | BEFORE INSERT/UPDATE ROW              | enabled | t
@@ -435,7 +438,7 @@
  settings_pilot      | zz_settings_pieces_fill             | _settings_pieces_fill                 | AFTER UPDATE ROW                      | enabled | t
  settings_pilot      | zz_settings_snapshot_change         | _settings_snapshot_change             | AFTER UPDATE ROW                      | enabled | t
  settings_pilot      | zz_worker_lists_saved               | _worker_lists_saved                   | AFTER UPDATE ROW                      | enabled | t
-(32 rows)
+(33 rows)
 
 == 4. row security and policies =========================================
           table          | rls_on | rls_forced | policies 

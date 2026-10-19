@@ -56,6 +56,14 @@ $gt2$;
     execute $gt3$
 select set_config('gt_st.ready', 'on', true)      -- fixture values are kept as gt_st.<name> (see pg_temp.put)
 $gt3$;
+    v_step := 'tickets from: the older nikur / cooler checks run as a day from before §47';
+    execute $gt3t$
+-- (round-3 02-M1) since §47 a piece goes into the nikur / cooler only with its own one-time number; the older
+-- checks below test the nikur / cooler rules themselves with pieces put on the board directly, so they run as a day
+-- from before §47. The §47 checks set the real day back (and check that a piece without a number is refused).
+insert into plant_state (key, value) values ('ticketsFromEpoch', '9223372036854775807')
+on conflict (key) do update set value = excluded.value
+$gt3t$;
     v_step := 'call SQL as the API would (authenticator → anon + request headers + JWT';
     execute $gt4$
 -- call SQL as the API would (authenticator → anon + request headers + JWT
@@ -893,7 +901,7 @@ begin
   r3 := pg_temp.api(pg_temp.dev('OUT2'), pg_temp.q_claim(942, 'outer', 'kosher', '', ''));
   ok := r ->> 'error' = 'bad_value' and pg_temp.claimed(r2) and (pg_temp.ar(940)).outer_status = 'glatt'
         and pg_temp.claimed(r3) and (pg_temp.ar(942)).outer_status = 'kosher'
-        and _kosher_ready(pg_temp.ar(938)) is not distinct from _kosher_ready(pg_temp.ar(938))
+        and 'kosher' = any(_kosher_statuses())   -- (round-3 03-L1: was a value compared with itself) the marked one's ruling stays a kashrut status
         and 'custom_nc36' = any(_kosher_statuses());
   perform set_config('gt.reset_in_progress', 'true', true);
   update settings_pilot set settings = settings || '{"notChalakEnabled":true}'::jsonb where id = 1;
@@ -1074,7 +1082,7 @@ begin
   perform set_config('gt.reset_in_progress', 'false', true);
   perform pg_temp.rec('v10.34 legs / head on two screens: the head slot never prints leg stickers, the legs slot never prints the head (v10.38: also with the legs off), slot 1 is refused when the screens are not split; sorting only on the legs screen, never a number without leg stickers; v10.38 legs off — what got stickers is still sorted', ok,
     concat_ws(' | ', r ->> 'error', r2 ->> 'error', r3 ->> 'error', r4 ->> 'error', r5 ->> 'error'));
-  -- v10.35: the four supervisor screens (cooler / nikur / salting / shipping) are paired tablets with NO write rights yet
+  -- v10.35: the four supervisor screens (cooler / nikur / salting / shipping) are paired tablets with no write rights here (round-3 03-L2: the cooler / nikur have their own scan / hold functions since v10.38)
   ok := true;
   perform set_config('gt.reset_in_progress', 'true', true);
   update animals_pilot set slaughter = 'slaughtered', slaughter_time = 1, eso_checked = true, eso_result = 'ok' where id = 888;
@@ -1091,7 +1099,7 @@ begin
            and (pg_temp.ar(888)).inner_status is null
            and not exists (select 1 from animal_holds where animal_id = 888 and resolved_at is null)
            and _gt_value_ok('device_role', 'shipping') and _worker_role_norm('מליחה') = 'salting';
-  perform pg_temp.rec('v10.35 supervisor screens (cooler / nikur / salting / shipping): paired, but no ruling, processing or hold rights', ok,
+  perform pg_temp.rec('v10.35 supervisor screens (cooler / nikur / salting / shipping): paired, but no ruling, processing, hold_set, settings or event rights (the cooler / nikur hold only through their own cooler_hold / nikur_hold)', ok,
     concat_ws(' | ', r ->> 'error', r2 ->> 'error', r3 ->> 'error', r3 ->> 'claimed', r4::text, r5::text, (pg_temp.ar(888)).legs_stickers, (pg_temp.ar(888)).stamped,
               (pg_temp.ar(888)).inner_status, (select count(*) from animal_holds where animal_id = 888 and resolved_at is null),
               _gt_value_ok('device_role', 'shipping'), _worker_role_norm('מליחה')));
@@ -3123,22 +3131,22 @@ begin
         and r4 ->> 'reason' = 'not_printed' and r5 ->> 'error' = 'unknown_part'   -- (v10.38: a piece that was not printed for this animal)
         and not exists (select 1 from piece_scans where board_epoch = pg_temp.ep() and animal_id in (871, 872))
         and exists (select 1 from events_pilot where stage = 'nikur' and action = 'piece_refused' and animal_no = 872);
-  -- USDA at the nikur: only its whole animal; it stops the nikur until the nikur releases it
-  r  := pg_temp.api(pg_temp.dev('NIK'), 'select hold_set(873, ''nikur'', ''usda'', ''whole'')');
+  -- USDA at the nikur: only its whole animal (nikur_hold, with the day's epoch); it stops the nikur until the nikur releases it
+  r  := pg_temp.api(pg_temp.dev('NIK'), format('select nikur_hold(873, %s, ''usda'')', pg_temp.ep()));
   h  := (r #>> '{hold,id}')::bigint;
   r2 := pg_temp.api(pg_temp.dev('NIK'), format('select nikur_scan(873, ''sides'', 1, %s)', pg_temp.ep()));
-  r3 := pg_temp.api(pg_temp.dev('NIK'), 'select hold_set(873, ''nikur'', ''usda'', ''right'')');   -- (the whole animal only)
+  r3 := pg_temp.api(pg_temp.dev('NIK'), 'select hold_set(873, ''nikur'', ''usda'', ''whole'')');   -- (round-3 02-L5: hold_set refuses the nikur)
   r4 := pg_temp.api(pg_temp.dev('STAMPS'), format('select hold_resolve(%s, ''released'')', h));
   r5 := pg_temp.api(pg_temp.dev('NIK'), format('select hold_resolve(%s, ''released'')', h));
   r6 := pg_temp.api(pg_temp.dev('NIK'), format('select nikur_scan(873, ''sides'', 1, %s)', pg_temp.ep()));
   -- what was scanned: the nikur tablet sees its screen's pieces, a station tablet nothing
   r7 := pg_temp.api(pg_temp.dev('NIK'), 'select nikur_board()');
   r8 := pg_temp.api(pg_temp.dev('PARTS'), 'select nikur_board()');
-  ok := ok and pg_temp.ok(r) and r2 ->> 'reason' = 'held' and r3 ->> 'error' = 'bad_value' and r4 ->> 'error' = 'wrong_station'
+  ok := ok and pg_temp.ok(r) and r2 ->> 'reason' = 'held' and r3 ->> 'error' = 'bad_station' and r4 ->> 'error' = 'wrong_station'
         and pg_temp.ok(r5) and pg_temp.ok(r6) and pg_temp.ok(r7) and r7 ->> 'screen' = 'big'
         and jsonb_array_length(r7 -> 'pieces') = 2 and r8 ->> 'error' = 'wrong_station';
   -- a "?" at the nikur: the piece waits; the nikur answers it and the piece goes in
-  r  := pg_temp.api(pg_temp.dev('NIK'), 'select hold_set(870, ''nikur'', ''question'')');
+  r  := pg_temp.api(pg_temp.dev('NIK'), format('select nikur_hold(870, %s, ''question'')', pg_temp.ep()));
   r2 := pg_temp.api(pg_temp.dev('NIK'), format('select nikur_scan(870, ''sides'', 3, %s)', pg_temp.ep()));
   r3 := pg_temp.api(pg_temp.dev('NIK'), format('select hold_resolve(%s, ''answered'')', (r #>> '{hold,id}')::bigint));
   r4 := pg_temp.api(pg_temp.dev('NIK'), format('select nikur_scan(870, ''sides'', 3, %s)', pg_temp.ep()));
@@ -3313,20 +3321,21 @@ begin
   select settings into s0 from settings_pilot where id = 1;
   perform pg_temp.prep(940, 'outer');
   update settings_pilot set settings = settings || '{"printers":[{"id":"p1","name":"Zebra","conn":"network","ip":"192.168.1.50","port":9100},{"id":"p2","name":"BT","conn":"bluetooth","bleId":"x"}]}'::jsonb where id = 1;
-  r  := pg_temp.api(pg_temp.dev('PARTS'), format('select print_job_add(%L, %L, ''kosher'', 940)', '192.168.1.50:9100', z));
-  r2 := pg_temp.api(pg_temp.dev('PARTS'), format('select print_job_add(%L, %L, ''kosher'', 940)', '192.168.1.51:9100', z));          -- not on the list
-  r3 := pg_temp.api(pg_temp.dev('PARTS'), format('select print_job_add(%L, %L, ''kosher'', 940)', '192.168.1.50:9100', 'not base64 !'));
+  -- (round-3 02-M1) a kosher sticker goes only through print_kosher_add (one-time numbers); the legs sticker here
+  r  := pg_temp.api(pg_temp.dev('LEGS'), format('select print_job_add(%L, %L, ''legs'', 940)', '192.168.1.50:9100', z));
+  r2 := pg_temp.api(pg_temp.dev('LEGS'), format('select print_job_add(%L, %L, ''legs'', 940)', '192.168.1.51:9100', z));          -- not on the list
+  r3 := pg_temp.api(pg_temp.dev('LEGS'), format('select print_job_add(%L, %L, ''legs'', 940)', '192.168.1.50:9100', 'not base64 !'));
   -- (round 23) a printer-setting / network command is refused: only labels as the app draws them
-  ok := pg_temp.api(pg_temp.dev('PARTS'), format('select print_job_add(%L, %L, ''kosher'', 940)', '192.168.1.50:9100', zbad)) ->> 'error' = 'bad_value';
-  r4 := pg_temp.api('{}', format('select print_job_add(%L, %L, ''kosher'', 940)', '192.168.1.50:9100', z));                          -- no device
-  r5 := pg_temp.api(pg_temp.dev('PARTS'), format('select print_job_status(%s)', (r ->> 'id')::bigint));
+  ok := pg_temp.api(pg_temp.dev('LEGS'), format('select print_job_add(%L, %L, ''legs'', 940)', '192.168.1.50:9100', zbad)) ->> 'error' = 'bad_value';
+  r4 := pg_temp.api('{}', format('select print_job_add(%L, %L, ''legs'', 940)', '192.168.1.50:9100', z));                          -- no device
+  r5 := pg_temp.api(pg_temp.dev('LEGS'), format('select print_job_status(%s)', (r ->> 'id')::bigint));
   ok := ok and pg_temp.ok(r) and r2 ->> 'error' = 'unknown_printer' and r3 ->> 'error' = 'bad_value' and not pg_temp.ok(r4)
         and pg_temp.ok(r5) and r5 ->> 'status' = 'new'
         and (select printer from print_jobs where id = (r ->> 'id')::bigint) = '192.168.1.50:9100';
   -- the list is a station setting: a printer outside the plant network / on another port is never sent to
   update settings_pilot set settings = settings || '{"printers":[{"id":"p3","name":"x","conn":"network","ip":"8.8.8.8","port":9100},{"id":"p4","name":"y","conn":"network","ip":"192.168.1.9","port":22}]}'::jsonb where id = 1;
-  r2 := pg_temp.api(pg_temp.dev('PARTS'), format('select print_job_add(%L, %L, ''kosher'', 940)', '8.8.8.8:9100', z));
-  r3 := pg_temp.api(pg_temp.dev('PARTS'), format('select print_job_add(%L, %L, ''kosher'', 940)', '192.168.1.9:22', z));
+  r2 := pg_temp.api(pg_temp.dev('LEGS'), format('select print_job_add(%L, %L, ''legs'', 940)', '8.8.8.8:9100', z));
+  r3 := pg_temp.api(pg_temp.dev('LEGS'), format('select print_job_add(%L, %L, ''legs'', 940)', '192.168.1.9:22', z));
   r4 := pg_temp.api(pg_temp.dev('NIK'), format('select print_job_status(%s)', (r ->> 'id')::bigint));               -- another device's job
   ok := ok and r2 ->> 'error' = 'unknown_printer' and r3 ->> 'error' = 'unknown_printer' and r4 ->> 'error' = 'bad_id';
   perform pg_temp.rec('v10.38 printing: a paired device sends stickers to a network printer of the list; not to a printer off the list, outside the plant network or on another port; bad data / a printer-setting command / no device refused; a device sees only its own job', ok,
@@ -3411,15 +3420,16 @@ begin
     q1 := pg_temp.api(pg_temp.dev('LEGS'),  format('select print_job_add(%L, %L, ''legs'', 911)', '192.168.1.50:9100', zl));            -- legs screen, slaughtered: yes
     q2 := pg_temp.api(pg_temp.dev('PARTS'), format('select print_job_add(%L, %L, ''legs'', 911)', '192.168.1.50:9100', zl));            -- legs stickers from the parts screen: no
     q3 := pg_temp.api(pg_temp.dev('LEGS'),  format('select print_job_add(%L, %L, ''legs'', 911)', '192.168.1.50:9100', zl9));           -- 50 copies: no
-    q4 := pg_temp.api(pg_temp.dev('PARTS'), format('select print_job_add(%L, %L, ''kosher'', 911, %L)', '192.168.1.50:9100', zk, '[{"pid":"cheeks","i":1}]'));   -- not ruled yet: no
-    q5 := pg_temp.api(pg_temp.dev('PARTS'), format('select print_job_add(%L, %L, ''kosher'', 910, %L)', '192.168.1.50:9100', zk, '[{"pid":"cheeks","i":1}]'));   -- kosher, cheek 1 free: yes
-    q6 := pg_temp.api(pg_temp.dev('PARTS'), format('select print_job_add(%L, %L, ''kosher'', 910, %L)', '192.168.1.50:9100', zk, '[{"pid":"tongue","i":1}]'));   -- the tongue is condemned: no
+    -- (round-3 02-M1) the kashrut checks of a kosher sticker are in print_tickets_take; print_job_add takes no kosher picture
+    q4 := pg_temp.api(pg_temp.dev('PARTS'), 'select print_tickets_take(911, ''[{"pid":"cheeks","i":1}]'')');   -- not ruled yet: no
+    q5 := pg_temp.api(pg_temp.dev('PARTS'), format('select print_job_add(%L, %L, ''kosher'', 910, %L)', '192.168.1.50:9100', zk, '[{"pid":"cheeks","i":1}]'));   -- a kosher picture from the tablet: no
+    q6 := pg_temp.api(pg_temp.dev('PARTS'), 'select print_tickets_take(910, ''[{"pid":"tongue","i":1}]'')');   -- the tongue is condemned: no
     q7 := pg_temp.api(pg_temp.dev('LEGS'),  format('select print_job_add(%L, %L, ''test'')', '192.168.1.50:9100', zk));                  -- a test without the team leader: no
     q8 := pg_temp.api('{}', format('select print_job_add(%L, %L, ''test'', null, ''[]'', %L)', '192.168.1.50:9100', zk, pg_temp.v('mgr')));
     ok := pg_temp.ok(q1) and q2 ->> 'reason' = 'wrong_station' and q3 ->> 'reason' = 'too_many' and q4 ->> 'reason' = 'not_kosher'
-          and pg_temp.ok(q5) and q6 ->> 'reason' = 'held' and q7 ->> 'reason' = 'unauthorized' and not (q8 ->> 'reason' is not distinct from 'unauthorized');
-    perform pg_temp.rec('round 24: a print job is checked for what it is — the right screen, the animal (slaughtered / ruled kosher), the part''s holds, the copies; a test only by the team leader', ok,
-      concat_ws(' | ', left(q1::text, 50), q2 ->> 'reason', q3 ->> 'reason', q4 ->> 'reason', left(q5::text, 50), q6 ->> 'reason', q7 ->> 'reason', left(q8::text, 80)));
+          and q5 ->> 'reason' = 'tickets_required' and q6 ->> 'reason' = 'held' and q7 ->> 'reason' = 'unauthorized' and not (q8 ->> 'reason' is not distinct from 'unauthorized');
+    perform pg_temp.rec('round 24: a print job is checked for what it is — the right screen, the animal (slaughtered / ruled kosher), the part''s holds, the copies; a kosher picture from the tablet is refused (one-time numbers only); a test only by the team leader', ok,
+      concat_ws(' | ', left(q1::text, 50), q2 ->> 'reason', q3 ->> 'reason', q4 ->> 'reason', q5 ->> 'reason', q6 ->> 'reason', q7 ->> 'reason', left(q8::text, 80)));
   end;
   -- (audit A1) legs and head on two screens: the legs screen prints only legs stickers, the head screen only head
   -- stickers (also by a direct call); one screen again → the legs screen prints both. A refused one leaves no job.
@@ -3465,6 +3475,7 @@ begin
   declare g jsonb := _kosher_geom(); nd jsonb; m1 jsonb; m2 jsonb; m3 jsonb; m4 jsonb; t1 jsonb; t2 jsonb; t3 jsonb; k1 jsonb; k2 jsonb; k3 jsonb;
           k4 jsonb; k5 jsonb; k6 jsonb; v_mark text := _printed_as_key(pg_temp.ar(910)); v_bpr int; v_band int; txt text; tall text; zz text; tk text;
   begin
+    update plant_state set value = _board_epoch()::text where key = 'ticketsFromEpoch';   -- (round-3) today is a §47 day
     v_bpr := ceil((g ->> 'w')::int / 8.0); v_band := (g ->> 'band')::int;
     txt  := encode(convert_to('^FO0,0^GFA,' || v_bpr * 10 || ',' || v_bpr * 10 || ',' || v_bpr || ',' || repeat('F0', v_bpr * 10) || '^FS', 'LATIN1'), 'base64');
     tall := encode(convert_to('^FO0,0^GFA,' || v_bpr * ((g ->> 'top')::int + 5) || ',' || v_bpr * ((g ->> 'top')::int + 5) || ',' || v_bpr || ','
@@ -3521,12 +3532,14 @@ begin
       _ticket_payload(pg_temp.ar(910), 'cheeks', 1, 1, 'ABCDEFGHJK', 'glatt')
         ~ '^BH\|N:911\|D:[0-9-]{10}\|TM:[0-9]{2}:[0-9]{2}\|SH:משה/כהן\|IN:יוסף לוי\|IT:[0-9]{2}:[0-9]{2}\|OUT:דוד\|OT:[0-9]{2}:[0-9]{2}\|P:cheeks\|I:1\|B:1\|K:גלאט · Glatt\|S:glatt\|T:ABCDEFGHJK$',
       _ticket_payload(pg_temp.ar(910), 'cheeks', 1, 1, 'ABCDEFGHJK', 'glatt'));
-    perform pg_temp.rec('§47 nikur / cooler: a piece with tickets goes in only with one of its own (no ticket / a made-up one refused); a piece printed without tickets as before',
+    perform pg_temp.rec('§47 nikur / cooler: a piece goes in only with one of its own tickets (no ticket / a made-up one refused) — round-3 02-M1: also a piece that never had one; only a day from before §47 goes in without',
       _ticket_refusal(_board_epoch(), 910, 'cheeks', 1, null) = 'no_ticket'
       and _ticket_refusal(_board_epoch(), 910, 'cheeks', 1, t1 #>> '{tickets,0,t}') is null
       and _ticket_refusal(_board_epoch(), 910, 'cheeks', 1, 'ABCDEFGHJK') = 'bad_ticket'
-      and _ticket_refusal(_board_epoch(), 910, 'cheeks', 2, null) is null
+      and _ticket_refusal(_board_epoch(), 910, 'cheeks', 2, null) = 'no_ticket'
+      and _ticket_refusal(_tickets_from() - 1, 910, 'cheeks', 2, null) is null
       and not has_table_privilege('anon', 'print_tickets', 'select') and not has_table_privilege('anon', 'print_marks', 'select'));
+    update plant_state set value = '9223372036854775807' where key = 'ticketsFromEpoch';   -- (the older checks after this)
   end;
   update settings_pilot set settings = s0 where id = 1;
 end $$;
@@ -3560,10 +3573,11 @@ begin
   update settings_pilot set settings = (settings - 'products') || '{"stampsCount":5,"printers":[{"id":"p1","name":"Zebra","conn":"network","ip":"192.168.1.50","port":9100}]}'::jsonb where id = 1;
   z5 := encode(convert_to(repeat(convert_from(decode(z, 'base64'), 'LATIN1'), 5), 'LATIN1'), 'base64');
   z5 := replace(z5, E'\n', '');
-  r  := pg_temp.api(pg_temp.dev('STAMPS'), format('select print_job_add(%L, %L, ''kosher'', 941)', '192.168.1.50:9100', z5));
-  r2 := pg_temp.api(pg_temp.dev('PARTS'), format('select print_job_add(%L, %L, ''kosher'', 941)', '192.168.1.50:9100', z5));   -- not the stamps screen
-  r3 := pg_temp.api(pg_temp.dev('PARTS'), format('select print_job_add(%L, %L, ''kosher'', 941, %L::jsonb)', '192.168.1.50:9100', z, '[{"pid":"tongue","i":"x"}]'));
-  ok := pg_temp.ok(r) and r2 ->> 'reason' = 'too_many' and r3 ->> 'reason' = 'bad_value';
+  -- (round-3 02-M1) through the one-time numbers, as the app prints them
+  r  := pg_temp.api(pg_temp.dev('STAMPS'), 'select print_tickets_take(941, ''[]'', 5)');
+  r2 := pg_temp.api(pg_temp.dev('PARTS'), 'select print_tickets_take(941, ''[]'', 5)');   -- not the stamps screen
+  r3 := pg_temp.api(pg_temp.dev('PARTS'), 'select print_tickets_take(941, ''[{"pid":"tongue","i":"x"}]'')');
+  ok := pg_temp.ok(r) and jsonb_array_length(r -> 'tickets') = 5 and r2 ->> 'reason' = 'too_many' and r3 ->> 'reason' = 'bad_value';
   perform pg_temp.rec('full review A2/S4: without the cuts list the stamps station prints its 5 stamps (another screen does not); a part number that is not a number is refused', ok,
     concat_ws(' | ', r::text, r2::text, r3::text));
   update settings_pilot set settings = s0 where id = 1;
@@ -3723,6 +3737,38 @@ begin
   update settings_pilot set settings = s0 where id = 1;
 end $$;
 $gt85$;
+    v_step := 'round-3 review: the shochet''s own time, the login lock';
+    execute $gt86$
+-- ── round-3 review (02-L2, 02-L3) ──
+do $$
+declare r jsonb; r2 jsonb; t0 bigint; a animals_pilot; ok boolean;
+begin
+  -- 02-L2: an esophagus correction (nevela → ok) moves slaughter_time on (the tablets take the change), but the
+  -- barcode keeps the shochet's own time
+  perform pg_temp.prep(990, 'slaughter');
+  t0 := (pg_temp.ar(990)).slaughter_time;
+  perform pg_temp.api(pg_temp.dev('ESO1'), pg_temp.q_claim(990, 'eso', 'ok', '', ''));
+  r  := pg_temp.api(pg_temp.dev('ESO1'), format('select eso_change(990, ''nevela'', ''x'', %s)', pg_temp.ep()));
+  r2 := pg_temp.api(pg_temp.dev('ESO1'), format('select eso_change(990, ''ok'', ''x'', %s)', pg_temp.ep()));
+  a := pg_temp.ar(990);
+  ok := a.shochet_time = t0 and a.slaughter_time > t0 and a.slaughter is not null
+        and _ticket_payload(a, null, null, 1, 'ABCDEFGHJK', 'glatt') like '%|TM:' || _qr_time(t0) || '|%';
+  -- the slaughter undone (a reset of the number): the time goes with it
+  perform set_config('gt.reset_in_progress', 'true', true);
+  update animals_pilot set slaughter = null, slaughter_time = null where id = 990;
+  perform set_config('gt.reset_in_progress', 'false', true);
+  ok := ok and (pg_temp.ar(990)).shochet_time is null;
+  perform pg_temp.rec('round-3 02-L2: after an esophagus correction the kosher barcode keeps the shochet''s own slaughter time (slaughter_time still moves on for the tablets)', ok,
+    concat_ws(' | ', left(r::text, 80), left(r2::text, 80), t0, a.shochet_time, a.slaughter_time));
+  -- 02-L3: parallel wrong codes from one address wait for each other (the count of tries cannot be skipped)
+  perform pg_temp.rec('round-3 02-L3: manager_login and worker_login count the wrong tries under a lock per address',
+    (select bool_and(pg_get_functiondef(p.oid) ~ 'pg_advisory_xact_lock\(hashtext\(''gt_login:''')
+       from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'public' and p.proname in ('manager_login', 'worker_login'))
+    and (select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+          where n.nspname = 'public' and p.proname in ('manager_login', 'worker_login')) >= 2);
+end $$;
+$gt86$;
     v_step := 'the ACTIVE security surface against the expected manifest';
     execute $gt70$
 -- ── the ACTIVE security surface against the expected manifest ───────────────

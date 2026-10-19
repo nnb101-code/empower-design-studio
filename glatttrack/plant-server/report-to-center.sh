@@ -78,6 +78,12 @@ SQL
 )" != "t" ]; then
     gt_log "release $V: what the manufacturer signed is not this release — not installed"; gt_state lastUpdateError "signature mismatch $V"; gt_state lastUpdateFailedVersion "$V"; gt_state lastUpdateFailedAt "$(date -Is)"; return 1
   fi
+  # (round-3 review P-L1) only a NEWER version is installed (the version is in the signed manifest): an old signed
+  # release sent again would take the plant back to a bug fixed since. Going back is the plant's own
+  # update-app.sh --rollback.
+  if [ -n "$cur" ] && [ "$V" != "$cur" ] && [ "$(printf '%s\n%s\n' "$cur" "$V" | sort -V | tail -n 1)" != "$V" ]; then
+    gt_log "release $V is older than the installed $cur — not installed"; gt_state lastUpdateError "older release $V (installed $cur)"; return 0
+  fi
   local T; T="$(mktemp -d)"
   curl -fsS -m 120 -o "$T/app.html" "$AURL" && [ "$(sha256sum "$T/app.html" | cut -d' ' -f1)" = "$ASHA" ] \
     || { gt_log "release $V: the app file did not download or its sha256 is wrong — not installed"; gt_state lastUpdateError "download/sha256 $V"; rm -rf "$T"; return 1; }

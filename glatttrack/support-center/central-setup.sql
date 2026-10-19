@@ -574,6 +574,8 @@ declare w text := _sc_staff(p_token); v_secret text := encode(gen_random_bytes(1
 begin
   if not _sc_can(p_token, 'plant_add') then return jsonb_build_object('ok', false, 'error', 'unauthorized'); end if;
   if p_code is null or p_code !~ '^[0-9]{3,8}$' or coalesce(trim(p_name), '') = '' then return jsonb_build_object('ok', false, 'error', 'bad_value'); end if;
+  -- (round-3 review C-L1) the name goes into alerts (e-mail subject / SMS / WhatsApp lines): no new line or control character
+  if p_name ~ '[[:cntrl:]]' then return jsonb_build_object('ok', false, 'error', 'bad_value'); end if;
   if exists (select 1 from sc_plants where code = p_code) then return jsonb_build_object('ok', false, 'error', 'code_taken'); end if;
   insert into sc_plants (code, name, secret_hash) values (p_code, left(trim(p_name), 60), crypt(v_secret, gen_salt('bf', 8)));
   insert into sc_audit (who, action, detail) values (w, 'plant_add', jsonb_build_object('code', p_code, 'name', p_name));

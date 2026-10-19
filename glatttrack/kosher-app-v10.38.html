@@ -1594,6 +1594,7 @@ const LUNG_B64="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICA
           </div>
           <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;">
             <span style="font-size:13px;color:var(--text);">מדבקות כשרות (חלקים)</span>
+            <span id="printPartsCountTxt" onclick="mgrGoProducts()" style="display:none;font-size:14px;font-weight:700;color:var(--gold);cursor:pointer;"></span>
             <input type="number" inputmode="numeric" min="0" id="printPartsCount" onchange="mgrSetPrintCount('parts',this.value)" style="width:70px;background:var(--panel2);border:1px solid var(--border);border-radius:7px;padding:7px;color:var(--gold);font-size:15px;font-weight:700;text-align:center;">
           </div>
         </div>
@@ -2117,7 +2118,7 @@ const KS = (function(){
     return data;};
   var QRMode={MODE_8BIT_BYTE:4};
   var QRErrorCorrectLevel={L:1,M:0,Q:3,H:2};
-  var QRUtil={PATTERN_POSITION_TABLE:[[],[6,18],[6,22],[6,26],[6,30],[6,34],[6,22,38],[6,24,42],[6,26,46],[6,28,50],[6,30,54],[6,32,58],[6,34,62],[6,26,46,66],[6,26,48,70],[6,26,50,74],[6,30,54,78],[6,30,56,82],[6,30,58,86],[6,34,62,90]],
+  var QRUtil={PATTERN_POSITION_TABLE:[[],[6,18],[6,22],[6,26],[6,30],[6,34],[6,22,38],[6,24,42],[6,26,46],[6,28,50],[6,30,54],[6,32,58],[6,34,62],[6,26,46,66],[6,26,48,70],[6,26,50,74],[6,30,54,78],[6,30,56,82],[6,30,58,86],[6,34,62,90],[6,28,50,72,94],[6,26,50,74,98],[6,30,54,78,102],[6,28,54,80,106],[6,32,58,84,110],[6,30,58,86,114],[6,34,62,90,118],[6,26,50,74,98,122],[6,30,54,78,102,126],[6,26,52,78,104,130],[6,30,56,82,108,134],[6,34,60,86,112,138],[6,30,58,86,114,142],[6,34,62,90,118,146],[6,30,54,78,102,126,150],[6,24,50,76,102,128,154],[6,28,54,80,106,132,158],[6,32,58,84,110,136,162],[6,26,54,82,110,138,166],[6,30,58,86,114,142,170]],
     G15:(1<<10)|(1<<8)|(1<<5)|(1<<4)|(1<<2)|(1<<1)|(1<<0),G18:(1<<12)|(1<<11)|(1<<10)|(1<<9)|(1<<8)|(1<<5)|(1<<2)|(1<<0),G15_MASK:(1<<14)|(1<<12)|(1<<10)|(1<<4)|(1<<1),
     getBCHTypeInfo:function(data){var d=data<<10;while(QRUtil.getBCHDigit(d)-QRUtil.getBCHDigit(QRUtil.G15)>=0)d^=QRUtil.G15<<(QRUtil.getBCHDigit(d)-QRUtil.getBCHDigit(QRUtil.G15));return((data<<10)|d)^QRUtil.G15_MASK;},
     getBCHTypeNumber:function(data){var d=data<<12;while(QRUtil.getBCHDigit(d)-QRUtil.getBCHDigit(QRUtil.G18)>=0)d^=QRUtil.G18<<(QRUtil.getBCHDigit(d)-QRUtil.getBCHDigit(QRUtil.G18));return(data<<12)|d;},
@@ -2140,7 +2141,7 @@ const KS = (function(){
     multiply:function(e){var num=new Array(this.getLength()+e.getLength()-1);for(var i=0;i<this.getLength();i++)for(var j=0;j<e.getLength();j++)num[i+j]^=QRMath.gexp(QRMath.glog(this.get(i))+QRMath.glog(e.get(j)));return new QRPolynomial(num,0);},
     mod:function(e){if(this.getLength()-e.getLength()<0)return this;var ratio=QRMath.glog(this.get(0))-QRMath.glog(e.get(0));var num=new Array(this.getLength());for(var i=0;i<this.getLength();i++)num[i]=this.get(i);for(var i=0;i<e.getLength();i++)num[i]^=QRMath.gexp(QRMath.glog(e.get(i))+ratio);return new QRPolynomial(num,0).mod(e);}};
   function QRRSBlock(totalCount,dataCount){this.totalCount=totalCount;this.dataCount=dataCount;}
-  QRRSBlock.RS_BLOCK_TABLE=[[1,26,19],[1,26,16],[1,26,13],[1,26,9],[1,44,34],[1,44,28],[1,44,22],[1,44,16],[1,70,55],[1,70,44],[2,35,17],[2,35,13],[1,100,80],[2,50,32],[2,50,24],[4,25,9],[1,134,108],[2,67,43],[2,33,15,2,34,16],[2,33,11,2,34,12],[2,86,68],[4,43,27],[4,43,19],[4,43,15],[2,98,78],[4,49,31],[2,32,14,4,33,15],[4,39,13,1,40,14],[2,121,97],[2,60,38,2,61,39],[4,40,18,2,41,19],[4,40,14,2,41,15],[2,146,116],[3,58,36,2,59,37],[4,36,16,4,37,17],[4,36,12,4,37,13],[2,86,68,2,87,69],[4,69,43,1,70,44],[6,43,19,2,44,20],[6,43,15,2,44,16]];
+  QRRSBlock.RS_BLOCK_TABLE=[[1,26,19],[1,26,16],[1,26,13],[1,26,9],[1,44,34],[1,44,28],[1,44,22],[1,44,16],[1,70,55],[1,70,44],[2,35,17],[2,35,13],[1,100,80],[2,50,32],[2,50,24],[4,25,9],[1,134,108],[2,67,43],[2,33,15,2,34,16],[2,33,11,2,34,12],[2,86,68],[4,43,27],[4,43,19],[4,43,15],[2,98,78],[4,49,31],[2,32,14,4,33,15],[4,39,13,1,40,14],[2,121,97],[2,60,38,2,61,39],[4,40,18,2,41,19],[4,40,14,2,41,15],[2,146,116],[3,58,36,2,59,37],[4,36,16,4,37,17],[4,36,12,4,37,13],[2,86,68,2,87,69],[4,69,43,1,70,44],[6,43,19,2,44,20],[6,43,15,2,44,16],[4,101,81],[1,80,50,4,81,51],[4,50,22,4,51,23],[3,36,12,8,37,13],[2,116,92,2,117,93],[6,58,36,2,59,37],[4,46,20,6,47,21],[7,42,14,4,43,15],[4,133,107],[8,59,37,1,60,38],[8,44,20,4,45,21],[12,33,11,4,34,12],[3,145,115,1,146,116],[4,64,40,5,65,41],[11,36,16,5,37,17],[11,36,12,5,37,13],[5,109,87,1,110,88],[5,65,41,5,66,42],[5,54,24,7,55,25],[11,36,12,7,37,13],[5,122,98,1,123,99],[7,73,45,3,74,46],[15,43,19,2,44,20],[3,45,15,13,46,16],[1,135,107,5,136,108],[10,74,46,1,75,47],[1,50,22,15,51,23],[2,42,14,17,43,15],[5,150,120,1,151,121],[9,69,43,4,70,44],[17,50,22,1,51,23],[2,42,14,19,43,15],[3,141,113,4,142,114],[3,70,44,11,71,45],[17,47,21,4,48,22],[9,39,13,16,40,14],[3,135,107,5,136,108],[3,67,41,13,68,42],[15,54,24,5,55,25],[15,43,15,10,44,16],[4,144,116,4,145,117],[17,68,42],[17,50,22,6,51,23],[19,46,16,6,47,17],[2,139,111,7,140,112],[17,74,46],[7,54,24,16,55,25],[34,37,13],[4,151,121,5,152,122],[4,75,47,14,76,48],[11,54,24,14,55,25],[16,45,15,14,46,16],[6,147,117,4,148,118],[6,73,45,14,74,46],[11,54,24,16,55,25],[30,46,16,2,47,17],[8,132,106,4,133,107],[8,75,47,13,76,48],[7,54,24,22,55,25],[22,45,15,13,46,16],[10,142,114,2,143,115],[19,74,46,4,75,47],[28,50,22,6,51,23],[33,46,16,4,47,17],[8,152,122,4,153,123],[22,73,45,3,74,46],[8,53,23,26,54,24],[12,45,15,28,46,16],[3,147,117,10,148,118],[3,73,45,23,74,46],[4,54,24,31,55,25],[11,45,15,31,46,16],[7,146,116,7,147,117],[21,73,45,7,74,46],[1,53,23,37,54,24],[19,45,15,26,46,16],[5,145,115,10,146,116],[19,75,47,10,76,48],[15,54,24,25,55,25],[23,45,15,25,46,16],[13,145,115,3,146,116],[2,74,46,29,75,47],[42,54,24,1,55,25],[23,45,15,28,46,16],[17,145,115],[10,74,46,23,75,47],[10,54,24,35,55,25],[19,45,15,35,46,16],[17,145,115,1,146,116],[14,74,46,21,75,47],[29,54,24,19,55,25],[11,45,15,46,46,16],[13,145,115,6,146,116],[14,74,46,23,75,47],[44,54,24,7,55,25],[59,46,16,1,47,17],[12,151,121,7,152,122],[12,75,47,26,76,48],[39,54,24,14,55,25],[22,45,15,41,46,16],[6,151,121,14,152,122],[6,75,47,34,76,48],[46,54,24,10,55,25],[2,45,15,64,46,16],[17,152,122,4,153,123],[29,74,46,14,75,47],[49,54,24,10,55,25],[24,45,15,46,46,16],[4,152,122,18,153,123],[13,74,46,32,75,47],[48,54,24,14,55,25],[42,45,15,32,46,16],[20,147,117,4,148,118],[40,75,47,7,76,48],[43,54,24,22,55,25],[10,45,15,67,46,16],[19,148,118,6,149,119],[18,75,47,31,76,48],[34,54,24,34,55,25],[20,45,15,61,46,16]];
   QRRSBlock.getRSBlocks=function(typeNumber,errorCorrectLevel){var rsBlock=QRRSBlock.getRsBlockTable(typeNumber,errorCorrectLevel);if(rsBlock==undefined)throw new Error("bad rs block @ typeNumber:"+typeNumber+"/errorCorrectLevel:"+errorCorrectLevel);
     var length=rsBlock.length/3,list=[];for(var i=0;i<length;i++){var count=rsBlock[i*3+0],totalCount=rsBlock[i*3+1],dataCount=rsBlock[i*3+2];for(var j=0;j<count;j++)list.push(new QRRSBlock(totalCount,dataCount));}return list;};
   QRRSBlock.getRsBlockTable=function(typeNumber,errorCorrectLevel){switch(errorCorrectLevel){case QRErrorCorrectLevel.L:return QRRSBlock.RS_BLOCK_TABLE[(typeNumber-1)*4+0];case QRErrorCorrectLevel.M:return QRRSBlock.RS_BLOCK_TABLE[(typeNumber-1)*4+1];case QRErrorCorrectLevel.Q:return QRRSBlock.RS_BLOCK_TABLE[(typeNumber-1)*4+2];case QRErrorCorrectLevel.H:return QRRSBlock.RS_BLOCK_TABLE[(typeNumber-1)*4+3];default:return undefined;}};
@@ -2149,7 +2150,7 @@ const KS = (function(){
   // Public API
   var _qr={};
   _qr.create=function(text,ecl){ecl=ecl||'M';var level=QRErrorCorrectLevel[ecl];
-    for(var t=1;t<=10;t++){try{var model=new QRCodeModel(t,level);model.addData(text);model.make();return model;}catch(e){if(t===10)throw e;}}};
+    for(var t=1;t<=40;t++){try{var model=new QRCodeModel(t,level);model.addData(text);model.make();return model;}catch(e){if(t===40)throw e;}}};
     return _qr;
   })();
   // Wrapper: draw a QR for `text` into a canvas at approx `px` pixels.
@@ -2164,8 +2165,9 @@ const KS = (function(){
           // Fall back to the part the scanners read: the animal number.
           const m=String(text||'').match(/(?:^|\|)N:(\d+)/);
           if(!m) throw e1;
-          // v10.38: the nikur needs the part, the piece and the day — they stay in the short code too
-          const keep=['P','I','B','D'].map(k=>{ const x=String(text).match(new RegExp('\\|'+k+':([^|]*)')); return x?'|'+k+':'+x[1]:''; }).join('');
+          // v10.38: the nikur needs the part, the piece, the day and the print number (T:) — they stay in the short code too
+          // (round-3 review A-1: the generator now goes up to the largest code, version 40, so this is only a last resort)
+          const keep=['P','I','B','D','S','K','T'].map(k=>{ const x=String(text).match(new RegExp('\\|'+k+':([^|]*)')); return x?'|'+k+':'+x[1]:''; }).join('');
           model=_qrcode.create('BH|N:'+m[1]+keep,'M');
           try{ gtLogError('qr.long', String(text).length+' chars → number only'); }catch(_){}
         }
@@ -3745,6 +3747,8 @@ const KS = (function(){
         _showRuleNotice(gtErrText(d.error));
         if(d.error!=='rate_limited') _sbRecordEvent('correction', 'rejected', { reason: d.error==='moved_on' ? 'moved-on' : 'not-allowed', stage:'esophagus' }, idx+1);
       }
+      // (round-3 review A-L1) the later station already ruled / the number is held: say so — not a silent undo
+      else if(['next_station_done','outer_ruled','held','eso_locked'].includes(d.error)) _showRuleNotice(gtErrText(d.error));
       // the change did not happen: show the real value
       if(d.row) _revertToServer(idx, d.row, _RULING_COLS); else _sbRefetchAnimal(idx);
       return done(d);
@@ -8546,7 +8550,9 @@ function buildStickerPayload(idx){
 // v10.38: the sticker's data — the same for the picture on the screen and the printed sticker
 function _gtStickerData(idx,kind,sample,piece){
   const s=KS.getSettings();
-  const opt={showQR:s.printShowQR!==false, showHeb:s.printShowHeb!==false, showGreg:s.printShowGreg!==false};
+  // (round-3 review A-L2, owner: "the kosher barcode carries the whole process") a kosher sticker always has its
+  // barcode — the nikur / cooler scan it; the "show barcode" switch is for the legs / head stickers only
+  const opt={showQR:kind==='kosher' || s.printShowQR!==false, showHeb:s.printShowHeb!==false, showGreg:s.printShowGreg!==false};
   let num=idx+1, heb='', greg='', st=['—','#888'], sealImg=null, payload='', shochet='', slTime=null, stRaw=null;
   // sample may be an object {status} (the sticker viewer)
   const _smp=(sample && typeof sample==='object') ? sample : null;
@@ -8813,7 +8819,9 @@ const GT_PRINT_REFUSED={ wrong_station:['המסך הזה לא מדפיס מדב�
   // (§47)
   mark_missing:['סימן הכשרות עוד לא הוכן להדפסה — ראש הצוות פותח את המסך שלו (זה נעשה לבד), ואז מדפיסים שוב','The kashrut mark is not ready for printing yet — the team leader opens his screen (it is done by itself), then print again','La marca kosher aún no está lista — el jefe de equipo abre su pantalla, luego imprima de nuevo'],
   ruling_changed:['הפסיקה השתנתה עכשיו — הדפיסו שוב','The ruling just changed — print again','El dictamen acaba de cambiar — imprima de nuevo'],
-  bad_ticket:['מספר ההדפסה לא תקין — הדפיסו שוב','The print number is not valid — print again','El número de impresión no es válido — imprima de nuevo'] };
+  bad_ticket:['מספר ההדפסה לא תקין — הדפיסו שוב','The print number is not valid — print again','El número de impresión no es válido — imprima de nuevo'],
+  // (round-3 review 02-M1) a kosher sticker is printed only with the server's one-time numbers
+  tickets_required:['מדבקת כשרות מודפסת רק עם מספרי ההדפסה מהשרת — עדכנו את האפליקציה והדפיסו שוב','A kosher sticker is printed only with the server\'s print numbers — update the app and print again','Una etiqueta kosher se imprime solo con los números del servidor — actualice la app e imprima de nuevo'] };
 async function _gtPrintNet(p,zpl,meta){
   if(!window.sb) throw new Error(L('אין חיבור לשרת המפעל','No connection to the plant server','Sin conexión al servidor'));
   meta=meta||{};
@@ -9381,6 +9389,10 @@ function mgrRenderPrintPreview(){
   const s=KS.getSettings();
   const lhc=document.getElementById('printLegsHeadCount');if(lhc)lhc.textContent=_gtProductCountsText()+' ✎';   // v10.38: from the products list
   const pc=document.getElementById('printPartsCount');if(pc)pc.value=s.partsStickerCount!=null?s.partsStickerCount:3;
+  // (round-3 review A-L3) with a cuts list the server takes the count from the list — shown, not typed
+  const pct=document.getElementById('printPartsCountTxt'), hasP=_gtHasProducts(s);
+  if(pc) pc.style.display=hasP?'none':'';
+  if(pct){ pct.style.display=hasP?'':'none'; if(hasP) pct.textContent=gtProductCounts(gtProducts(s)).partsStickerCount+' ✎'; }
   const qz=document.getElementById('printShowQR');if(qz)qz.checked=s.printShowQR!==false;
   const hz=document.getElementById('printShowHeb');if(hz)hz.checked=s.printShowHeb!==false;
   const gz=document.getElementById('printShowGreg');if(gz)gz.checked=s.printShowGreg!==false;
@@ -10719,7 +10731,7 @@ function gtPieRender(){
   h+=`<div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start;"><canvas id="gtPieCanvas" width="260" height="260" style="width:220px;height:220px;flex-shrink:0;"></canvas><div style="flex:1;min-width:240px;">`;
   if(!sl.length) h+=`<div class="gt-hint">${E(L('אין נתונים בתקופה הזו.','No data in this period.','Sin datos en este período.'))}</div>`;
   else h+=`<table class="gt-tbl"><tr><th></th><th></th><th>${E(L('בהמות','Animals','Animales'))}</th><th>%</th><th>${E(L('משקל','Weight','Peso'))} (${E(gtWU())})</th><th>${E(L('ממוצע','Average','Promedio'))}</th></tr>`
-    +sl.map(x=>{ const v=byKg?x.kg:x.n; return `<tr><td><input type="checkbox" ${_gtPie.sel[x.key]?'checked':''} onclick="gtPieToggle('${E(x.key).replace(/'/g,'&#39;')}')"></td>`
+    +sl.map(x=>{ const v=byKg?x.kg:x.n; return `<tr><td><input type="checkbox" ${_gtPie.sel[x.key]?'checked':''} onclick="gtPieToggle(${_jsArg(x.key)})"></td>`
       +`<td style="text-align:start;"><span style="color:${_safeColor(x.color)};">●</span> ${x.group?'🔗 ':''}${E(x.name)}</td><td>${_gtNum(x.n)}</td><td>${tot?_gtNum(v/tot*100,1)+'%':'—'}</td>`
       +`<td>${x.kg?_gtNum(gtW(x.kg)):'—'}</td><td>${x.wn?_gtNum(gtW(x.kg/x.wn),1):'—'}</td></tr>`; }).join('')
     +(()=>{ const n=sl.reduce((a,x)=>a+x.n,0), kg=sl.reduce((a,x)=>a+x.kg,0), wn=sl.reduce((a,x)=>a+x.wn,0);
@@ -11109,7 +11121,9 @@ function gtCardPrint(){
 // ── v10.16: every summary table to Excel (a .csv file Excel opens, Hebrew kept) ──
 function _gtCellText(td){ const t = document.createElement('textarea'); t.innerHTML = td.innerHTML.replace(/<br\s*\/?>/gi, ' ').replace(/<[^>]+>/g, ''); return t.value.replace(/[⇅▲▼]/g, '').replace(/\s+/g, ' ').trim(); }
 function gtExportTable(tbl, name){
-  const rows = [...tbl.querySelectorAll('tr')].map(tr => [...tr.children].map(td => { const v = _gtCellText(td); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }).join(','));
+  // (round-3 review A-L4) a cell that starts like a formula (= + - @) is kept as text in Excel — a number stays a number
+  const rows = [...tbl.querySelectorAll('tr')].map(tr => [...tr.children].map(td => { let v = _gtCellText(td);
+    if(/^[=+\-@\t\r]/.test(v) && !/^-?\d+(\.\d+)?$/.test(v)) v = "'" + v; return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }).join(','));
   const blob = new Blob(['﻿' + rows.join('\r\n')], { type: 'text/csv;charset=utf-8' });
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
   a.download = ('GlattTrack-' + (name || _gtIsoDate(new Date()))).replace(/[^A-Za-z0-9_.-]+/g, '-') + '.csv';
@@ -11539,29 +11553,6 @@ function mgrUpdateMonitor(){
   // Screens toggle list
   // (Old per-screen ON/OFF switches were replaced by the stations/pairing
   // panel — mgrRenderStationsPanel — rendered when the Screens tab opens.)
-  const st2=null;
-  if(st2){
-    const screens=[
-      {key:'legsEnabled',   he:'רגלים / ראש', en:'Legs / Head',      es:'Patas/Cabeza',  def:true},
-      {key:'esophagusEnabled', he:'בדיקת וושט', en:'Esophagus Check', es:'Esófago',      def:false},
-      {key:'innerEnabled',  he:'בודק פנים',   en:'Inner Inspector',  es:'Insp. Interno', def:true},
-      {key:'outerEnabled',  he:'בודק חוץ',   en:'Outer Inspector',  es:'Insp. Externo', def:true},
-      {key:'partsEnabled',  he:'חלקים קטנים', en:'Small Parts',      es:'Partes Peq.',   def:true},
-      {key:'stampsEnabled', he:'חותמות',      en:'Stamps',           es:'Sellos',        def:true},
-      {key:'coolerEnabled', he:'קולר',        en:'Cooler',           es:'Cámara',        def:false},
-      {key:'packagingEnabled',he:'אריזה',     en:'Packaging',        es:'Empaque',       def:false},
-      {key:'saltingEnabled',he:'מליחה',       en:'Salting',          es:'Salazón',       def:false},
-      {key:'nikkurEnabled', he:'ניקור',       en:'Nikkur',           es:'Nikkur',        def:false},
-    ];
-    const s=KS.getSettings();
-    st2.innerHTML=screens.map(sc=>{
-      const on=s[sc.key]!==undefined?s[sc.key]:sc.def;
-      const scLabel=sc[lang]||sc.he;return`<div class="mgr-toggle-row"><div style="font-size:13px;color:var(--text);font-weight:600;">${scLabel}</div><div onclick="mgrToggleScreen('${sc.key}',${!on},'mgrST_${sc.key}')" id="mgrST_${sc.key}" class="mgr-toggle ${on?'on':''}"><div class="mgr-toggle-dot" style="right:${on?'3':'26'}px"></div></div></div>`;
-    }).join('');
-    // Also update nav cards visibility
-    mgrUpdateNavCards();
-  }
-
   // License info
   const li=document.getElementById('mgrLicenseInfo');
   if(li){
@@ -12199,12 +12190,21 @@ function mgrRestorePrompt(){
       if(!await ATconfirm('שחזור מגיבוי מתאריך '+exportedAt+' ידרוס את כל הנתונים הנוכחיים במכשיר הזה. להמשיך?')) return;
       const result = KS.importBackup(data);
       if(!result.ok){ ATalert('שחזור נכשל: '+result.error); return; }
-      ATalert('✅ שוחזר בהצלחה. שים לב: זה שיחזר רק את המכשיר הזה — מכשירים אחרים ימשיכו להראות את הנתונים שהיו אצלם, עד שיתבצע סנכרון נוסף.');
+      _mgrRestoredNote();
       updateMgr();
     };
     reader.readAsText(file);
   };
   input.click();
+}
+
+// (round-3 review A-L5) a restore is on this tablet only and never passes the server's rules: with a plant server
+// the server's board is the truth — it is read again at once, and the message says the server was not changed
+function _mgrRestoredNote(){
+  if(window.sb){
+    ATalert('✅ הגיבוי נטען במכשיר הזה בלבד. השרת לא שונה — הלוח נטען עכשיו שוב מהשרת, כמו בכל המכשירים.');
+    try{ KS.syncNow(); }catch(e){}
+  } else ATalert('✅ שוחזר בהצלחה. שים לב: זה שיחזר רק את המכשיר הזה — מכשירים אחרים ימשיכו להראות את הנתונים שהיו אצלם, עד שיתבצע סנכרון נוסף.');
 }
 
 // ── HEALTH CHECK ──
@@ -12735,20 +12735,6 @@ function mgrUpdateSealUploads(){
 }
 function mgrSealChosen(type,input){
   return mgrUploadSeal(type,input);   // v10.23: the same small PNG as everywhere (the server keeps it)
-  const file=input.files[0];if(!file)return;
-  const reader=new FileReader();
-  reader.onload=function(e){
-    const data=e.target.result;
-    const s=KS.getSettings();
-    const seals=s.customSeals||{};
-    seals[type]=data;
-    KS.updateSettings({customSeals:seals});
-    // Update thumbnail directly
-    const thumb=document.getElementById('sealThumb_'+type);
-    if(thumb)thumb.innerHTML=`<img src="${data}" style="width:100%;height:100%;object-fit:contain;border-radius:6px;background:#fff;">`;
-    mgrUpdateSealPreviews();
-  };
-  reader.readAsDataURL(file);
 }
 
 
@@ -13136,20 +13122,6 @@ function mgrSaveStatusName(key){
   try{ rebuildOuterButtons(); outRenderGrid(); partsRenderGrid(); stampsRenderGrid(); }catch(x){}
 }
 function mgrRenameStatus(key){ mgrEditStatusName(key); }
-function _mgrRenameStatusOld(key){
-  const s=KS.getSettings();
-  const cur=(s.customStatuses||[]).find(st=>st.key===key); if(!cur) return;
-  const he=prompt(L('שם הסטטוס (עברית):','Status name (Hebrew):','Nombre (hebreo):'), cur.he||''); if(he===null) return;
-  const h=String(he).trim().slice(0,40); if(!h) return;
-  const en=prompt(L('שם הסטטוס באנגלית (למדבקות ולמסכים באנגלית):','Status name in English:','Nombre en inglés:'), cur.en||''); if(en===null) return;
-  const e=String(en).trim().slice(0,40);
-  const taken=getAllStatuses().some(st=>st.key!==key && !st.removed && (String(st.he||'').trim()===h || (e && String(st.en||'').trim()===e)));
-  if(taken){ alert(L('יש כבר סטטוס בשם הזה.','A status with this name already exists.','Ya existe un estado con ese nombre.')); return; }
-  const custom=(s.customStatuses||[]).map(st=>st.key===key?Object.assign({},st,{he:h, en:e||h}):st);
-  KS.updateSettings({customStatuses:custom});
-  mgrUpdateStatusToggles();
-  try{ if(typeof rebuildOuterButtons==='function') rebuildOuterButtons(); outRenderGrid(); partsRenderGrid(); stampsRenderGrid(); }catch(x){}
-}
 // a status already ruled today keeps its kosher meaning until the daily reset (the rulings of the day)
 function _gtStatusUsedToday(key){ try{ return (KS.getAnimals()||[]).filter(a=>a && a.outerStatus===key).map(a=>a.id+1); }catch(e){ return []; } }
 function mgrUpdateStatusColor(key,color){
@@ -13586,8 +13558,6 @@ function mgrSetScreenConfig(cfg){
 }
 function mgrApplyScreenConfig(cfg){
   KS.updateSettings({screenConfig:cfg});
-  // Update navigator to show correct number of screens
-  updateNavForConfig(cfg);
 }
 // ── test mode: a logged-in team leader can open every station on one device ──
 // Plant owner's rule (step43/44): the team leader never rules. Only the owner's
@@ -13827,19 +13797,6 @@ function buildNavCards(){
                        'No hay pantallas de trabajo activas. El jefe de equipo activa una estación y empareja un dispositivo en Jefe de equipo → Ajustes → Pantallas.');
   }
   try{ _gtApplyViewOnly(); }catch(e){}
-}
-
-function updateNavForConfig(cfg){
-  // Update the nav grid to show multiple inner/outer cards
-  const navGrid=document.querySelector('.nav-grid');
-  if(!navGrid)return;
-  // Remove existing inner/outer cards and rebuild
-  // This is called on page load too
-  const numIn=cfg==='2in1out'||cfg==='2in2out'?2:cfg==='1both'?0:1;
-  const numOut=cfg==='2in2out'?2:cfg==='1both'?0:1;
-  const hasBoth=cfg==='1both';
-  // Update existing cards or rebuild
-  // Simple approach: show/hide based on config
 }
 
 // ═══ BEEP (inactivity alert - slaughter only) ═══
@@ -14399,7 +14356,7 @@ async function mgrRestoreSnapshot(i){
   const result=KS.importBackup(sn.data);
   if(!result.ok){ ATalert('שחזור נכשל: '+result.error); return; }
   const m=document.getElementById('snapModal'); if(m) m.remove();
-  ATalert('✅ שוחזר בהצלחה. שים לב: זה שיחזר רק את המכשיר הזה — מכשירים אחרים ימשיכו להראות את הנתונים שהיו אצלם, עד שיתבצע סנכרון נוסף.');
+  _mgrRestoredNote();
   updateMgr();
 }
 
@@ -15020,6 +14977,13 @@ function partsReprintWarn(idx){
 // print (the reprint paths did not check it, so kosher stickers / stamps could be reprinted for a held or condemned animal)
 function _gtHoldTitle(h){ return h.kind==='usda'?(h.resolution==='condemned'?L('נפסל USDA','USDA condemned','Condenado USDA'):'USDA HOLD'):L('? שאלה','? Question','? Pregunta'); }
 function _gtHoldReprintText(idx){ return L('בהמה #'+(idx+1)+' — מעוכבת. אין להדפיס מחדש עד שהתחנה המסמנת משחררת.','Animal #'+(idx+1)+' — held. Do not reprint until the marking station releases it.','Animal #'+(idx+1)+' — retenido. No reimprima hasta que la estación que lo marcó lo libere.'); }
+// a reprint is a kashrut audit line: the team leader's list (newest 2000) and an append-only event
+// (v10.37: two stations reprinting at the same moment each sent their own copy of the whole log — one overwrote the other)
+function _gtReprintLog(e){
+  const logs=(KS.getSettings().reprintLog||[]).slice(); logs.push(e);
+  KS.updateSettings({reprintLog:logs.slice(-2000)});
+  try{ KS.recordOwnEvent && KS.recordOwnEvent('reprint', Object.assign({ step: e.step||null }, e), (e.idx!=null && isFinite(Number(e.idx))) ? Number(e.idx) : null); }catch(x){}
+}
 function partsDoReprint(){
   document.getElementById("partsRpModal").classList.remove("open");
   if(partsReprintIdx<0)return;
@@ -15033,17 +14997,11 @@ function partsDoReprint(){
     partsRenderGrid();partsUpdateSummary();
     return;
   }
-  if(_partsNeedsReprint(a) || !a.partsPrintedAs) KS.setPartsPrintedAs(partsReprintIdx,_printedAsKey(a));
   const cnt=a.partsPrintCount||0;
-  // Log reprint
-  const s=KS.getSettings();
-  const logs=s.reprintLog||[];
-  logs.push({screen:"חלקים",idx:partsReprintIdx+1,sticker:cnt+"/"+Math.max(1,gtPartsExpected()),time:new Date().toLocaleTimeString("he-IL")});
-  KS.updateSettings({reprintLog:logs.slice(-2000)});   // (improvement round) only the newest 2000 lines
-  // v10.37: also an append-only event — two stations reprinting at the same moment each sent their own copy of
-  // the whole log, and one copy overwrote the other (a reprint is a kashrut audit line, it must not be lost)
-  try{ const _e=logs[logs.length-1]||{}; KS.recordOwnEvent && KS.recordOwnEvent('reprint', Object.assign({ step: _e.step||null }, _e), (_e.idx!=null && isFinite(Number(_e.idx))) ? Number(_e.idx) : null); }catch(e){}
+  // (round-3 review A-L7) the reprint line and "printed as" are written only after the printer took the stickers
   { const _i=partsReprintIdx; gtPrintGate('parts',_gtPartsJobs(_i),()=>{     // (round 23)
+    if(_partsNeedsReprint(a) || !a.partsPrintedAs) KS.setPartsPrintedAs(_i,_printedAsKey(a));
+    _gtReprintLog({screen:"חלקים",idx:_i+1,sticker:cnt+"/"+Math.max(1,gtPartsExpected()),time:new Date().toLocaleTimeString("he-IL")});
     showPartsPrint(_i,a.outerStatus,true,cnt);
     try{ const _h=_partsHeldNow(_i); if(_h.length) _ppBreak(['cheek1','cheek2'].filter(p=>!_h.includes(p)).length, _h.includes('tongue')?0:1); }catch(e){} }); }   // v10.32: a held part is not reprinted
   partsReprintIdx=-1;
@@ -16182,16 +16140,11 @@ function stampsDoReprint(){
     stampsRenderGrid();stampsUpdateSummary();
     return;
   }
-  if(!a.stampedAs) KS.setStampedAs(stampsRpIdx,_printedAsKey(a));
-  // Log
-  const s=KS.getSettings();
-  const logs=s.reprintLog||[];
-  logs.push({screen:"חותמות",idx:stampsRpIdx+1,time:new Date().toLocaleTimeString("he-IL")});
-  KS.updateSettings({reprintLog:logs.slice(-2000)});   // (improvement round) only the newest 2000 lines
-  // v10.37: also an append-only event — two stations reprinting at the same moment each sent their own copy of
-  // the whole log, and one copy overwrote the other (a reprint is a kashrut audit line, it must not be lost)
-  try{ const _e=logs[logs.length-1]||{}; KS.recordOwnEvent && KS.recordOwnEvent('reprint', Object.assign({ step: _e.step||null }, _e), (_e.idx!=null && isFinite(Number(_e.idx))) ? Number(_e.idx) : null); }catch(e){}
-  { const _i=stampsRpIdx; gtPrintGate('stamps',_gtStampsJobs(_i),()=>stampsShowPrint(_i,a.outerStatus,true)); }   // (round 23)
+  // (round-3 review A-L7) the reprint line and "stamped as" are written only after the printer took the stamps
+  { const _i=stampsRpIdx; gtPrintGate('stamps',_gtStampsJobs(_i),()=>{     // (round 23)
+    if(!a.stampedAs) KS.setStampedAs(_i,_printedAsKey(a));
+    _gtReprintLog({screen:"חותמות",idx:_i+1,time:new Date().toLocaleTimeString("he-IL")});
+    stampsShowPrint(_i,a.outerStatus,true); }); }
   stampsRpIdx=-1;
   setTimeout(()=>stampsFocusScan(),1500);
 }

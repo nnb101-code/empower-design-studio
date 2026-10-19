@@ -31,6 +31,8 @@ begin
   r := sc_plant_add(tok, '9001', 'Selftest plant'); sec := r ->> 'secret';
   r2 := sc_plant_add(tok, '9001', 'again');
   perform pg_temp.rec('a plant is added once; its secret is given once', (r ->> 'ok')::boolean and length(sec) = 36 and r2 ->> 'error' = 'code_taken', r::text);
+  r2 := sc_plant_add(tok, '9003', E'Plant\nURGENT: call +1 555');
+  perform pg_temp.rec('round-3 C-L1: a plant name with a new line / control character is refused (it goes into the alerts)', r2 ->> 'error' = 'bad_value', r2::text);
   -- reports
   r := sc_report('9001', 'not-the-secret', '{"attention":[]}');
   r2 := sc_report('9001', sec, '{"attention":[],"appVersion":"v10.35","working":true,"tablets":[]}');

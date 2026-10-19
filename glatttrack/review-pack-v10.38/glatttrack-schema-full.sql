@@ -12142,6 +12142,7 @@ notify pgrst, 'reload schema';
 -- ============================================================================
 -- ============================================================================
 -- ============================================================================
+-- ============================================================================
 -- GlattTrack — step 46: stage order on the server, each station its own stage,
 -- kashrut configuration locks, and processing that continues over several days
 -- ============================================================================
@@ -12177,29 +12178,15 @@ notify pgrst, 'reload schema';
 --      • the team leader may define statuses, but may not change whether a status
 --        is kosher, or delete it, while an animal on an open board carries it —
 --        that would change rulings already made (error 'status_in_use').
---   4. PROCESSING OVER SEVERAL DAYS (no skipping, ever):
---      The daily reset still empties the screens for a new slaughter day. Every
---      slaughter day whose processing is not finished (legs / parts / stamps)
---      is kept on the server in animals_carry (one "board" per reset, linked to
---      its daily_board_archive row). Each processing station works strictly in
---      order: its oldest unfinished board first; it cannot touch a newer board —
---      nor today's board — until the older one is done for that station
---      (error 'earlier_day_open'). A board done for every station is written
---      back into its archive row and leaves animals_carry.
---        processing_board(p_station)            the station's current board (oldest unfinished) + its rows
---        carry_push(p_board, p_rows, p_command_id)   like animal_push, processing columns only
---        carry_claim(p_board, p_id, p_stage, p_command_id)   legs sort / stamped first claim
---        processing_day_close(p_token, p_board, p_station, p_reason)   team leader: close a board
---                                               for a station (what is left will not be processed), audited
---        processing_status(p_token)             team leader / owner: every open board, pending per station
---   5. DAILY ROLLOVER: never empties a board while work is going on (the 3-hour
---      forced reset is gone), and waits while a slaughtered animal has not
---      reached its last ruling (status 'waiting_unfinished'; system_health:
---      attention 'rollover_waiting'). The team leader's manual reset (an
---      emergency tool) stops too while such animals exist:
---      {ok:false, error:'unfinished_animals', unfinished, numbers:[…]} — it goes
---      on only with a written reason (recorded with the numbers in admin_audit).
---      It counts as the day's rollover.
+--   4. PROCESSING OVER SEVERAL DAYS — changed: since §37 (v10.38) no day is kept
+--      for legs / parts / stamps (everything goes through the same day); a day kept
+--      by an older version in animals_carry is closed into its archive row at every
+--      reset. Only the nikur / cooler work on earlier days (nikur_* / cooler_*, with
+--      the day's own epoch). processing_board / carry_push / carry_claim /
+--      processing_day_close / processing_status stay for such old kept boards.
+--   5. DAILY ROLLOVER (§37): the day always resets at its hour; the team leader's
+--      manual reset (an emergency tool) needs no reason — the unfinished numbers
+--      are written in admin_audit. (round-3 review 02-L1: this header was out of date.)
 --   6. One processing board is changed by one transaction at a time (carry_push,
 --      carry_claim, processing_day_close, the move back to the archive): a
 --      per-board lock, so a station can't write into a board while it is being
@@ -14306,48 +14293,7 @@ begin
 end $$;
 
 -- ── 12. team-leader / owner codes: at least 6 characters (new codes) ─────────
-CREATE OR REPLACE FUNCTION public.manager_add(p_token text, p_name text, p_code text) RETURNS jsonb
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public', 'extensions', 'pg_temp'
-    AS $$
-declare v_id uuid;
-begin
-  if not _is_real_manager(p_token) then
-    return jsonb_build_object('ok', false, 'error', 'unauthorized');
-  end if;
-  if p_code is null or length(p_code) < 6 then                       -- step 46: 6 characters
-    return jsonb_build_object('ok', false, 'error', 'code too short (minimum 6 characters)');
-  end if;
-  if _code_in_use(p_code) then
-    return jsonb_build_object('ok', false, 'error', 'code_in_use');
-  end if;
-  insert into plant_managers (name, code_hash, role) values (left(trim(p_name), 60), crypt(p_code, gen_salt('bf')), 'manager')
-    returning id into v_id;
-  return jsonb_build_object('ok', true, 'id', v_id);
-end $$;
-
-CREATE OR REPLACE FUNCTION public.manager_add_owner(p_token text, p_name text, p_code text) RETURNS jsonb
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public', 'extensions', 'pg_temp'
-    AS $$
-declare v_id uuid;
-begin
-  if not _is_real_manager(p_token) then
-    return jsonb_build_object('ok', false, 'error', 'unauthorized');
-  end if;
-  if coalesce(trim(p_name), '') = '' then
-    return jsonb_build_object('ok', false, 'error', 'name required');
-  end if;
-  if p_code is null or length(p_code) < 6 then                       -- step 46: 6 characters
-    return jsonb_build_object('ok', false, 'error', 'code too short (minimum 6 characters)');
-  end if;
-  if _code_in_use(p_code) then
-    return jsonb_build_object('ok', false, 'error', 'code_in_use');
-  end if;
-  insert into plant_managers (name, code_hash, role) values (left(trim(p_name), 60), crypt(p_code, gen_salt('bf')), 'owner')
-    returning id into v_id;
-  return jsonb_build_object('ok', true, 'id', v_id);
-end $$;
+-- (round-3 review 02-L4) manager_add / manager_add_owner are defined once, further down (server only).
 
 -- ── v10.38: the plant's products list (what is taken from the animal) ───────────────
 -- Each product: on / off, a number sticker before the ruling (from the head or the legs screen, how many),
@@ -15538,6 +15484,8 @@ begin
     end if;
   end if;
   v_key2 := 'wdev:' || coalesce(v_dev, 'mgr');
+  -- (round-3 review 02-L3) one try at a time per device: a burst of parallel tries cannot pass the count
+  perform pg_advisory_xact_lock(hashtext('gt_login:' || v_key2));
 
   delete from login_attempts where at < now() - interval '1 day';
   select count(*), max(at) into v_fails, v_last from login_attempts
@@ -17513,6 +17461,8 @@ declare
   v_all int;
   v_last timestamptz;
 begin
+  -- (round-3 review 02-L3) one try at a time per address + device: a burst of parallel tries cannot pass the count
+  perform pg_advisory_xact_lock(hashtext('gt_login:' || v_key));
   delete from login_attempts where at < now() - interval '1 day';
   select count(*), max(at) into v_fails, v_last from login_attempts
    where ip = v_key and not ok and at > now() - interval '15 minutes';
@@ -18646,11 +18596,10 @@ declare v_dev text; v_role text; v_ep bigint; v_res jsonb; a animals_pilot; v_id
 begin
   if p_id is null or p_id < 0 or p_id > 999 then return jsonb_build_object('ok', false, 'error', 'bad_id'); end if;
   if p_kind is null or p_kind not in ('question', 'usda') then return jsonb_build_object('ok', false, 'error', 'bad_value'); end if;
-  if p_station is null or p_station not in ('slaughter', 'eso', 'inner', 'outer', 'legs', 'parts', 'stamps', 'nikur') then
+  -- (round-3 review 02-L5) the nikur holds only through nikur_hold, with the day's own epoch — here it
+  -- would always be today's board, and an earlier day's number would hold today's animal of that number
+  if p_station is null or p_station not in ('slaughter', 'eso', 'inner', 'outer', 'legs', 'parts', 'stamps') then
     return jsonb_build_object('ok', false, 'error', 'bad_station');
-  end if;
-  if p_station = 'nikur' and v_part <> 'whole' then    -- v10.38: the nikur holds the whole animal (USDA or "?")
-    return jsonb_build_object('ok', false, 'error', 'bad_value');
   end if;
   if (p_kind = 'question' and not (v_part = 'whole'
                                    or (p_station = 'inner' and v_part in ('rumen', 'maw', 'lung'))))   -- v10.32: the window of an inner "?"
@@ -19866,11 +19815,13 @@ begin
     if not (_manager_session_valid(p_token) and coalesce(_session_role(p_token), '') in ('manager', 'manufacturer')) then v_e := 'unauthorized';
     elsif v_labels > 2 or v_pq > 1 then v_e := 'bad_value'; end if;
   else
-    if p_animal is null or p_animal < 0 or p_animal > 999 then v_e := 'bad_id'; end if;
+    -- (round-3 review 02-M1) a kosher sticker is printed only with the server's one-time numbers
+    -- (print_tickets_take + print_kosher_add) — never as a whole picture made by the tablet
+    if p_kind = 'kosher' then v_e := 'tickets_required'; end if;
+    if v_e is null and (p_animal is null or p_animal < 0 or p_animal > 999) then v_e := 'bad_id'; end if;
     if v_e is null then select * into a from animals_pilot where id = p_animal; end if;
     -- the screen that prints these stickers (test mode: the team leader's one-phone test may print anything)
-    if v_e is null and not v_test and not (case when p_kind = 'kosher' then coalesce(v_role, '') in ('parts', 'stamps')
-                                                else coalesce(v_role, '') = 'legs' end) then v_e := 'wrong_station'; end if;
+    if v_e is null and not v_test and coalesce(v_role, '') <> 'legs' then v_e := 'wrong_station'; end if;
     -- (audit A1) legs and head on two screens: the legs screen prints only legs stickers, the head screen only head
     -- stickers — the same rule as marking them done
     if v_e is null and p_kind in ('legs', 'head') then v_e := _legs_slot_error(p_kind = 'legs', p_kind = 'head', false); end if;
@@ -19879,23 +19830,6 @@ begin
                                                case when p_kind = 'legs' then 2 else 7 end)));
       if a.id is null or a.slaughter is null then v_e := 'not_slaughtered';
       elsif v_labels <> 1 or v_pq > v_max then v_e := 'too_many'; end if;
-    end if;
-    if v_e is null and p_kind = 'kosher' then
-      if a.id is null or a.slaughter is null or a.slaughter in ('nevela', 'shot') or a.inner_status = 'treif' or a.outer_status = 'treif'
-         or not _kosher_ready(a) then v_e := 'not_kosher';
-      elsif v_pq > 1 or v_labels > 30 or v_labels > _print_kosher_max(p_parts, v_role, v_test, s) then v_e := 'too_many';
-      else
-        for x in select e from jsonb_array_elements(coalesce(p_parts, '[]'::jsonb)) e loop
-          if jsonb_typeof(x) <> 'object' or coalesce(x ->> 'pid', '') !~ '^[a-z][a-z0-9_]{0,40}$' then v_e := 'bad_value'; exit; end if;
-          if coalesce(x ->> 'i', '') !~ '^[0-9]{0,3}$' then v_e := 'bad_value'; exit; end if;   -- (full review S4) a number, or nothing
-          v_e := _nikur_refusal(a, _product_def(x ->> 'pid'), _board_epoch(), nullif(x ->> 'i', '')::int);
-          if v_e is not null then exit; end if;
-        end loop;
-        -- no parts named (a plant without the cuts list): any open whole-animal hold still stops it
-        if v_e is null and jsonb_array_length(coalesce(p_parts, '[]'::jsonb)) = 0 then
-          v_e := _nikur_refusal(a, null, _board_epoch(), null);
-        end if;
-      end if;
     end if;
   end if;
   if v_e is not null then
@@ -20889,11 +20823,29 @@ language sql stable security definer set search_path = public, extensions, pg_te
   select left(regexp_replace(he || case when trim(en) <> '' and trim(en) <> he then ' · ' || trim(en) else '' end, '[|\r\n]', '/', 'g'), 48) from v;
 $$;
 revoke execute on function _status_sticker_label(text) from public, anon, authenticated;
+-- (round-3 review 02-L2) the shochet's own time: slaughter_time is also the version of the slaughter column (an
+-- esophagus change moves it on, so the tablets take the change); the barcode and the card keep the first time
+alter table animals_pilot add column if not exists shochet_time bigint;
+alter table animals_carry add column if not exists shochet_time bigint;
+create or replace function _animals_shochet_time() returns trigger
+language plpgsql security definer set search_path = public, extensions, pg_temp as $$
+begin
+  if new.slaughter is null then new.shochet_time := null;
+  elsif new.shochet_time is null or (tg_op = 'UPDATE' and old.slaughter is null) then new.shochet_time := new.slaughter_time;
+  end if;
+  return new;
+end $$;
+revoke execute on function _animals_shochet_time() from public, anon, authenticated;
+drop trigger if exists zz_animals_shochet_time on animals_pilot;
+create trigger zz_animals_shochet_time before insert or update on animals_pilot
+  for each row execute function _animals_shochet_time();
+update animals_pilot set shochet_time = slaughter_time where slaughter is not null and shochet_time is null;
+
 create or replace function _ticket_payload(a animals_pilot, p_pid text, p_i integer, p_epoch bigint, p_t text, p_mark text) returns text
 language sql stable security definer set search_path = public, extensions, pg_temp as $$
   select 'BH|N:' || (a.id + 1)
-         || '|D:' || coalesce(to_char(to_timestamp(a.slaughter_time / 1000.0) at time zone _plant_tz(), 'YYYY-MM-DD'), '')
-         || '|TM:' || _qr_time(a.slaughter_time) || '|SH:' || _qr_name(a.slaughtered_by)
+         || '|D:' || coalesce(to_char(to_timestamp(coalesce(a.shochet_time, a.slaughter_time) / 1000.0) at time zone _plant_tz(), 'YYYY-MM-DD'), '')
+         || '|TM:' || _qr_time(coalesce(a.shochet_time, a.slaughter_time)) || '|SH:' || _qr_name(a.slaughtered_by)
          || '|IN:' || _qr_name(a.inner_by) || '|IT:' || _qr_time(a.inner_time)
          || '|OUT:' || _qr_name(a.outer_by) || '|OT:' || _qr_time(a.outer_time)
          || coalesce('|P:' || p_pid || '|I:' || coalesce(p_i, 1), '') || '|B:' || p_epoch
@@ -20951,12 +20903,13 @@ end $$;
 revoke execute on function print_tickets_take(integer, jsonb, integer, uuid) from public;
 grant execute on function print_tickets_take(integer, jsonb, integer, uuid) to anon, authenticated;
 
--- the size of a QR in modules for a byte payload (error level M, versions 1–15: long names of the shochet and inspectors)
+-- the size of a QR in modules for a byte payload (error level M, versions 1–25: long names of the shochet and inspectors)
 create or replace function _qr_modules(p_len integer) returns integer
 language sql immutable set search_path = public, extensions, pg_temp as $$
   select 17 + 4 * coalesce((select v from (values (1,14),(2,26),(3,42),(4,62),(5,84),(6,106),(7,122),(8,152),(9,180),(10,213),
-                                              (11,251),(12,287),(13,331),(14,362),(15,412)) c(v, cap)
-                             where cap >= p_len order by v limit 1), 15);
+                                              (11,251),(12,287),(13,331),(14,362),(15,412),(16,450),(17,504),(18,560),(19,624),(20,666),
+                                              (21,711),(22,779),(23,857),(24,911),(25,997)) c(v, cap)
+                             where cap >= p_len order by v limit 1), 25);
 $$;
 revoke execute on function _qr_modules(integer) from public, anon, authenticated;
 
@@ -21031,13 +20984,26 @@ revoke execute on function print_kosher_add(text, text[], text[], uuid) from pub
 grant execute on function print_kosher_add(text, text[], text[], uuid) to anon, authenticated;
 
 -- 3. the nikur / cooler: a piece whose stickers were given tickets goes in only with one of its own tickets
+-- (round-3 review 02-M1) the day the one-time numbers started: from that day on EVERY kosher piece needs its number
+-- at the nikur / cooler (before, a piece with no ticket ever made for it went in — a sticker made outside the
+-- system was accepted). Days before keep the old rule.
+insert into plant_state (key, value)
+select 'ticketsFromEpoch', coalesce((select min(board_epoch) from print_tickets), _board_epoch(), 0)::text
+on conflict (key) do nothing;
+create or replace function _tickets_from() returns bigint
+language sql stable security definer set search_path = public, extensions, pg_temp as $$
+  select coalesce((select case when value ~ '^-?[0-9]{1,18}$' then value::bigint end from plant_state where key = 'ticketsFromEpoch'),
+                  9223372036854775807);
+$$;
+revoke execute on function _tickets_from() from public, anon, authenticated;
 create or replace function _ticket_refusal(p_epoch bigint, p_id integer, p_product text, p_piece integer, p_ticket text) returns text
 language sql stable security definer set search_path = public, extensions, pg_temp as $$
   select case
     when p_ticket is not null and not exists (select 1 from print_tickets t where t.t = upper(p_ticket) and t.board_epoch = p_epoch
                                                and t.animal_id = p_id and t.product = p_product and t.piece = p_piece) then 'bad_ticket'
-    when p_ticket is null and exists (select 1 from print_tickets t where t.board_epoch = p_epoch and t.animal_id = p_id
-                                       and t.product = p_product and t.piece = p_piece) then 'no_ticket'
+    when p_ticket is null and (coalesce(p_epoch, 0) >= _tickets_from()
+                               or exists (select 1 from print_tickets t where t.board_epoch = p_epoch and t.animal_id = p_id
+                                          and t.product = p_product and t.piece = p_piece)) then 'no_ticket'
   end;
 $$;
 revoke execute on function _ticket_refusal(bigint, integer, text, integer, text) from public, anon, authenticated;

@@ -113,9 +113,8 @@ fi
 ups="$(PSQLV -c "select value from plant_state where key = 'upsStatus'" 2>/dev/null)"
 [ -z "$ups" ] || { [ "$ups" = "online" ] && ok "חשמל (UPS)" "רשת חשמל רגילה" || bad "חשמל (UPS)" "$ups"; }
 
-# 10. yesterday's board was closed (the daily reset is not waiting for a ruling)
-w="$(PSQLV -c "select value from plant_state where key = 'rolloverWaitingSince'" 2>/dev/null)"
-[ -z "$w" ] && ok "איפוס יומי" "בוצע" || bad "איפוס יומי" "ממתין מאז $w — יש בהמה בלי פסיקה אחרונה (ראש הצוות)"
+# 10. (round-3 review P-L2: removed) since §37 the day always resets — the daily reset never waits, so there is
+#     nothing to check here
 
 # 11. tablets: paired station tablets not seen for a day
 off_dev="$(PSQLV -c "select string_agg(coalesce(device_name, id) || ' (' || assigned_role || ')', ', ') from devices_pilot where assigned_role is not null and assigned_role <> 'leader' and coalesce(device_status, 'active') = 'active' and (last_seen is null or last_seen < now() - interval '24 hours')" 2>/dev/null)"
