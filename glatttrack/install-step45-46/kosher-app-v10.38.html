@@ -1780,14 +1780,9 @@ const LUNG_B64="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICA
         <!-- v10.38 (owner): what is taken from the animal — one list: on/off, where, how many stickers, weight -->
         <div class="mgr-sec">חלקי פנים וחוץ</div>
         <div class="mgr-card" id="mgrProductsCard">
-          <div style="font-size:11px;color:var(--muted);line-height:1.6;margin-bottom:8px;">לכל חלק: פעיל, מדבקות מספר (ראש / רגליים), האזור שמטפל בו ומדבקות הכשרות שלו, הניקור, ומשקל ממוצע. מספר המדבקות בכל מסך מחושב לבד מהרשימה.</div>
+          <div style="font-size:11px;color:var(--muted);line-height:1.6;margin-bottom:8px;">לכל חלק: פעיל, מדבקות מספר (ראש / רגליים), האזור שמטפל בו ומדבקות הכשרות שלו, ומשקל ממוצע. מספר המדבקות בכל מסך מחושב לבד מהרשימה.</div>
           <div id="mgrProductsTotals" style="font-size:13px;font-weight:700;color:var(--gold);margin-bottom:6px;"></div>
           <div id="mgrProductsList"></div>
-          <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;">
-            <input id="newProductHe" type="text" maxlength="80" placeholder="שם חלק חדש" style="flex:1;min-width:120px;background:var(--panel2);border:1px solid var(--border);border-radius:7px;padding:8px;color:var(--text);font-size:13px;">
-            <input id="newProductEn" type="text" maxlength="80" placeholder="English (רשות)" style="flex:1;min-width:100px;background:var(--panel2);border:1px solid var(--border);border-radius:7px;padding:8px;color:var(--text);font-size:13px;">
-            <button onclick="mgrAddProduct()" style="padding:8px 14px;border-radius:7px;border:none;background:var(--gold);color:#07090F;font-size:13px;font-weight:700;cursor:pointer;">הוסף</button>
-          </div>
         </div>
 
         <!-- v10.38 (owner): the day resets by itself at the set hour; the team leader can also reset it by hand -->
@@ -12399,10 +12394,11 @@ const GT_DEFAULT_PRODUCTS=[
 const _GT_OLD_PART_IDS={tongue:'tongue',hanger:'hanger',tail:'tail',skirt_out:'skirt_out',skirt_in:'skirt_in'};
 function gtProducts(s){
   s=s||KS.getSettings();
-  if(Array.isArray(s.products)&&s.products.length) return s.products.map(p=>{
+  // (owner, 19.10) the standard parts only — a part added by hand in an older version is not used
+  if(Array.isArray(s.products)&&s.products.length) return s.products.filter(p=>p&&GT_DEFAULT_PRODUCTS.some(x=>x.id===p.id)).map(p=>{
     // (a list saved before stage 2 has no m / nikur yet: the built-in values, or none for the plant's own)
     const d=GT_DEFAULT_PRODUCTS.find(x=>x.id===p.id)||{m:0,nikur:'none'};
-    const o=Object.assign({}, p, {m:p.m!=null?p.m:d.m, nikur:p.nikur||d.nikur});
+    const o=Object.assign({}, p, {m:p.m!=null?p.m:d.m, nikur:d.nikur||'none'});   // (owner) a part's nikur is fixed
     // (v10.38: the trade names in Hebrew and Spanish — a built-in name the plant did not change follows them)
     if(p.builtin && d.he && ['Outside Skirt','Inside Skirt','Hanger steak','סקירט חיצוני','סקירט פנימי','הנגר סטייק'].includes(p.he)) o.he=d.he;
     if(p.builtin && d.es && (!p.es || ['Outside Skirt','Inside Skirt','Hanger steak'].includes(p.es))) o.es=d.es;
@@ -12414,9 +12410,6 @@ function gtProducts(s){
     const p=id&&list.find(x=>x.id===id);
     if(p&&o.avg!=null&&isFinite(o.avg)) p.avg=Number(o.avg);
     if(p&&id==='skirt_in'&&o.internal===false) p.notGlatt=false;
-    if(o&&!id&&o.name&&String(o.id||'').charAt(0)==='p')   // a part the plant added before
-      list.push({id:'p_'+String(o.id).slice(1).toLowerCase().replace(/[^a-z0-9_]/g,'').slice(0,30)||('p_'+Date.now().toString(36).replace(/q/g,'z0').replace(/w/g,'z1')),
-                 he:String(o.name).slice(0,80),en:'',es:'',on:false,pre:'none',n:0,post:'none',avg:o.avg!=null&&isFinite(o.avg)?Number(o.avg):null});
   });
   return list;
 }
@@ -12485,25 +12478,12 @@ function mgrSetProduct(id,field,val){
   else if(field==='m') p.m=Math.min(20,Math.max(0,parseInt(val)||0));
   // (owner) the tail gets its sticker once: on the head screen or at the stamps — choosing one clears the other
   // (v10.38: the tail's head sticker and its kosher sticker are no longer exclusive — the owner's kosher-sticker rule)
-  else if(field==='nikur') p.nikur=['big','small','none'].includes(val)?val:'none';
   else if(field==='avg'){ const v=String(val).trim().replace(',','.'); p.avg=v===''?null:Math.min(1000,Math.max(0,Number(v)||0)); }
   else if(field==='notGlatt') p.notGlatt=!!val;
   _gtSaveProducts(list);
 }
-function mgrAddProduct(){
-  const he=(document.getElementById('newProductHe')||{}).value||'', en=(document.getElementById('newProductEn')||{}).value||'';
-  const name=he.trim()||en.trim(); if(!name){ alert(L('חובה למלא שם','Name required','El nombre es obligatorio')); return; }
-  const list=gtProducts();
-  if(list.some(p=>[p.he,p.en].some(x=>String(x||'').trim()===name))){ alert(L('יש כבר חלק בשם הזה.','A cut with this name already exists.','Ya existe un corte con ese nombre.')); return; }
-  // (round-2 review A-sc3) no q / w in a new id: a hand scanner on a Hebrew keyboard types them as / and ' (not undone)
-  list.push({id:'p_'+Date.now().toString(36).replace(/q/g,'z0').replace(/w/g,'z1'),he:name.slice(0,80),en:en.trim().slice(0,80),es:'',on:true,pre:'none',n:0,post:'none',m:0,nikur:'none',avg:null});
-  if(_gtSaveProducts(list)){ ['newProductHe','newProductEn'].forEach(k=>{const e=document.getElementById(k);if(e)e.value='';}); }
-}
-function mgrRemoveProduct(id){
-  const list=gtProducts(); const p=list.find(x=>x.id===id); if(!p||p.builtin)return;
-  if(!confirm(L('למחוק את "'+p.he+'"?','Delete "'+(p.en||p.he)+'"?','¿Borrar "'+(p.es||p.en||p.he)+'"?')))return;
-  _gtSaveProducts(list.filter(x=>x.id!==id));
-}
+// (owner, 19.10) the standard parts of the animal only — no parts added by hand; the nikur of each part is fixed
+// (small parts → the small-parts nikur, large → the nikur)
 function mgrGoProducts(){
   try{ const c=document.getElementById('mgrProductsCard'); if(c){ let n=c; while(n){ if(n.tagName==='DETAILS')n.open=true; n=n.parentElement; } c.scrollIntoView({behavior:'smooth',block:'start'}); } }catch(e){}
 }
@@ -12534,7 +12514,6 @@ function mgrRenderProducts(){
     return `<div data-product="${escapeHtml(p.id)}" style="padding:9px 2px;border-bottom:1px solid var(--border);${on?'':'opacity:.55;'}">
       <div style="display:flex;align-items:center;gap:8px;">
         <span style="flex:1;font-size:13px;color:#E8EDF5;font-weight:700;">${escapeHtml(name)}${sub?`<span style="font-size:11px;color:var(--muted);font-weight:400;margin-inline-start:6px;">${escapeHtml(sub)}</span>`:''}</span>
-        ${p.builtin?'':`<button onclick="mgrRemoveProduct(${K})" aria-label="${escapeHtml(L('מחק','Delete','Eliminar'))}" style="color:#FF6B6B;background:none;border:1px solid rgba(224,48,48,.3);border-radius:6px;font-size:13px;min-width:34px;min-height:30px;cursor:pointer;">✕</button>`}
         <button ${isLegs?'disabled title="'+escapeHtml(L('רגליים תמיד פעילות','The legs are always on','Las patas siempre están activas'))+'"':''} onclick="mgrSetProduct(${K},'on')"
           style="width:50px;height:28px;min-width:50px;border-radius:14px;border:none;cursor:${isLegs?'default':'pointer'};position:relative;background:${on?'#28C76F':'#1F2D45'};">
           <div style="position:absolute;top:3px;${on?'right:3px':'left:3px'};width:22px;height:22px;border-radius:50%;background:white;pointer-events:none;"></div>
@@ -12552,8 +12531,7 @@ function mgrRenderProducts(){
         ${isLegs?`<span>${escapeHtml(L('(מיון)','(sorting)','(clasificación)'))}</span>`:''}
       </div>
       <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:6px;font-size:11px;color:var(--muted);">
-        <span>${escapeHtml(L('ניקור:','Nikur:','Nikur:'))}</span>
-        ${sel(p.id,'nikur',p.nikur||'none',NIK,false)}
+        <span>${escapeHtml(L('ניקור:','Nikur:','Nikur:'))} ${escapeHtml((NIK.find(x=>x[0]===(p.nikur||'none'))||NIK[2])[1])}</span>
         <span style="margin-inline-start:6px;">${escapeHtml(L('משקל ממוצע:','Average weight:','Peso medio:'))}</span>
         <input type="number" inputmode="decimal" step="0.01" min="0" value="${p.avg!=null?escapeHtml(p.avg):''}" placeholder="${escapeHtml(L('ק״ג','kg','kg'))}" onchange="mgrSetProduct(${K},'avg',this.value)" style="width:68px;background:var(--panel2);border:1px solid var(--border);border-radius:6px;padding:5px;color:var(--gold);font-weight:700;text-align:center;">
       </div>

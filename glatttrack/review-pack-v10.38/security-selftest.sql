@@ -3219,6 +3219,16 @@ begin
         and exists (select 1 from jsonb_array_elements(d -> 'days') x where (x ->> 'epoch')::bigint = e0 and (x ->> 'in')::int = 2 and (x ->> 'expected')::int = 12);
   perform pg_temp.rec('v10.38 nikur after the cooler: a piece is scanned with ITS day (yesterday''s 880 is not today''s 880); the nikur''s "?" stays over the daily reset; the board lists the day still waiting', ok,
     concat_ws(' | ', left(r::text, 60), left(r2::text, 80), left(r3::text, 80), left(r4::text, 80), left(r6::text, 60), left((d -> 'days')::text, 160)));
+  -- (owner, 19.10) only the standard parts of the animal, each one's nikur fixed: a part added by hand and a small
+  -- part sent to the large-parts nikur are refused by the server
+  r  := pg_temp.api(pg_temp.mgr(), format('select push_settings(%L::jsonb, ''x'', %L)', jsonb_build_object('products',
+          pr || '[{"id":"p_extra","he":"x","on":true,"pre":"none","n":0,"post":"stamps","m":1,"nikur":"small"}]'::jsonb), pg_temp.v('mgr')));
+  r2 := pg_temp.api(pg_temp.mgr(), format('select push_settings(%L::jsonb, ''x'', %L)', jsonb_build_object('products',
+          jsonb_set(pr, '{0,nikur}', '"big"')), pg_temp.v('mgr')));
+  perform pg_temp.rec('owner: only the standard parts — a part added by hand and a different nikur for a part are refused',
+    r ->> 'error' = 'bad_settings' and r2 ->> 'error' = 'bad_settings'
+    and not exists (select 1 from jsonb_array_elements(_gt_products()) e where e ->> 'id' = 'p_extra'),
+    concat_ws(' | ', left(r::text, 120), left(r2::text, 120)));
   -- (§46, owner) the settings of each day: the liver was taken on day A and is not taken on day B — day A's liver
   -- still goes into the nikur; day A's kashrut status stays "in use" while day A is still in the nikur
   perform set_config('gt.reset_in_progress', 'true', true);

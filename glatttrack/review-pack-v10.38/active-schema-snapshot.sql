@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict UWmCwLXirb7ifD5WGtdDcZrRCZeYdSdPZgg1Fd3e8zA8WrVH95Q4KjGHR0r9S45
+\restrict kGGU7N9rxbkxe2XZH7k56U6HxW2rwQljegxB07zLuMhhqy4mUuqdDhBOipe5frI
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -1938,6 +1938,20 @@ $$;
 ALTER FUNCTION public._gt_one_inspection() OWNER TO postgres;
 
 --
+-- Name: _gt_parts_std(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public._gt_parts_std() RETURNS jsonb
+    LANGUAGE sql IMMUTABLE
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $$
+  select '[{"id":"tongue","m":1,"nikur":"small"},{"id":"cheeks","m":2,"nikur":"small"},{"id":"sides","m":6,"nikur":"big"},{"id":"lung","m":0,"nikur":"none"},{"id":"hook","m":0,"nikur":"none"},{"id":"legs","m":0,"nikur":"none"},{"id":"tail","m":1,"nikur":"small"},{"id":"liver","m":1,"nikur":"small"},{"id":"skirt_out","m":1,"nikur":"small"},{"id":"skirt_in","m":1,"nikur":"small"},{"id":"hanger","m":1,"nikur":"small"}]'::jsonb;
+$$;
+
+
+ALTER FUNCTION public._gt_parts_std() OWNER TO postgres;
+
+--
 -- Name: _gt_products(); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -1960,10 +1974,10 @@ CREATE FUNCTION public._gt_products_from(p_settings jsonb) RETURNS jsonb
     SET search_path TO 'public', 'extensions', 'pg_temp'
     AS $$
   select coalesce(jsonb_agg(e || jsonb_build_object('m', coalesce(e -> 'm', d -> 'm', '0'::jsonb),
-                                                    'nikur', coalesce(e -> 'nikur', d -> 'nikur', '"none"'::jsonb)) order by o), '[]'::jsonb)
+                                                    'nikur', d -> 'nikur') order by o), '[]'::jsonb)   -- (owner) the nikur is fixed
     from jsonb_array_elements(case when jsonb_typeof(p_settings -> 'products') = 'array' then p_settings -> 'products' else '[]'::jsonb end)
          with ordinality t(e, o)
-    left join jsonb_array_elements('[{"id":"tongue","m":1,"nikur":"small"},{"id":"cheeks","m":2,"nikur":"small"},{"id":"sides","m":6,"nikur":"big"},{"id":"lung","m":0,"nikur":"none"},{"id":"hook","m":0,"nikur":"none"},{"id":"legs","m":0,"nikur":"none"},{"id":"tail","m":1,"nikur":"small"},{"id":"liver","m":1,"nikur":"small"},{"id":"skirt_out","m":1,"nikur":"small"},{"id":"skirt_in","m":1,"nikur":"small"},{"id":"hanger","m":1,"nikur":"small"}]'::jsonb) d on d ->> 'id' = e ->> 'id';
+    join jsonb_array_elements('[{"id":"tongue","m":1,"nikur":"small"},{"id":"cheeks","m":2,"nikur":"small"},{"id":"sides","m":6,"nikur":"big"},{"id":"lung","m":0,"nikur":"none"},{"id":"hook","m":0,"nikur":"none"},{"id":"legs","m":0,"nikur":"none"},{"id":"tail","m":1,"nikur":"small"},{"id":"liver","m":1,"nikur":"small"},{"id":"skirt_out","m":1,"nikur":"small"},{"id":"skirt_in","m":1,"nikur":"small"},{"id":"hanger","m":1,"nikur":"small"}]'::jsonb) d on d ->> 'id' = e ->> 'id';
 $$;
 
 
@@ -3525,6 +3539,11 @@ begin
     -- (v10.38 stage 2) m = the kosher stickers its area prints; nikur = the nikur screen it goes to
     if x ? 'm' and not _jint_ok(x -> 'm', 0, 20) then return 'product ' || v_id || ': stickers 0..20'; end if;
     if x ? 'nikur' and coalesce(x ->> 'nikur', '') not in ('big', 'small', 'none') then return 'product ' || v_id || ': nikur must be big / small / none'; end if;
+    -- (owner, 19.10) only the standard parts; each part's nikur is fixed
+    if not exists (select 1 from jsonb_array_elements(_gt_parts_std()) d where d ->> 'id' = v_id) then
+      return 'product ' || v_id || ': only the standard parts of the animal'; end if;
+    if x ? 'nikur' and x ->> 'nikur' is distinct from (select d ->> 'nikur' from jsonb_array_elements(_gt_parts_std()) d where d ->> 'id' = v_id) then
+      return 'product ' || v_id || ': the nikur of this part is fixed'; end if;
     if x ? 'avg' and jsonb_typeof(x -> 'avg') <> 'null' and not _jnum_ok(x -> 'avg', 0, 1000) then return 'product ' || v_id || ': average weight 0..1000 kg'; end if;
     if x ? 'notGlatt' and jsonb_typeof(x -> 'notGlatt') <> 'boolean' then return 'product ' || v_id || ': notGlatt must be true / false'; end if;
     if x ? 'builtin' and jsonb_typeof(x -> 'builtin') <> 'boolean' then return 'product ' || v_id || ': builtin must be true / false'; end if;
@@ -12520,6 +12539,13 @@ REVOKE ALL ON FUNCTION public._gt_one_inspection() FROM PUBLIC;
 
 
 --
+-- Name: FUNCTION _gt_parts_std(); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public._gt_parts_std() FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION _gt_products(); Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -14487,5 +14513,5 @@ GRANT ALL ON TABLE public.system_flags TO service_role;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict UWmCwLXirb7ifD5WGtdDcZrRCZeYdSdPZgg1Fd3e8zA8WrVH95Q4KjGHR0r9S45
+\unrestrict kGGU7N9rxbkxe2XZH7k56U6HxW2rwQljegxB07zLuMhhqy4mUuqdDhBOipe5frI
 

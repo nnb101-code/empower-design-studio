@@ -1,9 +1,9 @@
 == 1. plant state =======================================================
     key     |     value     |          updated_at           
 ------------+---------------+-------------------------------
- boardEpoch | 1792432789964 | 2026-10-19 17:59:49.96395+00
- schemaStep | 46            | 2026-10-19 17:59:51.400038+00
- testMode   | off           | 2026-10-19 17:59:50.577938+00
+ boardEpoch | 1792434700396 | 2026-10-19 18:31:40.395375+00
+ schemaStep | 46            | 2026-10-19 18:31:42.091214+00
+ testMode   | off           | 2026-10-19 18:31:41.126132+00
 (3 rows)
 
 == 2. functions (public, gt_rls) ========================================
@@ -156,6 +156,7 @@
  public | _gt_legs_first()                                                                   | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _gt_note_change(text,animals_pilot,text,text,text)                                 | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _gt_one_inspection()                                                               | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _gt_parts_std()                                                                    | function | f                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _gt_products()                                                                     | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _gt_products_from(jsonb)                                                           | function | f                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _gt_products_of(bigint)                                                            | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
@@ -298,7 +299,7 @@
  public | leader_account_remove(text)                                                        | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | leader_device_recovery(text)                                                       | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | manufacturer_set_code(text,text)                                                   | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
-(289 rows)
+(290 rows)
 
 == 2b. API surface: functions the app roles can run ======================
                        callable_by_app                       | security_definer 

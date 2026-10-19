@@ -12138,6 +12138,7 @@ notify pgrst, 'reload schema';
 -- ============================================================================
 -- ============================================================================
 -- ============================================================================
+-- ============================================================================
 -- GlattTrack — step 46: stage order on the server, each station its own stage,
 -- kashrut configuration locks, and processing that continues over several days
 -- ============================================================================
@@ -14417,14 +14418,22 @@ revoke execute on function _products_counts(jsonb) from public, anon, authentica
 
 -- (owner, 19.10) the plant's cuts list as the app sees it: a list saved before stage 2 has no m / nikur on its
 -- built-in parts — they take the built-in values (as in the app), so the nikur / cooler get their pieces
+-- (owner, 19.10) the standard parts of the animal and the nikur each one goes to — fixed: small parts to the
+-- small-parts nikur, large parts to the nikur; no parts added by hand
+create or replace function _gt_parts_std() returns jsonb
+language sql immutable set search_path = public, extensions, pg_temp as $$
+  select '[{"id":"tongue","m":1,"nikur":"small"},{"id":"cheeks","m":2,"nikur":"small"},{"id":"sides","m":6,"nikur":"big"},{"id":"lung","m":0,"nikur":"none"},{"id":"hook","m":0,"nikur":"none"},{"id":"legs","m":0,"nikur":"none"},{"id":"tail","m":1,"nikur":"small"},{"id":"liver","m":1,"nikur":"small"},{"id":"skirt_out","m":1,"nikur":"small"},{"id":"skirt_in","m":1,"nikur":"small"},{"id":"hanger","m":1,"nikur":"small"}]'::jsonb;
+$$;
+revoke execute on function _gt_parts_std() from public, anon, authenticated;
+
 -- (§46) the same from any settings (today's, or a snapshot of an earlier day)
 create or replace function _gt_products_from(p_settings jsonb) returns jsonb
 language sql immutable set search_path = public, extensions, pg_temp as $$
   select coalesce(jsonb_agg(e || jsonb_build_object('m', coalesce(e -> 'm', d -> 'm', '0'::jsonb),
-                                                    'nikur', coalesce(e -> 'nikur', d -> 'nikur', '"none"'::jsonb)) order by o), '[]'::jsonb)
+                                                    'nikur', d -> 'nikur') order by o), '[]'::jsonb)   -- (owner) the nikur is fixed
     from jsonb_array_elements(case when jsonb_typeof(p_settings -> 'products') = 'array' then p_settings -> 'products' else '[]'::jsonb end)
          with ordinality t(e, o)
-    left join jsonb_array_elements('[{"id":"tongue","m":1,"nikur":"small"},{"id":"cheeks","m":2,"nikur":"small"},{"id":"sides","m":6,"nikur":"big"},{"id":"lung","m":0,"nikur":"none"},{"id":"hook","m":0,"nikur":"none"},{"id":"legs","m":0,"nikur":"none"},{"id":"tail","m":1,"nikur":"small"},{"id":"liver","m":1,"nikur":"small"},{"id":"skirt_out","m":1,"nikur":"small"},{"id":"skirt_in","m":1,"nikur":"small"},{"id":"hanger","m":1,"nikur":"small"}]'::jsonb) d on d ->> 'id' = e ->> 'id';
+    join jsonb_array_elements('[{"id":"tongue","m":1,"nikur":"small"},{"id":"cheeks","m":2,"nikur":"small"},{"id":"sides","m":6,"nikur":"big"},{"id":"lung","m":0,"nikur":"none"},{"id":"hook","m":0,"nikur":"none"},{"id":"legs","m":0,"nikur":"none"},{"id":"tail","m":1,"nikur":"small"},{"id":"liver","m":1,"nikur":"small"},{"id":"skirt_out","m":1,"nikur":"small"},{"id":"skirt_in","m":1,"nikur":"small"},{"id":"hanger","m":1,"nikur":"small"}]'::jsonb) d on d ->> 'id' = e ->> 'id';
 $$;
 revoke execute on function _gt_products_from(jsonb) from public, anon, authenticated;
 create or replace function _gt_products() returns jsonb
@@ -19153,6 +19162,11 @@ begin
     -- (v10.38 stage 2) m = the kosher stickers its area prints; nikur = the nikur screen it goes to
     if x ? 'm' and not _jint_ok(x -> 'm', 0, 20) then return 'product ' || v_id || ': stickers 0..20'; end if;
     if x ? 'nikur' and coalesce(x ->> 'nikur', '') not in ('big', 'small', 'none') then return 'product ' || v_id || ': nikur must be big / small / none'; end if;
+    -- (owner, 19.10) only the standard parts; each part's nikur is fixed
+    if not exists (select 1 from jsonb_array_elements(_gt_parts_std()) d where d ->> 'id' = v_id) then
+      return 'product ' || v_id || ': only the standard parts of the animal'; end if;
+    if x ? 'nikur' and x ->> 'nikur' is distinct from (select d ->> 'nikur' from jsonb_array_elements(_gt_parts_std()) d where d ->> 'id' = v_id) then
+      return 'product ' || v_id || ': the nikur of this part is fixed'; end if;
     if x ? 'avg' and jsonb_typeof(x -> 'avg') <> 'null' and not _jnum_ok(x -> 'avg', 0, 1000) then return 'product ' || v_id || ': average weight 0..1000 kg'; end if;
     if x ? 'notGlatt' and jsonb_typeof(x -> 'notGlatt') <> 'boolean' then return 'product ' || v_id || ': notGlatt must be true / false'; end if;
     if x ? 'builtin' and jsonb_typeof(x -> 'builtin') <> 'boolean' then return 'product ' || v_id || ': builtin must be true / false'; end if;
