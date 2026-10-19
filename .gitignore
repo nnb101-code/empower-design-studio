@@ -1,2 +1,5 @@
 glatttrack/support-center/upload-glatttrack-center/
 glatttrack/support-center/upload-glatttrack-center.zip
+# the manufacturer's secret release key — never in git (round-2 review P-up1)
+gt-release-private.pem
+*.private.pem

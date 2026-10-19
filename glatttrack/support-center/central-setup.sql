@@ -59,6 +59,9 @@ create table if not exists sc_release (
   set_at timestamptz, set_by text
 );
 insert into sc_release (id) values (1) on conflict do nothing;
+-- (round-2 review P-up1) a release is signed by the manufacturer's key (release-sign.sh); the plants check it
+alter table sc_release add column if not exists manifest text;
+alter table sc_release add column if not exists sig text;
 create table if not exists sc_commands (
   id bigserial primary key,
   code text not null references sc_plants(code) on delete cascade,
@@ -138,7 +141,7 @@ begin
   select * into r from sc_release where id = 1;
   return jsonb_build_object('ok', true, 'level', lv.level, 'commands', v_cmds,
     'release', case when r.version is not null then jsonb_build_object('version', r.version, 'appUrl', r.app_url, 'appSha256', r.app_sha256,
-                                                                      'sqlUrl', r.sql_url, 'sqlSha256', r.sql_sha256) end);
+                                                                      'sqlUrl', r.sql_url, 'sqlSha256', r.sql_sha256, 'manifest', r.manifest, 'sig', r.sig) end);
 end $$;
 revoke execute on function sc_report(text, text, jsonb) from public;
 grant execute on function sc_report(text, text, jsonb) to anon, authenticated;
@@ -262,24 +265,34 @@ end $$;
 revoke execute on function sc_notify_set(text, jsonb) from public;
 grant execute on function sc_notify_set(text, jsonb) to anon, authenticated;
 
--- "send an update to all plants" (each plant checks the file's sha256 before installing)
+-- "send an update to all plants": only a release signed on the manufacturer's computer (release-sign.sh). The center
+-- keeps what was signed and the signature and gives both to the plants; each plant checks the signature with the
+-- manufacturer's public key and every file's sha256 — the center itself cannot make a release the plants accept.
+drop function if exists sc_release_set(text, text, text, text, text, text);
 create or replace function sc_release_set(p_token text, p_version text, p_app_url text, p_app_sha256 text,
-                                          p_sql_url text default null, p_sql_sha256 text default null) returns jsonb
+                                          p_sql_url text, p_sql_sha256 text, p_manifest text, p_sig text) returns jsonb
 language plpgsql security definer set search_path = public, extensions, pg_temp as $$
-declare w text := _sc_staff(p_token);
+declare w text := _sc_staff(p_token); m jsonb;
 begin
   if w is null or not _sc_can(p_token, 'plants_write') then return jsonb_build_object('ok', false, 'error', 'unauthorized'); end if;   -- v10.38: admin / support
   if p_version !~ '^[a-z][0-9][0-9A-Za-z._-]{0,18}$' or p_app_url !~ '^https://' or p_app_sha256 !~ '^[0-9a-f]{64}$'
-     or (p_sql_url is not null and (p_sql_url !~ '^https://' or coalesce(p_sql_sha256, '') !~ '^[0-9a-f]{64}$')) then
+     or (p_sql_url is not null and (p_sql_url !~ '^https://' or coalesce(p_sql_sha256, '') !~ '^[0-9a-f]{64}$'))
+     or (p_sql_url is null and p_sql_sha256 is not null) then
     return jsonb_build_object('ok', false, 'error', 'bad_value');
   end if;
+  begin m := p_manifest::jsonb; exception when others then m := null; end;
+  if m is null or length(p_manifest) > 1000 or coalesce(p_sig, '') !~ '^[A-Za-z0-9+/]{86}==$'
+     or m ->> 'version' is distinct from p_version or m ->> 'app' is distinct from p_app_sha256
+     or m ->> 'sql' is distinct from p_sql_sha256 then
+    return jsonb_build_object('ok', false, 'error', 'not_signed');
+  end if;
   update sc_release set version = p_version, app_url = p_app_url, app_sha256 = p_app_sha256,
-                        sql_url = p_sql_url, sql_sha256 = p_sql_sha256, set_at = now(), set_by = w where id = 1;
-  insert into sc_audit (who, action, detail) values (w, 'release', jsonb_build_object('version', p_version, 'app', p_app_url, 'sql', p_sql_url));
+                        sql_url = p_sql_url, sql_sha256 = p_sql_sha256, manifest = p_manifest, sig = p_sig, set_at = now(), set_by = w where id = 1;
+  insert into sc_audit (who, action, detail) values (w, 'release', jsonb_build_object('version', p_version, 'app', p_app_url, 'sql', p_sql_url, 'signed', true));
   return jsonb_build_object('ok', true);
 end $$;
-revoke execute on function sc_release_set(text, text, text, text, text, text) from public;
-grant execute on function sc_release_set(text, text, text, text, text, text) to anon, authenticated;
+revoke execute on function sc_release_set(text, text, text, text, text, text, text, text) from public;
+grant execute on function sc_release_set(text, text, text, text, text, text, text, text) to anon, authenticated;
 
 -- a fix from far: restart the backup server / reload the tablets / update now / run the nightly check
 create or replace function sc_command_add(p_token text, p_code text, p_cmd text) returns jsonb
@@ -453,7 +466,7 @@ begin
   return jsonb_build_object('ok', true, 'level', lv.level, 'commands', v_cmds, 'tickets', v_tickets,
     -- (full review C4) a plant held out of the automatic release gets it only by "update this plant now" (the release is sent with that command)
     'release', case when r.version is not null and (not p.hold_updates or exists (select 1 from jsonb_array_elements(v_cmds) cm where cm ->> 'cmd' = 'update_now')) then jsonb_build_object('version', r.version, 'appUrl', r.app_url, 'appSha256', r.app_sha256,
-                                                                      'sqlUrl', r.sql_url, 'sqlSha256', r.sql_sha256) end);
+                                                                      'sqlUrl', r.sql_url, 'sqlSha256', r.sql_sha256, 'manifest', r.manifest, 'sig', r.sig) end);
 end $$;
 revoke execute on function sc_report(text, text, jsonb) from public;
 grant execute on function sc_report(text, text, jsonb) to anon, authenticated;

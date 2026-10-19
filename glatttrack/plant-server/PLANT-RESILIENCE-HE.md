@@ -94,6 +94,14 @@ sudo systemctl enable --now gt-sync-watchdog.service gt-backup.timer gt-nightly.
 sudo systemctl enable --now gt-report.timer     # דיווח למרכז השירות כל 5 דקות (צריך GT_CENTER_URL ושאר הפרטים ב-gt-plant.conf)
 ```
 
+**עדכונים:** השרת מתקין רק עדכון שהיצרן חתם עליו. מעתיקים את המפתח הציבורי של היצרן (`gt-release-public.pem`, מקבלים אותו מהיצרן) לכל שרת:
+
+```bash
+sudo cp gt-release-public.pem /etc/glatttrack/release-public.pem
+```
+
+בלי הקובץ הזה השרת לא מתקין שום עדכון (ומסך הבריאות של היצרן מראה "not signed").
+
 **הדפסת מדבקות (v10.38):** שירות שמעביר את המדבקות מהטאבלטים למדפסות הרשת, ומחפש מדפסות כשראש הצוות מבקש:
 
 ```bash

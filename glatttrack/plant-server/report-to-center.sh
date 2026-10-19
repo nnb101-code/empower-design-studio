@@ -4,8 +4,9 @@
 # v10.38: + the problem reports and the daily totals for billing),
 # gets back the support center's commands and the current release, and carries them out:
 #   restart_standby · reload_tablets · run_nightly_check · update_now
-#   a new release → downloaded over https, sha256 checked, installed with update-app.sh (02 + the
-#   security self-test first; a release with a server part waits until nobody works).
+#   a new release → only when signed by the manufacturer (round-2 review P-up1: its public key in
+#   /etc/glatttrack/release-public.pem), downloaded over https, sha256 checked against what was signed, installed
+#   with update-app.sh (02 + the security self-test first; a release with a server part waits until nobody works).
 # Without internet nothing breaks: the plant works on; the support center shows "no report".
 . "$(dirname "$0")/gt-lib.sh"
 set +e
@@ -44,7 +45,9 @@ working(){ [ "$(J -c "select exists (select 1 from animals_pilot where updated_a
 
 # the release: install when it is new (the app at once — tablets ask / wait themselves; a server part only when nobody works)
 install_release(){   # $1 = force (update_now)
-  local rel; rel="$(J -v r="$resp" <<'SQL'
+  # (round-2 review) "${1:-}": the automatic call has no argument — with set -u it stopped here, so a release was
+  # installed only by "update this plant now"
+  local rel man sig; rel="$(J -v r="$resp" <<'SQL'
 select concat_ws(' ', r ->> 'version', r ->> 'appUrl', r ->> 'appSha256', coalesce(r ->> 'sqlUrl', '-'), coalesce(r ->> 'sqlSha256', '-'))
   from (select nullif(:'r', '')::jsonb -> 'release' as r) x where x.r is not null and x.r <> 'null'::jsonb;
 SQL
@@ -52,11 +55,29 @@ SQL
   [ -n "$rel" ] || return 0
   read -r V AURL ASHA SURL SSHA <<<"$rel"
   local cur; cur="$(J -c "select value from plant_state where key = 'appVersion'")"
-  [ "$V" = "$cur" ] && [ "$1" != "force" ] && return 0
+  [ "$V" = "$cur" ] && [ "${1:-}" != "force" ] && return 0
   # (full review P5) a release that failed is tried again after 6 hours (or at once with "update this plant now")
-  if [ "$1" != "force" ] && [ "$(J -c "select coalesce((select value from plant_state where key = 'lastUpdateFailedVersion'), '')")" = "$V" ] \
+  if [ "${1:-}" != "force" ] && [ "$(J -c "select coalesce((select value from plant_state where key = 'lastUpdateFailedVersion'), '')")" = "$V" ] \
      && [ "$(J -c "select coalesce((select value::timestamptz from plant_state where key = 'lastUpdateFailedAt') > now() - interval '6 hours', false)")" = "t" ]; then return 0; fi
-  if [ "$SURL" != "-" ] && working && [ "$1" != "force" ]; then gt_log "release $V has a server part — waits until nobody works"; return 0; fi
+  if [ "$SURL" != "-" ] && working && [ "${1:-}" != "force" ]; then gt_log "release $V has a server part — waits until nobody works"; return 0; fi
+  # (round-2 review P-up1) only a release signed by the manufacturer, and the files exactly the ones it signed
+  man="$(J -v r="$resp" <<'SQL'
+select coalesce(nullif(:'r', '')::jsonb #>> '{release,manifest}', '');
+SQL
+)"
+  sig="$(J -v r="$resp" <<'SQL'
+select coalesce(nullif(:'r', '')::jsonb #>> '{release,sig}', '');
+SQL
+)"
+  if ! gt_release_verify "$man" "$sig"; then
+    gt_log "release $V: NOT signed by the manufacturer (or the signature is wrong) — not installed"; gt_state lastUpdateError "not signed $V"; gt_state lastUpdateFailedVersion "$V"; gt_state lastUpdateFailedAt "$(date -Is)"; return 1
+  fi
+  if [ "$(J -v m="$man" -v v="$V" -v a="$ASHA" -v q="$SSHA" <<'SQL'
+select (m ->> 'version') = :'v' and (m ->> 'app') = :'a' and coalesce(m ->> 'sql', '-') = :'q' from (select :'m'::jsonb m) x;
+SQL
+)" != "t" ]; then
+    gt_log "release $V: what the manufacturer signed is not this release — not installed"; gt_state lastUpdateError "signature mismatch $V"; gt_state lastUpdateFailedVersion "$V"; gt_state lastUpdateFailedAt "$(date -Is)"; return 1
+  fi
   local T; T="$(mktemp -d)"
   curl -fsS -m 120 -o "$T/app.html" "$AURL" && [ "$(sha256sum "$T/app.html" | cut -d' ' -f1)" = "$ASHA" ] \
     || { gt_log "release $V: the app file did not download or its sha256 is wrong — not installed"; gt_state lastUpdateError "download/sha256 $V"; rm -rf "$T"; return 1; }

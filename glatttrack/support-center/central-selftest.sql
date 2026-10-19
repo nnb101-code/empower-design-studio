@@ -56,14 +56,20 @@ begin
   -- commands and release
   r := sc_command_add(tok, '9001', 'rm -rf /'); r2 := sc_command_add(tok, '9001', 'restart_standby'); cid := (r2 ->> 'id')::bigint;
   perform pg_temp.rec('only known commands', r ->> 'error' = 'bad_value' and (r2 ->> 'ok')::boolean);
-  r := sc_release_set(tok, 'v10.36', 'http://x/app.html', repeat('a', 64));
-  r2 := sc_release_set(tok, 'v10.36', 'https://example.com/app.html', repeat('a', 64));
-  perform pg_temp.rec('a release needs https and a sha256', r ->> 'error' = 'bad_value' and (r2 ->> 'ok')::boolean);
+  r := sc_release_set(tok, 'v10.36', 'http://x/app.html', repeat('a', 64), null, null, '{"v":1,"version":"v10.36","app":"' || repeat('a', 64) || '","sql":null}', repeat('A', 86) || '==');
+  r2 := sc_release_set(tok, 'v10.36', 'https://example.com/app.html', repeat('a', 64), null, null, '{"v":1,"version":"v10.36","app":"' || repeat('a', 64) || '","sql":null}', repeat('A', 86) || '==');
+  -- (round-2 review P-up1) no signature / a signed text that does not match the release → refused
+  x := sc_release_set(tok, 'v10.36', 'https://example.com/app.html', repeat('a', 64), null, null, null, null);
+  ok := x ->> 'error' = 'not_signed'
+        and sc_release_set(tok, 'v10.36', 'https://example.com/app.html', repeat('a', 64), null, null, '{"v":1,"version":"v10.36","app":"' || repeat('b', 64) || '","sql":null}', repeat('A', 86) || '==') ->> 'error' = 'not_signed'
+        and sc_release_set(tok, 'v10.37', 'https://example.com/app.html', repeat('a', 64), null, null, '{"v":1,"version":"v10.36","app":"' || repeat('a', 64) || '","sql":null}', repeat('A', 86) || '==') ->> 'error' = 'not_signed';
+  perform pg_temp.rec('a release needs https, a sha256 and the manufacturer''s signature (the signed text must match it)', r ->> 'error' = 'bad_value' and (r2 ->> 'ok')::boolean and ok);
   r := sc_report('9001', sec, '{"attention":[]}');
   r2 := sc_report('9001', sec, '{"attention":[]}');
   perform pg_temp.rec('the plant gets the command once and the release',
     jsonb_array_length(r -> 'commands') = 1 and r -> 'commands' -> 0 ->> 'cmd' = 'restart_standby' and jsonb_array_length(r2 -> 'commands') = 0
-    and r -> 'release' ->> 'version' = 'v10.36' and r -> 'release' ->> 'appSha256' = repeat('a', 64), r::text);
+    and r -> 'release' ->> 'version' = 'v10.36' and r -> 'release' ->> 'appSha256' = repeat('a', 64)
+    and r -> 'release' ->> 'sig' = repeat('A', 86) || '==' and (r -> 'release' ->> 'manifest')::jsonb ->> 'version' = 'v10.36', r::text);
   r := sc_command_done('9001', 'bad', cid, 'x'); r2 := sc_command_done('9001', sec, cid, 'restarted');
   perform pg_temp.rec('command done only with the plant secret', r ->> 'error' = 'unauthorized'
     and (select result from sc_commands where id = cid) = 'restarted');

@@ -255,10 +255,13 @@ async function showSettings(){
       <div class="row"><input id="pc" placeholder="מספר (3–8 ספרות)"><input id="pn" placeholder="שם המפעל" style="flex:1"></div>
       <button class="btn" style="margin-top:10px" onclick="addPlant()">הוסף</button><div id="perr" class="err"></div><div id="psec"></div></div></div>
     <div class="card w"><div class="t" style="color:var(--gold);margin-bottom:6px">⬆ שלח עדכון לכל המפעלים</div>
-      <div class="row"><input id="rv" placeholder="גרסה, למשל v10.36"><input id="ru" placeholder="https://.../kosher-app.html" style="flex:1"><input id="rs" placeholder="sha256 של הקובץ" style="flex:1"></div>
-      <div class="row"><span class="n">חלק שרת (02, לא חובה)</span><input id="qu" placeholder="https://.../02.sql" style="flex:1"><input id="qs" placeholder="sha256" style="flex:1"></div>
+      <div class="n" style="margin-bottom:6px">1. במחשב של היצרן (שבו המפתח הסודי): <code dir="ltr">bash release-sign.sh v10.39 app.html [02.sql]</code> — נוצר קובץ <code dir="ltr">release-v10.39.signed.json</code>. 2. מעלים את הקבצים לכתובת https. 3. כאן: בוחרים את הקובץ החתום ונותנים את הכתובות.</div>
+      <div class="row"><span class="n">הקובץ החתום</span><input id="rf" type="file" accept=".json,application/json" onchange="relFile(this)" style="flex:1"></div>
+      <div id="rinfo" class="n" style="padding:4px 0"></div>
+      <div class="row"><input id="ru" placeholder="https://.../kosher-app.html" style="flex:1"></div>
+      <div class="row" id="rqrow" style="display:none"><span class="n">חלק שרת (02)</span><input id="qu" placeholder="https://.../02.sql" style="flex:1"></div>
       <button class="btn" style="margin-top:10px" onclick="release()">שלח לכל המפעלים</button><div id="rerr" class="err"></div>
-      <div class="n" style="margin-top:6px">כל מפעל מוריד, בודק את ה-sha256, מריץ את 02 ואת בדיקת האבטחה (03) — ורק אם עברה, הטאבלטים מקבלים את הגרסה. חלק שרת מותקן רק כשאף אחד לא עובד. בלי אישור ראש צוות.</div></div>`;
+      <div class="n" style="margin-top:6px">כל מפעל בודק את החתימה של היצרן ואת ה-sha256 של כל קובץ, מריץ את 02 ואת בדיקת האבטחה (03) — ורק אם הכל עבר, הטאבלטים מקבלים את הגרסה. בלי חתימה נכונה — המפעל לא מתקין כלום. חלק שרת מותקן רק כשאף אחד לא עובד.</div></div></div>`;
 }
 const list = id => document.getElementById(id).value.split(',').map(x => x.trim()).filter(Boolean);
 async function saveNotify(){
@@ -273,11 +276,28 @@ async function addPlant(){
   if(d.ok) document.getElementById('psec').innerHTML = `<div class="card" style="margin-top:10px;border-color:var(--gold)">הסוד של מפעל #${E(d.code)} — <b>מוצג פעם אחת בלבד</b>. להעתיק לקובץ gt-plant.conf של שרת המפעל:<br>
      <code dir="ltr" style="display:block;margin-top:6px;font-size:14px">GT_PLANT_CODE=${E(d.code)}<br>GT_PLANT_SECRET=${E(d.secret)}</code></div>`;
 }
+// (round-2 review P-up1) a release is the file signed on the manufacturer's computer (release-sign.sh)
+let REL = null;
+function relFile(inp){
+  REL = null; const info = document.getElementById('rinfo'); info.textContent = '';
+  const f = inp.files && inp.files[0]; if(!f) return;
+  f.text().then(t => {
+    try{ const o = JSON.parse(t), m = JSON.parse(o.manifest);
+      if(typeof o.manifest !== 'string' || !/^[A-Za-z0-9+/]{86}==$/.test(o.sig || '') || !m.version || !/^[0-9a-f]{64}$/.test(m.app || '')) throw 0;
+      REL = { manifest: o.manifest, sig: o.sig, m };
+      info.innerHTML = '✓ ' + E(m.version) + ' · app ' + E(m.app.slice(0, 12)) + '…' + (m.sql ? ' · 02 ' + E(String(m.sql).slice(0, 12)) + '…' : ' · בלי חלק שרת') + ' · נחתם ' + E(dt(m.at));
+      document.getElementById('rqrow').style.display = m.sql ? '' : 'none';
+    }catch(e){ info.innerHTML = '<span class="r">זה לא קובץ חתום של release-sign.sh</span>'; }
+  });
+}
 async function release(){
-  const g = id => document.getElementById(id).value.trim() || null;
-  if(!confirm('לשלוח את הגרסה ' + (g('rv')||'') + ' לכל המפעלים?')) return;
-  const d = await rpc('sc_release_set', { p_token: TOK, p_version: g('rv'), p_app_url: g('ru'), p_app_sha256: g('rs'), p_sql_url: g('qu'), p_sql_sha256: g('qs') });
-  document.getElementById('rerr').textContent = d.ok ? '✓ נשלח — המפעלים יתעדכנו בדיווח הבא' : 'לא נשלח — צריך גרסה, כתובת https ו-sha256 (64 תווים)';
+  const g = id => (document.getElementById(id) || {}).value ? document.getElementById(id).value.trim() : null;
+  if(!REL){ document.getElementById('rerr').textContent = 'קודם בוחרים את הקובץ החתום'; return; }
+  if(!confirm('לשלוח את הגרסה ' + REL.m.version + ' לכל המפעלים?')) return;
+  const d = await rpc('sc_release_set', { p_token: TOK, p_version: REL.m.version, p_app_url: g('ru'), p_app_sha256: REL.m.app,
+                                          p_sql_url: REL.m.sql ? g('qu') : null, p_sql_sha256: REL.m.sql || null, p_manifest: REL.manifest, p_sig: REL.sig });
+  document.getElementById('rerr').textContent = d.ok ? '✓ נשלח — המפעלים יתעדכנו בדיווח הבא'
+    : d.error === 'not_signed' ? 'הקובץ החתום לא תואם' : d.error === 'no_permission' ? er(d.error) : 'לא נשלח — צריך כתובת https לכל קובץ';
 }
 setInterval(() => { if(!TOK) return; if(VIEW === 'overview') showOverview(); else if(VIEW === 'plant' && CUR) showPlant(CUR); else if(VIEW === 'tickets') showTickets(); }, 30000);
 (async () => { if(!TOK) return showLogin(); const w = await raw('sc_whoami', { p_token: TOK }); if(!w.ok) return logout(); ME = { name: w.name, role: w.role }; chrome(true); home(); })();

@@ -49,3 +49,14 @@ gt_state_del(){ gt_psql -v k="$1" <<'SQL'
 delete from plant_state where key = :'k';
 SQL
 }
+# (round-2 review P-up1) is this release signed by the manufacturer? $1 = the signed text, $2 = the signature (base64).
+# The manufacturer's public key: GT_RELEASE_PUBKEY (default /etc/glatttrack/release-public.pem). No key = no update.
+gt_release_verify(){
+  local key="${GT_RELEASE_PUBKEY:-/etc/glatttrack/release-public.pem}" t rc
+  [ -f "$key" ] || { gt_log "release: no manufacturer key ($key) — updates are not installed"; return 1; }
+  [ -n "$1" ] && [[ "$2" =~ ^[A-Za-z0-9+/]{86}==$ ]] || return 1
+  t="$(mktemp -d)"
+  printf '%s' "$1" > "$t/m"; printf '%s' "$2" | base64 -d > "$t/s" 2>/dev/null
+  openssl pkeyutl -verify -pubin -inkey "$key" -rawin -in "$t/m" -sigfile "$t/s" >/dev/null 2>&1; rc=$?
+  rm -rf "$t"; return $rc
+}
