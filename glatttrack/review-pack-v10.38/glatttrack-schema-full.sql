@@ -12133,6 +12133,7 @@ notify pgrst, 'reload schema';
 -- ============================================================================
 -- ============================================================================
 -- ============================================================================
+-- ============================================================================
 -- GlattTrack — step 46: stage order on the server, each station its own stage,
 -- kashrut configuration locks, and processing that continues over several days
 -- ============================================================================
@@ -14412,13 +14413,19 @@ revoke execute on function _products_counts(jsonb) from public, anon, authentica
 
 -- (owner, 19.10) the plant's cuts list as the app sees it: a list saved before stage 2 has no m / nikur on its
 -- built-in parts — they take the built-in values (as in the app), so the nikur / cooler get their pieces
-create or replace function _gt_products() returns jsonb
-language sql stable security definer set search_path = public, extensions, pg_temp as $$
+-- (§46) the same from any settings (today's, or a snapshot of an earlier day)
+create or replace function _gt_products_from(p_settings jsonb) returns jsonb
+language sql immutable set search_path = public, extensions, pg_temp as $$
   select coalesce(jsonb_agg(e || jsonb_build_object('m', coalesce(e -> 'm', d -> 'm', '0'::jsonb),
                                                     'nikur', coalesce(e -> 'nikur', d -> 'nikur', '"none"'::jsonb)) order by o), '[]'::jsonb)
-    from jsonb_array_elements(case when jsonb_typeof(_gt_settings() -> 'products') = 'array' then _gt_settings() -> 'products' else '[]'::jsonb end)
+    from jsonb_array_elements(case when jsonb_typeof(p_settings -> 'products') = 'array' then p_settings -> 'products' else '[]'::jsonb end)
          with ordinality t(e, o)
     left join jsonb_array_elements('[{"id":"tongue","m":1,"nikur":"small"},{"id":"cheeks","m":2,"nikur":"small"},{"id":"sides","m":6,"nikur":"big"},{"id":"lung","m":0,"nikur":"none"},{"id":"hook","m":0,"nikur":"none"},{"id":"legs","m":0,"nikur":"none"},{"id":"tail","m":1,"nikur":"small"},{"id":"liver","m":1,"nikur":"small"},{"id":"skirt_out","m":1,"nikur":"small"},{"id":"skirt_in","m":1,"nikur":"small"},{"id":"hanger","m":1,"nikur":"small"}]'::jsonb) d on d ->> 'id' = e ->> 'id';
+$$;
+revoke execute on function _gt_products_from(jsonb) from public, anon, authenticated;
+create or replace function _gt_products() returns jsonb
+language sql stable security definer set search_path = public, extensions, pg_temp as $$
+  select _gt_products_from(_gt_settings());
 $$;
 revoke execute on function _gt_products() from public, anon, authenticated;
 
@@ -19371,8 +19378,9 @@ begin
     v_res := jsonb_build_object('ok', false, 'error', 'refused', 'reason', 'day_closed');
     perform _cmd_put(p_command_id, v_dev, 'nikur_scan', v_res); return v_res;
   end if;
-  -- the part as the plant has it (also a part closed since: what was printed still goes in)
-  select e into x from jsonb_array_elements(_gt_products()) e
+  -- the part as the plant had it ON THAT DAY (§46: an earlier day keeps its own parts list; also a part closed
+  -- since: what was printed still goes in)
+  select e into x from jsonb_array_elements(_gt_products_of(v_ep)) e
    where e ->> 'id' = p_product limit 1;
   if x is null then
     v_res := jsonb_build_object('ok', false, 'error', 'unknown_part');
@@ -20124,7 +20132,7 @@ begin
     v_res := jsonb_build_object('ok', false, 'error', 'stale_board', 'boardEpoch', v_cur);
     perform _cmd_put(p_command_id, v_dev, 'cooler_scan', v_res); return v_res;
   end if;
-  x := _product_def(p_product);
+  x := _product_def_of(p_product, v_ep);                    -- §46: the part as it was on that day
   if x = '{}'::jsonb then
     v_res := jsonb_build_object('ok', false, 'error', 'unknown_part');
     perform _cmd_put(p_command_id, v_dev, 'cooler_scan', v_res); return v_res;
@@ -20504,7 +20512,7 @@ begin
     with rr as materialized (select r, _nikur_refusal(r, null, ep, null) base,
                                     exists (select 1 from animal_holds h where h.board_epoch = ep and h.animal_id = (r).id and h.kind in ('usda', 'question')) hh
                                from _nikur_day_rows(ep) r),
-         pr as (select e ->> 'id' id, e from jsonb_array_elements(v_prods) e),
+         pr as (select e ->> 'id' id, e from jsonb_array_elements(case when ep = v_cur then v_prods else _gt_products_of(ep) end) e),   -- §46: that day's parts
          ref as materialized (select p.animal_id, p.product, p.cnt, p.screen, x.r, coalesce(pr.e, '{}'::jsonb) xe,
                                      case when x.base is not null then x.base
                                           when x.hh then _nikur_refusal(x.r, coalesce(pr.e, '{}'::jsonb), ep, null)
@@ -20532,7 +20540,11 @@ begin
                                            'expected', v_exp, 'in', v_in, 'side', v_side,
                                            'cooled', case when ep = v_cur then (select coalesce(jsonb_agg(distinct c.animal_id + 1), '[]'::jsonb) from cooler_scans c where c.board_epoch = ep) else '[]'::jsonb end,
                                            'rows', (select coalesce(jsonb_agg(m), '[]'::jsonb) from (select m from jsonb_array_elements(v_all) m limit 800) q),
-                                           'missing', (select coalesce(jsonb_agg(m), '[]'::jsonb) from (select m from jsonb_array_elements(v_miss) m limit 300) q));
+                                           'missing', (select coalesce(jsonb_agg(m), '[]'::jsonb) from (select m from jsonb_array_elements(v_miss) m limit 300) q),
+                                           -- §46: an earlier day's parts by their names of that day (a part renamed / removed since)
+                                           'parts', case when ep = v_cur then '[]'::jsonb else
+                                             (select coalesce(jsonb_agg(jsonb_build_object('id', e ->> 'id', 'he', e ->> 'he', 'en', e ->> 'en', 'es', e ->> 'es')), '[]'::jsonb)
+                                                from jsonb_array_elements(_gt_products_of(ep)) e where e ->> 'nikur' in ('big', 'small')) end);
   end loop;
   return jsonb_build_object('ok', true, 'boardEpoch', v_cur, 'screen', v_screen, 'mode', v_mode, 'coolerOn', _cooler_on(), 'days', v_days,
     'productsSaved', exists (select 1 from jsonb_array_elements(_gt_products()) e where e ->> 'nikur' in ('big', 'small') and coalesce((e ->> 'm')::int, 0) >= 1),
@@ -20561,6 +20573,130 @@ revoke execute on function nikur_board() from public;
 grant execute on function nikur_board() to anon, authenticated;
 
 -- S-pt1 (see _parts_print_block above): the whole small-parts set, also a set of 4 or more, decides the "held" check
+
+-- ── §46 the settings of each day (19.10, owner) ─────────────────────────────
+-- Owner: "the processing is mostly not on the same day — the processing of today must know exactly what was on
+-- the day before, or two days before, to work on the same numbers and the same parts."
+-- A copy of the plant's settings is kept for each day: when the day starts (the reset) and at every change during
+-- it. An earlier day's nikur / cooler work reads THAT day's parts list (its parts, their names, their side, their
+-- counts) — not today's. Which screens exist (the cooler, one or two nikur screens) is today's: that is where the
+-- work is done now. Worker codes and seal pictures are not copied (only a fingerprint of each seal). 400 days.
+create table if not exists settings_snapshots (
+  id          bigserial primary key,
+  board_epoch bigint not null,
+  at          timestamptz not null default now(),
+  reason      text not null,                 -- day_start / change / install
+  sha         text not null,
+  settings    jsonb not null);
+create index if not exists settings_snapshots_day on settings_snapshots (board_epoch, id desc);
+alter table settings_snapshots enable row level security;     -- no policy: only the server
+revoke all on table settings_snapshots from public, anon, authenticated;
+revoke all on sequence settings_snapshots_id_seq from public, anon, authenticated;
+
+-- what is kept: the settings without what changes all the time (reprint log, who is on which screen, reset marks),
+-- without anything secret (codes, the installation code) and without the seal pictures (a fingerprint instead)
+create or replace function _settings_for_snapshot(p jsonb) returns jsonb
+language sql immutable set search_path = public, extensions, pg_temp as $$
+  select (coalesce(p, '{}'::jsonb)
+          - array['reprintLog', 'currentUser', 'activeUserByRole', 'lastServerResetAt', 'lastServerResetReason', 'boardEpoch',
+                  'forceReloadAt', 'customSeals', 'installationCode', 'setupGuide', 'licenseTermsAccepted'])
+         || case when jsonb_typeof(p -> 'users') = 'array'
+                 then jsonb_build_object('users', (select coalesce(jsonb_agg(case when jsonb_typeof(u) = 'object' then u - 'code' - 'codeHash' - 'hv' else u end), '[]'::jsonb)
+                                                   from jsonb_array_elements(p -> 'users') u)) else '{}'::jsonb end
+         || case when jsonb_typeof(p -> 'customSeals') = 'object'
+                 then jsonb_build_object('sealsFingerprint', (select coalesce(jsonb_object_agg(k, md5(v::text)), '{}'::jsonb) from jsonb_each(p -> 'customSeals') x(k, v)))
+                 else '{}'::jsonb end;
+$$;
+revoke execute on function _settings_for_snapshot(jsonb) from public, anon, authenticated;
+
+create or replace function _settings_snapshot_take(p_reason text) returns void
+language plpgsql security definer set search_path = public, extensions, pg_temp as $$
+declare v_ep bigint := _board_epoch(); v_s jsonb; v_sha text;
+begin
+  if v_ep is null then return; end if;
+  v_s := _settings_for_snapshot(_gt_settings());
+  v_sha := md5(v_s::text);
+  -- the same settings as the day's last copy → nothing new to keep
+  if p_reason <> 'day_start'
+     and v_sha = (select z.sha from settings_snapshots z where z.board_epoch = v_ep order by z.id desc limit 1) then return; end if;
+  insert into settings_snapshots (board_epoch, reason, sha, settings) values (v_ep, p_reason, v_sha, v_s);
+  if random() < 0.02 then delete from settings_snapshots where at < now() - interval '400 days'; end if;
+end $$;
+revoke execute on function _settings_snapshot_take(text) from public, anon, authenticated;
+
+-- a new day (the reset writes the new boardEpoch) and every change of the settings
+create or replace function _settings_snapshot_day() returns trigger
+language plpgsql security definer set search_path = public, extensions, pg_temp as $$
+begin
+  if new.key = 'boardEpoch' and (tg_op = 'INSERT' or new.value is distinct from old.value) then
+    perform _settings_snapshot_take('day_start');
+  end if;
+  return new;
+end $$;
+revoke execute on function _settings_snapshot_day() from public, anon, authenticated;
+drop trigger if exists zz_settings_snapshot_day on plant_state;
+create trigger zz_settings_snapshot_day after insert or update on plant_state for each row execute function _settings_snapshot_day();
+
+create or replace function _settings_snapshot_change() returns trigger
+language plpgsql security definer set search_path = public, extensions, pg_temp as $$
+begin
+  if new.id = 1 and new.settings is distinct from old.settings then perform _settings_snapshot_take('change'); end if;
+  return new;
+end $$;
+revoke execute on function _settings_snapshot_change() from public, anon, authenticated;
+drop trigger if exists zz_settings_snapshot_change on settings_pilot;
+create trigger zz_settings_snapshot_change after update on settings_pilot for each row execute function _settings_snapshot_change();
+
+-- the settings of a day: today → the settings now; an earlier day → its last copy (as the day ended);
+-- a day from before this version (no copy) → the settings now, as before
+create or replace function _settings_of(p_epoch bigint) returns jsonb
+language sql stable security definer set search_path = public, extensions, pg_temp as $$
+  select case when p_epoch is null or p_epoch = _board_epoch() then _gt_settings()
+              else coalesce((select z.settings from settings_snapshots z where z.board_epoch = p_epoch order by z.id desc limit 1),
+                            _gt_settings()) end;
+$$;
+revoke execute on function _settings_of(bigint) from public, anon, authenticated;
+
+create or replace function _gt_products_of(p_epoch bigint) returns jsonb
+language sql stable security definer set search_path = public, extensions, pg_temp as $$
+  select _gt_products_from(_settings_of(p_epoch));
+$$;
+revoke execute on function _gt_products_of(bigint) from public, anon, authenticated;
+
+create or replace function _product_def_of(p_id text, p_epoch bigint) returns jsonb
+language sql stable security definer set search_path = public, extensions, pg_temp as $$
+  select coalesce((select e from jsonb_array_elements(_gt_products_of(p_epoch)) e where e ->> 'id' = p_id limit 1), '{}'::jsonb);
+$$;
+revoke execute on function _product_def_of(text, bigint) from public, anon, authenticated;
+
+-- a kashrut status of an earlier day still in processing (nikur / cooler) is "in use": it cannot be removed or
+-- turned from kosher to not kosher until that day is done — otherwise yesterday's animals would stop at the nikur
+create or replace function _statuses_in_use() returns text[]
+language sql stable security definer set search_path = public, extensions, pg_temp as $$
+  select coalesce(array_agg(distinct s), '{}'::text[]) from (
+    select outer_status as s from animals_pilot where outer_status is not null
+    union all select parts_printed_as from animals_pilot where parts_printed_as is not null
+    union all select stamped_as from animals_pilot where stamped_as is not null
+    union all select outer_status from animals_carry where outer_status is not null
+    union all select parts_printed_as from animals_carry where parts_printed_as is not null
+    union all select stamped_as from animals_carry where stamped_as is not null
+    union all select r.outer_status
+      from (select p.board_epoch ep from animal_pieces p
+             where p.at > now() - interval '45 days' and p.board_epoch <> coalesce(_board_epoch(), -1)
+               and not exists (select 1 from nikur_days_closed z where z.board_epoch = p.board_epoch)
+             group by p.board_epoch
+            having sum(p.cnt) > (select count(*) from piece_scans q where q.board_epoch = p.board_epoch)) d,
+           lateral _nikur_day_rows(d.ep) r
+     where r.outer_status is not null) x;
+$$;
+revoke execute on function _statuses_in_use() from public, anon, authenticated;
+
+-- today's settings are kept from the moment this version is installed
+do $$ begin
+  if _board_epoch() is not null and not exists (select 1 from settings_snapshots where board_epoch = _board_epoch()) then
+    perform _settings_snapshot_take('install');
+  end if;
+end $$;
 
 -- ── self-check ──────────────────────────────────────────────────────────────
 do $$

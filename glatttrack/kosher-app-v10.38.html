@@ -5525,7 +5525,9 @@ function nikurRender(el){
             +`<span style="font-weight:800;color:${usda?'#B39DFF':'#FFC400'};">${usda?'USDA':'?'}${cond?' · '+E(L('נפסל','condemned','condenado')):''}</span><span style="flex:1"></span>`
             +(cond?'':(usda?btn(L('שחרר','Release','Liberar'),'var(--green)','released')+btn(L('נפסל','Condemned','Condenado'),'var(--red)','condemned')
                         :btn(L('נענה — מותר','Answered — ok','Respondida — ok'),'var(--green)','answered')+btn(L('בטל','Cancel','Cancelar'),'var(--muted)','cancelled')))+`</div>`; }).join('')+`</div>` : ''; } }
-  const nm=pid=>gtProductName(gtProducts().find(p=>p.id===pid))||pid;
+  // §46: a part of an earlier day that is not in today's list (removed since) gets its name of that day
+  const _dayParts={}; ((_nkBoard||{}).days||[]).forEach(d=>(d.parts||[]).forEach(p=>{ if(p&&p.id&&!_dayParts[p.id]) _dayParts[p.id]=p; }));
+  const nm=pid=>gtProductName(gtProducts().find(p=>p.id===pid)||_dayParts[pid])||pid;
   // one line an animal: each part with how many of its pieces are in (green = all in)
   const animalRows=rows=>{ const g={}; rows.forEach(r=>{ const a=(g[r.n]=g[r.n]||{}); const p=(a[r.p]=a[r.p]||[0,0]); p[0]++; if(r.ok) p[1]++; });
     return Object.keys(g).map(Number).sort((x,y)=>x-y).map(n=>{ const parts=g[n], done=Object.values(parts).every(p=>p[1]>=p[0]);

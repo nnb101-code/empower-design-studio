@@ -1,9 +1,9 @@
 == 1. plant state =======================================================
     key     |     value     |          updated_at           
 ------------+---------------+-------------------------------
- boardEpoch | 1792422485151 | 2026-10-19 15:08:05.150471+00
- schemaStep | 46            | 2026-10-19 15:08:06.880627+00
- testMode   | off           | 2026-10-19 15:08:05.914585+00
+ boardEpoch | 1792425508432 | 2026-10-19 15:58:28.431845+00
+ schemaStep | 46            | 2026-10-19 15:58:29.922122+00
+ testMode   | off           | 2026-10-19 15:58:29.084381+00
 (3 rows)
 
 == 2. functions (public, gt_rls) ========================================
@@ -153,6 +153,8 @@
  public | _gt_note_change(text,animals_pilot,text,text,text)                                 | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _gt_one_inspection()                                                               | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _gt_products()                                                                     | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _gt_products_from(jsonb)                                                           | function | f                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _gt_products_of(bigint)                                                            | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _gt_screen_used(text)                                                              | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _gt_settings()                                                                     | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _gt_standbys()                                                                     | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
@@ -225,6 +227,7 @@
  public | _proc_station_of_group(text)                                                       | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _proc_stations()                                                                   | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _product_def(text)                                                                 | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _product_def_of(text,bigint)                                                       | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _products_counts(jsonb)                                                            | function | f                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _products_error(jsonb)                                                             | function | f                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _products_list_defaults(jsonb)                                                     | function | f                | public, extensions, pg_temp | postgres | f    | f             | f           | f
@@ -245,8 +248,13 @@
  public | _session_role(text)                                                                | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _session_view_only(text)                                                           | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _set_setup_code(text)                                                              | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _settings_for_snapshot(jsonb)                                                      | function | f                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _settings_hash_worker_codes()                                                      | trigger  | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _settings_of(bigint)                                                               | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _settings_pieces_fill()                                                            | trigger  | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _settings_snapshot_change()                                                        | trigger  | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _settings_snapshot_day()                                                           | trigger  | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _settings_snapshot_take(text)                                                      | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _settings_value_error(text,jsonb)                                                  | function | f                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _setup_code_norm(text)                                                             | function | f                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _slaughter_q_open(animals_pilot)                                                   | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
@@ -278,7 +286,7 @@
  public | leader_account_remove(text)                                                        | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | leader_device_recovery(text)                                                       | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | manufacturer_set_code(text,text)                                                   | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
-(269 rows)
+(277 rows)
 
 == 2b. API surface: functions the app roles can run ======================
                        callable_by_app                       | security_definer 
@@ -401,11 +409,13 @@
  events_pilot        | zz_device_write_guard               | _device_write_guard                   | BEFORE INSERT/UPDATE/DELETE STATEMENT | enabled | t
  manager_sessions    | zz_manager_sessions_cleanup         | _manager_sessions_cleanup             | AFTER INSERT STATEMENT                | enabled | t
  plant_state         | extend_maker_sessions               | _extend_maker_sessions                | AFTER INSERT/UPDATE ROW               | enabled | t
+ plant_state         | zz_settings_snapshot_day            | _settings_snapshot_day                | AFTER INSERT/UPDATE ROW               | enabled | t
  plant_state         | zz_test_mode_audit                  | _plant_state_test_mode_trg            | AFTER INSERT/UPDATE ROW               | enabled | t
  settings_pilot      | zz_settings_hash_worker_codes       | _settings_hash_worker_codes           | BEFORE INSERT/UPDATE ROW              | enabled | t
  settings_pilot      | zz_settings_pieces_fill             | _settings_pieces_fill                 | AFTER UPDATE ROW                      | enabled | t
+ settings_pilot      | zz_settings_snapshot_change         | _settings_snapshot_change             | AFTER UPDATE ROW                      | enabled | t
  settings_pilot      | zz_worker_lists_saved               | _worker_lists_saved                   | AFTER UPDATE ROW                      | enabled | t
-(30 rows)
+(32 rows)
 
 == 4. row security and policies =========================================
           table          | rls_on | rls_forced | policies 
@@ -452,12 +462,13 @@
  revoked_device_writes   | t      | f          |        0
  scanner_scans           | t      | f          |        0
  settings_pilot          | t      | f          |        1
+ settings_snapshots      | t      | f          |        0
  source_farms            | t      | f          |        2
  support_issues          | t      | f          |        0
  system_flags            | t      | f          |        0
  worker_codes            | t      | f          |        0
  worker_sessions         | t      | f          |        0
-(47 rows)
+(48 rows)
 
           table          |            policy            |  cmd   | permissive |        roles         |                                                                    using_expr                                                                     |                          check_expr                           
 -------------------------+------------------------------+--------+------------+----------------------+---------------------------------------------------------------------------------------------------------------------------------------------------+---------------------------------------------------------------
@@ -521,8 +532,9 @@
  print_log_id_seq            | f          | f
  rate_events_id_seq          | f          | f
  scanner_scans_id_seq        | f          | f
+ settings_snapshots_id_seq   | f          | f
  support_issues_id_seq       | f          | f
-(13 rows)
+(14 rows)
 
 == 6. schema rights =====================================================
    schema   | anon_usage | anon_create | authenticated_create 

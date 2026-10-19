@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict 3Bpf092bYpdkMtUL2IeEsMYU7syJk5dyVhm68mmm54B14wMdC1xboytY1ugc0oP
+\restrict R06SozyjXBkFC9x1CwSOSDZhIzg9J8fRkyuZfyterv0JfxR2QaHkgUsYa3Nr2HA
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -1945,15 +1945,43 @@ CREATE FUNCTION public._gt_products() RETURNS jsonb
     LANGUAGE sql STABLE SECURITY DEFINER
     SET search_path TO 'public', 'extensions', 'pg_temp'
     AS $$
+  select _gt_products_from(_gt_settings());
+$$;
+
+
+ALTER FUNCTION public._gt_products() OWNER TO postgres;
+
+--
+-- Name: _gt_products_from(jsonb); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public._gt_products_from(p_settings jsonb) RETURNS jsonb
+    LANGUAGE sql IMMUTABLE
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $$
   select coalesce(jsonb_agg(e || jsonb_build_object('m', coalesce(e -> 'm', d -> 'm', '0'::jsonb),
                                                     'nikur', coalesce(e -> 'nikur', d -> 'nikur', '"none"'::jsonb)) order by o), '[]'::jsonb)
-    from jsonb_array_elements(case when jsonb_typeof(_gt_settings() -> 'products') = 'array' then _gt_settings() -> 'products' else '[]'::jsonb end)
+    from jsonb_array_elements(case when jsonb_typeof(p_settings -> 'products') = 'array' then p_settings -> 'products' else '[]'::jsonb end)
          with ordinality t(e, o)
     left join jsonb_array_elements('[{"id":"tongue","m":1,"nikur":"small"},{"id":"cheeks","m":2,"nikur":"small"},{"id":"sides","m":6,"nikur":"big"},{"id":"lung","m":0,"nikur":"none"},{"id":"hook","m":0,"nikur":"none"},{"id":"legs","m":0,"nikur":"none"},{"id":"tail","m":1,"nikur":"small"},{"id":"liver","m":1,"nikur":"small"},{"id":"skirt_out","m":1,"nikur":"small"},{"id":"skirt_in","m":1,"nikur":"small"},{"id":"hanger","m":1,"nikur":"small"}]'::jsonb) d on d ->> 'id' = e ->> 'id';
 $$;
 
 
-ALTER FUNCTION public._gt_products() OWNER TO postgres;
+ALTER FUNCTION public._gt_products_from(p_settings jsonb) OWNER TO postgres;
+
+--
+-- Name: _gt_products_of(bigint); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public._gt_products_of(p_epoch bigint) RETURNS jsonb
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $$
+  select _gt_products_from(_settings_of(p_epoch));
+$$;
+
+
+ALTER FUNCTION public._gt_products_of(p_epoch bigint) OWNER TO postgres;
 
 --
 -- Name: _gt_screen_used(text); Type: FUNCTION; Schema: public; Owner: postgres
@@ -3346,6 +3374,20 @@ $$;
 ALTER FUNCTION public._product_def(p_id text) OWNER TO postgres;
 
 --
+-- Name: _product_def_of(text, bigint); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public._product_def_of(p_id text, p_epoch bigint) RETURNS jsonb
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $$
+  select coalesce((select e from jsonb_array_elements(_gt_products_of(p_epoch)) e where e ->> 'id' = p_id limit 1), '{}'::jsonb);
+$$;
+
+
+ALTER FUNCTION public._product_def_of(p_id text, p_epoch bigint) OWNER TO postgres;
+
+--
 -- Name: _products_counts(jsonb); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -3787,6 +3829,28 @@ end $$;
 ALTER FUNCTION public._set_setup_code(p_code text) OWNER TO postgres;
 
 --
+-- Name: _settings_for_snapshot(jsonb); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public._settings_for_snapshot(p jsonb) RETURNS jsonb
+    LANGUAGE sql IMMUTABLE
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $$
+  select (coalesce(p, '{}'::jsonb)
+          - array['reprintLog', 'currentUser', 'activeUserByRole', 'lastServerResetAt', 'lastServerResetReason', 'boardEpoch',
+                  'forceReloadAt', 'customSeals', 'installationCode', 'setupGuide', 'licenseTermsAccepted'])
+         || case when jsonb_typeof(p -> 'users') = 'array'
+                 then jsonb_build_object('users', (select coalesce(jsonb_agg(case when jsonb_typeof(u) = 'object' then u - 'code' - 'codeHash' - 'hv' else u end), '[]'::jsonb)
+                                                   from jsonb_array_elements(p -> 'users') u)) else '{}'::jsonb end
+         || case when jsonb_typeof(p -> 'customSeals') = 'object'
+                 then jsonb_build_object('sealsFingerprint', (select coalesce(jsonb_object_agg(k, md5(v::text)), '{}'::jsonb) from jsonb_each(p -> 'customSeals') x(k, v)))
+                 else '{}'::jsonb end;
+$$;
+
+
+ALTER FUNCTION public._settings_for_snapshot(p jsonb) OWNER TO postgres;
+
+--
 -- Name: _settings_hash_worker_codes(); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -3831,6 +3895,22 @@ end $$;
 ALTER FUNCTION public._settings_hash_worker_codes() OWNER TO postgres;
 
 --
+-- Name: _settings_of(bigint); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public._settings_of(p_epoch bigint) RETURNS jsonb
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $$
+  select case when p_epoch is null or p_epoch = _board_epoch() then _gt_settings()
+              else coalesce((select z.settings from settings_snapshots z where z.board_epoch = p_epoch order by z.id desc limit 1),
+                            _gt_settings()) end;
+$$;
+
+
+ALTER FUNCTION public._settings_of(p_epoch bigint) OWNER TO postgres;
+
+--
 -- Name: _settings_pieces_fill(); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -3857,6 +3937,63 @@ end $$;
 
 
 ALTER FUNCTION public._settings_pieces_fill() OWNER TO postgres;
+
+--
+-- Name: _settings_snapshot_change(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public._settings_snapshot_change() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $$
+begin
+  if new.id = 1 and new.settings is distinct from old.settings then perform _settings_snapshot_take('change'); end if;
+  return new;
+end $$;
+
+
+ALTER FUNCTION public._settings_snapshot_change() OWNER TO postgres;
+
+--
+-- Name: _settings_snapshot_day(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public._settings_snapshot_day() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $$
+begin
+  if new.key = 'boardEpoch' and (tg_op = 'INSERT' or new.value is distinct from old.value) then
+    perform _settings_snapshot_take('day_start');
+  end if;
+  return new;
+end $$;
+
+
+ALTER FUNCTION public._settings_snapshot_day() OWNER TO postgres;
+
+--
+-- Name: _settings_snapshot_take(text); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public._settings_snapshot_take(p_reason text) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $$
+declare v_ep bigint := _board_epoch(); v_s jsonb; v_sha text;
+begin
+  if v_ep is null then return; end if;
+  v_s := _settings_for_snapshot(_gt_settings());
+  v_sha := md5(v_s::text);
+  -- the same settings as the day's last copy → nothing new to keep
+  if p_reason <> 'day_start'
+     and v_sha = (select z.sha from settings_snapshots z where z.board_epoch = v_ep order by z.id desc limit 1) then return; end if;
+  insert into settings_snapshots (board_epoch, reason, sha, settings) values (v_ep, p_reason, v_sha, v_s);
+  if random() < 0.02 then delete from settings_snapshots where at < now() - interval '400 days'; end if;
+end $$;
+
+
+ALTER FUNCTION public._settings_snapshot_take(p_reason text) OWNER TO postgres;
 
 --
 -- Name: _settings_value_error(text, jsonb); Type: FUNCTION; Schema: public; Owner: postgres
@@ -4230,8 +4367,16 @@ CREATE FUNCTION public._statuses_in_use() RETURNS text[]
     union all select parts_printed_as from animals_pilot where parts_printed_as is not null
     union all select stamped_as from animals_pilot where stamped_as is not null
     union all select outer_status from animals_carry where outer_status is not null
-    union all select parts_printed_as from animals_carry where parts_printed_as is not null   -- (round 19 A3)
-    union all select stamped_as from animals_carry where stamped_as is not null) x;
+    union all select parts_printed_as from animals_carry where parts_printed_as is not null
+    union all select stamped_as from animals_carry where stamped_as is not null
+    union all select r.outer_status
+      from (select p.board_epoch ep from animal_pieces p
+             where p.at > now() - interval '45 days' and p.board_epoch <> coalesce(_board_epoch(), -1)
+               and not exists (select 1 from nikur_days_closed z where z.board_epoch = p.board_epoch)
+             group by p.board_epoch
+            having sum(p.cnt) > (select count(*) from piece_scans q where q.board_epoch = p.board_epoch)) d,
+           lateral _nikur_day_rows(d.ep) r
+     where r.outer_status is not null) x;
 $$;
 
 
@@ -5675,7 +5820,7 @@ begin
     v_res := jsonb_build_object('ok', false, 'error', 'stale_board', 'boardEpoch', v_cur);
     perform _cmd_put(p_command_id, v_dev, 'cooler_scan', v_res); return v_res;
   end if;
-  x := _product_def(p_product);
+  x := _product_def_of(p_product, v_ep);                    -- §46: the part as it was on that day
   if x = '{}'::jsonb then
     v_res := jsonb_build_object('ok', false, 'error', 'unknown_part');
     perform _cmd_put(p_command_id, v_dev, 'cooler_scan', v_res); return v_res;
@@ -7155,7 +7300,7 @@ begin
     with rr as materialized (select r, _nikur_refusal(r, null, ep, null) base,
                                     exists (select 1 from animal_holds h where h.board_epoch = ep and h.animal_id = (r).id and h.kind in ('usda', 'question')) hh
                                from _nikur_day_rows(ep) r),
-         pr as (select e ->> 'id' id, e from jsonb_array_elements(v_prods) e),
+         pr as (select e ->> 'id' id, e from jsonb_array_elements(case when ep = v_cur then v_prods else _gt_products_of(ep) end) e),   -- §46: that day's parts
          ref as materialized (select p.animal_id, p.product, p.cnt, p.screen, x.r, coalesce(pr.e, '{}'::jsonb) xe,
                                      case when x.base is not null then x.base
                                           when x.hh then _nikur_refusal(x.r, coalesce(pr.e, '{}'::jsonb), ep, null)
@@ -7183,7 +7328,11 @@ begin
                                            'expected', v_exp, 'in', v_in, 'side', v_side,
                                            'cooled', case when ep = v_cur then (select coalesce(jsonb_agg(distinct c.animal_id + 1), '[]'::jsonb) from cooler_scans c where c.board_epoch = ep) else '[]'::jsonb end,
                                            'rows', (select coalesce(jsonb_agg(m), '[]'::jsonb) from (select m from jsonb_array_elements(v_all) m limit 800) q),
-                                           'missing', (select coalesce(jsonb_agg(m), '[]'::jsonb) from (select m from jsonb_array_elements(v_miss) m limit 300) q));
+                                           'missing', (select coalesce(jsonb_agg(m), '[]'::jsonb) from (select m from jsonb_array_elements(v_miss) m limit 300) q),
+                                           -- §46: an earlier day's parts by their names of that day (a part renamed / removed since)
+                                           'parts', case when ep = v_cur then '[]'::jsonb else
+                                             (select coalesce(jsonb_agg(jsonb_build_object('id', e ->> 'id', 'he', e ->> 'he', 'en', e ->> 'en', 'es', e ->> 'es')), '[]'::jsonb)
+                                                from jsonb_array_elements(_gt_products_of(ep)) e where e ->> 'nikur' in ('big', 'small')) end);
   end loop;
   return jsonb_build_object('ok', true, 'boardEpoch', v_cur, 'screen', v_screen, 'mode', v_mode, 'coolerOn', _cooler_on(), 'days', v_days,
     'productsSaved', exists (select 1 from jsonb_array_elements(_gt_products()) e where e ->> 'nikur' in ('big', 'small') and coalesce((e ->> 'm')::int, 0) >= 1),
@@ -7365,8 +7514,9 @@ begin
     v_res := jsonb_build_object('ok', false, 'error', 'refused', 'reason', 'day_closed');
     perform _cmd_put(p_command_id, v_dev, 'nikur_scan', v_res); return v_res;
   end if;
-  -- the part as the plant has it (also a part closed since: what was printed still goes in)
-  select e into x from jsonb_array_elements(_gt_products()) e
+  -- the part as the plant had it ON THAT DAY (§46: an earlier day keeps its own parts list; also a part closed
+  -- since: what was printed still goes in)
+  select e into x from jsonb_array_elements(_gt_products_of(v_ep)) e
    where e ->> 'id' = p_product limit 1;
   if x is null then
     v_res := jsonb_build_object('ok', false, 'error', 'unknown_part');
@@ -9775,6 +9925,43 @@ ALTER TABLE ONLY public.settings_pilot REPLICA IDENTITY FULL;
 ALTER TABLE public.settings_pilot OWNER TO postgres;
 
 --
+-- Name: settings_snapshots; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.settings_snapshots (
+    id bigint NOT NULL,
+    board_epoch bigint NOT NULL,
+    at timestamp with time zone DEFAULT now() NOT NULL,
+    reason text NOT NULL,
+    sha text NOT NULL,
+    settings jsonb NOT NULL
+);
+
+
+ALTER TABLE public.settings_snapshots OWNER TO postgres;
+
+--
+-- Name: settings_snapshots_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.settings_snapshots_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE public.settings_snapshots_id_seq OWNER TO postgres;
+
+--
+-- Name: settings_snapshots_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.settings_snapshots_id_seq OWNED BY public.settings_snapshots.id;
+
+
+--
 -- Name: source_farms; Type: TABLE; Schema: public; Owner: postgres
 --
 
@@ -9925,6 +10112,13 @@ ALTER TABLE ONLY public.rate_events ALTER COLUMN id SET DEFAULT nextval('public.
 --
 
 ALTER TABLE ONLY public.scanner_scans ALTER COLUMN id SET DEFAULT nextval('public.scanner_scans_id_seq'::regclass);
+
+
+--
+-- Name: settings_snapshots id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.settings_snapshots ALTER COLUMN id SET DEFAULT nextval('public.settings_snapshots_id_seq'::regclass);
 
 
 --
@@ -10312,6 +10506,14 @@ ALTER TABLE ONLY public.settings_pilot
 
 
 --
+-- Name: settings_snapshots settings_snapshots_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.settings_snapshots
+    ADD CONSTRAINT settings_snapshots_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: source_farms source_farms_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -10569,6 +10771,13 @@ CREATE INDEX scanner_scans_ip_id ON public.scanner_scans USING btree (ip, id);
 
 
 --
+-- Name: settings_snapshots_day; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX settings_snapshots_day ON public.settings_snapshots USING btree (board_epoch, id DESC);
+
+
+--
 -- Name: worker_sessions_device; Type: INDEX; Schema: public; Owner: postgres
 --
 
@@ -10734,6 +10943,20 @@ CREATE TRIGGER zz_settings_hash_worker_codes BEFORE INSERT OR UPDATE ON public.s
 --
 
 CREATE TRIGGER zz_settings_pieces_fill AFTER UPDATE ON public.settings_pilot FOR EACH ROW EXECUTE FUNCTION public._settings_pieces_fill();
+
+
+--
+-- Name: settings_pilot zz_settings_snapshot_change; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE TRIGGER zz_settings_snapshot_change AFTER UPDATE ON public.settings_pilot FOR EACH ROW EXECUTE FUNCTION public._settings_snapshot_change();
+
+
+--
+-- Name: plant_state zz_settings_snapshot_day; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE TRIGGER zz_settings_snapshot_day AFTER INSERT OR UPDATE ON public.plant_state FOR EACH ROW EXECUTE FUNCTION public._settings_snapshot_day();
 
 
 --
@@ -11398,6 +11621,12 @@ ALTER TABLE public.scanner_scans ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.settings_pilot ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: settings_snapshots; Type: ROW SECURITY; Schema: public; Owner: postgres
+--
+
+ALTER TABLE public.settings_snapshots ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: source_farms; Type: ROW SECURITY; Schema: public; Owner: postgres
 --
 
@@ -11891,6 +12120,20 @@ REVOKE ALL ON FUNCTION public._gt_one_inspection() FROM PUBLIC;
 --
 
 REVOKE ALL ON FUNCTION public._gt_products() FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION _gt_products_from(p_settings jsonb); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public._gt_products_from(p_settings jsonb) FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION _gt_products_of(p_epoch bigint); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public._gt_products_of(p_epoch bigint) FROM PUBLIC;
 
 
 --
@@ -12403,6 +12646,13 @@ REVOKE ALL ON FUNCTION public._product_def(p_id text) FROM PUBLIC;
 
 
 --
+-- Name: FUNCTION _product_def_of(p_id text, p_epoch bigint); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public._product_def_of(p_id text, p_epoch bigint) FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION _products_counts(v jsonb); Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -12554,6 +12804,13 @@ REVOKE ALL ON FUNCTION public._set_setup_code(p_code text) FROM PUBLIC;
 
 
 --
+-- Name: FUNCTION _settings_for_snapshot(p jsonb); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public._settings_for_snapshot(p jsonb) FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION _settings_hash_worker_codes(); Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -12561,10 +12818,38 @@ REVOKE ALL ON FUNCTION public._settings_hash_worker_codes() FROM PUBLIC;
 
 
 --
+-- Name: FUNCTION _settings_of(p_epoch bigint); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public._settings_of(p_epoch bigint) FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION _settings_pieces_fill(); Type: ACL; Schema: public; Owner: postgres
 --
 
 REVOKE ALL ON FUNCTION public._settings_pieces_fill() FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION _settings_snapshot_change(); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public._settings_snapshot_change() FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION _settings_snapshot_day(); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public._settings_snapshot_day() FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION _settings_snapshot_take(p_reason text); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public._settings_snapshot_take(p_reason text) FROM PUBLIC;
 
 
 --
@@ -13706,5 +13991,5 @@ GRANT ALL ON TABLE public.system_flags TO service_role;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict 3Bpf092bYpdkMtUL2IeEsMYU7syJk5dyVhm68mmm54B14wMdC1xboytY1ugc0oP
+\unrestrict R06SozyjXBkFC9x1CwSOSDZhIzg9J8fRkyuZfyterv0JfxR2QaHkgUsYa3Nr2HA
 
