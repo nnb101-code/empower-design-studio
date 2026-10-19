@@ -6021,36 +6021,10 @@ async function gtWindowQuestion(st){
 // The stickers already carry the animal's code (QR "BH|N:12|…"). The scan opens exactly that number —
 // also out of the usual order (two outer inspectors on different numbers). Camera (BarcodeDetector),
 // a hand scanner (types the code + Enter), or typing the number.
-let _gtScanStream=null, _gtScanTimer=null;
-function _gtScanStop(){ try{ if(_gtScanTimer) clearInterval(_gtScanTimer); _gtScanTimer=null; }catch(e){} try{ if(_gtScanStream) _gtScanStream.getTracks().forEach(t=>t.stop()); }catch(e){} _gtScanStream=null; }
-function gtScanClose(){ _gtScanStop(); gtSheetClose(); }
-async function gtScanOpen(st){
-  gtSheet('📷 '+L('סריקת המדבקה','Scan the sticker','Escanear la etiqueta'),
-    L('מכוונים את המצלמה למדבקה (ריאה / בית הכוסות) — או סורקים עם סורק ידני, או מקלידים מספר.','Point the camera at the sticker (lung / maw) — or use a hand scanner, or type the number.','Apunte la cámara a la etiqueta (pulmón / cuajar) — o use un escáner de mano, o escriba el número.'),
-    '<video id="gtScanVid" playsinline muted style="width:100%;max-height:240px;background:#111;border-radius:10px;object-fit:cover;"></video>'
-    +'<div id="gtScanMsg" style="font-size:12px;color:var(--muted);margin:6px 0;"></div>'
-    +_gtNumInput(-1)
-    +'<div class="gt-row">'+_gtHBtn(L('פתח','Open','Abrir'),'#D4A843',`(function(){ const i=_gtReadNum(); if(i<0){ KS.notice(L('מספר לא תקין','Invalid number','Número inválido')); return; } gtScanClose(); gtScanGo('${st}', i); })()`)
-    +_gtHBtn(L('ביטול','Cancel','Cancelar'),'#9aa4b5','gtScanClose()')+'</div>');
-  const msg=document.getElementById('gtScanMsg'), vid=document.getElementById('gtScanVid');
-  if(!('BarcodeDetector' in window) || !(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)){
-    if(vid) vid.style.display='none';
-    if(msg) msg.textContent=L('המצלמה לא קוראת ברקוד בטאבלט הזה — סורק ידני או הקלדה.','This tablet\'s camera cannot read codes — use a hand scanner or type.','La cámara no lee códigos aquí — use un escáner o escriba.');
-    return;
-  }
-  let det; try{ det=new window.BarcodeDetector({formats:['qr_code','code_128','code_39','ean_13']}); }catch(e){ try{ det=new window.BarcodeDetector(); }catch(e2){ det=null; } }
-  try{
-    _gtScanStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
-    if(!document.getElementById('gtScanVid')){ _gtScanStop(); return; }
-    vid.srcObject=_gtScanStream; await vid.play();
-  }catch(e){ if(vid) vid.style.display='none'; if(msg) msg.textContent=L('אין גישה למצלמה — סורק ידני או הקלדה.','No camera access — hand scanner or typing.','Sin cámara — escáner o escriba.'); return; }
-  if(!det) return;
-  _gtScanTimer=setInterval(async()=>{
-    if(!document.getElementById('gtScanVid')){ _gtScanStop(); return; }
-    try{ const r=await det.detect(vid); if(r && r.length){ const code=r[0].rawValue; const n=_gtCodeNum(code);
-      if(!isNaN(n) && n>=1 && n<=KS.getAnimals().length){ gtScanClose(); try{ playPressSound && playPressSound('ok'); }catch(e){} gtScanGo(st, n-1); } } }catch(e){}
-  }, 300);
-}
+// (round-2 review A-sc2) the top-bar "📷 Scan" opens the one camera scanner of the app (gtCamScanOpen: the
+// built-in reader too, and the https / permission messages); its code goes in like a hand scanner (below).
+function gtScanClose(){ try{ gtCamScanClose(); }catch(e){} }
+function gtScanOpen(st){ gtCamScanOpen(); }
 function gtScanGo(st, idx){
   const x=KS.getAnimal(idx); const N='#'+(idx+1)+' — ';
   const say=(he,en,es)=>KS.notice(N+L(he,en,es));
@@ -15234,20 +15208,33 @@ async function wmOpenCamera(mode){
   const _weighHint=L('הכנס את מספר המשקל לתוך המסגרת','Place the weight number inside the frame','Coloque el número del peso dentro del marco');
   const _barcodeHint=lang==='he'?'כוון את הברקוד למצלמה':lang==='es'?'Apunta la cámara al código de barras':'Point the camera at the barcode';
   document.getElementById('wmCamHint').textContent=(mode==='ocr')?_weighHint:_barcodeHint;
+  // (round-2 review A-wm1) a live camera needs https; a blocked permission is said plainly (like the 📷 scanner)
+  if(!window.isSecureContext || !(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)){
+    ATalert(L('מצלמה חיה צריכה כתובת https. אפשר לסרוק את מדבקת המשקל בסורק, או להקליד את המשקל.','A live camera needs an https address. Scan the weight label with the scanner, or type the weight.','Una cámara en vivo necesita https. Escanee la etiqueta de peso con el escáner, o escriba el peso.'));
+    if(wrap)wrap.style.display='none'; return;
+  }
   try{
     wmStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
     video.srcObject=wmStream;await video.play();
-  }catch(e){ATalert('לא ניתן לפתוח מצלמה: '+e.message);if(wrap)wrap.style.display='none';return;}
-  if(mode!=='ocr' && ('BarcodeDetector' in window)){
-    const detector=new window.BarcodeDetector();
+  }catch(e){
+    ATalert(e && e.name==='NotAllowedError'
+      ? L('המצלמה חסומה לאפליקציה — מאשרים מצלמה בהגדרות הדפדפן (🔒 ליד הכתובת ← הרשאות ← מצלמה).','The camera is blocked for the app — allow it in the browser settings (🔒 next to the address → permissions → camera).','La cámara está bloqueada — permítala en la configuración del navegador (🔒 junto a la dirección → permisos → cámara).')
+      : L('לא ניתן לפתוח מצלמה: ','Cannot open the camera: ','No se puede abrir la cámara: ')+(e && e.message || ''));
+    if(wrap)wrap.style.display='none';return;
+  }
+  if(mode!=='ocr'){
+    // BarcodeDetector where the browser has it, otherwise the app's built-in reader (ZXing)
+    let detector=null; try{ if('BarcodeDetector' in window) detector=new window.BarcodeDetector(); }catch(e){ detector=null; }
+    const got=(raw)=>{
+      const w=parseWeightFromCode(raw);
+      // not a usable weight (animal sticker, out-of-range number) → keep scanning
+      if(w!=null && w>0 && w<2000){wmStopCamera();weightCaptured(w,{source:'barcode',rawValue:raw});setTimeout(()=>stampsFocusScan&&stampsFocusScan(),150);}
+    };
     wmDetectTimer=setInterval(async()=>{
       try{
-        const codes=await detector.detect(video);
-        if(codes&&codes.length){
-          const w=parseWeightFromCode(codes[0].rawValue);
-          // not a usable weight (animal sticker, out-of-range number) → keep scanning
-          if(w!=null && w>0 && w<2000){wmStopCamera();weightCaptured(w,{source:'barcode',rawValue:codes[0].rawValue});setTimeout(()=>stampsFocusScan&&stampsFocusScan(),150);}
-        }
+        if(detector){ const codes=await detector.detect(video); if(codes&&codes.length) got(codes[0].rawValue); return; }
+        const W=video.videoWidth, H=video.videoHeight; if(!W||!H) return;
+        const v=_gtZxRead(video, W, H, 0, 0, W, H, 900); if(v) got(v);
       }catch(e){}
     },400);
   }
@@ -17630,20 +17617,10 @@ setTimeout(_maybeShowLicenseRequest, 2000); // let the app render first, then ch
   }); });
 </script>
 <script>
-// Migrate: if screenConfig is '1both', reset to '1in1out' 
-(function(){
-  const s=KS.getSettings();
-  if(!s.screenConfig||s.screenConfig==='undefined'){
-    KS.updateSettings({screenConfig:'1in1out'});
-  }
-})();
-// One-time fix: clear any wrongly-disabled kosher statuses so outer inspector shows all
-(function(){
-  const s=KS.getSettings();
-  if(!s._statusesFixed_v54){
-    KS.updateSettings({disabledStatuses:[], _statusesFixed_v54:true});
-  }
-})();
+// (round-2 review A-mig1) the old start-up "migrations" (screenConfig → '1in1out', disabledStatuses → []) were
+// removed: on a new / cleared team-leader device they could be sent to the server before its settings arrived,
+// turning switched-off kashrut statuses on again and resetting the inner / outer screens. Every reader of
+// screenConfig already takes '1in1out' when it is missing; the statuses come from the server.
 // ── v10.22: kashrut seals live on the server ──────────────────────────────────
 // The team leader's seal pictures are sent to the server (seal_set); every tablet reads them
 // (seals_get) at start and every minute, so the parts / stamps tablets print the seal too.
@@ -19486,8 +19463,8 @@ function _gtPhType(){ const v=prompt(L('הקלידו את הקוד / המספר:
    ═══════════════════════════════════════════════════════════════════ */
 const _gtCam={stream:null, timer:null, det:null, busy:false};
 function _gtCamScreenOk(){ const a=(document.querySelector('.screen.active')||{}).id;
-  return a==='scStamps' || a==='scParts' || (a==='scLegs') || (a==='scSup' && typeof supRole!=='undefined' && (supRole==='nikur'||supRole==='cooler'))
-      || ((a==='scInner'||a==='scOuter') && KS.getSettings().scanInOut===true); }
+  return a==='scStamps' || a==='scParts' || (a==='scLegs') || (a==='scSup' && typeof supRole!=='undefined' && (supRole==='nikur'||supRole==='cooler')); }
+// (round-2 review A-sc2) inner / outer: their top-bar "📷 Scan" opens the same camera — no second button
 function _gtCamBtnSync(){
   let b=document.getElementById('gtCamBtn'); const on=_gtCamScreenOk() && !window._gtPhoneMode;
   if(!on){ if(b) b.style.display='none'; return; }
