@@ -12139,6 +12139,7 @@ notify pgrst, 'reload schema';
 -- ============================================================================
 -- ============================================================================
 -- ============================================================================
+-- ============================================================================
 -- GlattTrack — step 46: stage order on the server, each station its own stage,
 -- kashrut configuration locks, and processing that continues over several days
 -- ============================================================================
@@ -18846,7 +18847,6 @@ begin
                     or (h.kind = 'question' and h.resolved_at is null))) then
     return 'held';
   end if;
-  if coalesce((x ->> 'notGlatt')::boolean, false) and a.outer_status = 'glatt' then return 'not_glatt'; end if;
   -- the piece got its kosher sticker in its area (the scanned sticker was really printed)
   if x ->> 'post' = 'stamps' and not coalesce(a.stamped, false) then return 'not_printed'; end if;
   if x ->> 'post' = 'parts' and not coalesce(a.parts_scanned, false) then return 'not_printed'; end if;
@@ -19342,7 +19342,7 @@ begin
                     or h.part not in ('tongue', 'cheek1', 'cheek2', 'right', 'left'))) then
     return 'held';
   end if;
-  if x is not null and coalesce((x ->> 'notGlatt')::boolean, false) and a.outer_status = 'glatt' then return 'not_glatt'; end if;
+  -- (owner, 19.10) no part is kept from a glatt animal: an inside skirt that is on follows the animal's ruling
   return null;
 end $$;
 revoke execute on function _nikur_refusal(animals_pilot, jsonb, bigint, integer) from public, anon, authenticated;
@@ -20542,7 +20542,7 @@ begin
          ref as materialized (select p.animal_id, p.product, p.cnt, p.screen, x.r, coalesce(pr.e, '{}'::jsonb) xe,
                                      case when x.base is not null then x.base
                                           when x.hh then _nikur_refusal(x.r, coalesce(pr.e, '{}'::jsonb), ep, null)
-                                          when coalesce((pr.e ->> 'notGlatt')::boolean, false) and (x.r).outer_status = 'glatt' then 'not_glatt' end f
+                                     end f
                                 from animal_pieces p join rr x on (x.r).id = p.animal_id left join pr on pr.id = p.product
                                where p.board_epoch = ep and (v_screen is null or p.screen = v_screen)),
          got as materialized (select s.animal_id, s.product, s.piece from piece_scans s where s.board_epoch = ep),

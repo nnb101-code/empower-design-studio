@@ -5673,7 +5673,7 @@ function _nkShow(kind,big,sub){
 }
 const GT_NK_REASON={treif:['טרף — לא להכניס!','Treif — do not take in!','Treif — ¡no ingresar!'],nevela:['נבלה — לא להכניס!','Nevela — do not take in!','Nevelá — ¡no ingresar!'],
   no_ruling:['אין פסיקה כשרה — לא להכניס!','No kosher ruling — do not take in!','Sin dictamen kosher — ¡no ingresar!'],held:['מעוכב (USDA / שאלה) — לא להכניס!','Held (USDA / question) — do not take in!','Retenido (USDA / pregunta) — ¡no ingresar!'],
-  not_glatt:['לא נלקח מבהמה גלאט','Not taken from a glatt animal','No se toma de un animal glatt'],not_printed:['לא הודפסה מדבקה כשרה לחתיכה הזו','No kosher sticker was printed for this piece','No se imprimió etiqueta kosher para esta pieza'],
+  not_printed:['לא הודפסה מדבקה כשרה לחתיכה הזו','No kosher sticker was printed for this piece','No se imprimió etiqueta kosher para esta pieza'],
   not_slaughtered:['לא נשחט','Not slaughtered','No faenado'],day_closed:['היום הזה נסגר בניקור','This day was closed at the nikur','Este día se cerró en el nikur'],
   not_in_cooler:['לא נכנס לקולר — לא להכניס לניקור!','Not in the cooler — do not take into the nikur!','No entró a la cámara — ¡no ingresar al nikur!'],
   // (§47) a sticker without the server's one-time number, or with one the server did not give
@@ -8808,7 +8808,6 @@ const GT_PRINT_REFUSED={ wrong_station:['המסך הזה לא מדפיס מדב�
   not_slaughtered:['הבהמה עוד לא נשחטה','The animal is not slaughtered yet','El animal aún no fue faenado'],
   not_kosher:['הבהמה לא נפסקה כשרה — אין מדבקת כשרות','The animal is not ruled kosher — no kosher sticker','El animal no es kosher — sin etiqueta kosher'],
   held:['החלק מעוכב (USDA / "?") — לא מודפס','The part is held (USDA / "?") — not printed','La parte está retenida — no se imprime'],
-  not_glatt:['החלק הזה לא נלקח מבהמה גלאט','This part is not taken from a glatt animal','Esta parte no se toma de un animal glatt'],
   too_many:['יותר מדבקות ממה שמוגדר במפעל','More stickers than the plant\'s setting','Más etiquetas que lo configurado'],
   unauthorized:['רק ראש הצוות מדפיס מדבקת ניסיון','Only the team leader prints a test sticker','Solo el jefe de equipo imprime una prueba'],
   // (§47)
@@ -12387,7 +12386,7 @@ const GT_DEFAULT_PRODUCTS=[
   {id:'tail',     he:'זנב',          en:'Tail',          es:'Cola',            on:true,  pre:'none', n:0, post:'stamps', m:1, nikur:'small', avg:null, builtin:true},
   {id:'liver',    he:'כבד',          en:'Liver',         es:'Hígado',          on:false, pre:'head', n:1, post:'parts',  m:1, nikur:'small', avg:null, builtin:true},   // number sticker at the head + kosher sticker (owner)
   {id:'skirt_out',he:'סרעפת חיצונית', en:'Outside Skirt', es:'Entraña fina',    on:true,  pre:'none', n:0, post:'stamps', m:1, nikur:'small', avg:null, builtin:true},
-  {id:'skirt_in', he:'סרעפת פנימית',  en:'Inside Skirt',  es:'Entraña gruesa',  on:false, pre:'none', n:0, post:'stamps', m:1, nikur:'small', avg:null, builtin:true, notGlatt:true},
+  {id:'skirt_in', he:'סרעפת פנימית',  en:'Inside Skirt',  es:'Entraña gruesa',  on:false, pre:'none', n:0, post:'stamps', m:1, nikur:'small', avg:null, builtin:true},
   {id:'hanger',   he:'נתח קצבים',     en:'Hanger steak',  es:'Centro de entraña', on:true,  pre:'none', n:0, post:'stamps', m:1, nikur:'small', avg:null, builtin:true},
 ];
 // (before v10.38 the average weights were kept in partTypes — they carry over to the list)
@@ -12409,7 +12408,6 @@ function gtProducts(s){
     const id=_GT_OLD_PART_IDS[o&&o.id];
     const p=id&&list.find(x=>x.id===id);
     if(p&&o.avg!=null&&isFinite(o.avg)) p.avg=Number(o.avg);
-    if(p&&id==='skirt_in'&&o.internal===false) p.notGlatt=false;
   });
   return list;
 }
@@ -12479,7 +12477,6 @@ function mgrSetProduct(id,field,val){
   // (owner) the tail gets its sticker once: on the head screen or at the stamps — choosing one clears the other
   // (v10.38: the tail's head sticker and its kosher sticker are no longer exclusive — the owner's kosher-sticker rule)
   else if(field==='avg'){ const v=String(val).trim().replace(',','.'); p.avg=v===''?null:Math.min(1000,Math.max(0,Number(v)||0)); }
-  else if(field==='notGlatt') p.notGlatt=!!val;
   _gtSaveProducts(list);
 }
 // (owner, 19.10) the standard parts of the animal only — no parts added by hand; the nikur of each part is fixed
@@ -12535,7 +12532,6 @@ function mgrRenderProducts(){
         <span style="margin-inline-start:6px;">${escapeHtml(L('משקל ממוצע:','Average weight:','Peso medio:'))}</span>
         <input type="number" inputmode="decimal" step="0.01" min="0" value="${p.avg!=null?escapeHtml(p.avg):''}" placeholder="${escapeHtml(L('ק״ג','kg','kg'))}" onchange="mgrSetProduct(${K},'avg',this.value)" style="width:68px;background:var(--panel2);border:1px solid var(--border);border-radius:6px;padding:5px;color:var(--gold);font-weight:700;text-align:center;">
       </div>
-      ${p.id==='skirt_in'?`<label style="display:flex;align-items:center;gap:6px;margin-top:6px;font-size:11px;color:var(--muted);cursor:pointer;"><input type="checkbox" ${p.notGlatt!==false?'checked':''} onchange="mgrSetProduct(${K},'notGlatt',this.checked)" style="width:15px;height:15px;"><span>${escapeHtml(L('לא נלקח מבהמה גלאט','Not taken from a glatt animal','No se toma de un animal glatt'))}</span></label>`:''}
     </div>`;
   }).join('');
 }

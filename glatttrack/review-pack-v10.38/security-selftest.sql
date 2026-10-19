@@ -2995,7 +2995,7 @@ declare r jsonb; r2 jsonb; r3 jsonb; r4 jsonb; ok boolean; p jsonb; bad text[] :
                 {"id":"hook","he":"קרס","on":true,"pre":"head","n":1,"post":"none","builtin":true},
                 {"id":"legs","he":"רגליים","on":true,"pre":"legs","n":2,"post":"legs","builtin":true},
                 {"id":"tail","he":"זנב","on":false,"pre":"head","n":1,"post":"stamps","builtin":true},
-                {"id":"skirt_in","he":"Inside Skirt","en":"Inside Skirt","on":false,"pre":"none","n":0,"post":"stamps","notGlatt":true,"builtin":true}]';
+                {"id":"skirt_in","he":"Inside Skirt","en":"Inside Skirt","on":false,"pre":"none","n":0,"post":"stamps","builtin":true}]';
 begin
   p := pr;
   r  := pg_temp.api(pg_temp.mgr(), format('select push_settings(%L::jsonb, ''x'', %L)', jsonb_build_object('products', p), pg_temp.v('mgr')));
@@ -3091,7 +3091,7 @@ declare r jsonb; r2 jsonb; r3 jsonb; r4 jsonb; r5 jsonb; r6 jsonb; r7 jsonb; r8 
                 {"id":"sides","he":"צדדים","on":true,"pre":"head","n":2,"post":"stamps","m":6,"nikur":"big","builtin":true},
                 {"id":"lung","he":"ריאה","on":true,"pre":"head","n":1,"post":"none","m":0,"nikur":"none","builtin":true},
                 {"id":"legs","he":"רגליים","on":true,"pre":"legs","n":2,"post":"legs","m":0,"nikur":"none","builtin":true},
-                {"id":"skirt_in","he":"Inside Skirt","on":true,"pre":"none","n":0,"post":"stamps","m":1,"nikur":"small","notGlatt":true,"builtin":true}]';
+                {"id":"skirt_in","he":"Inside Skirt","on":true,"pre":"none","n":0,"post":"stamps","m":1,"nikur":"small","builtin":true}]';
 begin
   select settings into s0 from settings_pilot where id = 1;
   perform pg_temp.api(pg_temp.mgr(), format('select push_settings(%L::jsonb, ''x'', %L)', jsonb_build_object('products', pr), pg_temp.v('mgr')));
@@ -3119,7 +3119,7 @@ begin
   r6 := pg_temp.api(pg_temp.dev('NIKS'), format('select nikur_scan(873, ''skirt_in'', 1, %s)', pg_temp.ep()));
   r4 := pg_temp.api(pg_temp.dev('NIK'),  format('select nikur_scan(870, ''sides'', 7, %s)', pg_temp.ep()));
   r5 := pg_temp.api(pg_temp.dev('NIK'),  format('select nikur_scan(870, ''hanger'', 1, %s)', pg_temp.ep()));
-  ok := ok and r ->> 'reason' = 'treif' and r2 ->> 'reason' = 'no_ruling' and r3 ->> 'reason' = 'not_glatt' and pg_temp.ok(r6)
+  ok := ok and r ->> 'reason' = 'treif' and r2 ->> 'reason' = 'no_ruling' and pg_temp.ok(r3) and pg_temp.ok(r6)   -- (owner) an inside skirt that is on follows the animal's ruling, glatt too
         and r4 ->> 'reason' = 'not_printed' and r5 ->> 'error' = 'unknown_part'   -- (v10.38: a piece that was not printed for this animal)
         and not exists (select 1 from piece_scans where board_epoch = pg_temp.ep() and animal_id in (871, 872))
         and exists (select 1 from events_pilot where stage = 'nikur' and action = 'piece_refused' and animal_no = 872);
@@ -3153,7 +3153,7 @@ begin
     r5 ->> 'reason' = 'treif' and not exists (select 1 from piece_scans where board_epoch = pg_temp.ep() and animal_id = 870 and product = 'sides' and piece = 4),
     left(r5::text, 120));
   update settings_pilot set settings = s0 where id = 1;
-  perform pg_temp.rec('v10.38 nikur: a kosher piece is scanned in once, on its own nikur screen only; treif / unruled / Inside Skirt of glatt / unknown refused and recorded; a nikur USDA hold / "?" stops it until the nikur releases / answers it; each nikur tablet sees its own pieces', ok,
+  perform pg_temp.rec('v10.38 nikur: a kosher piece is scanned in once, on its own nikur screen only; treif / unruled / unknown refused and recorded; the inside skirt goes in like any part; a nikur USDA hold / "?" stops it until the nikur releases / answers it; each nikur tablet sees its own pieces', ok,
     concat_ws(' | ', left(r::text, 60), r2 ->> 'reason', left(r3::text, 60), r4 ->> 'error', r4 ->> 'reason', left(r5::text, 60), left(r6::text, 60), left(r7::text, 80), left(r8::text, 60)));
 end $$;
 $gt76$;
