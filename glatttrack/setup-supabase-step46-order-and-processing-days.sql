@@ -7811,7 +7811,7 @@ declare s jsonb := _gt_settings();
 begin
   if _call_device(null) is null then return jsonb_build_object('ok', false, 'error', _no_device_error()); end if;
   if p_ip is null or not exists (select 1 from jsonb_array_elements(case when jsonb_typeof(s -> 'scanners') = 'array' then s -> 'scanners' else '[]'::jsonb end) x
-                                  where x ->> 'conn' in ('network', 'phone') and x ->> 'ip' = p_ip) then   -- §43: also a phone
+                                  where x ->> 'conn' = 'network' and x ->> 'ip' = p_ip) then
     return jsonb_build_object('ok', false, 'error', 'unknown_scanner');
   end if;
   if p_after is null then   -- the start: only where the list stands now
@@ -7863,125 +7863,7 @@ end $_$;
 revoke execute on function device_heartbeat(text, text, jsonb) from public;
 grant execute on function device_heartbeat(text, text, jsonb) to anon, authenticated;
 
--- ── §43 a phone as a scanner (v10.38, owner) ──────────────────────────────────────────────────────
--- The team leader shows a one-time QR code (10 minutes, one phone). The phone opens it, gets its own key and
--- becomes a scanner screen only — it can do NOTHING else (no screen, no data, no settings). Each code it reads
--- goes into scanner_scans as "phone:<n>", exactly like a Wi-Fi scanner: the station it is given to receives it.
--- The team leader removes a phone → its key stops at once.
-create table if not exists phone_scanners (
-  id bigserial primary key, name text not null, invite_hash text, short_hash text, invite_until timestamptz,
-  token_hash text unique, created_at timestamptz not null default now(), joined_at timestamptz,
-  last_seen timestamptz, scans_today int not null default 0, scans_day date, revoked boolean not null default false);
-alter table phone_scanners enable row level security;
-revoke all on phone_scanners from public, anon, authenticated;
-revoke all on sequence phone_scanners_id_seq from public, anon, authenticated;
-alter table phone_scanners add column if not exists short_hash text;
-create table if not exists phone_join_fails (at timestamptz not null default now());
-alter table phone_join_fails enable row level security;
-revoke all on phone_join_fails from public, anon, authenticated;
-
--- the team leader: a new one-time invitation (returns the code that goes into the QR)
-create or replace function phone_scanner_invite(p_token text) returns jsonb
-language plpgsql security definer set search_path = public, extensions, pg_temp as $$
-declare v_code text := encode(gen_random_bytes(18), 'hex'); v_id bigint;
-        v_short text := lpad(((('x' || encode(gen_random_bytes(4), 'hex'))::bit(32)::bigint) % 100000000)::text, 8, '0');   -- to type on a phone
-begin
-  if not (_manager_session_valid(p_token) and coalesce(_session_role(p_token), '') in ('manager', 'manufacturer')) then
-    return jsonb_build_object('ok', false, 'error', 'unauthorized');
-  end if;
-  delete from phone_scanners where joined_at is null and invite_until < now() - interval '1 day';
-  insert into phone_scanners (name, invite_hash, short_hash, invite_until)
-  values ('', encode(digest(v_code, 'sha256'), 'hex'), encode(digest('s:' || v_short, 'sha256'), 'hex'), now() + interval '10 minutes') returning id into v_id;
-  return jsonb_build_object('ok', true, 'code', v_code, 'short', v_short, 'id', v_id, 'until', now() + interval '10 minutes');
-end $$;
-revoke execute on function phone_scanner_invite(text) from public;
-grant execute on function phone_scanner_invite(text) to anon, authenticated;
-
--- the phone: the invitation once → its own key; it goes onto the plant's scanner list
-create or replace function phone_scanner_join(p_invite text, p_name text) returns jsonb
-language plpgsql security definer set search_path = public, extensions, pg_temp as $$
-declare r phone_scanners; v_tok text := encode(gen_random_bytes(24), 'hex'); v_name text := left(coalesce(nullif(trim(p_name), ''), 'טלפון'), 40);
-begin
-  -- a wrong code is counted: more than 20 in 10 minutes (from anywhere) → wait (the typed code has 8 digits)
-  delete from phone_join_fails where at < now() - interval '1 day';
-  if (select count(*) from phone_join_fails where at > now() - interval '10 minutes') >= 20 then
-    return jsonb_build_object('ok', false, 'error', 'rate_limited');
-  end if;
-  p_invite := regexp_replace(coalesce(p_invite, ''), '[\s-]', '', 'g');
-  if p_invite ~ '^[0-9a-f]{36}$' then
-    select * into r from phone_scanners where invite_hash = encode(digest(p_invite, 'sha256'), 'hex') for update;
-  elsif p_invite ~ '^[0-9]{8}$' then
-    select * into r from phone_scanners where short_hash = encode(digest('s:' || p_invite, 'sha256'), 'hex') and joined_at is null and invite_until > now() for update;
-  end if;
-  if r.id is null or r.joined_at is not null or r.revoked or r.invite_until < now() then
-    insert into phone_join_fails default values;
-    return jsonb_build_object('ok', false, 'error', 'code_invalid');
-  end if;
-  update phone_scanners set name = v_name, token_hash = encode(digest(v_tok, 'sha256'), 'hex'), invite_hash = null, short_hash = null,
-         joined_at = now(), last_seen = now() where id = r.id;
-  perform pg_advisory_xact_lock(hashtext('glatttrack_settings'));
-  update settings_pilot set settings = jsonb_set(settings, '{scanners}',
-           (case when jsonb_typeof(settings -> 'scanners') = 'array' then settings -> 'scanners' else '[]'::jsonb end)
-           || jsonb_build_array(jsonb_build_object('id', 'ph' || r.id, 'name', '📱 ' || v_name, 'conn', 'phone', 'ip', 'phone:' || r.id))),
-         updated_at = now(), device_id = 'server'
-   where id = 1;
-  return jsonb_build_object('ok', true, 'token', v_tok, 'id', r.id, 'name', v_name);
-end $$;
-revoke execute on function phone_scanner_join(text, text) from public;
-grant execute on function phone_scanner_join(text, text) to anon, authenticated;
-
-create or replace function _phone_by_token(p_token text) returns phone_scanners
-language sql stable security definer set search_path = public, extensions, pg_temp as $$
-  select * from phone_scanners where p_token is not null and p_token ~ '^[0-9a-f]{48}$'
-     and token_hash = encode(digest(p_token, 'sha256'), 'hex') and not revoked and joined_at is not null limit 1;
-$$;
-revoke execute on function _phone_by_token(text) from public, anon, authenticated;
-
--- the phone: what it is and which screen it serves (its title)
-create or replace function phone_scanner_status(p_token text) returns jsonb
-language plpgsql stable security definer set search_path = public, extensions, pg_temp as $$
-declare r phone_scanners := _phone_by_token(p_token); s jsonb := _gt_settings();
-begin
-  if r.id is null then return jsonb_build_object('ok', false, 'error', 'unauthorized'); end if;
-  return jsonb_build_object('ok', true, 'id', r.id, 'name', r.name,
-    'today', case when r.scans_day = current_date then r.scans_today else 0 end,
-    'screens', coalesce((select jsonb_agg(k) from jsonb_each(case when jsonb_typeof(s -> 'screenDevices') = 'object' then s -> 'screenDevices' else '{}'::jsonb end) e(k, v)
-                          where jsonb_typeof(v) = 'object' and v ->> 'scanner' = 'ph' || r.id), '[]'::jsonb));
-end $$;
-revoke execute on function phone_scanner_status(text) from public;
-grant execute on function phone_scanner_status(text) to anon, authenticated;
-
--- the phone: one code read
-create or replace function phone_scan(p_token text, p_code text) returns jsonb
-language plpgsql security definer set search_path = public, extensions, pg_temp as $$
-declare r phone_scanners := _phone_by_token(p_token); v_code text := left(regexp_replace(coalesce(p_code, ''), '[[:cntrl:]]', '', 'g'), 200);
-begin
-  if r.id is null then return jsonb_build_object('ok', false, 'error', 'unauthorized'); end if;
-  if trim(v_code) = '' then return jsonb_build_object('ok', false, 'error', 'bad_value'); end if;
-  if (select count(*) from scanner_scans where ip = 'phone:' || r.id and at > now() - interval '10 seconds') >= 40 then
-    return jsonb_build_object('ok', false, 'error', 'too_many');
-  end if;
-  insert into scanner_scans (ip, code) values ('phone:' || r.id, trim(v_code));
-  update phone_scanners set last_seen = now(),
-         scans_today = case when scans_day = current_date then scans_today + 1 else 1 end, scans_day = current_date
-   where id = r.id;
-  return jsonb_build_object('ok', true);
-end $$;
-revoke execute on function phone_scan(text, text) from public;
-grant execute on function phone_scan(text, text) to anon, authenticated;
-
--- the team leader removes a phone: its key stops; it leaves the scanner list and the screens
-create or replace function phone_scanner_remove(p_token text, p_id bigint) returns jsonb
-language plpgsql security definer set search_path = public, extensions, pg_temp as $$
-begin
-  if not (_manager_session_valid(p_token) and coalesce(_session_role(p_token), '') in ('manager', 'manufacturer')) then
-    return jsonb_build_object('ok', false, 'error', 'unauthorized');
-  end if;
-  update phone_scanners set revoked = true, token_hash = null where id = p_id;
-  return jsonb_build_object('ok', true);
-end $$;
-revoke execute on function phone_scanner_remove(text, bigint) from public;
-grant execute on function phone_scanner_remove(text, bigint) to anon, authenticated;
+-- ── §43 (a phone as a scanner) was removed — round-2 review S-ph1, see §45 ──
 
 -- ── §44 the cooler (v10.38, owner): the cooler receives the kosher animals; the large-parts nikur takes from it ──
 -- The team leader turns the cooler screen on in the plan (screensPlan.screens has 'cooler'). Then every large part
@@ -8351,6 +8233,45 @@ begin
   return null;
 end $$;
 revoke execute on function _animal_pieces_track() from public, anon, authenticated;
+
+-- S-ph1: "a phone as a scanner" was removed from the app (owner, 19.10) — its functions and tables go too
+-- (they were still callable), and the phones are taken off the plant's scanner list
+drop function if exists phone_scanner_invite(text);
+drop function if exists phone_scanner_join(text, text);
+drop function if exists phone_scanner_status(text);
+drop function if exists phone_scan(text, text);
+drop function if exists phone_scanner_remove(text, bigint);
+drop function if exists _phone_by_token(text);
+drop table if exists phone_join_fails;
+drop table if exists phone_scanners;
+delete from scanner_scans where ip like 'phone:%';
+update settings_pilot set settings = jsonb_set(settings, '{scanners}',
+         coalesce((select jsonb_agg(x) from jsonb_array_elements(settings -> 'scanners') x where x ->> 'conn' is distinct from 'phone'), '[]'::jsonb))
+ where id = 1 and jsonb_typeof(settings -> 'scanners') = 'array'
+   and exists (select 1 from jsonb_array_elements(settings -> 'scanners') x where x ->> 'conn' = 'phone');
+
+-- S-nk4: a day is closed at the nikur only when it is an earlier day that really has pieces for the nikur
+-- (not today's board, not a future or made-up number)
+create or replace function nikur_day_close(p_token text, p_epoch bigint, p_reason text default null) returns jsonb
+language plpgsql security definer set search_path = public, extensions, pg_temp as $$
+begin
+  if not _manager_session_valid(p_token) or coalesce(_session_role(p_token), 'manager') not in ('manager') then
+    return jsonb_build_object('ok', false, 'error', 'unauthorized');
+  end if;
+  if p_epoch is null then return jsonb_build_object('ok', false, 'error', 'bad_value'); end if;
+  if not _reason_ok(p_reason) then return jsonb_build_object('ok', false, 'error', 'reason_required'); end if;
+  if p_epoch >= coalesce(_board_epoch(), p_epoch + 1)
+     or not exists (select 1 from animal_pieces where board_epoch = p_epoch) then
+    return jsonb_build_object('ok', false, 'error', 'bad_value');
+  end if;
+  insert into nikur_days_closed (board_epoch, closed_by, reason)
+  values (p_epoch, coalesce(_session_name(p_token), 'manager'), left(trim(p_reason), 200))
+  on conflict (board_epoch) do nothing;
+  perform _admin_audit(p_token, 'nikur_day_close', 'nikur_days_closed', jsonb_build_object('board', p_epoch, 'reason', left(trim(p_reason), 200)));
+  return jsonb_build_object('ok', true);
+end $$;
+revoke execute on function nikur_day_close(text, bigint, text) from public;
+grant execute on function nikur_day_close(text, bigint, text) to anon, authenticated;
 
 -- S-pt1 (see _parts_print_block above): the whole small-parts set, also a set of 4 or more, decides the "held" check
 

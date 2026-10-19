@@ -3207,6 +3207,12 @@ begin
         and exists (select 1 from admin_audit where action = 'nikur_day_close');
   perform pg_temp.rec('v10.38 a day closed at the nikur (team leader only, with a reason, audited): its pieces are refused and it leaves the list', ok,
     concat_ws(' | ', r::text, r2::text, r3::text, left(r4::text, 80)));
+  -- (round-2 review S-nk4) today's board / a made-up day cannot be closed at the nikur
+  r  := pg_temp.api('{}', format('select nikur_day_close(%L, %s, ''selftest: today'')', pg_temp.v('mgr'), _board_epoch()));
+  r2 := pg_temp.api('{}', format('select nikur_day_close(%L, %s, ''selftest: no such day'')', pg_temp.v('mgr'), e0 - 12345));
+  perform pg_temp.rec('round-2 review: only an earlier day with pieces is closed at the nikur (not today, not a made-up day)',
+    r ->> 'error' = 'bad_value' and r2 ->> 'error' = 'bad_value'
+    and not exists (select 1 from nikur_days_closed where board_epoch in (_board_epoch(), e0 - 12345)), concat_ws(' | ', r::text, r2::text));
   -- (round 22) a number with an open "?" of the shochet (not slaughtered yet) is kept in the archive at the reset
   r  := pg_temp.api(pg_temp.dev('SL1'), 'select hold_set(890, ''slaughter'', ''question'')');
   perform pg_temp.api('{}', format('select reset_daily_board(%L, ''selftest: archive the open ?'')', pg_temp.v('mgr')));
@@ -3441,36 +3447,12 @@ begin
   update settings_pilot set settings = s0 where id = 1;
 end $$;
 $gt82$;
-    v_step := 'v10.38 a phone as a scanner';
+    v_step := 'round-2 review: the phone-as-a-scanner functions are gone';
     execute $gt83$
-do $$
-declare r jsonb; r2 jsonb; r3 jsonb; r4 jsonb; ok boolean; s0 jsonb; v_tok text; v_id bigint;
-begin
-  select settings into s0 from settings_pilot where id = 1;
-  r  := pg_temp.api('{}', format('select phone_scanner_invite(%L)', pg_temp.v('mgr')));
-  r2 := pg_temp.api(pg_temp.dev('STAMPS'), 'select phone_scanner_invite(null)');                     -- a station cannot invite
-  r3 := pg_temp.api('{}', format('select phone_scanner_join(%L, %L)', r ->> 'short', 'selftest phone'));  -- the typed 8 digits
-  r4 := pg_temp.api('{}', format('select phone_scanner_join(%L, %L)', r ->> 'short', 'again'));        -- once only
-  v_tok := r3 ->> 'token'; v_id := (r3 ->> 'id')::bigint;
-  ok := pg_temp.ok(r) and length(r ->> 'short') = 8 and r2 ->> 'error' = 'unauthorized' and pg_temp.ok(r3) and r4 ->> 'error' = 'code_invalid'
-        and exists (select 1 from settings_pilot, jsonb_array_elements(settings -> 'scanners') x where id = 1 and x ->> 'id' = 'ph' || v_id and x ->> 'conn' = 'phone');
-  perform pg_temp.rec('v10.38 phone scanner: only the team leader invites; the phone joins once with the code; it goes onto the scanner list', ok,
-    concat_ws(' | ', left(r::text, 80), r2::text, left(r3::text, 80), r4::text));
-  r  := pg_temp.api('{}', format('select phone_scan(%L, %L)', v_tok, 'GT|N:9|X'));
-  r2 := pg_temp.api('{}', format('select phone_scan(%L, %L)', repeat('0', 48), 'x'));                 -- a made-up key
-  r3 := pg_temp.api('{}', format('select phone_scanner_status(%L)', v_tok));
-  ok := pg_temp.ok(r) and r2 ->> 'error' = 'unauthorized' and pg_temp.ok(r3)
-        and exists (select 1 from scanner_scans where ip = 'phone:' || v_id and code = 'GT|N:9|X')
-        and has_table_privilege('anon', 'phone_scanners', 'select') = false;
-  perform pg_temp.rec('v10.38 phone scanner: its key sends a scan (as "phone:<n>"); a made-up key cannot; the phones table is closed', ok,
-    concat_ws(' | ', r::text, r2::text, left(r3::text, 80)));
-  r  := pg_temp.api(pg_temp.dev('STAMPS'), format('select phone_scanner_remove(null, %s)', v_id));     -- a station cannot remove
-  r2 := pg_temp.api('{}', format('select phone_scanner_remove(%L, %s)', pg_temp.v('mgr'), v_id));
-  r3 := pg_temp.api('{}', format('select phone_scan(%L, %L)', v_tok, 'GT|N:10|X'));
-  ok := r ->> 'error' = 'unauthorized' and pg_temp.ok(r2) and r3 ->> 'error' = 'unauthorized';
-  perform pg_temp.rec('v10.38 phone scanner: the team leader removes it → its key stops at once', ok, concat_ws(' | ', r::text, r2::text, r3::text));
-  delete from scanner_scans where ip = 'phone:' || v_id; delete from phone_scanners where id = v_id; delete from phone_join_fails;
-  update settings_pilot set settings = s0 where id = 1;
+do $$ begin
+  perform pg_temp.rec('round-2 review: "a phone as a scanner" is gone from the server (no function, no table)',
+    to_regprocedure('phone_scanner_join(text,text)') is null and to_regprocedure('phone_scan(text,text)') is null
+    and to_regprocedure('phone_scanner_invite(text)') is null and to_regclass('public.phone_scanners') is null);
 end $$;
 $gt83$;
     v_step := 'owner: one nikur screen split into large / small parts';
@@ -3689,7 +3671,7 @@ begin
                 'eso_change(integer,text,text,bigint)', 'eso_change(integer,text,text,bigint,uuid)', 'event_append(jsonb)',
                 'lung_drawing_get(integer)', 'lung_drawing_set(integer,bigint,text)', 'manager_add(text,text,text)',
                 'manager_add_owner(text,text,text)', 'manager_deactivate(text,uuid)', 'manager_list(text)', 'manager_login(text)',
-                'manager_logout(text)', 'manager_session_check(text)', 'leader_recovery_code_new(text)', 'leader_recovery_status(text)', 'leader_device_replace(text,text)', 'plant_server_status(text)', 'animal_card(text,date,integer)', 'seal_set(text,text,text)', 'seals_get(text,bigint)', 'hold_set(integer,text,text,text,bigint,uuid)', 'hold_resolve(bigint,text,uuid)', 'nikur_scan(integer,text,integer,bigint,uuid)', 'nikur_board()', 'nikur_hold(integer,bigint,text,uuid)', 'cooler_scan(integer,text,integer,bigint,uuid)', 'cooler_hold(integer,bigint,text,uuid)', 'cooler_board()', 'nikur_passed(integer)', 'nikur_day_close(text,bigint,text)', 'support_issue_add(text,text)', 'support_tickets(text)', 'maker_changes(text)', 'print_job_add(text,text,text,integer,jsonb,text,uuid)', 'print_job_status(bigint)', 'printer_scan_request(text)', 'printers_found(text)', 'printers_status(text)', 'scanners_heard(text,integer)', 'scanner_scans_since(text,bigint)', 'phone_scanner_invite(text)', 'phone_scanner_join(text,text)', 'phone_scanner_status(text)', 'phone_scan(text,text)', 'phone_scanner_remove(text,bigint)', 'board_flags(text)', 'change_ack(text,bigint)', 'manufacturer_set_billing(text,boolean,numeric,text,text)',
+                'manager_logout(text)', 'manager_session_check(text)', 'leader_recovery_code_new(text)', 'leader_recovery_status(text)', 'leader_device_replace(text,text)', 'plant_server_status(text)', 'animal_card(text,date,integer)', 'seal_set(text,text,text)', 'seals_get(text,bigint)', 'hold_set(integer,text,text,text,bigint,uuid)', 'hold_resolve(bigint,text,uuid)', 'nikur_scan(integer,text,integer,bigint,uuid)', 'nikur_board()', 'nikur_hold(integer,bigint,text,uuid)', 'cooler_scan(integer,text,integer,bigint,uuid)', 'cooler_hold(integer,bigint,text,uuid)', 'cooler_board()', 'nikur_passed(integer)', 'nikur_day_close(text,bigint,text)', 'support_issue_add(text,text)', 'support_tickets(text)', 'maker_changes(text)', 'print_job_add(text,text,text,integer,jsonb,text,uuid)', 'print_job_status(bigint)', 'printer_scan_request(text)', 'printers_found(text)', 'printers_status(text)', 'scanners_heard(text,integer)', 'scanner_scans_since(text,bigint)', 'board_flags(text)', 'change_ack(text,bigint)', 'manufacturer_set_billing(text,boolean,numeric,text,text)',
                 'outer_open(integer,bigint,boolean,text)', 'outer_open(integer,bigint,boolean,text,uuid)', 'plant_status_snapshot()', 'plant_setup_needed()',
                 'push_settings(jsonb,text,text,text)', 'request_daily_rollover()', 'reset_daily_board(text,text)', 'security_summary(text)',
                 'processing_board(text)', 'carry_push(bigint,jsonb,uuid)', 'carry_claim(bigint,integer,text,uuid)',

@@ -924,6 +924,7 @@ const LUNG_B64="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICA
     <div class="tb-right">
       <div class="online-dot"></div>
       <div class="tb-user"><span id="supWelcome">ברוך הבא</span>: <strong id="supUser">משגיח</strong></div>
+      <div class="icon-btn" onclick="reportProblem(supRole==='cooler'?'קולר':'ניקור')" title="דווח בעיה" style="color:var(--amber)">&#9888;</div>
       <div class="icon-btn" onclick="goTo('scNav')">&#127968;</div>
       <div class="icon-btn" onclick="goTo('scSupLogin')" style="color:var(--red-light)">&#10005;</div>
     </div>
@@ -1269,7 +1270,7 @@ const LUNG_B64="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICA
         <button class="mgr-mini-tab"             onclick="funcTab('parts')"     data-t="mgrFuncParts">חלקים</button>
         <button class="mgr-mini-tab"             onclick="funcTab('stamps')"    data-t="mgrFuncStamps">חותמות</button>
         <button class="mgr-mini-tab"             onclick="funcTab('printing')"  >הדפסה וסריקה</button>
-        <button class="mgr-mini-tab"             onclick="funcTab('cooler')"    data-t="mgrFuncCooler">קולר</button>
+        <button class="mgr-mini-tab"             onclick="funcTab('cooler')"    data-t="mgrFuncCooler">קולר / ניקור</button>
       </div>
 
       <!-- Slaughter -->
@@ -1475,9 +1476,9 @@ const LUNG_B64="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgICA
 
       <!-- Cooler (קולר) -->
       <div id="func-cooler" style="display:none;">
-        <div class="mgr-sec">קולר / אריזה</div>
+        <div class="mgr-sec">קולר / ניקור</div>
         <div class="mgr-card">
-          <div style="font-size:12px;color:var(--muted);">הגדרות קולר ואריזה — בקרוב.</div>
+          <div style="font-size:12px;color:var(--muted);line-height:1.6;">מסכי הקולר והניקור מופעלים בבחירת המסכים (הגדרות ← מסכים). לאיזה צד של הניקור הולך כל חלק (גדולים / קטנים) — בהגדרות ← חלקי פנים וחוץ.</div>
         </div>
       </div>
 
@@ -4436,7 +4437,9 @@ const KS = (function(){
           +(left!=null ? L(' — נותרו ',' — left: ',' — quedan ')+left : '')
           +L(' · אין דילוג: יום השחיטה הבא אחרי שמסיימים את זה',' · no skipping: the next slaughter day comes after this one is finished',' · sin saltos: el siguiente día de faena viene al terminar este'), {color:'amber'});
       } else {
-        const n=new Date(); const d=n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')+'-'+String(n.getDate()).padStart(2,'0');
+        // (round-2 review A-ux3) the plant's day (its time zone and reset hour), not the tablet's own date
+        let d=null; try{ d=_plantBusinessDate(); }catch(e){}
+        if(!d){ const n=new Date(); d=n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')+'-'+String(n.getDate()).padStart(2,'0'); }
         window.gtStatusSet('procday', L('📅 עובדים על שחיטת היום — ','📅 Working on today\'s slaughter — ','📅 Trabajando en la faena de hoy — ')+_fmtDay(d), {color:'green'});
       }
     }catch(e){}
@@ -4984,7 +4987,7 @@ function _gtFlagsCacheSave(){ try{ localStorage.setItem(_GT_FLAGS_KEY, JSON.stri
 var _gtFlagsBusy=false, _gtNext={};
 const GT_ST_NAME={slaughter:['שחיטה','Slaughter','Faena'],eso:['וושט','Esophagus','Esófago'],legs:['רגליים וראש','Legs & head','Patas y cabeza'],
   inner:['פנים','Inner','Interno'],outer:['חוץ','Outer','Externo'],parts:['חלקים','Parts','Partes'],stamps:['חותמות ושקילה','Stamps & weighing','Sellos y pesaje'],
-  nikur:['ניקור','Nikur','Nikur']};
+  nikur:['ניקור','Nikur','Nikur'],cooler:['קולר','Cooler','Cámara']};
 const GT_PART_NAME={whole:['כל הבהמה','Whole animal','Animal entero'],right:['חצי ימין','Right half','Mitad derecha'],left:['חצי שמאל','Left half','Mitad izquierda'],
   cheek1:['לחי 1','Cheek 1','Mejilla 1'],cheek2:['לחי 2','Cheek 2','Mejilla 2'],tongue:['לשון','Tongue','Lengua']};
 function _gtL(a){ return L(a[0],a[1],a[2]); }
@@ -5492,7 +5495,9 @@ function nikurRender(el){
   // what a side holds today: [expected, in]
   const side=sd=>{ const v=today&&today.side&&today.side[sd]; return v?[Number(v[0])||0,Number(v[1])||0]:[0,0]; };
   const coming=(B.coming||[]).filter(c=>(c.s||[]).includes(_nkTab));
-  const ready=new Set(((today&&today.rows)||[]).filter(r=>!r.ok).map(r=>r.n)).size;
+  // (round-2 review A-nk3) ready = waiting on THIS side; with the cooler on, a large part counts only once its animal is in the cooler
+  const cooled=new Set((today&&today.cooled)||[]);
+  const ready=new Set(((today&&today.rows)||[]).filter(r=>!r.ok && (!r.s || r.s===_nkTab) && !(B.coolerOn && r.s==='big' && !cooled.has(r.n))).map(r=>r.n)).size;
   const tile=(v,l,c)=>`<div style="flex:1;min-width:70px;background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:8px 4px;text-align:center;"><div style="font-size:24px;font-weight:800;color:${c};">${v}</div><div style="font-size:11px;color:var(--muted);">${E(l)}</div></div>`;
   { const t=document.getElementById('nkTiles'); if(t) t.innerHTML=tile(B.kosherToday||0,L('בהמות כשרות היום','Kosher animals today','Animales kosher hoy'),'var(--green)')
       +tile(ready,L('מוכנות לניקור','Ready for nikur','Listos para nikur'),'var(--amber)')
@@ -5584,7 +5589,14 @@ function nkNumInfo(n){
   const rows=((today&&today.rows)||[]).filter(r=>r.n===n && r.s===_nkTab), g={};
   rows.forEach(r=>{ const a=(g[r.p]=g[r.p]||[0,0]); a[0]++; if(r.ok) a[1]++; });
   const t=Object.keys(g).map(p=>nm(p)+' '+g[p][1]+'/'+g[p][0]).join(' · ');
-  _nkShow(t&&Object.values(g).every(a=>a[1]>=a[0])?'ok':'dup','#'+n, t || ((B.coming||[]).some(c=>c.n===n) ? L('כשר — עוד לא קיבל מדבקות כשרות','Kosher — no kosher stickers yet','Kosher — aún sin etiquetas') : L('עוד לא נכנס לקולר','Not in the cooler yet','Aún no está en la cámara')));
+  // (round-2 review A-nk2) a number with nothing here says why: nevela / treif / not ruled / no stickers / not in the cooler
+  let why=null; try{ const x=KS.getAnimal(n-1);
+    if(x && (x.slaughter==='nevela'||x.slaughter==='shot')) why=L('נבלה — לא לניקור','Nevela — not for the nikur','Nevelá — no para el nikur');
+    else if(x && (x.innerStatus==='treif'||x.outerStatus==='treif')) why=L('טרף — לא לניקור','Treif — not for the nikur','Treif — no para el nikur');
+    else if(!x || !x.slaughter || !isKosherReady(x)) why=L('עוד אין פסיקה','No ruling yet','Aún sin dictamen');
+  }catch(e){}
+  _nkShow(t&&Object.values(g).every(a=>a[1]>=a[0])?'ok':'dup','#'+n, t || why || ((B.coming||[]).some(c=>c.n===n) ? L('כשר — עוד לא קיבל מדבקות כשרות','Kosher — no kosher stickers yet','Kosher — aún sin etiquetas')
+     : (B.coolerOn && _nkTab==='big') ? L('עוד לא נכנס לקולר','Not in the cooler yet','Aún no está en la cámara') : L('עוד לא הגיע לניקור','Not at the nikur yet','Aún no llegó al nikur')));
   setTimeout(nkFocus,50);
 }
 // a number sticker (no part) at the nikur / cooler: today's animal is checked here — not kosher → red + warning
@@ -5706,7 +5718,7 @@ setInterval(()=>{ const s=document.querySelector('.screen.active'); if(s&&s.id==
     if(!go) return;
     const t=e.target; if(t && ['nkScan','clScan','stampsScanInput','scanInput','lgScanInput'].includes(t.id)) return;   // the field has it
     if(t && (t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.tagName==='SELECT'||t.isContentEditable)) return;
-    if(document.querySelector('.gt-sheet.open, #gtCamOv, .overlay.open, .modal.open')) return;
+    if(document.querySelector('#gtSheet, #gtCamOv, .overlay.open, .modal.open')) return;
     const now=Date.now(); if(now-last>150) buf=''; last=now;
     if(e.key==='Enter'){ const v=buf.trim(); buf=''; if(v.length>=3){ e.preventDefault(); go(v); } return; }
     if(e.key && e.key.length===1) buf+=e.key;
@@ -6170,6 +6182,12 @@ function _safeImg(u){ u=String(u||''); return /^data:image\/(png|jpe?g|gif|webp|
 // 'stale-board'). gtErrCode gives the code, gtErrText the translated sentence
 // (anything unknown is shown as the server wrote it).
 var _GT_ERR = {
+  // (round-2 review A-err1) the nikur / cooler refusals
+  unknown_part:['החלק הזה לא ברשימת החלקים של המפעל','This part is not on the plant\'s cuts list','Esta parte no está en la lista de cortes'],
+  wrong_screen:['לא במסך הזה — החלק שייך למסך אחר','Not on this screen — the part belongs to another screen','No en esta pantalla — la parte es de otra pantalla'],
+  day_closed:['היום הזה נסגר בניקור','This day was closed at the nikur','Este día se cerró en el nikur'],
+  not_cooler_part:['חלק קטן — לא נכנס לקולר, הולך ישר לניקור','A small part — it does not go into the cooler, straight to the nikur','Parte pequeña — no entra a la cámara, va directo al nikur'],
+  not_in_cooler:['עוד לא נכנס לקולר','Not in the cooler yet','Aún no está en la cámara'],
   unknown_printer: ['המדפסת לא ברשימת המדפסות, או שהכתובת שלה לא ברשת המפעל (או לא ביציאה 9100)','The printer is not on the printer list, or its address is not on the plant network (or not port 9100)','La impresora no está en la lista o su dirección no está en la red de la planta'],
   // step 46
   setup_code_not_configured:['בשרת לא הוגדר קוד התקנה — מי שמתקין את השרת צריך להגדיר אותו (select _set_setup_code(...)).','No setup code was set on the server — whoever installs it must set one (select _set_setup_code(...)).','No hay código de instalación en el servidor — quien lo instala debe definirlo (select _set_setup_code(...)).'],
@@ -6292,6 +6310,8 @@ Object.assign(I18N_DOM,{"📨 דווח על תקלה לתמיכה הטכנית �
 const _HEB=/[֐-׿]/;
 Object.assign(I18N_DOM,{"כפתור \"לא חלק\" בשחיטה ובבית הכוסות — עם כל מספר של מסכי חוץ (גם מסך אחד, גם מסך משותף פנים+חוץ). \"לא חלק\" נשאר עד הפסיקה בבודק החוץ, ושם הבהמה מקבלת סטטוס אחד: הסטטוס של \"לא חלק\" (רבנות כשר, כשר או כל שם שהמפעל נותן לו — בסטטוסי הכשרות, ✏️ שם) או טרף.": ["A \"Non-Chalak\" button at slaughter and at the maw — with any number of outer screens (one screen, or one shared inner + outer screen too). \"Non-Chalak\" holds until the outer ruling, where the animal gets one status: the non-chalak status (רבנות כשר, כשר or any name the plant gives it — in the kashrut statuses, ✏️ Name) or treif.", "Un botón \"No Jalak\" en la faena y en el cuajar — con cualquier número de pantallas externas (una sola, o una compartida interna + externa). \"No Jalak\" vale hasta el dictamen externo, donde el animal recibe un estado: el estado no jalak (רבנות כשר, כשר o el nombre que la planta le dé — en los estados de kashrut, ✏️ Nombre) o treif."], "\"לא חלק\"": ["\"Non-Chalak\"", "\"No Jalak\""], "ניתוב \"לא חלק\" למסך B": ["Route \"Non-Chalak\" to screen B", "Enviar \"No Jalak\" a la pantalla B"], "רק כשיש שני מסכי חוץ. דולק: מסך B הוא רק ל\"לא חלק\" — בהמה \"לא חלק\" עוברת אליו ומקבלת שם את הסטטוס של \"לא חלק\" או טרף, ובמסך A יש \"שליחה למסך B\". כבוי (משולב): שני מסכי החוץ פוסקים הכול, כל אחד את הבהמה שמגיעה אליו.": ["Only with two outer screens. On: screen B is only for non-chalak — a non-chalak animal goes there and gets the non-chalak status or treif, and screen A has \"Send to screen B\". Off (combined): both outer screens rule everything, each the animal that comes to it.", "Solo con dos pantallas externas. Encendido: la pantalla B es solo para no jalak — el animal no jalak va allí y recibe el estado no jalak o treif, y la pantalla A tiene \"Enviar a la pantalla B\". Apagado (combinado): ambas pantallas dictaminan todo, cada una el animal que le llega."]});   // v10.34: the not-chalak switches
 Object.assign(I18N_DOM,{"מפעל שלוקח \"לא חלק\" — מדליק: כפתור \"לא חלק\" בשחיטה ובבית הכוסות, וסטטוסי \"לא חלק\" בפסיקה. מפעל שלא לוקח — מכבה: בהמה לא חלקה נפסקת טרף.": ["A plant that takes \"not chalak\" turns it on: a \"not chalak\" button at slaughter and at the maw check, and the \"not chalak\" statuses in the ruling. A plant that does not take it turns it off: an animal that is not chalak is ruled treif.", "Una planta que acepta \"no jalak\" lo enciende: un botón \"no jalak\" en faena y en el cuajar, y los estados \"no jalak\" en el dictamen. Una que no lo acepta lo apaga: un animal no jalak se dictamina treif."], "רק כשיש שני מסכי חוץ. דולק: מסך B הוא רק ל\"לא חלק\" — בהמה \"לא חלק\" עוברת אליו ומקבלת שם את הסטטוס שבחרת ל\"לא חלק\" או טרף, ובמסך A יש \"שליחה למסך B\". כבוי (משולב): שני מסכי החוץ פוסקים הכול, כל אחד את הבהמה שמגיעה אליו.": ["Only with two outer screens. On: screen B is only for non-chalak — a non-chalak animal goes there and gets the status you chose for non-chalak or treif, and screen A has \"Send to screen B\". Off (combined): both outer screens rule everything, each the animal that comes to it.", "Solo con dos pantallas externas. Encendido: la pantalla B es solo para no jalak — el animal no jalak va allí y recibe el estado elegido para no jalak o treif, y la pantalla A tiene \"Enviar a la pantalla B\". Apagado (combinado): ambas pantallas dictaminan todo, cada una el animal que le llega."]});   // v10.36
+Object.assign(I18N_DOM,{"מנקר":["Nikur","Nikur"],"מליחה":["Salting","Salado"],"שיפינג":["Shipping","Envío"],"🔧 מה היצרן שינה":["🔧 What the manufacturer changed","🔧 Lo que cambió el fabricante"]});   // (round-2 review A-i18n2)
+Object.assign(I18N_DOM,{"קולר / ניקור":["Cooler / nikur","Cámara / nikur"],"מסכי הקולר והניקור מופעלים בבחירת המסכים (הגדרות ← מסכים). לאיזה צד של הניקור הולך כל חלק (גדולים / קטנים) — בהגדרות ← חלקי פנים וחוץ.":["The cooler and nikur screens are turned on in the screen choice (Settings → Screens). Which nikur side each part goes to (large / small) — in Settings → inner and outer parts.","Las pantallas de cámara y nikur se activan en la elección de pantallas (Configuración → Pantallas). A qué lado del nikur va cada parte (grandes / pequeñas) — en Configuración → partes internas y externas."]});
 Object.assign(I18N_DOM,{"📷 סריקת ברקוד בבדיקת פנים וחוץ": ["📷 Barcode scan at the inner and outer checks", "📷 Escaneo de código en revisión interna y externa"], "סורקים את המדבקה מהרגליים (על הריאה / בית הכוסות) — נפתח בדיוק המספר שעליה. אפשר גם ללחוץ על מספר כרגיל. מצלמת הטאבלט, או סורק ידני (USB / Bluetooth) שנקלט לבד.": ["Scan the sticker from legs (on the lung / maw) — exactly that number opens. Tapping a number still works. The tablet camera, or a hand scanner (USB / Bluetooth) that is picked up by itself.", "Escanee la etiqueta de patas (en el pulmón / cuajar) — se abre exactamente ese número. Tocar un número sigue funcionando. La cámara de la tableta, o un escáner de mano (USB / Bluetooth) que se detecta solo."]});
 Object.assign(I18N_DOM,{"🧪 איפוס יום עכשיו — רק במצב בדיקה": ["🧪 Reset the day now — test mode only", "🧪 Reiniciar el día ahora — solo modo de prueba"]});
 Object.assign(I18N_DOM,{"שינוי — בבחירת מסכים ←": ["Change — in Choosing screens →", "Cambiar — en Elegir pantallas →"]});
@@ -6382,7 +6402,7 @@ async function ATalert(text){ alert(lang==='he' ? text : await _atFetch(text, la
 async function ATconfirm(text){ return confirm(lang==='he' ? text : await _atFetch(text, lang)); }
 
 const T={
-  he:{brand:"מערכת שחיטה כשרה",online:"מחובר לרשת",sync:"סנכרון פעיל",mgmt:"ניהול",work:"מסכי עבודה",mgr:"מסך ראש צוות",mgrD:"שליטה מלאה, הגדרות, סיכומים, הרשאות",sl:"שחיטה",slD:"נשחט / נבלה / ירוי",lg:"רגלים / ראש",lgD:"מדבקות ראשוניות",inner:"בודק פנים",innerD:"בדיקת ריאות",outer:"בודק חוץ",outerD:"פסיקת כשרות",parts:"חלקים קטנים",soon:"בקרוב",ready:"מוכן",syncInfo:"BroadcastChannel — עדכון בזמן אמת",reset:"איפוס יום",slS:"נשחט",slN:"נבלה",slSh:"ירוי",slTot:"סה״כ",lgWaiting:"ממתינים",lgDone:"טופלו",lgNev:"נבלה",lgTot:"סה״כ",inWaiting:"ממתינים",inDone:"לבודק חוץ",inTreif:"טרף",inTot:"סה״כ",outPend:"ממתינים",outTr:"טרף",mawSub:"בדיקת בית הכוסות",rumenLabel:"בדיקת כרסים (ד.א.)",mawK:"כשר",mawT:"טרף",lungSub:"סמן מה הרגשת",flip:"הפוך",lTreif:"טרף",lConfirm:"אישור לבודק חוץ",decSub:"פסוק סטטוס כשרות סופי",dGlatt:"גלאט",dBeit:"בית יוסף",dKosher:"כשר",dMk:"MK",dTreif:"טרף",nsTitle:"אי אפשר לדלג!",nsDesc:"חייבים ללכת לפי הסדר.",wTitle:"שינוי סטטוס",wCancel:"ביטול",tap:"לחץ לעריכה",stSlaughtered:"נשחט",stDone:"בוצע",stTreif:"טרף",stPending:"ממתין",stGlatt:"גלאט",stBeit:"ב״י",stKosher:"כשר",stMk:"MK",stNev:"נבלה",welcome:"ברוך הבא",    mgrFuncSlaughter:"שחיטה",    mgrFuncLegs:"רגלים",    mgrFuncInspection:"בדיקות",    mgrFuncParts:"חלקים",    mgrFuncStamps:"חותמות",    mgrFuncCooler:"קולר",    mgrBeepLabel:"ציפצוף שחיטה",    mgrBeepSec:"שניות",    mgrLegsMode:"מצב הדפסה:",    mgrLegsStickers:"מדבקות רגלים:",    mgrHeadStickers:"מדבקות ראש:",    mgrPartsStickers:"מדבקות לבהמה:",    mgrPartsDefault:"ברירת מחדל: 3 (2 לחיים + 1 לשון)",    mgrStampsStickers:"מדבקות לבהמה:",    mgrFloatLabel:"חלונות צפים",    mgrLungLabel:"בדיקת ריאות",    mgrMawLabel:"בדיקת בית הכוסות",    mgrRumenLabel:"בדיקת כרסים",    mgrRumenSub:"אמריקה הדרומית",    mgrLoginMode:"מצב כניסה:",    mgrNoLogin:"ללא",    mgrNameOnly:"שם בלבד",    mgrCodeOnly:"קוד בלבד",    mgrNameCode:"שם + קוד",    mgrAddUser:"+ הוסף משתמש",    mgrSecLicense:"רישוי",    mgrLicStatus:"סטטוס",    mgrLicExpiry:"תפוגה",    mgrDailyTarget:"יעד יומי",    mgrSecFarmsTitle:"משקים",    mgrAddFarm:"+ הוסף משק",    mgrSecStickers:"הגדרות מדבקות",    mgrStickerSize:"גודל מדבקה (mm):",    mgrSealTitle:"סימני כשרות למדבקות:",    mgrSecLungImg:"תמונת ריאה לבדיקה",    mgrLungDesc:"מוצגת לבודקים — ניתן להחליף",    mgrLungReset:"↩ חזור לברירת מחדל",    mgrSecStatuses:"סטטוסי כשרות",    mgrStatusNote:"הסרת סטטוס תסיר אותו מכל המסכים",    mgrResetBtn:"איפוס יום",    mgrResetTitle:"איפוס",    mgrSecKosher:"סיכום כשרות",    mgrSecPct:"אחוזים",    mgrSecWorkers:"שוחטים",    mgrSecInspectors:"בודקים / משגיחים",    mgrSecFarmSum:"כמות לפי משק",    mgrSecAnimal:"סיכום לפי זן בהמה",    mgrSecPie:"תרשים כשרות",    mgrSecBar:"שחיטה לפי שעה",    mgrSecTrend:"מגמה שבועית",    mgrSubReprint:"הדפסות חוזרות",    mgrSubErrors:"שגיאות",    mgrSubAi:"AI עוזר",    mgrAiTitle:"עוזר AI",    mgrAiBtn:"AI — נתח ותקן בעיות",    mgrAiSend:"שלח",    mgrClearLog:"נקה",    mgrSecLive:"ניטור חי",    mgrSecProgress:"התקדמות יומית",    mgrSecSearch:"חיפוש בהמה",    mgrSearchBtn:"חפש",    mgrSecProblems:"דיווח בעיה",    mgrScreensTitle:"מסכי השגחה",    mgrTabMonitor:"ניטור",    mgrTabSettings:"הגדרות",    mgrTabSummaries:"סיכומים",    mgrTabReports:"דוחות",    mgrTabLog:"יומן",    mgrSubScreens:"מסכים",    mgrSubFunctions:"פונקציות",    mgrSubUsers:"משתמשים",    mgrSubSystem:"מערכת",    mgrSubKosher:"כשרות",    mgrSubWorkers:"עובדים",    mgrSubFarms:"משקים",    mgrSubAnimals:"זני בהמה",    mgrSubPie:"עוגה",    mgrSubHourly:"שעתי",    mgrSubTrend:"מגמה",    mgrSecDaily:"קבלת בהמות יומית",    lgTitle:"משגיח רגלים / ראש",    loginBtn:"כניסה למערכת",    sys:"מחובר לרשת",    slTitle:"מסך שחיטה",    partsSubTitle:"לשון ולחיים — סריקה",    scanPrompt:"סרוק ברקוד או לחץ על מספר",    stampsScanPromptTxt:"סרוק QR של הבהמה",    stampsSubTitle:"סריקת QR ← מדבקות כשרות",    partsD:"לשון ולחיים",    stampsTitle:"חותמות",    stampsD:"חותמות ומדבקות כשרות",    esoTitle:"בדיקת וושט",    esoDesc:"משגיח — פסילת נבלה",
+  he:{brand:"מערכת שחיטה כשרה",online:"מחובר לרשת",sync:"סנכרון פעיל",mgmt:"ניהול",work:"מסכי עבודה",mgr:"מסך ראש צוות",mgrD:"שליטה מלאה, הגדרות, סיכומים, הרשאות",sl:"שחיטה",slD:"נשחט / נבלה / ירוי",lg:"רגלים / ראש",lgD:"מדבקות ראשוניות",inner:"בודק פנים",innerD:"בדיקת ריאות",outer:"בודק חוץ",outerD:"פסיקת כשרות",parts:"חלקים קטנים",soon:"בקרוב",ready:"מוכן",syncInfo:"BroadcastChannel — עדכון בזמן אמת",reset:"איפוס יום",slS:"נשחט",slN:"נבלה",slSh:"ירוי",slTot:"סה״כ",lgWaiting:"ממתינים",lgDone:"טופלו",lgNev:"נבלה",lgTot:"סה״כ",inWaiting:"ממתינים",inDone:"לבודק חוץ",inTreif:"טרף",inTot:"סה״כ",outPend:"ממתינים",outTr:"טרף",mawSub:"בדיקת בית הכוסות",rumenLabel:"בדיקת כרסים (ד.א.)",mawK:"כשר",mawT:"טרף",lungSub:"סמן מה הרגשת",flip:"הפוך",lTreif:"טרף",lConfirm:"אישור לבודק חוץ",decSub:"פסוק סטטוס כשרות סופי",dGlatt:"גלאט",dBeit:"בית יוסף",dKosher:"כשר",dMk:"MK",dTreif:"טרף",nsTitle:"אי אפשר לדלג!",nsDesc:"חייבים ללכת לפי הסדר.",wTitle:"שינוי סטטוס",wCancel:"ביטול",tap:"לחץ לעריכה",stSlaughtered:"נשחט",stDone:"בוצע",stTreif:"טרף",stPending:"ממתין",stGlatt:"גלאט",stBeit:"ב״י",stKosher:"כשר",stMk:"MK",stNev:"נבלה",welcome:"ברוך הבא",    mgrFuncSlaughter:"שחיטה",    mgrFuncLegs:"רגלים",    mgrFuncInspection:"בדיקות",    mgrFuncParts:"חלקים",    mgrFuncStamps:"חותמות",    mgrFuncCooler:"קולר / ניקור",    mgrBeepLabel:"ציפצוף שחיטה",    mgrBeepSec:"שניות",    mgrLegsMode:"מצב הדפסה:",    mgrLegsStickers:"מדבקות רגלים:",    mgrHeadStickers:"מדבקות ראש:",    mgrPartsStickers:"מדבקות לבהמה:",    mgrPartsDefault:"ברירת מחדל: 3 (2 לחיים + 1 לשון)",    mgrStampsStickers:"מדבקות לבהמה:",    mgrFloatLabel:"חלונות צפים",    mgrLungLabel:"בדיקת ריאות",    mgrMawLabel:"בדיקת בית הכוסות",    mgrRumenLabel:"בדיקת כרסים",    mgrRumenSub:"אמריקה הדרומית",    mgrLoginMode:"מצב כניסה:",    mgrNoLogin:"ללא",    mgrNameOnly:"שם בלבד",    mgrCodeOnly:"קוד בלבד",    mgrNameCode:"שם + קוד",    mgrAddUser:"+ הוסף משתמש",    mgrSecLicense:"רישוי",    mgrLicStatus:"סטטוס",    mgrLicExpiry:"תפוגה",    mgrDailyTarget:"יעד יומי",    mgrSecFarmsTitle:"משקים",    mgrAddFarm:"+ הוסף משק",    mgrSecStickers:"הגדרות מדבקות",    mgrStickerSize:"גודל מדבקה (mm):",    mgrSealTitle:"סימני כשרות למדבקות:",    mgrSecLungImg:"תמונת ריאה לבדיקה",    mgrLungDesc:"מוצגת לבודקים — ניתן להחליף",    mgrLungReset:"↩ חזור לברירת מחדל",    mgrSecStatuses:"סטטוסי כשרות",    mgrStatusNote:"הסרת סטטוס תסיר אותו מכל המסכים",    mgrResetBtn:"איפוס יום",    mgrResetTitle:"איפוס",    mgrSecKosher:"סיכום כשרות",    mgrSecPct:"אחוזים",    mgrSecWorkers:"שוחטים",    mgrSecInspectors:"בודקים / משגיחים",    mgrSecFarmSum:"כמות לפי משק",    mgrSecAnimal:"סיכום לפי זן בהמה",    mgrSecPie:"תרשים כשרות",    mgrSecBar:"שחיטה לפי שעה",    mgrSecTrend:"מגמה שבועית",    mgrSubReprint:"הדפסות חוזרות",    mgrSubErrors:"שגיאות",    mgrSubAi:"AI עוזר",    mgrAiTitle:"עוזר AI",    mgrAiBtn:"AI — נתח ותקן בעיות",    mgrAiSend:"שלח",    mgrClearLog:"נקה",    mgrSecLive:"ניטור חי",    mgrSecProgress:"התקדמות יומית",    mgrSecSearch:"חיפוש בהמה",    mgrSearchBtn:"חפש",    mgrSecProblems:"דיווח בעיה",    mgrScreensTitle:"מסכי השגחה",    mgrTabMonitor:"ניטור",    mgrTabSettings:"הגדרות",    mgrTabSummaries:"סיכומים",    mgrTabReports:"דוחות",    mgrTabLog:"יומן",    mgrSubScreens:"מסכים",    mgrSubFunctions:"פונקציות",    mgrSubUsers:"משתמשים",    mgrSubSystem:"מערכת",    mgrSubKosher:"כשרות",    mgrSubWorkers:"עובדים",    mgrSubFarms:"משקים",    mgrSubAnimals:"זני בהמה",    mgrSubPie:"עוגה",    mgrSubHourly:"שעתי",    mgrSubTrend:"מגמה",    mgrSecDaily:"קבלת בהמות יומית",    lgTitle:"משגיח רגלים / ראש",    loginBtn:"כניסה למערכת",    sys:"מחובר לרשת",    slTitle:"מסך שחיטה",    partsSubTitle:"לשון ולחיים — סריקה",    scanPrompt:"סרוק ברקוד או לחץ על מספר",    stampsScanPromptTxt:"סרוק QR של הבהמה",    stampsSubTitle:"סריקת QR ← מדבקות כשרות",    partsD:"לשון ולחיים",    stampsTitle:"חותמות",    stampsD:"חותמות ומדבקות כשרות",    esoTitle:"בדיקת וושט",    esoDesc:"משגיח — פסילת נבלה",
         perDay:"יום",    perWeek:"שבוע",    perMonth:"חודש",    perYear:"שנה",    defineUsers:"הגדר משתמשים בהגדרות",    noWorkers:"אין עובדים מוגדרים",
         slaughtered:"נשחט",
     nevela:"נבלה",
@@ -6467,7 +6487,7 @@ const T={
     loginBtn:"כניסה למערכת",partsSubTitle:"לשון ולחיים — סריקה",stampsSubTitle:"QR ← מדבקות כשרות",
     scanPrompt:"סרוק ברקוד או לחץ על מספר",stampsScanPromptTxt:"סרוק QR של הבהמה",
     slTitle:"מסך שחיטה",lgTitle:"משגיח רגלים / ראש",inTitle:"בודק פנים",outTitle:"בודק חוץ"},
-  en:{brand:"Kosher Slaughter System",online:"Connected",sync:"Sync Active",mgmt:"MANAGEMENT",work:"WORK SCREENS",mgr:"Team Leader",mgrD:"Full control, settings, summaries",sl:"Slaughter",slD:"Slaughtered / Nevela / Shot",lg:"Legs / Head",lgD:"Initial stickers",inner:"Inner Inspector",innerD:"Lung check",outer:"Outer Inspector",outerD:"Final ruling",parts:"Small Parts",soon:"Soon",ready:"Ready",syncInfo:"BroadcastChannel — Real-time sync",reset:"Reset Day",slS:"Slaughtered",slN:"Nevela",slSh:"Shot",slTot:"Total",lgWaiting:"Waiting",lgDone:"Done",lgNev:"Nevela",lgTot:"Total",inWaiting:"Waiting",inDone:"To outer",inTreif:"Treif",inTot:"Total",outPend:"Pending",outTr:"Treif",mawSub:"Maw Check",rumenLabel:"Rumen Check (S.A.)",mawK:"Kosher",mawT:"Treif",lungSub:"Mark what you felt",flip:"Flip",lTreif:"Treif",lConfirm:"Confirm to Outer",decSub:"Issue final kosher ruling",dGlatt:"Glatt",dBeit:"Beit Yosef",dKosher:"Kosher",dMk:"MK",dTreif:"Treif",nsTitle:"Cannot Skip!",nsDesc:"Must follow the order.",wTitle:"Change Status",wCancel:"Cancel",tap:"Tap to edit",stSlaughtered:"Slaughtered",stDone:"Done",stTreif:"Treif",stPending:"Pending",stGlatt:"Glatt",stBeit:"B.Y.",stKosher:"Kosher",stMk:"MK",stNev:"Nevela",welcome:"Welcome",    mgrFuncSlaughter:"Slaughter",    mgrFuncLegs:"Legs",    mgrFuncInspection:"Inspection",    mgrFuncParts:"Small Parts",    mgrFuncStamps:"Stamps",    mgrFuncCooler:"Cooler",    mgrBeepLabel:"Slaughter Beep",    mgrBeepSec:"Seconds",    mgrLegsMode:"Print mode:",    mgrLegsStickers:"Leg stickers:",    mgrHeadStickers:"Head stickers:",    mgrPartsStickers:"Stickers per animal:",    mgrPartsDefault:"Default: 3 (2 cheeks + 1 tongue)",    mgrStampsStickers:"Stickers per animal:",    mgrFloatLabel:"Floating Windows",    mgrLungLabel:"Lung Check",    mgrMawLabel:"Maw Check",    mgrRumenLabel:"Rumen Check",    mgrRumenSub:"South America",    mgrLoginMode:"Login mode:",    mgrNoLogin:"None",    mgrNameOnly:"Name only",    mgrCodeOnly:"Code only",    mgrNameCode:"Name + Code",    mgrAddUser:"+ Add User",    mgrSecLicense:"License",    mgrLicStatus:"Status",    mgrLicExpiry:"Expiry",    mgrDailyTarget:"Daily target",    mgrSecFarmsTitle:"Farms",    mgrAddFarm:"+ Add Farm",    mgrSecStickers:"Sticker Settings",    mgrStickerSize:"Sticker size (mm):",    mgrSealTitle:"Kosher Seals for Stickers:",    mgrSecLungImg:"Lung Image",    mgrLungDesc:"Shown to inspectors — replaceable",    mgrLungReset:"↩ Reset to Default",    mgrSecStatuses:"Kosher Statuses",    mgrStatusNote:"Disabling removes from all screens",    mgrResetBtn:"Reset Day",    mgrResetTitle:"Reset",    mgrSecKosher:"Kosher Summary",    mgrSecPct:"Percentages",    mgrSecWorkers:"Slaughterers",    mgrSecInspectors:"Inspectors / Supervisors",    mgrSecFarmSum:"Count by Farm",    mgrSecAnimal:"By Breed",    mgrSecPie:"Kosher Chart",    mgrSecBar:"Slaughter by Hour",    mgrSecTrend:"Weekly Trend",    mgrSubReprint:"Reprints",    mgrSubErrors:"Errors",    mgrSubAi:"AI Assistant",    mgrAiTitle:"AI Assistant",    mgrAiBtn:"AI — Analyze Problems",    mgrAiSend:"Send",    mgrClearLog:"Clear",    mgrSecLive:"Live Monitor",    mgrSecProgress:"Daily Progress",    mgrSecSearch:"Search Animal",    mgrSearchBtn:"Search",    mgrSecProblems:"Problem Reports",    mgrScreensTitle:"Supervision Screens",    mgrTabMonitor:"Monitor",    mgrTabSettings:"Settings",    mgrTabSummaries:"Summaries",    mgrTabReports:"Reports",    mgrTabLog:"Log",    mgrSubScreens:"Screens",    mgrSubFunctions:"Functions",    mgrSubUsers:"Users",    mgrSubSystem:"System",    mgrSubKosher:"Kosher",    mgrSubWorkers:"Workers",    mgrSubFarms:"Farms",    mgrSubAnimals:"Breeds",    mgrSubPie:"Pie",    mgrSubHourly:"Hourly",    mgrSubTrend:"Trend",    mgrSecDaily:"Daily Intake",    lgTitle:"Legs / Head Inspector",    loginBtn:"Enter System",    sys:"Connected",    slTitle:"Slaughter Screen",    partsSubTitle:"Tongue & Cheeks — Scan",    scanPrompt:"Scan or tap number",    stampsScanPromptTxt:"Scan animal QR",    stampsSubTitle:"QR → Kosher Stickers",    partsD:"Tongue & Cheeks",    stampsTitle:"Stamps",    stampsD:"Stamps and kosher stickers",    esoTitle:"Esophagus Check",    esoDesc:"Supervisor — Nevela disqualification",
+  en:{brand:"Kosher Slaughter System",online:"Connected",sync:"Sync Active",mgmt:"MANAGEMENT",work:"WORK SCREENS",mgr:"Team Leader",mgrD:"Full control, settings, summaries",sl:"Slaughter",slD:"Slaughtered / Nevela / Shot",lg:"Legs / Head",lgD:"Initial stickers",inner:"Inner Inspector",innerD:"Lung check",outer:"Outer Inspector",outerD:"Final ruling",parts:"Small Parts",soon:"Soon",ready:"Ready",syncInfo:"BroadcastChannel — Real-time sync",reset:"Reset Day",slS:"Slaughtered",slN:"Nevela",slSh:"Shot",slTot:"Total",lgWaiting:"Waiting",lgDone:"Done",lgNev:"Nevela",lgTot:"Total",inWaiting:"Waiting",inDone:"To outer",inTreif:"Treif",inTot:"Total",outPend:"Pending",outTr:"Treif",mawSub:"Maw Check",rumenLabel:"Rumen Check (S.A.)",mawK:"Kosher",mawT:"Treif",lungSub:"Mark what you felt",flip:"Flip",lTreif:"Treif",lConfirm:"Confirm to Outer",decSub:"Issue final kosher ruling",dGlatt:"Glatt",dBeit:"Beit Yosef",dKosher:"Kosher",dMk:"MK",dTreif:"Treif",nsTitle:"Cannot Skip!",nsDesc:"Must follow the order.",wTitle:"Change Status",wCancel:"Cancel",tap:"Tap to edit",stSlaughtered:"Slaughtered",stDone:"Done",stTreif:"Treif",stPending:"Pending",stGlatt:"Glatt",stBeit:"B.Y.",stKosher:"Kosher",stMk:"MK",stNev:"Nevela",welcome:"Welcome",    mgrFuncSlaughter:"Slaughter",    mgrFuncLegs:"Legs",    mgrFuncInspection:"Inspection",    mgrFuncParts:"Small Parts",    mgrFuncStamps:"Stamps",    mgrFuncCooler:"Cooler / nikur",    mgrBeepLabel:"Slaughter Beep",    mgrBeepSec:"Seconds",    mgrLegsMode:"Print mode:",    mgrLegsStickers:"Leg stickers:",    mgrHeadStickers:"Head stickers:",    mgrPartsStickers:"Stickers per animal:",    mgrPartsDefault:"Default: 3 (2 cheeks + 1 tongue)",    mgrStampsStickers:"Stickers per animal:",    mgrFloatLabel:"Floating Windows",    mgrLungLabel:"Lung Check",    mgrMawLabel:"Maw Check",    mgrRumenLabel:"Rumen Check",    mgrRumenSub:"South America",    mgrLoginMode:"Login mode:",    mgrNoLogin:"None",    mgrNameOnly:"Name only",    mgrCodeOnly:"Code only",    mgrNameCode:"Name + Code",    mgrAddUser:"+ Add User",    mgrSecLicense:"License",    mgrLicStatus:"Status",    mgrLicExpiry:"Expiry",    mgrDailyTarget:"Daily target",    mgrSecFarmsTitle:"Farms",    mgrAddFarm:"+ Add Farm",    mgrSecStickers:"Sticker Settings",    mgrStickerSize:"Sticker size (mm):",    mgrSealTitle:"Kosher Seals for Stickers:",    mgrSecLungImg:"Lung Image",    mgrLungDesc:"Shown to inspectors — replaceable",    mgrLungReset:"↩ Reset to Default",    mgrSecStatuses:"Kosher Statuses",    mgrStatusNote:"Disabling removes from all screens",    mgrResetBtn:"Reset Day",    mgrResetTitle:"Reset",    mgrSecKosher:"Kosher Summary",    mgrSecPct:"Percentages",    mgrSecWorkers:"Slaughterers",    mgrSecInspectors:"Inspectors / Supervisors",    mgrSecFarmSum:"Count by Farm",    mgrSecAnimal:"By Breed",    mgrSecPie:"Kosher Chart",    mgrSecBar:"Slaughter by Hour",    mgrSecTrend:"Weekly Trend",    mgrSubReprint:"Reprints",    mgrSubErrors:"Errors",    mgrSubAi:"AI Assistant",    mgrAiTitle:"AI Assistant",    mgrAiBtn:"AI — Analyze Problems",    mgrAiSend:"Send",    mgrClearLog:"Clear",    mgrSecLive:"Live Monitor",    mgrSecProgress:"Daily Progress",    mgrSecSearch:"Search Animal",    mgrSearchBtn:"Search",    mgrSecProblems:"Problem Reports",    mgrScreensTitle:"Supervision Screens",    mgrTabMonitor:"Monitor",    mgrTabSettings:"Settings",    mgrTabSummaries:"Summaries",    mgrTabReports:"Reports",    mgrTabLog:"Log",    mgrSubScreens:"Screens",    mgrSubFunctions:"Functions",    mgrSubUsers:"Users",    mgrSubSystem:"System",    mgrSubKosher:"Kosher",    mgrSubWorkers:"Workers",    mgrSubFarms:"Farms",    mgrSubAnimals:"Breeds",    mgrSubPie:"Pie",    mgrSubHourly:"Hourly",    mgrSubTrend:"Trend",    mgrSecDaily:"Daily Intake",    lgTitle:"Legs / Head Inspector",    loginBtn:"Enter System",    sys:"Connected",    slTitle:"Slaughter Screen",    partsSubTitle:"Tongue & Cheeks — Scan",    scanPrompt:"Scan or tap number",    stampsScanPromptTxt:"Scan animal QR",    stampsSubTitle:"QR → Kosher Stickers",    partsD:"Tongue & Cheeks",    stampsTitle:"Stamps",    stampsD:"Stamps and kosher stickers",    esoTitle:"Esophagus Check",    esoDesc:"Supervisor — Nevela disqualification",
         perDay:"Day",    perWeek:"Week",    perMonth:"Month",    perYear:"Year",    defineUsers:"Define users in Settings",    noWorkers:"No workers defined",
         slaughtered:"Slaughtered",
     nevela:"Nevela",
@@ -6552,7 +6572,7 @@ const T={
     loginBtn:"Enter System",partsSubTitle:"Tongue & Cheeks — Scan",stampsSubTitle:"QR ← Kosher Stickers",
     scanPrompt:"Scan barcode or tap number",stampsScanPromptTxt:"Scan animal QR",
     slTitle:"Slaughter Screen",lgTitle:"Legs / Head Inspector",inTitle:"Inner Inspector",outTitle:"Outer Inspector"},
-  es:{brand:"Sistema Matanza Kosher",online:"Conectado",sync:"Sincronización Activa",mgmt:"GESTIÓN",work:"PANTALLAS",mgr:"Jefe de equipo",mgrD:"Control total, configuración",sl:"Matanza",slD:"Sacrificado / Nevela / Baleado",lg:"Patas / Cabeza",lgD:"Etiquetas iniciales",inner:"Inspector Interno",innerD:"Revisión pulmón",outer:"Inspector Externo",outerD:"Fallo final",parts:"Partes Pequeñas",soon:"Próximo",ready:"Listo",syncInfo:"BroadcastChannel — Sincronización",reset:"Resetear Día",slS:"Faenado",slN:"Nevela",slSh:"Baleado",slTot:"Total",lgWaiting:"Esperando",lgDone:"Listo",lgNev:"Nevela",lgTot:"Total",inWaiting:"Esperando",inDone:"Al externo",inTreif:"Treif",inTot:"Total",outPend:"Esperando",outTr:"Treif",mawSub:"Revisión Cuajar",rumenLabel:"Revisión Panza (A.S.)",mawK:"Kosher",mawT:"Treif",lungSub:"Marque lo que sintió",flip:"Voltear",lTreif:"Treif",lConfirm:"Confirmar al Externo",decSub:"Emitir fallo kosher final",dGlatt:"Glatt",dBeit:"Beit Yosef",dKosher:"Kosher",dMk:"MK",dTreif:"Treif",nsTitle:"No se puede saltar!",nsDesc:"Debe seguir el orden.",wTitle:"Cambiar Estado",wCancel:"Cancelar",tap:"Toca para editar",stSlaughtered:"Sacrificado",stDone:"Listo",stTreif:"Treif",stPending:"Pendiente",stGlatt:"Glatt",stBeit:"B.Y.",stKosher:"Kosher",stMk:"MK",stNev:"Nevela",welcome:"Bienvenido",    mgrFuncSlaughter:"Matanza",    mgrFuncLegs:"Patas",    mgrFuncInspection:"Inspección",    mgrFuncParts:"Partes Peq.",    mgrFuncStamps:"Sellos",    mgrFuncCooler:"Cámara",    mgrBeepLabel:"Pitido",    mgrBeepSec:"Segundos",    mgrLegsMode:"Modo impresión:",    mgrLegsStickers:"Etiquetas patas:",    mgrHeadStickers:"Etiquetas cabeza:",    mgrPartsStickers:"Etiquetas/animal:",    mgrPartsDefault:"Predeterminado: 3",    mgrStampsStickers:"Etiquetas/animal:",    mgrFloatLabel:"Ventanas flotantes",    mgrLungLabel:"Revisión pulmón",    mgrMawLabel:"Revisión cuajar",    mgrRumenLabel:"Revisión panza",    mgrRumenSub:"América del Sur",    mgrLoginMode:"Modo acceso:",    mgrNoLogin:"Sin acceso",    mgrNameOnly:"Solo nombre",    mgrCodeOnly:"Solo código",    mgrNameCode:"Nombre + Código",    mgrAddUser:"+ Agregar Usuario",    mgrSecLicense:"Licencia",    mgrLicStatus:"Estado",    mgrLicExpiry:"Vencimiento",    mgrDailyTarget:"Meta diaria",    mgrSecFarmsTitle:"Granjas",    mgrAddFarm:"+ Agregar Granja",    mgrSecStickers:"Etiquetas",    mgrStickerSize:"Tamaño etiqueta (mm):",    mgrSealTitle:"Sellos Kosher para Etiquetas:",    mgrSecLungImg:"Imagen Pulmón",    mgrLungDesc:"Mostrado a inspectores — reemplazable",    mgrLungReset:"↩ Restablecer",    mgrSecStatuses:"Estados Kosher",    mgrStatusNote:"Deshabilitar elimina de todas las pantallas",    mgrResetBtn:"Reiniciar Día",    mgrResetTitle:"Reiniciar",    mgrSecKosher:"Resumen Kosher",    mgrSecPct:"Porcentajes",    mgrSecWorkers:"Matarifes",    mgrSecInspectors:"Inspectores",    mgrSecFarmSum:"Por Granja",    mgrSecAnimal:"Por raza",    mgrSecPie:"Gráfico",    mgrSecBar:"Por Hora",    mgrSecTrend:"Tendencia",    mgrSubReprint:"Reimpresiones",    mgrSubErrors:"Errores",    mgrSubAi:"Asistente AI",    mgrAiTitle:"Asistente AI",    mgrAiBtn:"AI — Analizar",    mgrAiSend:"Enviar",    mgrClearLog:"Limpiar",    mgrSecLive:"Monitor en Vivo",    mgrSecProgress:"Progreso",    mgrSecSearch:"Buscar Animal",    mgrSearchBtn:"Buscar",    mgrSecProblems:"Reportes",    mgrScreensTitle:"Pantallas de Supervisión",    mgrTabMonitor:"Monitor",    mgrTabSettings:"Ajustes",    mgrTabSummaries:"Resúmenes",    mgrTabReports:"Informes",    mgrTabLog:"Registro",    mgrSubScreens:"Pantallas",    mgrSubFunctions:"Funciones",    mgrSubUsers:"Usuarios",    mgrSubSystem:"Sistema",    mgrSubKosher:"Kosher",    mgrSubWorkers:"Trabajadores",    mgrSubFarms:"Granjas",    mgrSubAnimals:"Razas",    mgrSubPie:"Pastel",    mgrSubHourly:"Por Hora",    mgrSubTrend:"Tendencia",    mgrSecDaily:"Ingreso Diario",    lgTitle:"Inspector Patas/Cabeza",    loginBtn:"Entrar al Sistema",    sys:"Conectado",    slTitle:"Pantalla Matanza",    partsSubTitle:"Lengua y Mejillas",    scanPrompt:"Escanear o tocar",    stampsScanPromptTxt:"Escanear QR animal",    stampsSubTitle:"QR → Etiquetas kosher",    partsD:"Lengua y Mejillas",    stampsTitle:"Sellos",    stampsD:"Sellos y etiquetas kosher",    esoTitle:"Revisión Esófago",    esoDesc:"Supervisor — Descalificación Nevela",
+  es:{brand:"Sistema Matanza Kosher",online:"Conectado",sync:"Sincronización Activa",mgmt:"GESTIÓN",work:"PANTALLAS",mgr:"Jefe de equipo",mgrD:"Control total, configuración",sl:"Matanza",slD:"Sacrificado / Nevela / Baleado",lg:"Patas / Cabeza",lgD:"Etiquetas iniciales",inner:"Inspector Interno",innerD:"Revisión pulmón",outer:"Inspector Externo",outerD:"Fallo final",parts:"Partes Pequeñas",soon:"Próximo",ready:"Listo",syncInfo:"BroadcastChannel — Sincronización",reset:"Resetear Día",slS:"Faenado",slN:"Nevela",slSh:"Baleado",slTot:"Total",lgWaiting:"Esperando",lgDone:"Listo",lgNev:"Nevela",lgTot:"Total",inWaiting:"Esperando",inDone:"Al externo",inTreif:"Treif",inTot:"Total",outPend:"Esperando",outTr:"Treif",mawSub:"Revisión Cuajar",rumenLabel:"Revisión Panza (A.S.)",mawK:"Kosher",mawT:"Treif",lungSub:"Marque lo que sintió",flip:"Voltear",lTreif:"Treif",lConfirm:"Confirmar al Externo",decSub:"Emitir fallo kosher final",dGlatt:"Glatt",dBeit:"Beit Yosef",dKosher:"Kosher",dMk:"MK",dTreif:"Treif",nsTitle:"No se puede saltar!",nsDesc:"Debe seguir el orden.",wTitle:"Cambiar Estado",wCancel:"Cancelar",tap:"Toca para editar",stSlaughtered:"Sacrificado",stDone:"Listo",stTreif:"Treif",stPending:"Pendiente",stGlatt:"Glatt",stBeit:"B.Y.",stKosher:"Kosher",stMk:"MK",stNev:"Nevela",welcome:"Bienvenido",    mgrFuncSlaughter:"Matanza",    mgrFuncLegs:"Patas",    mgrFuncInspection:"Inspección",    mgrFuncParts:"Partes Peq.",    mgrFuncStamps:"Sellos",    mgrFuncCooler:"Cámara / nikur",    mgrBeepLabel:"Pitido",    mgrBeepSec:"Segundos",    mgrLegsMode:"Modo impresión:",    mgrLegsStickers:"Etiquetas patas:",    mgrHeadStickers:"Etiquetas cabeza:",    mgrPartsStickers:"Etiquetas/animal:",    mgrPartsDefault:"Predeterminado: 3",    mgrStampsStickers:"Etiquetas/animal:",    mgrFloatLabel:"Ventanas flotantes",    mgrLungLabel:"Revisión pulmón",    mgrMawLabel:"Revisión cuajar",    mgrRumenLabel:"Revisión panza",    mgrRumenSub:"América del Sur",    mgrLoginMode:"Modo acceso:",    mgrNoLogin:"Sin acceso",    mgrNameOnly:"Solo nombre",    mgrCodeOnly:"Solo código",    mgrNameCode:"Nombre + Código",    mgrAddUser:"+ Agregar Usuario",    mgrSecLicense:"Licencia",    mgrLicStatus:"Estado",    mgrLicExpiry:"Vencimiento",    mgrDailyTarget:"Meta diaria",    mgrSecFarmsTitle:"Granjas",    mgrAddFarm:"+ Agregar Granja",    mgrSecStickers:"Etiquetas",    mgrStickerSize:"Tamaño etiqueta (mm):",    mgrSealTitle:"Sellos Kosher para Etiquetas:",    mgrSecLungImg:"Imagen Pulmón",    mgrLungDesc:"Mostrado a inspectores — reemplazable",    mgrLungReset:"↩ Restablecer",    mgrSecStatuses:"Estados Kosher",    mgrStatusNote:"Deshabilitar elimina de todas las pantallas",    mgrResetBtn:"Reiniciar Día",    mgrResetTitle:"Reiniciar",    mgrSecKosher:"Resumen Kosher",    mgrSecPct:"Porcentajes",    mgrSecWorkers:"Matarifes",    mgrSecInspectors:"Inspectores",    mgrSecFarmSum:"Por Granja",    mgrSecAnimal:"Por raza",    mgrSecPie:"Gráfico",    mgrSecBar:"Por Hora",    mgrSecTrend:"Tendencia",    mgrSubReprint:"Reimpresiones",    mgrSubErrors:"Errores",    mgrSubAi:"Asistente AI",    mgrAiTitle:"Asistente AI",    mgrAiBtn:"AI — Analizar",    mgrAiSend:"Enviar",    mgrClearLog:"Limpiar",    mgrSecLive:"Monitor en Vivo",    mgrSecProgress:"Progreso",    mgrSecSearch:"Buscar Animal",    mgrSearchBtn:"Buscar",    mgrSecProblems:"Reportes",    mgrScreensTitle:"Pantallas de Supervisión",    mgrTabMonitor:"Monitor",    mgrTabSettings:"Ajustes",    mgrTabSummaries:"Resúmenes",    mgrTabReports:"Informes",    mgrTabLog:"Registro",    mgrSubScreens:"Pantallas",    mgrSubFunctions:"Funciones",    mgrSubUsers:"Usuarios",    mgrSubSystem:"Sistema",    mgrSubKosher:"Kosher",    mgrSubWorkers:"Trabajadores",    mgrSubFarms:"Granjas",    mgrSubAnimals:"Razas",    mgrSubPie:"Pastel",    mgrSubHourly:"Por Hora",    mgrSubTrend:"Tendencia",    mgrSecDaily:"Ingreso Diario",    lgTitle:"Inspector Patas/Cabeza",    loginBtn:"Entrar al Sistema",    sys:"Conectado",    slTitle:"Pantalla Matanza",    partsSubTitle:"Lengua y Mejillas",    scanPrompt:"Escanear o tocar",    stampsScanPromptTxt:"Escanear QR animal",    stampsSubTitle:"QR → Etiquetas kosher",    partsD:"Lengua y Mejillas",    stampsTitle:"Sellos",    stampsD:"Sellos y etiquetas kosher",    esoTitle:"Revisión Esófago",    esoDesc:"Supervisor — Descalificación Nevela",
         perDay:"Día",    perWeek:"Semana",    perMonth:"Mes",    perYear:"Año",    defineUsers:"Definir usuarios en Ajustes",    noWorkers:"Sin trabajadores definidos",
         slaughtered:"Sacrificado",
     nevela:"Nevela",
@@ -8726,9 +8746,11 @@ async function _gtPrintBle(p,zpl){
 function _gtPrintSystem(items,wMM,hMM){
   let box=document.getElementById('gtStkPrint');
   if(!box){ box=document.createElement('div'); box.id='gtStkPrint'; box.setAttribute('data-no-i18n',''); document.body.appendChild(box); }
-  box.innerHTML=items.map(it=>{ const src=it.cv.toDataURL('image/png'); return Array.from({length:Math.max(1,it.copies||1)},()=>`<img src="${src}" style="width:${wMM}mm;height:${hMM}mm;display:block;page-break-after:always;break-after:page;">`).join(''); }).join('');
+  // (round-2 review A-pr3) each sticker its own page size (a test print mixes legs and kosher stickers)
+  const sz=[]; const pg=it=>{ const w=it.wMM||wMM, h=it.hMM||hMM; let k=sz.findIndex(x=>x[0]===w&&x[1]===h); if(k<0){ sz.push([w,h]); k=sz.length-1; } return [w,h,'gtStk'+k]; };
+  box.innerHTML=items.map(it=>{ const src=it.cv.toDataURL('image/png'), P=pg(it); return Array.from({length:Math.max(1,it.copies||1)},()=>`<img src="${src}" style="width:${P[0]}mm;height:${P[1]}mm;display:block;page:${P[2]};page-break-after:always;break-after:page;">`).join(''); }).join('');
   let st=document.getElementById('gtStkPage'); if(!st){ st=document.createElement('style'); st.id='gtStkPage'; document.head.appendChild(st); }
-  st.textContent=`#gtStkPrint{display:none}@media print{@page{size:${wMM}mm ${hMM}mm;margin:0}body.gt-stk-printing *{visibility:hidden !important}`
+  st.textContent=`#gtStkPrint{display:none}@media print{@page{size:${wMM}mm ${hMM}mm;margin:0}${sz.map((x,k)=>`@page gtStk${k}{size:${x[0]}mm ${x[1]}mm;margin:0}`).join('')}body.gt-stk-printing *{visibility:hidden !important}`
     +`body.gt-stk-printing #gtStkPrint,body.gt-stk-printing #gtStkPrint *{visibility:visible !important}body.gt-stk-printing #gtStkPrint{display:block !important;position:absolute;left:0;top:0}}`;
   document.body.classList.add('gt-stk-printing');
   const done=()=>{ document.body.classList.remove('gt-stk-printing'); window.removeEventListener('afterprint',done); };
@@ -8742,7 +8764,7 @@ async function gtPrintStickers(key,jobs,o){
   const p=o.printer?_gtPrNorm(o.printer):gtPrinterFor(key);
   if(!p){ if(!o.quiet) _gtPrintMsg(L('🖨 אין מדפסת למסך הזה — המדבקות לא הודפסו. ראש הצוות משייך מדפסת: הגדרות ← מדפסות.','🖨 No printer for this screen — the stickers were not printed. The team leader sets one: Settings → Printers.','🖨 No hay impresora para esta pantalla — no se imprimió. El jefe de equipo la asigna: Ajustes → Impresoras.'),true); return {ok:false,error:'no_printer'}; }
   try{
-    const items=[]; for(const j of jobs){ items.push({cv:await gtStickerCanvas(j.idx,j.kind,j.piece,j.sample), copies:j.copies||1, kind:j.kind}); }
+    const items=[]; for(const j of jobs){ const Dj=_gtStickerData(j.idx,j.kind,j.sample,j.piece); items.push({cv:await gtStickerCanvas(j.idx,j.kind,j.piece,j.sample), copies:j.copies||1, kind:j.kind, wMM:Dj&&Dj.wMM, hMM:Dj&&Dj.hMM}); }
     if(!items.length) return {ok:true};
     const D=_gtStickerData(jobs[0].idx,jobs[0].kind,jobs[0].sample,jobs[0].piece);
     if(p.conn==='system') _gtPrintSystem(items,D.wMM,D.hMM);
@@ -8785,7 +8807,7 @@ async function gtPrintGate(key,jobs,commit){
     try{ if(window.sb){ const r=await window.sb.rpc('server_test_mode'); if(!r.error) test = r.data===true; } }catch(e){}
     if(test){ commit(); _gtPrintMsg('🧪 '+L('מצב בדיקה — הודפס וירטואלית (אין מדפסת למסך הזה).','Test mode — printed virtually (no printer for this screen).','Modo de prueba — impreso virtualmente (sin impresora).'),false);
       gtVirtualPrint(jobs); return true; }
-    _gtPrintMsg('🖨 '+L('אין מדפסת למסך הזה — לא סומן. קראו לראש הצוות (הגדרות ← מדפסות ← שיוך לכל מסך).','No printer for this screen — not marked. Call the team leader (Settings → Printers → Assign to each screen).','No hay impresora para esta pantalla — no marcado. Llame al jefe de equipo.'),true+(window.GT_SERVER?'':L(' · לבדיקה בלי מדפסות: להפעיל מצב בדיקה בשרת (test-mode-on.sql) — 8 שעות.',' · Testing without printers: turn on test mode on the server (test-mode-on.sql) — 8 hours.',' · Prueba sin impresoras: active el modo de prueba (test-mode-on.sql).')));
+    _gtPrintMsg('🖨 '+L('אין מדפסת למסך הזה — לא סומן. קראו לראש הצוות (הגדרות ← מדפסות ← שיוך לכל מסך).','No printer for this screen — not marked. Call the team leader (Settings → Printers → Assign to each screen).','No hay impresora para esta pantalla — no marcado. Llame al jefe de equipo.')+(window.GT_SERVER?'':L(' · לבדיקה בלי מדפסות: להפעיל מצב בדיקה בשרת (test-mode-on.sql) — 8 שעות.',' · Testing without printers: turn on test mode on the server (test-mode-on.sql) — 8 hours.',' · Prueba sin impresoras: active el modo de prueba (test-mode-on.sql).')),true);   // (round-2 review A-pr1) the test-mode hint is part of the text
     return false;
   }
   _gtPrintBusy=true; if(p.conn!=='system') _gtPrintingShow(true,p);
@@ -8968,8 +8990,9 @@ async function gtPrinterScan(){
               :`<button onclick='gtPrinterAddFound(${_jsArg(p.ip)},${Number(p.port)||9100},${_jsArg(p.model||'')})' style="padding:7px 12px;border-radius:7px;border:none;background:var(--gold);color:#07090F;font-weight:700;cursor:pointer;">${escapeHtml(L('הוסף','Add','Agregar'))}</button>`}</div>`; }).join('')
     : '<div style="font-size:12px;color:var(--amber,#F0A030);line-height:1.5;">'+escapeHtml(L('לא נמצאה מדפסת מדבקות ברשת. בדקו שהמדפסת דולקת ומחוברת לאותה רשת (Wi-Fi / כבל) כמו שרת המפעל — או הוסיפו לפי כתובת IP. מדפסת משרדית רגילה: דרך "מסך ההדפסה של המכשיר".','No label printer found on the network. Check that it is on and connected to the same network as the plant server — or add it by IP address. An ordinary office printer: through "the device\'s print screen".','No se encontró impresora. Revise que esté encendida y en la misma red — o agréguela por IP.'))+'</div>';
 }
-function gtPrinterAddFound(ip,port,model){ const d=_gtPrinterAdd({name:model||L('מדפסת ','Printer ','Impresora ')+ip, conn:'network', ip, port:port||9100}); if(d){ gtPrinterScanRedraw(); if(confirm(L('להדפיס מדבקת ניסיון עכשיו?','Print a test sticker now?','¿Imprimir una etiqueta de prueba ahora?'))) gtPrinterTest(d.id); } }
-function gtPrinterScanRedraw(){ const b=document.getElementById('gtPrScanRes'); if(b) b.querySelectorAll('button').forEach(x=>{ if(/הוסף|Add|Agregar/.test(x.textContent)) x.disabled=true; }); }
+function gtPrinterAddFound(ip,port,model){ const d=_gtPrinterAdd({name:model||L('מדפסת ','Printer ','Impresora ')+ip, conn:'network', ip, port:port||9100}); if(d){ gtPrinterScanRedraw(ip); if(confirm(L('להדפיס מדבקת ניסיון עכשיו?','Print a test sticker now?','¿Imprimir una etiqueta de prueba ahora?'))) gtPrinterTest(d.id); } }
+// (round-2 review A-pr2) only the found printer that was just added gets its "Add" button disabled
+function gtPrinterScanRedraw(ip){ const b=document.getElementById('gtPrScanRes'); if(b) b.querySelectorAll('button').forEach(x=>{ if(/הוסף|Add|Agregar/.test(x.textContent) && (!ip || String(x.getAttribute('onclick')||'').includes(JSON.stringify(String(ip))+','))) x.disabled=true; }); }
 async function gtPrinterAddBle(){
   try{ const dev=await gtBlePick(); const d=_gtPrinterAdd({name:dev.name||'Bluetooth', conn:'bluetooth', bleId:dev.id});
        if(d && confirm(L('להדפיס מדבקת ניסיון עכשיו?','Print a test sticker now?','¿Imprimir una etiqueta de prueba ahora?'))) gtPrinterTest(d.id); }
@@ -9372,14 +9395,16 @@ function lgDoReprint(step){
   document.getElementById("lgRpModal").classList.remove("open");
   if(lgReprintIdx<0)return;
   {const _h=gtHeldAt(lgReprintIdx,'legs'); if(_h){ const _i=lgReprintIdx; lgReprintIdx=-1; lgShowWarn(_gtHoldTitle(_h), _gtHoldReprintText(_i)); return; }}
-  // Log reprint
-  const logs=KS.getSettings().reprintLog||[];
-  logs.push({idx:lgReprintIdx+1,step,screen:(step==="legs"?"רגלים":"ראש"),time:new Date().toLocaleTimeString("he-IL")});
-  KS.updateSettings({reprintLog:logs.slice(-2000)});   // (improvement round) only the newest 2000 lines
-  // v10.37: also an append-only event — two stations reprinting at the same moment each sent their own copy of
-  // the whole log, and one copy overwrote the other (a reprint is a kashrut audit line, it must not be lost)
-  try{ const _e=logs[logs.length-1]||{}; KS.recordOwnEvent && KS.recordOwnEvent('reprint', Object.assign({ step: _e.step||null }, _e), (_e.idx!=null && isFinite(Number(_e.idx))) ? Number(_e.idx) : null); }catch(e){}
-  { const _i=lgReprintIdx; gtPrintGate('legs',[{idx:_i, kind:step, copies:_gtLgCount(step)}],()=>showPrintPopup(_i,step,true)); }   // (round 23)
+  // (round-2 review A-lg1) the reprint is logged only once the stickers really went to the printer
+  const _logReprint=(_i)=>{
+    const logs=KS.getSettings().reprintLog||[];
+    logs.push({idx:_i+1,step,screen:(step==="legs"?"רגלים":"ראש"),time:new Date().toLocaleTimeString("he-IL")});
+    KS.updateSettings({reprintLog:logs.slice(-2000)});   // (improvement round) only the newest 2000 lines
+    // v10.37: also an append-only event — two stations reprinting at the same moment each sent their own copy of
+    // the whole log, and one copy overwrote the other (a reprint is a kashrut audit line, it must not be lost)
+    try{ const _e=logs[logs.length-1]||{}; KS.recordOwnEvent && KS.recordOwnEvent('reprint', Object.assign({ step: _e.step||null }, _e), (_e.idx!=null && isFinite(Number(_e.idx))) ? Number(_e.idx) : null); }catch(e){}
+  };
+  { const _i=lgReprintIdx; gtPrintGate('legs',[{idx:_i, kind:step, copies:_gtLgCount(step)}],()=>{ _logReprint(_i); showPrintPopup(_i,step,true); }); }   // (round 23)
   lgReprintIdx=-1;
 }
 function lgPrevPage(){if(lgPage>0){lgManualPage=true;lgPage--;lgRenderGrid();}}
@@ -10413,8 +10438,14 @@ function _gtArchAnimals(day){
   return arr;
 }
 // every slaughtered animal of [from, to] (archived days + today's live board)
+// (round-2 review A-ux3b) "today" of the summaries / search = the plant's day (its time zone and reset hour)
+function _gtPlantToday(){
+  let d=null; try{ d=_plantBusinessDate(); }catch(e){}
+  const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(d||''); if(!m) return _gtDay(new Date());
+  return new Date(+m[1], +m[2]-1, +m[3]);
+}
 function gtCollect(from, to){
-  const today = _gtIsoDate(new Date()), f = _gtIsoDate(from), t = _gtIsoDate(to);
+  const today = _gtIsoDate(_gtPlantToday()), f = _gtIsoDate(from), t = _gtIsoDate(to);
   return _gtArchive(from, to).then(days => {
     const out = [];
     days.forEach(day => { const d = String(day.date || '').slice(0, 10); if(d >= f && d <= t) out.push({ date: d, animals: _gtArchAnimals(day), intake: day.intake || [], live: false, at: day.at }); });
@@ -10436,7 +10467,7 @@ function gtStatsOf(daysList){
 var _gtAnPeriod = 'day', _gtAnCmp = { prev: false, year: false };
 function _gtDay(d){ const x = new Date(d); x.setHours(0, 0, 0, 0); return x; }
 function gtPeriodRange(kind){
-  const now = _gtDay(new Date());
+  const now = _gtPlantToday();
   if(kind === 'day') return { from: now, to: now };
   if(kind === 'week'){ const f = new Date(now); f.setDate(f.getDate() - 6); return { from: f, to: now }; }
   if(kind === 'month') return { from: new Date(now.getFullYear(), now.getMonth(), 1), to: now };
@@ -10783,8 +10814,8 @@ function gtSearchInit(){
   const keep = id => { const e = document.getElementById(id); return e ? e.value : ''; };
   const v = { number: keep('srN'), date: keep('srD'), from: keep('srF'), to: keep('srT'), farm: keep('srFarm'), type: keep('srType'), status: keep('srSt'), worker: keep('srW') };
   if(_gtSrch.on.number) f.push(`<div class="gt-field"><label>${L('מספר בהמה', 'Animal number', 'Número')}</label><input id="srN" class="gt-in" type="number" min="1" inputmode="numeric" style="width:110px;" value="${escapeHtml(v.number)}"></div>`);
-  if(_gtSrch.on.date) f.push(`<div class="gt-field"><label>${L('תאריך', 'Date', 'Fecha')}</label><input id="srD" class="gt-in" type="date" value="${escapeHtml(v.date || _gtIsoDate(new Date()))}"></div>`);
-  if(_gtSrch.on.range) f.push(`<div class="gt-field"><label>${L('מתאריך עד תאריך', 'From – to', 'Desde – hasta')}</label><input id="srF" class="gt-in" type="date" value="${escapeHtml(v.from)}"> — <input id="srT" class="gt-in" type="date" value="${escapeHtml(v.to || _gtIsoDate(new Date()))}"></div>`);
+  if(_gtSrch.on.date) f.push(`<div class="gt-field"><label>${L('תאריך', 'Date', 'Fecha')}</label><input id="srD" class="gt-in" type="date" value="${escapeHtml(v.date || _gtIsoDate(_gtPlantToday()))}"></div>`);
+  if(_gtSrch.on.range) f.push(`<div class="gt-field"><label>${L('מתאריך עד תאריך', 'From – to', 'Desde – hasta')}</label><input id="srF" class="gt-in" type="date" value="${escapeHtml(v.from)}"> — <input id="srT" class="gt-in" type="date" value="${escapeHtml(v.to || _gtIsoDate(_gtPlantToday()))}"></div>`);
   if(_gtSrch.on.farm) f.push(`<div class="gt-field"><label>${L('משק', 'Farm', 'Granja')}</label><select id="srFarm" class="gt-in">${opt([['', L('כל המשקים', 'All farms', 'Todas')]].concat((sets.farmNames || []).map(x => [x, x])))}</select></div>`);
   if(_gtSrch.on.type) f.push(`<div class="gt-field"><label>${L('זן בהמה', 'Breed', 'Raza')}</label><select id="srType" class="gt-in">${opt([['', L('כל הזנים', 'All breeds', 'Todas')]].concat((sets.cattleTypes || []).map(x => [x, x])))}</select></div>`);
   if(_gtSrch.on.status) f.push(`<div class="gt-field"><label>${L('פסיקה', 'Ruling', 'Dictamen')}</label><select id="srSt" class="gt-in">${opt(st.map(x => [x.key, he ? x.he : es ? (x.es || x.en) : x.en]).concat([['nevela', L('נבלה', 'Nevela', 'Nevelá')], ['shot', L('ירוי', 'Shot', 'Baleado')], ['notChalak', L('לא חלק', 'Not chalak', 'No glatt')], ['pending', L('ממתין לפסיקה', 'Waiting', 'Pendiente')]]))}</select></div>`);
@@ -10807,7 +10838,7 @@ function _gtStatusOf(x){
 }
 function gtSearchRun(){
   const val = id => { const e = document.getElementById(id); return e ? e.value.trim() : ''; };
-  const now = _gtDay(new Date()); let from, to, note = '';
+  const now = _gtPlantToday(); let from, to, note = '';
   if(_gtSrch.on.date && val('srD')){ from = to = _gtDay(val('srD')); }
   else if(_gtSrch.on.range && (val('srF') || val('srT'))){ from = _gtDay(val('srF') || val('srT')); to = _gtDay(val('srT') || val('srF')); if(from > to){ const t = from; from = to; to = t; } }
   else { to = now; from = new Date(now); from.setDate(from.getDate() - 30); note = L('בלי תאריך — מחפש ב־30 הימים האחרונים.', 'No date — searching the last 30 days.', 'Sin fecha — últimos 30 días.'); }
@@ -10916,9 +10947,9 @@ async function gtAnimalCard(date, n){
     if(d.live && _gtNkCard){ const pc = _gtNkCard.filter(q => q.n === n + 1);     // v10.38: the nikur
       h += stage(pc.length > 0, L('ניקור', 'Nikur', 'Nikur'), pc.length ? pc.length + ' ' + L('חתיכות', 'pieces', 'piezas') : '',
         pc.map(q => (gtProductName(gtProducts().find(p => p.id === q.p)) || q.p) + (q.i > 1 ? ' ' + q.i : '') + ' · ' + new Date(q.at).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' }) + (q.by ? ' · ' + q.by : '')).join(' | ')); }
-    h += stage(kg > 0, L('משקל', 'Weight', 'Peso'), kg > 0 ? _gtNum(kg, 1) + ' ' + L('ק״ג', 'kg', 'kg') : '',
-      [x.weight_right ? L('ימין ', 'right ', 'der. ') + _gtNum(x.weight_right, 1) : (x.weight_right_skipped ? L('ימין דולג', 'right skipped', 'der. omitido') : ''), x.weight_left ? L('שמאל ', 'left ', 'izq. ') + _gtNum(x.weight_left, 1) : (x.weight_left_skipped ? L('שמאל דולג', 'left skipped', 'izq. omitido') : ''),
-       x.weight_stage2 ? L('שלב 2: ', 'stage 2: ', 'etapa 2: ') + _gtNum(x.weight_stage2, 1) : '', x.weight_stage3 ? L('שלב 3: ', 'stage 3: ', 'etapa 3: ') + _gtNum(x.weight_stage3, 1) : ''].filter(Boolean).join(' · '));
+    h += stage(kg > 0, L('משקל', 'Weight', 'Peso'), kg > 0 ? _gtNum(gtW(kg), 1) + ' ' + gtWU() : '',
+      [x.weight_right ? L('ימין ', 'right ', 'der. ') + _gtNum(gtW(x.weight_right), 1) : (x.weight_right_skipped ? L('ימין דולג', 'right skipped', 'der. omitido') : ''), x.weight_left ? L('שמאל ', 'left ', 'izq. ') + _gtNum(gtW(x.weight_left), 1) : (x.weight_left_skipped ? L('שמאל דולג', 'left skipped', 'izq. omitido') : ''),
+       x.weight_stage2 ? L('שלב 2: ', 'stage 2: ', 'etapa 2: ') + _gtNum(gtW(x.weight_stage2), 1) : '', x.weight_stage3 ? L('שלב 3: ', 'stage 3: ', 'etapa 3: ') + _gtNum(gtW(x.weight_stage3), 1) : ''].filter(Boolean).join(' · '));
   }
   if(c) h += `<div class="gt-hint" style="margin-top:6px;">${L('היום הזה עוד בעיבוד — רגלים / חלקים / חותמות / משקל מעודכנים עד עכשיו.', 'This day is still in processing — legs / parts / stamps / weight are as of now.', 'Este día sigue en procesamiento.')}</div>`;
   const ev = d.events || [];
@@ -12076,23 +12107,6 @@ function mgrHealthCheck(){
   }
 }
 
-// ── SEARCH ──
-function mgrDoSearch(val){
-  const idx=parseInt(val)-1;const res=document.getElementById('mgrSearchResult');if(!res)return;
-  if(isNaN(idx)||idx<0||idx>=KS.getAnimals().length){
-    const invalidTxt=lang==='he'?'מספר לא תקין':lang==='es'?'Número inválido':'Invalid number';
-    res.innerHTML='<span style="color:var(--red-light)">'+invalidTxt+'</span>';return;
-  }
-  const a=KS.getAnimal(idx);
-  const he=(lang==='he'),es=(lang==='es');
-  const sl={slaughtered:he?'נשחט':(es?'Sacrificado':'Slaughtered'),notChalak:he?'לא חלק':(es?'No Jalak':'Non-Chalak'),nevela:L('נבלה','Nevela','Nevelá'),shot:L('ירוי','Shot','Baleado'),null:'—'};
-  const ist={confirmed:he?'אושר':(es?'Confirmado':'Confirmed'),treif:'טרף',in_progress:L('בתהליך','In progress','En proceso'),null:'—'};
-  const ost=new Proxy({glatt:'גלאט',beit:'בית יוסף',kosher:'כשר',mk:'MK',treif:'טרף',null:'—'},
-    {get:(o,k)=>(k in o)?o[k]:(statusDisplayName(k)||'—')});
-  const lbl={slaughter:he?'שחיטה':(es?'Matanza':'Slaughter'),legs:he?'רגלים':(es?'Patas':'Legs'),inner:he?'בודק פנים':(es?'Insp. Interno':'Inner'),outer:he?'בודק חוץ':(es?'Insp. Externo':'Outer'),parts:he?'חלקים':(es?'Partes':'Parts'),stamps:he?'חותמות':(es?'Sellos':'Stamps')};
-  res.innerHTML=`<div style="background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:10px;font-size:12px;line-height:1.9;direction:rtl;"><div style="font-size:16px;font-weight:700;color:var(--gold);margin-bottom:6px;">#${idx+1}</div><div>${lbl.slaughter}: <strong style="color:var(--text)">${sl[a.slaughter]||'—'}</strong></div><div>${lbl.legs}: <strong style="color:var(--text)">${a.headStickers?'✅':'—'}</strong></div><div>${lbl.inner}: <strong style="color:var(--text)">${ist[a.innerStatus]||'—'}</strong></div><div>${lbl.outer}: <strong style="color:var(--text)">${ost[a.outerStatus]||'—'}</strong></div><div>${lbl.parts}: <strong style="color:var(--text)">${a.partsScanned?'✅ ('+(a.partsPrintCount||0)+'/3)':'—'}</strong></div><div>${lbl.stamps}: <strong style="color:var(--text)">${a.stamped?'✅':'—'}</strong></div></div>`;
-}
-
 // ── SETTINGS ──
 function mgrToggle(key,def,toggleId,dotId){
   const s=KS.getSettings(),cur=s[key]!==undefined?s[key]:def,nv=!cur;
@@ -12263,7 +12277,7 @@ function gtProducts(s){
     if(p&&o.avg!=null&&isFinite(o.avg)) p.avg=Number(o.avg);
     if(p&&id==='skirt_in'&&o.internal===false) p.notGlatt=false;
     if(o&&!id&&o.name&&String(o.id||'').charAt(0)==='p')   // a part the plant added before
-      list.push({id:'p_'+String(o.id).slice(1).toLowerCase().replace(/[^a-z0-9_]/g,'').slice(0,30)||('p_'+Date.now().toString(36)),
+      list.push({id:'p_'+String(o.id).slice(1).toLowerCase().replace(/[^a-z0-9_]/g,'').slice(0,30)||('p_'+Date.now().toString(36).replace(/q/g,'z0').replace(/w/g,'z1')),
                  he:String(o.name).slice(0,80),en:'',es:'',on:false,pre:'none',n:0,post:'none',avg:o.avg!=null&&isFinite(o.avg)?Number(o.avg):null});
   });
   return list;
@@ -12343,7 +12357,8 @@ function mgrAddProduct(){
   const name=he.trim()||en.trim(); if(!name){ alert(L('חובה למלא שם','Name required','El nombre es obligatorio')); return; }
   const list=gtProducts();
   if(list.some(p=>[p.he,p.en].some(x=>String(x||'').trim()===name))){ alert(L('יש כבר חלק בשם הזה.','A cut with this name already exists.','Ya existe un corte con ese nombre.')); return; }
-  list.push({id:'p_'+Date.now().toString(36),he:name.slice(0,80),en:en.trim().slice(0,80),es:'',on:true,pre:'none',n:0,post:'none',m:0,nikur:'none',avg:null});
+  // (round-2 review A-sc3) no q / w in a new id: a hand scanner on a Hebrew keyboard types them as / and ' (not undone)
+  list.push({id:'p_'+Date.now().toString(36).replace(/q/g,'z0').replace(/w/g,'z1'),he:name.slice(0,80),en:en.trim().slice(0,80),es:'',on:true,pre:'none',n:0,post:'none',m:0,nikur:'none',avg:null});
   if(_gtSaveProducts(list)){ ['newProductHe','newProductEn'].forEach(k=>{const e=document.getElementById(k);if(e)e.value='';}); }
 }
 function mgrRemoveProduct(id){
@@ -12523,11 +12538,6 @@ function mgrSyncUI(){
   mgrRenderFarms();
   const sw=document.getElementById('stickerW'),sh=document.getElementById('stickerH');
   if(sw)sw.value=s.stickerW||50;if(sh)sh.value=s.stickerH||50;
-  // Restore number inputs
-  const li=document.getElementById('legStickerInput');if(li)li.value=s.legStickerCount!=null?s.legStickerCount:2;
-  const hi=document.getElementById('headStickerInput');if(hi)hi.value=s.headStickerCount!=null?s.headStickerCount:7;
-  const pi=document.getElementById('partsStickerInput');if(pi)pi.value=s.partsTotalStickers||3;
-  const si=document.getElementById('stampsStickerInput');if(si)si.value=s.stampsCount||5;
   // Screen config
   const cfgMap={'1both':0,'1in1out':1,'2in1out':2,'2in2out':3,'1in2out':4};
   const cfg=s.screenConfig||'1in1out';
@@ -13332,15 +13342,7 @@ async function mgrSetUserCode(i){
   const c=String(code).trim(); if(!c) return;
   { const res=await gtWorkerCodeSet(u.role, u.name, c);                 // v10.35 review: only on the server
     if(!res || !res.ok){ alert(_gtWorkerCodeErr(res)); return; }
-    _gtMarkHasCode(u.role, u.name, true); mgrRenderUsers(); return; }
-  const h=await _workerCodeHash(c);
-  const cur=(KS.getSettings().users||[]).slice();
-  const j=cur.findIndex(x=>x && x.name===u.name && x.role===u.role); if(j<0) return;
-  if(_workerCodeTaken(u.role, h, j)){ alert(L('הקוד הזה כבר בשימוש אצל עובד אחר בתחנה — בחר קוד אחר.','This code is already used by another worker at this station — choose another.','Este código ya lo usa otro trabajador de la estación — elija otro.')); return; }
-  const {code:_c, codeHash:_h, hv:_v, ...rest}=cur[j];
-  cur[j]={...rest, codeHash:h, hv:2};
-  KS.updateSettings({users:cur});
-  mgrRenderUsers();
+    _gtMarkHasCode(u.role, u.name, true); mgrRenderUsers(); }
 }
 async function mgrConfirmAddUser(){
   const name=document.getElementById('newUserName')?.value?.trim();
@@ -13353,11 +13355,9 @@ async function mgrConfirmAddUser(){
     if(!res || !res.ok){ alert(_gtWorkerCodeErr(res)); mgrRenderUsers(); return; }
     _gtMarkHasCode(role, name, true); mgrHideAddUser(); mgrRenderUsers(); return;
   }
-  const h=null;
-  if(h && _workerCodeTaken(mgrCurrentUserRole, h, -1)){ alert(L('הקוד הזה כבר בשימוש אצל עובד אחר בתחנה — בחר קוד אחר.','This code is already used by another worker at this station — choose another.','Este código ya lo usa otro trabajador de la estación — elija otro.')); return; }
   const s=KS.getSettings();
   const users=s.users||[];
-  users.push(h ? {name,codeHash:h,hv:2,role:mgrCurrentUserRole} : {name,role:mgrCurrentUserRole});
+  users.push({name,role:mgrCurrentUserRole});   // (round-2 review A-old2) a worker without a code; codes only on the server
   KS.updateSettings({users});
   mgrHideAddUser();
   mgrRenderUsers();
@@ -14075,15 +14075,10 @@ function mgrDeleteArchive(idx){
   }catch(e){}
 }
 
-// ── AUTOMATIC DAILY ROLLOVER — NO MANUAL RESET IN THE FACTORY APP ──
-// Manual reset was removed from the operator/manager UI: in a live plant it's
-// too easy to trigger by accident and destroy a day's unsaved work. Rollover
-// is now automatic-only, at a manager-configurable time (default 00:00,
-// since real work always finishes well before midnight), and is BLOCKED if
-// the automatic backup fails — so a bad day never gets wiped without a copy.
-// (KS.resetDay() itself is unchanged and still callable from the browser
-// console — that's intentional, for the manufacturer's own testing, never
-// wired to a visible button in the shipped app.)
+// ── DAILY ROLLOVER ──
+// The day changes automatically on the server at the plant's reset time (request_daily_rollover). The team leader
+// also has a reset button (v10.38, owner): it always goes through, and the server records the numbers not
+// finished (reset_daily_board). Before a rollover the tablet keeps a local backup of the board (below).
 
 const KS_AUTO_BACKUP = (function(){
   const DB_NAME='glatttrack_backups', STORE='snapshots', MAX_KEEP=24;
@@ -14411,9 +14406,32 @@ function _gtPlantStations(){
       cell:x=>x.stamped?G:(kosherOut(x)&&alive(x)?Y:null),
       done:x=>!!x.stamped, wait:x=>alive(x)&&kosherOut(x)&&!x.stamped},
   ];
+  // (round-2 review A-pl1) the cooler and the nikur, from their server boards (read every 10 s while the view is open)
+  const PB=window._gtPlantBoards||{};
+  if(typeof gtPlanned==='function' && gtPlanned('cooler') && PB.cooler){
+    const rows={}; (PB.cooler.rows||[]).forEach(r=>{ rows[r.n]=r; }); const com=new Set(PB.cooler.coming||[]);
+    const st=x=>{ const n=a.indexOf(x)+1, r=rows[n]; return r ? (r.held?'held':(r.in>=r.exp?'done':(r.in>0?'part':'wait'))) : (com.has(n)?'wait':null); };
+    list.push({key:'cooler', flag:'_none', noOpen:true, name:L3('קולר','Cooler','Cámara'),
+      cell:x=>({done:G,part:B,wait:Y,held:'#B39DFF'})[st(x)]||null, done:x=>st(x)==='done', wait:x=>st(x)==='wait'||st(x)==='part'});
+  }
+  if(typeof gtPlanned==='function' && gtPlanned('nikur') && PB.nikur){
+    const today=(PB.nikur.days||[]).find(d=>d.today), g={};
+    ((today&&today.rows)||[]).forEach(r=>{ const v=(g[r.n]=g[r.n]||[0,0]); v[0]++; if(r.ok) v[1]++; });
+    const com=new Set((PB.nikur.coming||[]).map(c=>c.n));
+    const st=x=>{ const n=a.indexOf(x)+1, v=g[n]; return v ? (v[1]>=v[0]?'done':(v[1]>0?'part':'wait')) : (com.has(n)?'wait':null); };
+    list.push({key:'nikur', flag:'_none', noOpen:true, name:L3('ניקור','Nikur','Nikur'),
+      cell:x=>({done:G,part:B,wait:Y})[st(x)]||null, done:x=>st(x)==='done', wait:x=>st(x)==='wait'||st(x)==='part'});
+  }
   return list.filter(st=>s[st.flag]!==false || a.some(st.done));
 }
-function gtPlantOpen(){ window._gtFromPlant=false; goTo('scPlant'); gtPlantRender(); }
+async function _gtPlantBoardsLoad(){
+  if(!window.sb) return; const B={};
+  try{ if(gtPlanned('cooler')){ const r=await _withTimeout(window.sb.rpc('cooler_board'),6000); if(r&&r.data&&r.data.ok) B.cooler=r.data; } }catch(e){}
+  try{ if(gtPlanned('nikur')){ const r=await _withTimeout(window.sb.rpc('nikur_board'),6000); if(r&&r.data&&r.data.ok) B.nikur=r.data; } }catch(e){}
+  window._gtPlantBoards=B;
+}
+setInterval(()=>{ const a=document.querySelector('.screen.active'); if(a&&a.id==='scPlant') _gtPlantBoardsLoad(); }, 10000);
+function gtPlantOpen(){ window._gtFromPlant=false; goTo('scPlant'); gtPlantRender(); _gtPlantBoardsLoad().then(()=>{ try{ gtPlantRender(); }catch(e){} }); }
 function gtPlantRender(){
   const el=document.getElementById('plBody'); if(!el) return;
   const set=(id,t)=>{const e=document.getElementById(id); if(e) e.textContent=t;};
@@ -14435,13 +14453,13 @@ function gtPlantRender(){
     a.forEach((x,i)=>{ if(st.done(x)){ done++; const t=st.time?Number(st.time(x))||0:0; if(t>=lastT){ lastT=t; last=i; } } if(st.wait(x)) wait++; });
     const cells=[]; for(let i=0;i<shown;i++){ const x=a[i]; const c=x?st.cell(x):null;
       cells.push(`<div title="#${i+1}" style="aspect-ratio:1;border-radius:3px;background:${c||'rgba(255,255,255,.08)'};color:${c?'#07090F':'var(--muted)'};font-size:9px;display:flex;align-items:center;justify-content:center;font-weight:700;">${i+1}</div>`); }
-    return `<div onclick="gtPlantOpenStation('${st.key}')" style="cursor:pointer;background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:10px;">
+    return `<div ${st.noOpen?'':`onclick="gtPlantOpenStation('${st.key}')"`} style="${st.noOpen?'':'cursor:pointer;'}background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:10px;">
       <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;">
         <span style="font-size:14px;font-weight:700;color:var(--text);">${escapeHtml(st.name)}</span>
         <span style="font-size:11px;color:var(--muted);">${L('בוצעו','Done','Hechos')} <b style="color:var(--green);">${done}</b> · ${L('ממתינות','Waiting','En espera')} <b style="color:var(--amber);">${wait}</b>${last>=0?' · '+L('אחרון','Last','Último')+' <b style="color:var(--gold);">#'+(last+1)+'</b>':''}</span>
       </div>
       <div style="display:grid;grid-template-columns:repeat(10,1fr);gap:2px;">${cells.join('')}</div>
-      <div style="font-size:10px;color:var(--blue);margin-top:6px;text-align:center;">${L('לחץ לפתיחת המסך (צפייה בלבד)','Tap to open the screen (view only)','Toque para abrir la pantalla (solo ver)')}</div>
+      ${st.noOpen?'':`<div style="font-size:10px;color:var(--blue);margin-top:6px;text-align:center;">${L('לחץ לפתיחת המסך (צפייה בלבד)','Tap to open the screen (view only)','Toque para abrir la pantalla (solo ver)')}</div>`}
     </div>`;
   }).join('').replace(/\$\{GRc\}/g,'');
   const legend=`<div style="font-size:11px;color:var(--muted);margin-top:10px;line-height:1.8;">
@@ -14954,7 +14972,7 @@ function partsRenderGrid(){
       if(!isKosherReady(x)) return"empty";
       const cnt=x.partsPrintCount||0;
       if(_partsNeedsReprint(x)) return i===firstPending?"next":"parts-kosher";
-      if(cnt>=3||x.partsScanned) return"parts-done";
+      if(cnt>=Math.max(1,gtPartsExpected())||x.partsScanned) return"parts-done";   // (round-2 review A-pt1) the plant's set, not 3
       if(cnt>0) return"parts-waiting";
       // First pending animal gets rainbow flash
       return i===firstPending?"next":"parts-kosher";
@@ -15055,7 +15073,8 @@ let pendingWeightIdx=-1, wmStream=null, wmDetectTimer=null;
 // sticker's small letters as Hebrew letters ("P:sides" → "P:דןגקד") — they are turned back into the keys
 const _GT_HEB_KEYS={'ש':'a','נ':'b','ב':'c','ג':'d','ק':'e','כ':'f','ע':'g','י':'h','ן':'i','ח':'j','ל':'k','ך':'l','צ':'m','מ':'n','ם':'o','פ':'p','/':'q','ר':'r','ד':'s','א':'t','ו':'u','ה':'v',"'":'w','ס':'x','ט':'y','ז':'z','ת':',','ץ':'.','ף':';'};
 function gtScanUnHeb(code){ const c=String(code||''); if(!/[֐-׿]/.test(c)) return c;
-  return c.replace(/[א-ת]/g,ch=>_GT_HEB_KEYS[ch]||ch); }
+  // (round-2 review A-sc3) in the part id (P:…) the q / w keys come out as / and ' — turned back there only
+  return c.replace(/[א-ת]/g,ch=>_GT_HEB_KEYS[ch]||ch).replace(/(^|\|)(P:)([^|]*)/i,(m,a,b,v)=>a+b+v.replace(/\//g,'q').replace(/'/g,'w')); }
 function _gtCodeNum(code){
   const c=String(code||'');
   const m=c.match(/(?:^|\|)N:(\d+)/i)||c.match(/([0-9]+)/);
@@ -17492,7 +17511,7 @@ setTimeout(_maybeShowLicenseRequest, 2000); // let the app render first, then ch
     var s=document.createElement('script');
     // v10.16 (A7): known before anything loads, so the stop screen can say why
     try{ window._gtPlantConfigMissing = !(window.GT_SERVER && window.GT_SERVER.url) && (window.GT_BUILD === 'plant' || localStorage.getItem('gt_plant_bound') === '1'); }catch(e){}
-    s.src=((window.GT_SERVER || window.GT_BUILD === 'plant') ? 'vendor/supabase.js' : 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js');
+    s.src=((window.GT_SERVER || window.GT_BUILD === 'plant') ? 'vendor/supabase.js' : 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js');
     s.async=false;
     document.head.appendChild(s);
   })();
@@ -17806,7 +17825,6 @@ window.addEventListener("touchcancel",function(){isDrawing=false;},true);
     <div style="background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:14px;font-size:12px;color:var(--muted);direction:rtl;text-align:right">
       <div id="ppPartsRows"></div>
     </div>
-    </div>
     <div style="height:4px;background:var(--border);border-radius:2px;margin-bottom:14px;overflow:hidden">
       <div id="ppPartsBar" style="height:100%;background:var(--gold);border-radius:2px;width:100%;transition:width 3s linear;"></div>
     </div>
@@ -18056,7 +18074,7 @@ function _gtPlaceFloats(){
 
 // ── 9. Android back button: close the open window, else previous screen;
 //       never leave a work-station screen (and never exit the app) ──
-const _GT_STAY=['scSlaughter','scEsophagus','scLegs','scInner','scOuter','scParts','scStamps','scCounter','scPair','scNav'];
+const _GT_STAY=['scSlaughter','scEsophagus','scLegs','scInner','scOuter','scParts','scStamps','scSup','scCounter','scPair','scNav'];   // (round-2 review A-bk1) the nikur / cooler too
 const _gtScreens=[]; let _gtBackNav=false, _gtArmed=false;
 function _gtArm(){ if(_gtArmed) return; try{ history.pushState({gt:1},''); _gtArmed=true; }catch(e){} }
 ['pointerdown','touchstart','keydown'].forEach(ev=>document.addEventListener(ev,_gtArm,{capture:true,passive:true}));
@@ -18105,7 +18123,7 @@ function _gtCloseModal(m){
 }
 // screens that need a login — "back" never walks into one (a worker who
 // logged out with ✕ must not be let back in by the next person's back press)
-const _GT_PROTECTED=['scSlaughter','scEsophagus','scLegs','scInner','scOuter','scParts','scStamps','scCounter','scManager','scMaker'];
+const _GT_PROTECTED=['scSlaughter','scEsophagus','scLegs','scInner','scOuter','scParts','scStamps','scSup','scCounter','scManager','scMaker'];   // (round-2 review A-bk1)
 function _gtBack(){
   const m=_gtTopModal(); if(m){ _gtCloseModal(m); return; }
   const a=document.querySelector('.screen.active'), id=a?a.id:'';
@@ -19293,166 +19311,10 @@ setInterval(_gtLiveRefresh, 30000); setTimeout(_gtLiveRefresh, 4000);
 </script>
 
 <script>
-/* ═══════════════════════════════════════════════════════════════════
-   v10.38 (owner): A PHONE AS A SCANNER.
-   The team leader shows a one-time QR (or an 8-digit code, 10 minutes). The phone opens it and becomes a
-   scanner screen ONLY: a live camera reads barcodes / QR, each code goes to the plant server (phone_scan) and
-   the station the phone is given to receives it within a second — like any scanner. The phone sees nothing else.
-   ═══════════════════════════════════════════════════════════════════ */
-const _GT_PH_KEY='gt_phone_scan_token';
-function _gtPhTok(){ try{ return localStorage.getItem(_GT_PH_KEY)||''; }catch(e){ return ''; } }
-// ── the team leader: invitation (QR + code), wait until the phone joins ──
-let _gtPhInv=null;
-async function gtPhoneScannerInvite(){
-  const box=document.getElementById('gtPhInvite'); if(!box) return;
-  const tok=KS.getManagerToken&&KS.getManagerToken(); if(!window.sb||!tok){ box.textContent=L('אין חיבור לשרת המפעל.','No connection to the plant server.','Sin conexión.'); return; }
-  let x; try{ const r=await window.sb.rpc('phone_scanner_invite',{p_token:tok}); x=r.data||{}; if(r.error||!x.ok) throw new Error(gtErrText(r.error||x.error)); }
-  catch(e){ box.innerHTML='<div style="color:var(--red-light);font-size:12px;">'+escapeHtml(e.message||String(e))+'</div>'; return; }
-  const web=/^https?:$/.test(location.protocol), url=location.origin+location.pathname+'#phonescan='+x.code, my=_gtPhInv={id:x.id, until:Date.parse(x.until)};
-  const sh=String(x.short||'');
-  box.innerHTML='<div style="border:1px solid #28C76F;border-radius:10px;padding:10px;text-align:center;background:rgba(40,199,111,.06);">'
-    +(web?'<canvas id="gtPhQr" width="200" height="200" style="background:#fff;border-radius:8px;padding:8px;"></canvas>'
-         +'<div style="font-size:12px;color:var(--muted);margin:6px 0;">'+escapeHtml(L('סורקים את הקוד הזה במצלמה של הטלפון (הטלפון מחובר ל-Wi-Fi של המפעל)','Scan this code with the phone\'s camera (the phone on the plant Wi-Fi)','Escanee este código con la cámara del teléfono'))+'</div>':'')
-    +'<div style="font-size:12px;color:var(--muted);">'+escapeHtml(web?L('או בטלפון: פותחים את האפליקציה ← "להשתמש בטלפון הזה כסורק" ← מקלידים:','Or on the phone: open the app → "Use this phone as a scanner" → type:','O en el teléfono: abra la app → "Usar como escáner" → escriba:')
-                                       :L('בטלפון: פותחים את האפליקציה ← "להשתמש בטלפון הזה כסורק" ← מקלידים:','On the phone: open the app → "Use this phone as a scanner" → type:','En el teléfono: abra la app → "Usar como escáner" → escriba:'))+'</div>'
-    +'<div dir="ltr" style="font-size:30px;font-weight:900;letter-spacing:4px;color:var(--gold);font-family:monospace;margin:4px 0;">'+escapeHtml(sh.slice(0,4)+' '+sh.slice(4))+'</div>'
-    +'<div id="gtPhWait" style="font-size:13px;margin-top:6px;"><span class="gt-spin"></span>'+escapeHtml(L('ממתין שהטלפון יתחבר… (10 דקות)','Waiting for the phone… (10 minutes)','Esperando el teléfono… (10 minutos)'))+'</div></div>';
-  if(web){ try{ QRGen.draw(document.getElementById('gtPhQr'), url, 184); }catch(e){} }
-  while(_gtPhInv===my && Date.now()<my.until){
-    await new Promise(z=>setTimeout(z,2000));
-    const sc=(KS.getSettings().scanners||[]).find(d=>d.id==='ph'+my.id);
-    if(sc){ const w=document.getElementById('gtPhWait');
-      if(w) w.innerHTML='<b style="color:var(--green);">✅ '+escapeHtml(L('הטלפון מחובר: ','The phone is connected: ','Teléfono conectado: ')+sc.name)+'</b><div style="font-size:12px;color:var(--muted);">'
-        +escapeHtml(L('עכשיו משייכים אותו למסך — ב"שיוך לכל מסך".','Now give it to a screen — in "Assign to each screen".','Ahora asígnelo a una pantalla.'))+'</div>';
-      try{ mgrRenderDevices(); }catch(e){} return; }
-    try{ if(KS.syncNow) KS.syncNow(); }catch(e){}
-  }
-  const w=document.getElementById('gtPhWait'); if(w && _gtPhInv===my) w.textContent=L('הקוד פג. לוחצים שוב "טלפון כסורק".','The code expired. Tap "A phone as a scanner" again.','El código caducó.');
-}
-// removing a phone from the list stops its key
-(function(){ const o=window.mgrRemoveDevice; if(typeof o!=='function') return;
-  window.mgrRemoveDevice=mgrRemoveDevice=function(kind,id){
-    if(kind==='scanner' && /^ph\d+$/.test(String(id)) && window.sb && KS.getManagerToken()){
-      try{ window.sb.rpc('phone_scanner_remove',{p_token:KS.getManagerToken(), p_id:Number(String(id).slice(2))}).then(()=>{},()=>{}); }catch(e){} }   // (sent only when awaited)
-    return o.apply(this,arguments); }; })();
-
-// ── the phone ──
-window._gtPhoneMode=false;
-(function(){   // a phone scanner is never stopped by the station rules (no device key, no pairing, no "no server" lock)
-  const ol=window._gtNetLockShow; if(typeof ol==='function') window._gtNetLockShow=_gtNetLockShow=function(on,why){ return ol.call(this, window._gtPhoneMode?false:on, why); };
-  const op=window.pairEnsureCode; if(typeof op==='function') window.pairEnsureCode=pairEnsureCode=function(){ if(window._gtPhoneMode) return; return op.apply(this,arguments); };
-})();
-const _gtPh={stream:null, timer:null, det:null, last:'', lastAt:0, busy:false, screens:[], today:0, name:''};
-function _gtPhEl(){ let el=document.getElementById('gtPhone');
-  if(!el){ el=document.createElement('div'); el.id='gtPhone'; el.setAttribute('data-no-i18n','');
-    el.style.cssText='position:fixed;inset:0;z-index:2147483600;background:#05070c;color:#E8ECF4;overflow-y:auto;font-family:Arial,sans-serif;direction:'+(lang==='he'?'rtl':'ltr')+';';
-    document.body.appendChild(el); }
-  return el; }
-function gtPhoneScanStart(invite){
-  window._gtPhoneMode=true; _gtNetLockShow(false);
-  const el=_gtPhEl();
-  if(_gtPhTok()){ _gtPhScanner(); return; }
-  el.innerHTML='<div style="max-width:420px;margin:0 auto;padding:40px 18px;text-align:center;">'
-    +'<div style="font-size:44px;">📱</div><div style="font-size:22px;font-weight:900;color:#D4A843;margin:8px 0;">'+escapeHtml(L('הטלפון הזה כסורק','This phone as a scanner','Este teléfono como escáner'))+'</div>'
-    +'<div style="font-size:13px;color:#8A93A6;line-height:1.6;margin-bottom:14px;">'+escapeHtml(L('ראש הצוות פותח: הגדרות ← סורקים ← "➕ הוספת סורק" ← "📱 טלפון כסורק". שם מופיע קוד.','The team leader opens: Settings → Scanners → "➕ Add a scanner" → "📱 A phone as a scanner". A code appears there.','El jefe abre: Ajustes → Escáneres → "Agregar" → "Teléfono". Aparece un código.'))+'</div>'
-    +(invite?'':'<input id="gtPhCode" inputmode="numeric" maxlength="9" placeholder="•••• ••••" style="width:100%;box-sizing:border-box;padding:14px;font-size:26px;letter-spacing:5px;text-align:center;direction:ltr;border-radius:12px;border:1px solid #2A3142;background:#11151F;color:#fff;margin-bottom:10px;">')
-    +'<input id="gtPhName" maxlength="40" placeholder="'+escapeHtml(L('שם הטלפון (למשל: טלפון של משה)','Phone name (e.g. Moshe\'s phone)','Nombre del teléfono'))+'" style="width:100%;box-sizing:border-box;padding:12px;font-size:16px;border-radius:12px;border:1px solid #2A3142;background:#11151F;color:#fff;margin-bottom:12px;">'
-    +'<button id="gtPhJoin" style="width:100%;padding:15px;border-radius:12px;border:none;background:#28C76F;color:#05070c;font-size:17px;font-weight:900;">'+escapeHtml(L('חבר את הטלפון','Connect the phone','Conectar el teléfono'))+'</button>'
-    +'<div id="gtPhErr" style="color:#FF6B6B;font-size:14px;min-height:20px;margin-top:10px;"></div>'
-    +'<button onclick="gtPhoneScanExit()" style="margin-top:16px;background:none;border:1px solid #2A3142;color:#8A93A6;border-radius:10px;padding:9px 16px;">'+escapeHtml(L('ביטול','Cancel','Cancelar'))+'</button></div>';
-  document.getElementById('gtPhJoin').onclick=async()=>{
-    const code=invite || String((document.getElementById('gtPhCode')||{}).value||'').replace(/\D/g,'');
-    const name=String(document.getElementById('gtPhName').value||'').trim()||L('טלפון','Phone','Teléfono');
-    const err=document.getElementById('gtPhErr'); err.style.color='#8A93A6'; err.textContent=L('מתחבר…','Connecting…','Conectando…');
-    for(let i=0;i<50 && !window.sb;i++) await new Promise(z=>setTimeout(z,200));
-    if(!window.sb){ err.style.color='#FF6B6B'; err.textContent=L('אין חיבור לשרת המפעל.','No connection to the plant server.','Sin conexión.'); return; }
-    try{ const r=await window.sb.rpc('phone_scanner_join',{p_invite:code, p_name:name}); const x=r.data||{};
-      if(r.error||!x.ok){ err.style.color='#FF6B6B'; err.textContent=x.error==='rate_limited'?L('יותר מדי ניסיונות — חכו כמה דקות.','Too many tries — wait a few minutes.','Demasiados intentos.'):L('הקוד לא נכון או שפג (10 דקות). בקשו מראש הצוות קוד חדש.','The code is wrong or expired (10 minutes). Ask the team leader for a new one.','Código incorrecto o caducado.'); return; }
-      localStorage.setItem(_GT_PH_KEY, x.token); try{ history.replaceState(null,'',location.pathname); }catch(e){}
-      _gtPhScanner();
-    }catch(e){ err.style.color='#FF6B6B'; err.textContent=gtErrText(e); }
-  };
-}
-function gtPhoneScanExit(){
-  _gtPhStop(); window._gtPhoneMode=false; const el=document.getElementById('gtPhone'); if(el) el.remove();
-  try{ history.replaceState(null,'',location.pathname); }catch(e){}
-}
-function gtPhoneScanForget(){
-  if(!confirm(L('לנתק את הטלפון מהסורקים של המפעל?','Disconnect this phone from the plant\'s scanners?','¿Desconectar este teléfono?'))) return;
-  try{ localStorage.removeItem(_GT_PH_KEY); }catch(e){} gtPhoneScanExit();
-}
-function _gtPhStop(){ clearInterval(_gtPh.timer); _gtPh.timer=null; try{ _gtPh.stream && _gtPh.stream.getTracks().forEach(t=>t.stop()); }catch(e){} _gtPh.stream=null; }
-function _gtPhScreensTxt(){
-  if(!_gtPh.screens.length) return L('לא משויך למסך — ראש הצוות משייך ב"שיוך לכל מסך"','Not given to a screen — the team leader does it in "Assign to each screen"','Sin pantalla asignada');
-  const names=Object.fromEntries((typeof SCREEN_LIST!=='undefined'?SCREEN_LIST:[]).concat([['head','ראש'],['nikur2','ניקור חלקים קטנים']]));
-  return _gtPh.screens.map(k=>_gtScreenName(names[k]||k)).join(' · ');
-}
-async function _gtPhStatus(){
-  try{ const r=await window.sb.rpc('phone_scanner_status',{p_token:_gtPhTok()}); const x=r.data||{};
-    if(x.error==='unauthorized'){ _gtPhGone(); return; }
-    if(x.ok){ _gtPh.screens=x.screens||[]; _gtPh.today=x.today||0; _gtPh.name=x.name||''; _gtPhHead(); } }catch(e){}
-}
-function _gtPhGone(){
-  try{ localStorage.removeItem(_GT_PH_KEY); }catch(e){} _gtPhStop();
-  _gtPhEl().innerHTML='<div style="padding:50px 20px;text-align:center;font-size:18px;">📵 '+escapeHtml(L('הטלפון הוסר מהסורקים של המפעל. כדי לחבר שוב — קוד חדש מראש הצוות.','This phone was removed from the plant\'s scanners. To connect again — a new code from the team leader.','El teléfono fue quitado.'))
-    +'<br><br><button onclick="gtPhoneScanExit()" style="padding:10px 18px;border-radius:10px;border:1px solid #2A3142;background:none;color:#8A93A6;">'+escapeHtml(L('סגור','Close','Cerrar'))+'</button></div>';
-}
-function _gtPhHead(){ const h=document.getElementById('gtPhHead'); if(h) h.textContent='📷 '+L('סורק','Scanner','Escáner')+' · '+_gtPhScreensTxt();
-  const t=document.getElementById('gtPhToday'); if(t) t.textContent=L('היום: ','Today: ','Hoy: ')+_gtPh.today+L(' סריקות',' scans',' escaneos'); }
-function _gtPhBeep(ok){ try{ const c=new (window.AudioContext||window.webkitAudioContext)(), o=c.createOscillator(), g=c.createGain(); o.frequency.value=ok?1400:300; g.gain.value=.25; o.connect(g); g.connect(c.destination); o.start(); setTimeout(()=>{ o.stop(); c.close(); }, ok?120:400); }catch(e){}
-  try{ navigator.vibrate && navigator.vibrate(ok?80:[100,60,100]); }catch(e){} }
-async function _gtPhSend(code){
-  code=String(code||'').trim(); if(!code) return;
-  const now=Date.now(); if(code===_gtPh.last && now-_gtPh.lastAt<3000) return;   // the same code held in front of the camera
-  _gtPh.last=code; _gtPh.lastAt=now;
-  const box=document.getElementById('gtPhRes'); const n=_gtCodeNum(code), shown=!isNaN(n)?'#'+n:code.slice(0,24);
-  try{ const r=await window.sb.rpc('phone_scan',{p_token:_gtPhTok(), p_code:code}); const x=r.data||{};
-    if(x.error==='unauthorized'){ _gtPhGone(); return; }
-    if(r.error||!x.ok) throw new Error(gtErrText(r.error||x.error));
-    _gtPh.today++; _gtPhHead(); _gtPhBeep(true);
-    if(box){ box.style.borderColor='#28C76F'; box.style.background='#0f3d24';
-      box.innerHTML='<b style="font-size:30px;color:#28C76F;display:block;">✓ '+escapeHtml(shown)+'</b><span style="font-size:13px;">'+escapeHtml((_gtPh.screens.length?L('נשלח ל: ','Sent to: ','Enviado a: ')+_gtPhScreensTxt():L('נשלח (הטלפון עוד לא משויך למסך)','Sent (the phone is not given to a screen yet)','Enviado (sin pantalla)'))+' · '+_gtHM(Date.now()))+'</span>'; }
-  }catch(e){ _gtPhBeep(false);
-    if(box){ box.style.borderColor='#E03030'; box.style.background='#3a0d0d'; box.innerHTML='<b style="font-size:20px;color:#FF6B6B;">✕ '+escapeHtml(shown)+'</b><div style="font-size:13px;">'+escapeHtml(L('לא נשלח: ','Not sent: ','No enviado: ')+(e.message||e))+'</div>'; } }
-}
-async function _gtPhScanner(){
-  _gtPhStop();
-  const el=_gtPhEl();
-  el.innerHTML='<div style="max-width:480px;margin:0 auto;padding:10px;">'
-    +'<div id="gtPhHead" style="color:#D4A843;font-weight:900;text-align:center;font-size:18px;margin:6px 0 10px;">📷 …</div>'
-    +'<div style="position:relative;border-radius:14px;overflow:hidden;background:#1c2028;min-height:200px;">'
-    +'<video id="gtPhVid" playsinline muted autoplay style="width:100%;display:block;max-height:52vh;object-fit:cover;"></video>'
-    +'<div style="position:absolute;left:12%;right:12%;top:28%;height:40%;border:3px solid #28C76F;border-radius:10px;box-shadow:0 0 0 999px rgba(0,0,0,.3);pointer-events:none;"></div></div>'
-    +'<div id="gtPhMsg" style="font-size:13px;color:#F0A030;text-align:center;margin:6px 0;"></div>'
-    +'<div id="gtPhRes" style="margin-top:8px;border:2px solid #2A3142;border-radius:12px;padding:12px;text-align:center;min-height:56px;font-size:14px;color:#8A93A6;">'+escapeHtml(L('מכוונים את המצלמה לברקוד / QR','Point the camera at a barcode / QR','Apunte la cámara al código'))+'</div>'
-    +'<div style="display:flex;gap:8px;margin-top:10px;">'
-    +'<button id="gtPhTorch" style="flex:1;padding:12px;border-radius:10px;border:1px solid #2A3142;background:#11151F;color:#E8ECF4;font-size:14px;">🔦 '+escapeHtml(L('פנס','Light','Linterna'))+'</button>'
-    +'<button onclick="document.getElementById(\'gtPhFile\').click()" style="flex:1;padding:12px;border-radius:10px;border:1px solid #2A3142;background:#11151F;color:#E8ECF4;font-size:14px;">📷 '+escapeHtml(L('צלם','Photo','Foto'))+'</button>'
-    +'<button onclick="_gtPhType()" style="flex:1;padding:12px;border-radius:10px;border:1px solid #2A3142;background:#11151F;color:#E8ECF4;font-size:14px;">⌨ '+escapeHtml(L('הקלד','Type','Escribir'))+'</button></div>'
-    +'<input type="file" id="gtPhFile" accept="image/*" capture="environment" style="display:none">'
-    +'<div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;font-size:12px;color:#8A93A6;"><span id="gtPhToday"></span>'
-    +'<button onclick="gtPhoneScanForget()" style="background:none;border:none;color:#8A93A6;font-size:12px;text-decoration:underline;">'+escapeHtml(L('נתק טלפון','Disconnect phone','Desconectar'))+'</button></div></div>';
-  for(let i=0;i<50 && !window.sb;i++) await new Promise(z=>setTimeout(z,200));
-  _gtPhStatus(); clearInterval(_gtPh.st); _gtPh.st=setInterval(()=>{ if(window._gtPhoneMode && !document.hidden) _gtPhStatus(); }, 20000);
-  const msg=document.getElementById('gtPhMsg'), vid=document.getElementById('gtPhVid');
-  try{ _gtPh.det=('BarcodeDetector' in window) ? new window.BarcodeDetector() : null; }catch(e){ _gtPh.det=null; }
-  document.getElementById('gtPhFile').onchange=async(ev)=>{ const f=ev.target.files&&ev.target.files[0]; ev.target.value=''; if(!f) return;
-    if(!_gtPh.det){ msg.textContent=L('הדפדפן הזה לא קורא ברקוד מתמונה — "הקלד".','This browser cannot read a code from a photo — "Type".','Use "Escribir".'); return; }
-    try{ const bmp=await createImageBitmap(f); const r=await _gtPh.det.detect(bmp); if(r&&r.length){ _gtPh.last=''; _gtPhSend(r[0].rawValue); } else { _gtPhBeep(false); msg.textContent=L('לא נמצא ברקוד בתמונה — צלמו שוב מקרוב.','No code in the photo — take it again closer.','Sin código en la foto.'); } }catch(e){ msg.textContent=String(e.message||e); } };
-  if(!_gtPh.det){ msg.textContent=L('הדפדפן הזה לא קורא ברקוד במצלמה (מומלץ Chrome באנדרואיד). אפשר "הקלד".','This browser cannot read codes with the camera (Chrome on Android is best). "Type" works.','Este navegador no lee códigos (mejor Chrome en Android).'); vid.style.display='none'; return; }
-  if(!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia) || !window.isSecureContext){
-    msg.textContent=L('מצלמה חיה צריכה כתובת https — כאן: "📷 צלם" לכל סריקה.','A live camera needs an https address — here: "📷 Photo" for each scan.','La cámara en vivo necesita https — use "Foto".'); vid.style.display='none'; return; }
-  try{ _gtPh.stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}}); vid.srcObject=_gtPh.stream; await vid.play(); }
-  catch(e){ msg.textContent=L('אין גישה למצלמה — מאשרים מצלמה בדפדפן, או "📷 צלם".','No camera access — allow the camera in the browser, or "📷 Photo".','Sin cámara — permítala o use "Foto".'); vid.style.display='none'; return; }
-  const tr=_gtPh.stream.getVideoTracks()[0]; let torch=false;
-  document.getElementById('gtPhTorch').onclick=async()=>{ try{ torch=!torch; await tr.applyConstraints({advanced:[{torch}]}); }catch(e){ msg.textContent=L('לטלפון הזה אין פנס שאפשר להדליק מכאן.','This phone\'s light cannot be switched on from here.','Sin linterna.'); } };
-  _gtPh.timer=setInterval(async()=>{ if(_gtPh.busy || document.hidden || !vid.videoWidth) return; _gtPh.busy=true;
-    try{ const r=await _gtPh.det.detect(vid); if(r&&r.length) await _gtPhSend(r[0].rawValue); }catch(e){} finally{ _gtPh.busy=false; } }, 250);
-}
-function _gtPhType(){ const v=prompt(L('הקלידו את הקוד / המספר:','Type the code / number:','Escriba el código / número:'),''); if(v&&v.trim()){ _gtPh.last=''; _gtPhSend(v.trim()); } }
 // (owner, 19.10) the separate "phone as a scanner" was removed — every screen scans with its own camera (📷).
-// A phone that had joined as a scanner forgets it and opens as a normal device.
-(function(){ try{ if(_gtPhTok()) localStorage.removeItem(_GT_PH_KEY); }catch(e){} })();
+// A phone that had joined as a scanner forgets it and opens as a normal device. (round-2 review A-old4: the rest of
+// that code was removed; the server's phone_scanner_* functions are removed in 02 §45)
+(function(){ try{ localStorage.removeItem('gt_phone_scan_token'); }catch(e){} })();
 </script>
 
 <script>
@@ -19466,7 +19328,7 @@ function _gtCamScreenOk(){ const a=(document.querySelector('.screen.active')||{}
   return a==='scStamps' || a==='scParts' || (a==='scLegs') || (a==='scSup' && typeof supRole!=='undefined' && (supRole==='nikur'||supRole==='cooler')); }
 // (round-2 review A-sc2) inner / outer: their top-bar "📷 Scan" opens the same camera — no second button
 function _gtCamBtnSync(){
-  let b=document.getElementById('gtCamBtn'); const on=_gtCamScreenOk() && !window._gtPhoneMode;
+  let b=document.getElementById('gtCamBtn'); const on=_gtCamScreenOk();
   if(!on){ if(b) b.style.display='none'; return; }
   if(!b){ b=document.createElement('button'); b.id='gtCamBtn'; b.setAttribute('data-no-i18n','');
     b.style.cssText='position:fixed;bottom:76px;left:14px;z-index:800;width:58px;height:58px;border-radius:50%;border:2px solid #28C76F;background:rgba(10,30,18,.92);color:#fff;font-size:26px;box-shadow:0 4px 16px rgba(0,0,0,.5);cursor:pointer;';
