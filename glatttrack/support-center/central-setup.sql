@@ -485,6 +485,8 @@ begin
   v_ip := left(trim(coalesce(nullif(current_setting('request.headers', true), '')::json ->> 'cf-connecting-ip',
                              nullif(current_setting('request.headers', true), '')::json ->> 'x-real-ip',
                              (regexp_split_to_array(v_ip, '\s*,\s*'))[cardinality(regexp_split_to_array(v_ip, '\s*,\s*'))])), 64);
+  -- (audit) one attempt at a time from the same address: many at the same moment cannot pass the limit of 10
+  perform pg_advisory_xact_lock(hashtext('sc_login:' || coalesce(v_ip, '')));
   if (select count(*) from sc_login_attempts where not ok and ip = v_ip and at > now() - interval '15 minutes') >= 10 then
     return jsonb_build_object('ok', false, 'error', 'rate_limited');
   end if;

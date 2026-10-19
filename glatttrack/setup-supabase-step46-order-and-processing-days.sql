@@ -7606,6 +7606,57 @@ language sql immutable set search_path = public, extensions, pg_temp as $$
 $$;
 revoke execute on function _print_kosher_max(jsonb, text, boolean, jsonb) from public, anon, authenticated;
 
+-- (audit) the print log: every print a station asked for — what it was for (kind, animal, day, parts, copies), who
+-- asked (device, worker), what the server answered, and what the printer did. Kept 400 days, without the picture.
+create table if not exists print_log (
+  id          bigserial primary key,
+  at          timestamptz not null default now(),
+  device_id   text not null,
+  worker      text,
+  kind        text not null check (kind in ('legs', 'head', 'kosher', 'test', '?')),
+  board_epoch bigint,
+  animal_id   integer,
+  parts       jsonb,
+  labels      integer,
+  copies      integer,
+  printer     text,
+  job_id      bigint,
+  result      text not null,          -- queued / refused:<reason> / sent / failed
+  error       text,
+  done_at     timestamptz);
+create index if not exists print_log_animal on print_log (board_epoch, animal_id);
+create index if not exists print_log_job on print_log (job_id) where job_id is not null;
+alter table print_log enable row level security;          -- no policy: only the server writes it
+revoke all on table print_log from public, anon, authenticated;
+revoke all on sequence print_log_id_seq from public, anon, authenticated;
+
+create or replace function _print_log_add(p_dev text, p_kind text, p_animal integer, p_parts jsonb, p_labels integer, p_copies integer,
+                                          p_printer text, p_job bigint, p_result text) returns void
+language plpgsql security definer set search_path = public, extensions, pg_temp as $$
+begin
+  insert into print_log (device_id, worker, kind, board_epoch, animal_id, parts, labels, copies, printer, job_id, result)
+  values (coalesce(p_dev, '?'), (select w.name from _current_worker() w limit 1),
+          case when p_kind in ('legs', 'head', 'kosher', 'test') then p_kind else '?' end, _board_epoch(),
+          case when p_animal between 0 and 999 then p_animal end,
+          case when jsonb_typeof(p_parts) = 'array' and jsonb_array_length(p_parts) between 1 and 30 then p_parts end,
+          p_labels, p_copies, left(p_printer, 40), p_job, left(p_result, 60));
+  if random() < 0.01 then delete from print_log where at < now() - interval '400 days'; end if;
+end $$;
+revoke execute on function _print_log_add(text, text, integer, jsonb, integer, integer, text, bigint, text) from public, anon, authenticated;
+
+-- what the printer did (the relay writes sent / failed on the job) goes into the log too
+create or replace function _print_log_result() returns trigger
+language plpgsql security definer set search_path = public, extensions, pg_temp as $$
+begin
+  if new.status in ('sent', 'failed') and new.status is distinct from old.status then
+    update print_log set result = new.status, error = left(new.error, 200), done_at = now() where job_id = new.id;
+  end if;
+  return new;
+end $$;
+revoke execute on function _print_log_result() from public, anon, authenticated;
+drop trigger if exists zz_print_log_result on print_jobs;
+create trigger zz_print_log_result after update of status on print_jobs for each row execute function _print_log_result();
+
 create or replace function print_job_add(p_printer text, p_data text, p_kind text, p_animal integer default null,
                                          p_parts jsonb default '[]'::jsonb, p_token text default null, p_command_id uuid default null) returns jsonb
 language plpgsql security definer set search_path = public, extensions, pg_temp as $$
@@ -7645,6 +7696,9 @@ begin
     -- the screen that prints these stickers (test mode: the team leader's one-phone test may print anything)
     if v_e is null and not v_test and not (case when p_kind = 'kosher' then coalesce(v_role, '') in ('parts', 'stamps')
                                                 else coalesce(v_role, '') = 'legs' end) then v_e := 'wrong_station'; end if;
+    -- (audit A1) legs and head on two screens: the legs screen prints only legs stickers, the head screen only head
+    -- stickers — the same rule as marking them done
+    if v_e is null and p_kind in ('legs', 'head') then v_e := _legs_slot_error(p_kind = 'legs', p_kind = 'head', false); end if;
     if v_e is null and p_kind in ('legs', 'head') then
       v_max := least(20, greatest(1, coalesce(nullif(s ->> case when p_kind = 'legs' then 'legStickerCount' else 'headStickerCount' end, '')::int,
                                                case when p_kind = 'legs' then 2 else 7 end)));
@@ -7671,12 +7725,14 @@ begin
   end if;
   if v_e is not null then
     v_res := jsonb_build_object('ok', false, 'error', 'refused', 'reason', v_e);
+    perform _print_log_add(v_dev, p_kind, p_animal, p_parts, v_labels, v_pq, p_printer, null, 'refused:' || v_e);   -- (audit)
     perform _cmd_put(p_command_id, v_dev, 'print_job_add', v_res); return v_res;
   end if;
   if (select count(*) from print_jobs where device_id = v_dev and at > now() - interval '1 minute') >= 120 then
     return jsonb_build_object('ok', false, 'error', 'too_many');
   end if;
   insert into print_jobs (device_id, printer, data) values (v_dev, p_printer, p_data) returning id into v_id;
+  perform _print_log_add(v_dev, p_kind, p_animal, p_parts, v_labels, v_pq, p_printer, v_id, 'queued');            -- (audit)
   delete from print_jobs where at < now() - interval '2 days';
   v_res := jsonb_build_object('ok', true, 'id', v_id);
   perform _cmd_put(p_command_id, v_dev, 'print_job_add', v_res);

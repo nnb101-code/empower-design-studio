@@ -8808,10 +8808,17 @@ async function gtPrintGate(key,jobs,commit){
   if(!p){
     // (round 24) no printer for this screen: nothing is marked — only the server's test mode (switched on by the
     // owner, 8 hours at most) lets the screens be tried before the printers are there
-    let test=window._gtServerTestMode===true;
-    try{ if(window.sb){ const r=await window.sb.rpc('server_test_mode'); if(!r.error) test = r.data===true; } }catch(e){}
-    if(test){ commit(); _gtPrintMsg('🧪 '+L('מצב בדיקה — הודפס וירטואלית (אין מדפסת למסך הזה).','Test mode — printed virtually (no printer for this screen).','Modo de prueba — impreso virtualmente (sin impresora).'),false);
-      gtVirtualPrint(jobs); return true; }
+    // (audit A3) the virtual stickers first — marked only when they are on the screen; a second tap meanwhile waits
+    let test=window._gtServerTestMode===true, vok=false;
+    _gtPrintBusy=true;
+    try{
+      try{ if(window.sb){ const r=await window.sb.rpc('server_test_mode'); if(!r.error) test = r.data===true; } }catch(e){}
+      if(test) vok=await gtVirtualPrint(jobs);
+    } finally{ _gtPrintBusy=false; }
+    if(test){
+      if(!vok){ _gtPrintMsg('🧪 '+L('מצב בדיקה — המדבקות לא הוצגו, לא סומן. נסו שוב.','Test mode — the stickers were not shown, not marked. Try again.','Modo de prueba — no se mostraron las etiquetas, no marcado.'),true); return false; }
+      commit(); _gtPrintMsg('🧪 '+L('מצב בדיקה — הודפס וירטואלית (אין מדפסת למסך הזה).','Test mode — printed virtually (no printer for this screen).','Modo de prueba — impreso virtualmente (sin impresora).'),false);
+      return true; }
     _gtPrintMsg('🖨 '+L('אין מדפסת למסך הזה — לא סומן. קראו לראש הצוות (הגדרות ← מדפסות ← שיוך לכל מסך).','No printer for this screen — not marked. Call the team leader (Settings → Printers → Assign to each screen).','No hay impresora para esta pantalla — no marcado. Llame al jefe de equipo.')+(window.GT_SERVER?'':L(' · לבדיקה בלי מדפסות: להפעיל מצב בדיקה בשרת (test-mode-on.sql) — 8 שעות.',' · Testing without printers: turn on test mode on the server (test-mode-on.sql) — 8 hours.',' · Prueba sin impresoras: active el modo de prueba (test-mode-on.sql).')),true);   // (round-2 review A-pr1) the test-mode hint is part of the text
     return false;
   }
@@ -8832,7 +8839,8 @@ async function gtVirtualPrint(jobs){
       for(let c=0;c<Math.max(1,j.copies||1);c++) _gtVP.items.unshift({src:cv.toDataURL('image/png'), t:'#'+(Number(j.idx)+1)+(j.piece&&j.piece.name?' · '+j.piece.name:'')}); }
     _gtVP.items=_gtVP.items.slice(0,40);
     _gtVPRender(true);
-  }catch(e){ try{ gtLogError('virtual_print', e); }catch(_){} }
+    return true;
+  }catch(e){ try{ gtLogError('virtual_print', e); }catch(_){} return false; }
 }
 function _gtVPRender(open){
   let el=document.getElementById('gtVP');

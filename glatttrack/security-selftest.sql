@@ -3374,6 +3374,41 @@ begin
     perform pg_temp.rec('round 24: a print job is checked for what it is — the right screen, the animal (slaughtered / ruled kosher), the part''s holds, the copies; a test only by the team leader', ok,
       concat_ws(' | ', left(q1::text, 50), q2 ->> 'reason', q3 ->> 'reason', q4 ->> 'reason', left(q5::text, 50), q6 ->> 'reason', q7 ->> 'reason', left(q8::text, 80)));
   end;
+  -- (audit A1) legs and head on two screens: the legs screen prints only legs stickers, the head screen only head
+  -- stickers (also by a direct call); one screen again → the legs screen prints both. A refused one leaves no job.
+  declare zl text := encode(convert_to('^XA^PW16^LL16^LH0,0^FO0,0^GFA,4,4,2,FF00FF00^FS^PQ2^XZ', 'LATIN1'), 'base64');
+          q9 jsonb; q10 jsonb; q11 jsonb; q12 jsonb; q13 jsonb; n0 bigint; n1 bigint;
+  begin
+    perform set_config('gt.reset_in_progress', 'true', true);
+    update settings_pilot set settings = (settings - 'legsPaused') || '{"legsHeadSplit":true,"legsMode":true}'::jsonb where id = 1;
+    update devices_pilot set assigned_index = 191 where assigned_role = 'legs' and assigned_index in (0, 1) and device_status = 'active' and id <> pg_temp.devid('LEGS');
+    update devices_pilot set assigned_index = 0 where id = pg_temp.devid('LEGS');
+    perform set_config('gt.reset_in_progress', 'false', true);
+    select count(*) into n0 from print_jobs;
+    q9  := pg_temp.api(pg_temp.dev('LEGS'), format('select print_job_add(%L, %L, ''head'', 911)', '192.168.1.50:9100', zl));   -- legs screen, head sticker: no
+    q10 := pg_temp.api(pg_temp.dev('LEGS'), format('select print_job_add(%L, %L, ''legs'', 911)', '192.168.1.50:9100', zl));   -- legs screen, legs sticker: yes
+    update devices_pilot set assigned_index = 1 where id = pg_temp.devid('LEGS');                                                  -- now the head screen
+    q11 := pg_temp.api(pg_temp.dev('LEGS'), format('select print_job_add(%L, %L, ''head'', 911)', '192.168.1.50:9100', zl));   -- head screen, head sticker: yes
+    q12 := pg_temp.api(pg_temp.dev('LEGS'), format('select print_job_add(%L, %L, ''legs'', 911)', '192.168.1.50:9100', zl));   -- head screen, legs sticker: no
+    select count(*) into n1 from print_jobs;
+    perform set_config('gt.reset_in_progress', 'true', true);
+    update settings_pilot set settings = settings - 'legsHeadSplit' where id = 1;
+    update devices_pilot set assigned_index = 0 where id = pg_temp.devid('LEGS');
+    perform set_config('gt.reset_in_progress', 'false', true);
+    q13 := pg_temp.api(pg_temp.dev('LEGS'), format('select print_job_add(%L, %L, ''head'', 911)', '192.168.1.50:9100', zl));   -- one screen: the head too
+    perform pg_temp.rec('audit A1: legs / head on two screens — each screen prints only its own stickers, also by a direct call; a refused print leaves no job; one screen prints both',
+      q9 ->> 'reason' = 'wrong_screen' and pg_temp.ok(q10) and pg_temp.ok(q11) and q12 ->> 'reason' = 'wrong_screen' and n1 = n0 + 2 and pg_temp.ok(q13),
+      concat_ws(' | ', q9 ->> 'reason', left(q10::text, 40), left(q11::text, 40), q12 ->> 'reason', n1 - n0, left(q13::text, 40)));
+    -- (audit) the print log: each request with what it was for and the server's answer; the printer's result follows
+    update print_jobs set status = 'sent', sent_at = now() where id = (q10 ->> 'id')::bigint;
+    perform pg_temp.rec('audit: the print log keeps every request — kind, animal, day, device, copies, the refusal reason; the printer''s result follows the job; closed to the API',
+      exists (select 1 from print_log where job_id is null and kind = 'head' and animal_id = 911 and result = 'refused:wrong_screen' and device_id = pg_temp.devid('LEGS'))
+      and exists (select 1 from print_log where job_id = (q10 ->> 'id')::bigint and kind = 'legs' and animal_id = 911 and board_epoch = _board_epoch()
+                    and copies = 2 and labels = 1 and result = 'sent' and done_at is not null)
+      and exists (select 1 from print_log where job_id = (q11 ->> 'id')::bigint and result = 'queued')
+      and not has_table_privilege('anon', 'print_log', 'select') and not has_table_privilege('authenticated', 'print_log', 'select'),
+      (select string_agg(kind || ':' || coalesce(animal_id::text, '-') || ':' || result, ', ' order by id) from (select * from print_log order by id desc limit 6) x));
+  end;
   update settings_pilot set settings = s0 where id = 1;
 end $$;
 $gt80$;
