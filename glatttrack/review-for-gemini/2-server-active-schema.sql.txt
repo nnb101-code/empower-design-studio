@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict dBn9rfh8wec3n6XdYBmoCAm1ujetCSanu9OxZnoiHaJU1xfmNBf5RZfNeVsDaET
+\restrict UWmCwLXirb7ifD5WGtdDcZrRCZeYdSdPZgg1Fd3e8zA8WrVH95Q4KjGHR0r9S45
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -7476,11 +7476,7 @@ begin
                                            'expected', v_exp, 'in', v_in, 'side', v_side,
                                            'cooled', case when ep = v_cur then (select coalesce(jsonb_agg(distinct c.animal_id + 1), '[]'::jsonb) from cooler_scans c where c.board_epoch = ep) else '[]'::jsonb end,
                                            'rows', (select coalesce(jsonb_agg(m), '[]'::jsonb) from (select m from jsonb_array_elements(v_all) m limit 800) q),
-                                           'missing', (select coalesce(jsonb_agg(m), '[]'::jsonb) from (select m from jsonb_array_elements(v_miss) m limit 300) q),
-                                           -- §46: an earlier day's parts by their names of that day (a part renamed / removed since)
-                                           'parts', case when ep = v_cur then '[]'::jsonb else
-                                             (select coalesce(jsonb_agg(jsonb_build_object('id', e ->> 'id', 'he', e ->> 'he', 'en', e ->> 'en', 'es', e ->> 'es')), '[]'::jsonb)
-                                                from jsonb_array_elements(_gt_products_of(ep)) e where e ->> 'nikur' in ('big', 'small')) end);
+                                           'missing', (select coalesce(jsonb_agg(m), '[]'::jsonb) from (select m from jsonb_array_elements(v_miss) m limit 300) q));
   end loop;
   return jsonb_build_object('ok', true, 'boardEpoch', v_cur, 'screen', v_screen, 'mode', v_mode, 'coolerOn', _cooler_on(), 'days', v_days,
     'productsSaved', exists (select 1 from jsonb_array_elements(_gt_products()) e where e ->> 'nikur' in ('big', 'small') and coalesce((e ->> 'm')::int, 0) >= 1),
@@ -14491,5 +14487,5 @@ GRANT ALL ON TABLE public.system_flags TO service_role;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict dBn9rfh8wec3n6XdYBmoCAm1ujetCSanu9OxZnoiHaJU1xfmNBf5RZfNeVsDaET
+\unrestrict UWmCwLXirb7ifD5WGtdDcZrRCZeYdSdPZgg1Fd3e8zA8WrVH95Q4KjGHR0r9S45
 

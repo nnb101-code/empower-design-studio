@@ -12137,6 +12137,7 @@ notify pgrst, 'reload schema';
 -- ============================================================================
 -- ============================================================================
 -- ============================================================================
+-- ============================================================================
 -- GlattTrack — step 46: stage order on the server, each station its own stage,
 -- kashrut configuration locks, and processing that continues over several days
 -- ============================================================================
@@ -20551,11 +20552,7 @@ begin
                                            'expected', v_exp, 'in', v_in, 'side', v_side,
                                            'cooled', case when ep = v_cur then (select coalesce(jsonb_agg(distinct c.animal_id + 1), '[]'::jsonb) from cooler_scans c where c.board_epoch = ep) else '[]'::jsonb end,
                                            'rows', (select coalesce(jsonb_agg(m), '[]'::jsonb) from (select m from jsonb_array_elements(v_all) m limit 800) q),
-                                           'missing', (select coalesce(jsonb_agg(m), '[]'::jsonb) from (select m from jsonb_array_elements(v_miss) m limit 300) q),
-                                           -- §46: an earlier day's parts by their names of that day (a part renamed / removed since)
-                                           'parts', case when ep = v_cur then '[]'::jsonb else
-                                             (select coalesce(jsonb_agg(jsonb_build_object('id', e ->> 'id', 'he', e ->> 'he', 'en', e ->> 'en', 'es', e ->> 'es')), '[]'::jsonb)
-                                                from jsonb_array_elements(_gt_products_of(ep)) e where e ->> 'nikur' in ('big', 'small')) end);
+                                           'missing', (select coalesce(jsonb_agg(m), '[]'::jsonb) from (select m from jsonb_array_elements(v_miss) m limit 300) q));
   end loop;
   return jsonb_build_object('ok', true, 'boardEpoch', v_cur, 'screen', v_screen, 'mode', v_mode, 'coolerOn', _cooler_on(), 'days', v_days,
     'productsSaved', exists (select 1 from jsonb_array_elements(_gt_products()) e where e ->> 'nikur' in ('big', 'small') and coalesce((e ->> 'm')::int, 0) >= 1),
@@ -20589,8 +20586,7 @@ grant execute on function nikur_board() to anon, authenticated;
 -- Owner: "the processing is mostly not on the same day — the processing of today must know exactly what was on
 -- the day before, or two days before, to work on the same numbers and the same parts."
 -- A copy of the plant's settings is kept for each day: when the day starts (the reset) and at every change during
--- it. An earlier day's nikur / cooler work reads THAT day's parts list (its parts, their names, their side, their
--- counts) — not today's. Which screens exist (the cooler, one or two nikur screens) is today's: that is where the
+-- it. An earlier day's nikur / cooler work reads THAT day's parts list (its parts and their counts) — not today's. Which screens exist (the cooler, one or two nikur screens) is today's: that is where the
 -- work is done now. Worker codes and seal pictures are not copied (only a fingerprint of each seal). 400 days.
 create table if not exists settings_snapshots (
   id          bigserial primary key,
