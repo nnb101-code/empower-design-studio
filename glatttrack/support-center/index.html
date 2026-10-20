@@ -49,7 +49,9 @@ a.lk{color:var(--gold);font-size:13px}
 <main id="main"></main>
 <script>
 const SC = window.SC_SERVER || {};
-let TOK = sessionStorage.getItem('sc_tok') || '', ME = { name:'', role:'' }, VIEW = 'overview', CUR = null, lastBad = new Set(), TF = 'open';
+// (owner) a page opened from a phone's Downloads may have no session storage: the login still works
+const SS = { get(k){ try{ return sessionStorage.getItem(k); }catch(e){ return null; } }, set(k, v){ try{ sessionStorage.setItem(k, v); }catch(e){} }, del(k){ try{ sessionStorage.removeItem(k); }catch(e){} } };
+let TOK = SS.get('sc_tok') || '', ME = { name:'', role:'' }, VIEW = 'overview', CUR = null, lastBad = new Set(), TF = 'open';
 // (owner) Hebrew / English — the whole page at once; the choice is kept on this computer
 let LANG = 'he'; try{ LANG = localStorage.getItem('sc_lang') === 'en' ? 'en' : 'he'; }catch(e){}
 const L = (he, en) => LANG === 'en' ? en : he;
@@ -96,6 +98,7 @@ const ROLE_ = { slaughter:['שחיטה','Slaughter'], esophagus:['וושט','Eso
   nikur:['מנקר','Nikur'], salting:['מליחה','Salting'], shipping:['שיפינג','Shipping'] };
 const roleName = r => ROLE_[r] ? L(ROLE_[r][0], ROLE_[r][1]) : (r || '');
 async function raw(fn, args){
+  if(!SC.url || !SC.anonKey) return { ok:false, error:'no_config' };   // sc-config.js was not found next to the page
   try{ const r = await fetch(SC.url + '/rest/v1/rpc/' + fn, { method:'POST', headers:Object.assign({ 'Content-Type':'application/json', apikey:SC.anonKey }, /^eyJ/.test(SC.anonKey||'') ? { Authorization:'Bearer ' + SC.anonKey } : {}), body: JSON.stringify(args || {}) });
        return (await r.json()) || { ok:false, error:'network' }; }catch(e){ return { ok:false, error:'network' }; }
 }
@@ -115,7 +118,8 @@ const can = k => CAN[k](ME.role);
 const ERR = { no_permission:['אין הרשאה לפעולה הזאת','No permission for this'], network:['אין חיבור לשרת','No connection to the server'], bad_value:['ערך לא תקין','Invalid value'],
   code_too_short:['קוד קצר מדי (לפחות 10 תווים)','Code too short (at least 10 characters)'], code_taken:['הקוד / המספר תפוס','The code / number is taken'],
   last_admin:['אי אפשר — זה המנהל האחרון','Not possible — this is the last admin'], bad_id:['לא נמצא','Not found'],
-  code_invalid:['קוד שגוי','Wrong code'], rate_limited:['יותר מדי ניסיונות — לחכות 15 דקות','Too many tries — wait 15 minutes'] };
+  code_invalid:['קוד שגוי','Wrong code'],
+  no_config:['חסרה כתובת השרת: הקובץ sc-config.js לא נמצא ליד הדף (או: לפתוח את הגרסה בקובץ אחד)','The server address is missing: sc-config.js was not found next to the page (or: open the one-file version)'], rate_limited:['יותר מדי ניסיונות — לחכות 15 דקות','Too many tries — wait 15 minutes'] };
 const er = e => ERR[e] ? L(ERR[e][0], ERR[e][1]) : e;
 const dt = t => t ? new Date(t).toLocaleString(LOC(), { day:'2-digit', month:'2-digit', year:'2-digit', hour:'2-digit', minute:'2-digit' }) : '—';
 const nf = n => Number(n || 0).toLocaleString(LOC());
@@ -134,7 +138,7 @@ function chrome(on){
 function go(v){ ({ overview:showOverview, tickets:showTickets, billing:showBilling, staff:showStaff, settings:showSettings, plant:showOverview })[v](); }
 function mark(v){ VIEW = v; document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.id === 'tab_' + (v === 'plant' ? 'overview' : v))); }
 function home(){ if(can('plants')) showOverview(); else if(can('billing')) showBilling(); }
-function logout(){ TOK=''; ME={ name:'', role:'' }; sessionStorage.removeItem('sc_tok'); chrome(false); showLogin(); }
+function logout(){ TOK=''; ME={ name:'', role:'' }; SS.del('sc_tok'); chrome(false); showLogin(); }
 function showLogin(msg){
   main().innerHTML = `<div class="card" style="max-width:380px;margin:60px auto;text-align:center"><div class="t" style="margin-bottom:12px">${E(L('כניסה למרכז השירות','Service center login'))}</div>
     ${msg ? `<div class="g" style="margin-bottom:10px;font-size:14px">${E(msg)}</div>` : ''}
@@ -144,8 +148,8 @@ function showLogin(msg){
 }
 async function doLogin(){
   const d = await rpc('sc_login', { p_code: document.getElementById('code').value });
-  if(!d.ok){ document.getElementById('lerr').textContent = d.error === 'rate_limited' ? er('rate_limited') : d.error === 'network' ? er('network') : er('code_invalid'); return; }
-  TOK = d.token; sessionStorage.setItem('sc_tok', TOK); ME = { name: d.name, role: d.role || 'admin' }; chrome(true); home();
+  if(!d.ok){ document.getElementById('lerr').textContent = ['rate_limited','network','no_config'].includes(d.error) ? er(d.error) : er('code_invalid'); return; }
+  TOK = d.token; SS.set('sc_tok', TOK); ME = { name: d.name, role: d.role || 'admin' }; chrome(true); home();
 }
 // (owner) a forgotten code: the admin's one-time recovery code + a new code
 function showRecover(){

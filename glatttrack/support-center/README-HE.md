@@ -39,6 +39,7 @@
    window.SC_SERVER = { url: 'https://<project>.supabase.co', anonKey: '<anon key>' };
    ```
 3. נכנסים עם הקוד של עובד השירות.
+4. **בטלפון, או בלי אתר:** פותחים את `glatttrack-center.html` מתיקיית ההעלאה. זה אותו דף, והכתובת והמפתח הציבורי כבר בתוכו, אז אין צורך בקובץ שני. אם נפתח `index.html` בלי `sc-config.js` לידו, מופיעה ההודעה "חסרה כתובת השרת". · **On a phone, or without a website:** open `glatttrack-center.html` from the upload folder. It is the same page with the address and the public key inside, so no second file is needed.
 
 ## 3. מפעל חדש
 1. בדף: "עדכונים והגדרות" ← "מפעל חדש" ← מספר ושם. (רק מנהל.)
