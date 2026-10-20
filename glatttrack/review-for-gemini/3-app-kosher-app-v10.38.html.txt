@@ -16729,7 +16729,7 @@ async function _gtCheckSetupNeeded(){
 }
 function gtStartFirstSetup(){
   _showLoginModal('manager','code','scManagerLogin');
-  const inp=document.getElementById('loginCodeInput'); if(inp && inp.parentElement) inp.parentElement.style.display='none';
+  const inp=document.getElementById('loginCodeInput'), box=inp && inp.closest('div'); if(box) box.style.display='none';   // (the code field may sit in its 👁 wrapper)
   const m=document.getElementById('loginModal');
   const btns=m ? [...m.querySelectorAll('button')] : []; if(btns.length) btns[btns.length-1].style.display='none';
   const t=m && m.firstElementChild && m.firstElementChild.firstElementChild; if(t) t.textContent=L('התקנה ראשונה','First installation','Primera instalación');
@@ -19498,6 +19498,32 @@ async function gtCamScanOpen(){
 }
 // the Android back button / leaving the screen closes the camera
 (function(){ const og=window.goTo; window.goTo=function(){ gtCamScanClose(); const r=og.apply(this,arguments); setTimeout(_gtCamBtnSync,50); return r; }; })();
+// (owner) every code field: written left to right (a code is not Hebrew text), 👁 shows / hides the code (hidden
+// again by itself after 30 s), and a warning when the keyboard writes Hebrew letters into it
+const _GT_CF_CSS='.gt-cf{position:relative;display:block}.gt-cf>input{direction:ltr !important;text-align:left !important;padding-right:44px !important;width:100%;box-sizing:border-box}'
+  +'.gt-cf>.gt-eye{position:absolute;right:4px;top:50%;transform:translateY(-50%);background:transparent;border:none;font-size:20px;padding:4px 6px;line-height:1;cursor:pointer;color:#8A93A6}'
+  +'.gt-kbw{display:none;color:#F0A030;font-size:12px;font-weight:700;margin:4px 0;text-align:start}.gt-kbw.on{display:block}';
+function _gtCodeField(inp){
+  if(!inp || inp.dataset.gtcf) return; inp.dataset.gtcf='1';
+  inp.setAttribute('dir','ltr'); inp.setAttribute('autocapitalize','off'); inp.setAttribute('autocorrect','off'); inp.setAttribute('spellcheck','false');
+  const w=document.createElement('span'); w.className='gt-cf';
+  const mb=getComputedStyle(inp).marginBottom; if(mb && mb!=='0px'){ w.style.marginBottom=mb; inp.style.marginBottom='0'; }
+  inp.parentNode.insertBefore(w, inp); w.appendChild(inp);
+  const b=document.createElement('button'); b.type='button'; b.className='gt-eye'; b.tabIndex=-1; b.textContent='👁';
+  b.title=L('הצג / הסתר את הקוד','Show / hide the code','Mostrar / ocultar el código'); w.appendChild(b);
+  const k=document.createElement('div'); k.className='gt-kbw'; k.setAttribute('data-no-i18n','');
+  k.textContent='⚠ '+L('המקלדת בעברית! הקוד נכתב באותיות עבריות — להחליף לאנגלית','The keyboard is writing Hebrew! Switch it to English','¡El teclado escribe en hebreo! Cámbielo a inglés');
+  w.parentNode.insertBefore(k, w.nextSibling);
+  b.addEventListener('mousedown', e=>e.preventDefault());   // the field keeps the focus (the keyboard stays open)
+  b.addEventListener('click', e=>{ e.preventDefault(); e.stopPropagation(); const show=inp.type==='password'; inp.type=show?'text':'password'; b.textContent=show?'🙈':'👁';
+    clearTimeout(inp._gtEyeT); if(show) inp._gtEyeT=setTimeout(()=>{ inp.type='password'; b.textContent='👁'; }, 30000); });
+  inp.addEventListener('input', ()=>k.classList.toggle('on', /[\u0590-\u05FF]/.test(inp.value)));
+}
+(function(){
+  try{ const st=document.createElement('style'); st.textContent=_GT_CF_CSS; document.head.appendChild(st); }catch(e){}
+  const run=()=>{ try{ document.querySelectorAll('input[type="password"]:not([data-gtcf])').forEach(_gtCodeField); }catch(e){} };
+  run(); try{ new MutationObserver(run).observe(document.body, { childList:true, subtree:true }); }catch(e){}
+})();
 </script>
 <!-- ZXing (@zxing/library 0.21.3, Apache License 2.0, https://github.com/zxing-js/library) — the built-in barcode / QR
      reader for phones whose browser has no BarcodeDetector. Kept as text; started the first time the camera opens. -->

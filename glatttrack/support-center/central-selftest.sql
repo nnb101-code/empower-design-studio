@@ -1,5 +1,5 @@
 -- GlattTrack support center — self-test. Changes nothing (every change is undone inside it).
--- Expected result (one row): PASSED — 28 of 28 support-center checks (nothing was changed)
+-- Expected result (one row): PASSED — 32 of 32 support-center checks (nothing was changed)
 -- ONE statement (one DO block), no temporary table: the Supabase SQL Editor runs it like psql does
 -- (the same way as the plant's 03). Works on an empty center and on one that already has plants and staff.
 do $$
@@ -107,6 +107,30 @@ begin
       and sc_command_add(tview, '9001', 'reload_tablets') ->> 'error' = 'unauthorized' and sc_billing_set(tview, '9001', 'kg', 1) ->> 'error' = 'unauthorized'
       and sc_billing(tsup) ->> 'error' = 'unauthorized' and sc_staff_list(tsup) ->> 'error' = 'unauthorized' and sc_plant_add(tsup, '9002', 'x') ->> 'error' = 'unauthorized'
       and (sc_command_add(tsup, '9001', 'reload_tablets') ->> 'ok')::boolean and sc_staff_add(tfin, 'x', 'selftest-xxxx-code', 'admin') ->> 'error' = 'unauthorized');
+    -- (owner) a forgotten code: A. the admin gives a new code (the old one stops); B. an admin's one-time recovery code
+    declare rr jsonb; rc text; sid uuid := (select id from sc_staff where name = 'Selftest viewer');
+    begin
+      rr := sc_staff_add(tok, 'Selftest admin2', 'selftest-admin2-code-1', 'admin'); rc := rr ->> 'recovery';
+      perform pg_temp.rec('owner A: the admin gives a staff member a new code — the old code stops, the new one works; only the admin; at least 10 characters',
+        sc_staff_set_code(tok, sid, 'short') ->> 'error' = 'code_too_short'
+        and sc_staff_set_code(tsup, sid, 'selftest-viewer-code-2') ->> 'error' = 'unauthorized'
+        and (sc_staff_set_code(tok, sid, 'selftest-viewer-code-2') ->> 'ok')::boolean
+        and sc_login('selftest-viewer-code-1') ->> 'error' = 'code_invalid' and (sc_login('selftest-viewer-code-2') ->> 'ok')::boolean
+        and sc_overview(tview) ->> 'error' = 'unauthorized', rr::text);
+      perform pg_temp.rec('owner B: a new admin gets a recovery code once; with it (any case, with or without dashes) they set a new code — once only; a wrong one counts as a wrong try',
+        rc ~ '^[A-Z2-9]{4}-[A-Z2-9]{4}-[A-Z2-9]{4}-[A-Z2-9]{4}$'
+        and sc_recover('AAAA-BBBB-CCCC-DDDD', 'selftest-admin2-code-2') ->> 'error' = 'code_invalid'
+        and sc_recover(rc, 'short') ->> 'error' = 'code_too_short'
+        and (sc_recover(lower(replace(rc, '-', '')), 'selftest-admin2-code-2') ->> 'ok')::boolean
+        and sc_recover(rc, 'selftest-admin2-code-3') ->> 'error' = 'code_invalid'
+        and sc_login('selftest-admin2-code-1') ->> 'error' = 'code_invalid' and (sc_login('selftest-admin2-code-2') ->> 'ok')::boolean
+        and (sc_staff_add(tok, 'Selftest support2', 'selftest-support2-code', 'support') ? 'recovery') is false, rc);
+      rr := sc_recovery_new(tok);
+      perform pg_temp.rec('owner B: an admin makes their own recovery code (shown once); not support / finance',
+        (rr ->> 'recovery') ~ '^[A-Z2-9]{4}(-[A-Z2-9]{4}){3}$' and (sc_recovery_status(tok) ->> 'has')::boolean
+        and sc_recovery_new(tsup) ->> 'error' = 'unauthorized' and sc_recovery_new(tfin) ->> 'error' = 'unauthorized'
+        and not has_function_privilege('anon', '_sc_recovery_code()', 'execute'), rr::text);
+    end;
     -- the plant's problem reports become tickets (once); the plant gets their status back
     r := sc_report('9001', sec, '{"attention":[],"issues":[{"key":"E17","at":"2026-10-15T10:00:00Z","source":"station","screen":"legs","message":"printer stuck"},{"key":"L3","source":"leader","message":"tablet 2 slow"}],"usage":[{"day":"2026-09-01","animals":100,"kg":30000},{"day":"2026-09-02","animals":50,"kg":15000.5}]}');
     r2 := sc_report('9001', sec, '{"attention":[],"issues":[{"key":"E17","message":"printer stuck"}],"usage":[{"day":"2026-09-02","animals":60,"kg":18000}]}');

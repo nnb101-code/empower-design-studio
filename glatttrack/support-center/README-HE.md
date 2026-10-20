@@ -10,7 +10,7 @@
 ## 1. מסד הנתונים המרכזי (פעם אחת)
 1. פותחים פרויקט Supabase **נפרד** של היצרן. זה לא מסד של מפעל.
 2. ב-SQL Editor מריצים את `central-setup.sql`. ההרצה בטוחה גם יותר מפעם אחת.
-3. מריצים את `central-selftest.sql`. בתוצאה (שורה אחת בטבלה למטה) צריך להיות `PASSED — 29 of 29`.
+3. מריצים את `central-selftest.sql`. בתוצאה (שורה אחת בטבלה למטה) צריך להיות `PASSED — 32 of 32`.
 4. יוצרים את המנהל הראשון (את השאר מוסיפים אחר כך מהדף, בלשונית "צוות"):
    ```sql
    insert into sc_staff (name, code_hash, role) values ('שם המנהל', crypt('<קוד ארוך>', gen_salt('bf', 8)), 'admin');
@@ -18,8 +18,19 @@
 
 ## 1א. עדכון מרכז שכבר מותקן
 1. ב-SQL Editor של פרויקט היצרן מריצים שוב את `central-setup.sql` (כל הקובץ). זה בטוח: שום מפעל, איש צוות או חיוב לא נמחק.
-2. מריצים את `central-selftest.sql` → `PASSED — 29 of 29`. הבדיקה לא משנה כלום.
+2. מריצים את `central-selftest.sql` → `PASSED — 32 of 32`. הבדיקה לא משנה כלום.
 3. הדף (`index.html`) צריך החלפה רק כשהוא השתנה. בעדכון של 19.10 (סבב 3) הוא לא השתנה.
+
+## 1ב. שכחתי את הקוד · I forgot my code
+קוד נשמר רק מוצפן. אי אפשר לראות אותו, אפשר רק לקבוע קוד חדש. · A code is kept only encrypted: it can't be seen, only replaced.
+- **קוד שחזור (למנהל):** בלשונית "צוות" ← "🛟 קוד השחזור שלי" ← "צור קוד שחזור חדש". הקוד מוצג **פעם אחת**. כותבים אותו על דף ושומרים בכספת. אם שוכחים את הקוד: במסך הכניסה ← "שכחתי את הקוד" ← קוד השחזור + קוד חדש. קוד שחזור עובד פעם אחת, ואחרי השימוש יוצרים חדש. · **Recovery code (admins):** Staff → My recovery code → make a new one. It is shown **once**; keep it on paper in a safe. On the login screen → "I forgot my code".
+- **מנהל אחר:** בלשונית "צוות" ← "🔑 קוד חדש" ליד השם. · **Another admin:** Staff → "🔑 New code" next to the name.
+- **בלי שניהם:** ב-SQL Editor מריצים · **Without either:** in the SQL Editor:
+  ```sql
+  update sc_staff set code_hash = crypt('קוד-חדש-לפחות-10-תווים', gen_salt('bf', 8)), active = true where name = 'השם';
+  ```
+- **שדה הקוד** כתוב משמאל לימין. 👁 מציג את הקוד ל-30 שניות. אם המקלדת בעברית, מופיעה אזהרה. · The code field is left-to-right; 👁 shows it for 30 s; a warning appears if the keyboard is Hebrew.
+- **שפה:** הכפתור "עב | EN" למעלה. · **Language:** the "עב | EN" button at the top.
 
 ## 2. דף מרכז השירות
 1. מעלים את `index.html` לאתר של היצרן. מומלץ להגן עליו ב-https.

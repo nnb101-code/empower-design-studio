@@ -740,6 +740,129 @@ end $$;
 revoke execute on function sc_plant_hold(text, text, boolean) from public;
 grant execute on function sc_plant_hold(text, text, boolean) to anon, authenticated;
 
+-- ── v10.38 (owner): a forgotten code — an admin gives a new code; an admin's one-time recovery code ──────────
+-- A code is kept only as a bcrypt hash: nobody can read it back, it can only be replaced.
+alter table sc_staff add column if not exists recovery_hash text;
+
+-- the address the platform saw (the same rule as sc_login)
+create or replace function _sc_client_ip() returns text
+language plpgsql stable security definer set search_path = public, extensions, pg_temp as $$
+declare h json := nullif(current_setting('request.headers', true), '')::json; v text := coalesce(h ->> 'x-forwarded-for', 'local'); a text[];
+begin
+  a := regexp_split_to_array(v, '\s*,\s*');
+  return left(trim(coalesce(h ->> 'cf-connecting-ip', h ->> 'x-real-ip', a[cardinality(a)])), 64);
+end $$;
+revoke execute on function _sc_client_ip() from public, anon, authenticated;
+
+-- 16 letters / digits that cannot be mixed up (no 0/O, 1/I/L), shown as XXXX-XXXX-XXXX-XXXX
+create or replace function _sc_recovery_code() returns text
+language plpgsql volatile security definer set search_path = public, extensions, pg_temp as $$
+declare al text := 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; b bytea := gen_random_bytes(16); v text := ''; i int;
+begin
+  for i in 0 .. 15 loop
+    v := v || substr(al, 1 + (get_byte(b, i) % length(al)), 1) || case when i in (3, 7, 11) then '-' else '' end;
+  end loop;
+  return v;
+end $$;
+revoke execute on function _sc_recovery_code() from public, anon, authenticated;
+create or replace function _sc_recovery_norm(p text) returns text
+language sql immutable set search_path = public, extensions, pg_temp as $$
+  select upper(regexp_replace(coalesce(p, ''), '[^A-Za-z0-9]', '', 'g'));
+$$;
+revoke execute on function _sc_recovery_norm(text) from public, anon, authenticated;
+
+-- A. an admin gives a staff member a new code (the old one stops; that person's open sessions end)
+create or replace function sc_staff_set_code(p_token text, p_id uuid, p_code text) returns jsonb
+language plpgsql security definer set search_path = public, extensions, pg_temp as $$
+declare w text := _sc_staff(p_token); s sc_staff;
+begin
+  if not _sc_can(p_token, 'staff') then return jsonb_build_object('ok', false, 'error', 'unauthorized'); end if;
+  if p_code is null or length(p_code) < 10 then return jsonb_build_object('ok', false, 'error', 'code_too_short'); end if;
+  select * into s from sc_staff where id = p_id for update;
+  if s.id is null then return jsonb_build_object('ok', false, 'error', 'bad_id'); end if;
+  if exists (select 1 from sc_staff where active and id <> p_id and crypt(p_code, code_hash) = code_hash) then
+    return jsonb_build_object('ok', false, 'error', 'code_taken');
+  end if;
+  update sc_staff set code_hash = crypt(p_code, gen_salt('bf', 8)) where id = p_id;
+  delete from sc_sessions where staff_id = p_id and token is distinct from p_token;
+  insert into sc_audit (who, action, detail) values (w, 'staff_code', jsonb_build_object('name', s.name));
+  return jsonb_build_object('ok', true);
+end $$;
+revoke execute on function sc_staff_set_code(text, uuid, text) from public;
+grant execute on function sc_staff_set_code(text, uuid, text) to anon, authenticated;
+
+-- B. an admin makes their own recovery code: shown ONCE (written on paper, kept in a safe); a new one replaces the old
+create or replace function sc_recovery_new(p_token text) returns jsonb
+language plpgsql security definer set search_path = public, extensions, pg_temp as $$
+declare w text := _sc_staff(p_token); v_id uuid; v text := _sc_recovery_code();
+begin
+  if w is null or _sc_role(p_token) is distinct from 'admin' then return jsonb_build_object('ok', false, 'error', 'unauthorized'); end if;
+  select x.staff_id into v_id from sc_sessions x where x.token = p_token;
+  update sc_staff set recovery_hash = crypt(_sc_recovery_norm(v), gen_salt('bf', 8)) where id = v_id;
+  insert into sc_audit (who, action) values (w, 'recovery_new');
+  return jsonb_build_object('ok', true, 'recovery', v);
+end $$;
+revoke execute on function sc_recovery_new(text) from public;
+grant execute on function sc_recovery_new(text) to anon, authenticated;
+create or replace function sc_recovery_status(p_token text) returns jsonb
+language plpgsql stable security definer set search_path = public, extensions, pg_temp as $$
+begin
+  if _sc_staff(p_token) is null then return jsonb_build_object('ok', false, 'error', 'unauthorized'); end if;
+  return jsonb_build_object('ok', true, 'has', exists (select 1 from sc_sessions x join sc_staff s on s.id = x.staff_id
+                                                       where x.token = p_token and s.recovery_hash is not null));
+end $$;
+revoke execute on function sc_recovery_status(text) from public;
+grant execute on function sc_recovery_status(text) to anon, authenticated;
+
+-- B. the forgotten code: the recovery code + a new code. The recovery code works once; wrong tries count like
+-- wrong logins (the same limit per address)
+create or replace function sc_recover(p_recovery text, p_new_code text) returns jsonb
+language plpgsql security definer set search_path = public, extensions, pg_temp as $$
+declare v_ip text := _sc_client_ip(); s sc_staff; v text := _sc_recovery_norm(p_recovery);
+begin
+  perform pg_advisory_xact_lock(hashtext('sc_login:' || coalesce(v_ip, '')));
+  if (select count(*) from sc_login_attempts where not ok and ip = v_ip and at > now() - interval '15 minutes') >= 10 then
+    return jsonb_build_object('ok', false, 'error', 'rate_limited');
+  end if;
+  if p_new_code is null or length(p_new_code) < 10 then return jsonb_build_object('ok', false, 'error', 'code_too_short'); end if;
+  select * into s from sc_staff where active and role = 'admin' and recovery_hash is not null and length(v) = 16
+                                  and crypt(v, recovery_hash) = recovery_hash limit 1 for update;
+  if s.id is null then
+    insert into sc_login_attempts (ip, ok) values (v_ip, false); perform pg_sleep(0.5);
+    return jsonb_build_object('ok', false, 'error', 'code_invalid');
+  end if;
+  if exists (select 1 from sc_staff where active and id <> s.id and crypt(p_new_code, code_hash) = code_hash) then
+    return jsonb_build_object('ok', false, 'error', 'code_taken');
+  end if;
+  update sc_staff set code_hash = crypt(p_new_code, gen_salt('bf', 8)), recovery_hash = null where id = s.id;
+  delete from sc_sessions where staff_id = s.id;
+  insert into sc_audit (who, action, detail) values (s.name, 'recovered', jsonb_build_object('ip', v_ip));
+  return jsonb_build_object('ok', true, 'name', s.name);
+end $$;
+revoke execute on function sc_recover(text, text) from public;
+grant execute on function sc_recover(text, text) to anon, authenticated;
+
+-- a new admin gets their recovery code at once (shown once to the admin who adds them)
+create or replace function sc_staff_add(p_token text, p_name text, p_code text, p_role text) returns jsonb
+language plpgsql security definer set search_path = public, extensions, pg_temp as $$
+declare w text := _sc_staff(p_token); v_id uuid; v_rec text;
+begin
+  if not _sc_can(p_token, 'staff') then return jsonb_build_object('ok', false, 'error', 'unauthorized'); end if;
+  if coalesce(trim(p_name), '') = '' or length(p_name) > 60 or p_role not in ('admin', 'support', 'finance', 'viewer') then
+    return jsonb_build_object('ok', false, 'error', 'bad_value');
+  end if;
+  if p_code is null or length(p_code) < 10 then return jsonb_build_object('ok', false, 'error', 'code_too_short'); end if;
+  if exists (select 1 from sc_staff where active and crypt(p_code, code_hash) = code_hash) then return jsonb_build_object('ok', false, 'error', 'code_taken'); end if;
+  if p_role = 'admin' then v_rec := _sc_recovery_code(); end if;
+  insert into sc_staff (name, code_hash, role, recovery_hash)
+  values (trim(p_name), crypt(p_code, gen_salt('bf', 8)), p_role, case when v_rec is not null then crypt(_sc_recovery_norm(v_rec), gen_salt('bf', 8)) end)
+  returning id into v_id;
+  insert into sc_audit (who, action, detail) values (w, 'staff_add', jsonb_build_object('name', trim(p_name), 'role', p_role));
+  return jsonb_build_object('ok', true, 'id', v_id) || case when v_rec is not null then jsonb_build_object('recovery', v_rec) else '{}'::jsonb end;
+end $$;
+revoke execute on function sc_staff_add(text, text, text, text) from public;
+grant execute on function sc_staff_add(text, text, text, text) to anon, authenticated;
+
 -- the first staff member (run once by the manufacturer in the SQL editor):
 --   insert into sc_staff (name, code_hash, role) values ('Admin 1', crypt('<a long code>', gen_salt('bf', 8)), 'admin');
 notify pgrst, 'reload schema';
