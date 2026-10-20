@@ -864,5 +864,5 @@ revoke execute on function sc_staff_add(text, text, text, text) from public;
 grant execute on function sc_staff_add(text, text, text, text) to anon, authenticated;
 
 -- the first staff member (run once by the manufacturer in the SQL editor):
---   insert into sc_staff (name, code_hash, role) values ('Admin 1', crypt('<a long code>', gen_salt('bf', 8)), 'admin');
+--   insert into sc_staff (name, code_hash, role) values ('Admin 1', extensions.crypt('<a long code>', extensions.gen_salt('bf', 8)), 'admin');
 notify pgrst, 'reload schema';

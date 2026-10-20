@@ -13,7 +13,7 @@
 3. מריצים את `central-selftest.sql`. בתוצאה (שורה אחת בטבלה למטה) צריך להיות `PASSED — 32 of 32`.
 4. יוצרים את המנהל הראשון (את השאר מוסיפים אחר כך מהדף, בלשונית "צוות"):
    ```sql
-   insert into sc_staff (name, code_hash, role) values ('שם המנהל', crypt('<קוד ארוך>', gen_salt('bf', 8)), 'admin');
+   insert into sc_staff (name, code_hash, role) values ('שם המנהל', extensions.crypt('<קוד ארוך>', extensions.gen_salt('bf', 8)), 'admin');
    ```
 
 ## 1א. עדכון מרכז שכבר מותקן
@@ -27,7 +27,7 @@
 - **מנהל אחר:** בלשונית "צוות" ← "🔑 קוד חדש" ליד השם. · **Another admin:** Staff → "🔑 New code" next to the name.
 - **בלי שניהם:** ב-SQL Editor מריצים · **Without either:** in the SQL Editor:
   ```sql
-  update sc_staff set code_hash = crypt('קוד-חדש-לפחות-10-תווים', gen_salt('bf', 8)), active = true where name = 'השם';
+  update sc_staff set code_hash = extensions.crypt('קוד-חדש-לפחות-10-תווים', extensions.gen_salt('bf', 8)), active = true where name = 'השם';
   ```
 - **שדה הקוד** כתוב משמאל לימין. 👁 מציג את הקוד ל-30 שניות. אם המקלדת בעברית, מופיעה אזהרה. · The code field is left-to-right; 👁 shows it for 30 s; a warning appears if the keyboard is Hebrew.
 - **שפה:** הכפתור "עב | EN" למעלה. · **Language:** the "עב | EN" button at the top.
