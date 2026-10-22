@@ -414,6 +414,17 @@ button[onclick^="mgrRemoveCattleType("],button[onclick^="mgrRemoveDevice("]{min-
 #gtSetGroups details.gt-grp[data-g="printing"]{--gc:#FF9F43;}
 #gtSetGroups details.gt-grp[data-g="daily"]{--gc:#34D1D1;}
 #gtSetGroups details.gt-grp[data-g="system"]{--gc:#FF6B6B;}
+/* (owner) the summaries in 4 groups, like the settings */
+#gtAnGroups details.gt-grp{border-inline-start:6px solid var(--gc,var(--gold));border-radius:14px;margin-bottom:10px;}
+#gtAnGroups details.gt-grp>summary{font-size:20px!important;font-weight:900!important;padding:16px 14px!important;background:color-mix(in srgb,var(--gc,#D4A843) 16%,transparent);}
+#gtAnGroups details.gt-grp>summary .gt-acc-t{color:var(--gc,var(--gold));font-size:20px;font-weight:900;}
+#gtAnGroups details.gt-grp>summary .gt-acc-s{font-size:12px;opacity:.75;}
+#gtAnGroups details.gt-acc-in{border-inline-start:4px solid var(--gc,var(--gold));}
+#gtAnGroups details.gt-acc-in>summary{font-size:16px!important;font-weight:800!important;padding:12px!important;background:color-mix(in srgb,var(--gc,#D4A843) 8%,transparent);}
+#gtAnGroups details.gt-grp[data-g="kashrut"]{--gc:#E8B84A;}
+#gtAnGroups details.gt-grp[data-g="farms"]{--gc:#3DD68C;}
+#gtAnGroups details.gt-grp[data-g="people"]{--gc:#4FA3FF;}
+#gtAnGroups details.gt-grp[data-g="weight"]{--gc:#FF9F43;}
 /* the team leader's main tabs: bigger, each in its colour */
 #scManager .mgr-tab{font-size:16px!important;font-weight:800!important;padding:12px 14px!important;}
 #scManager .mgr-tab#tab-monitor{color:#E8B84A;} #scManager .mgr-tab#tab-search{color:#4FA3FF;} #scManager .mgr-tab#tab-analysis{color:#3DD68C;}
@@ -6685,6 +6696,9 @@ function applyLang(){
       const k=el.getAttribute('data-t');
       if(t[k])el.textContent=t[k];
     });
+    // (owner) the team leader's tab names too — some stayed in the old language until the next tab change
+    try{ if(typeof gtMgrTabLabels==='function') gtMgrTabLabels(); }catch(e){}
+    try{ if(typeof mgrCurrentTab!=='undefined' && mgrCurrentTab==='analysis' && typeof gtAnRender==='function') gtAnRender(); }catch(e){}
     // Rebuild nav cards in current language
     if(typeof buildNavCards==='function')buildNavCards();
     if(typeof pairRender==='function' && typeof _pairScreenActive==='function' && _pairScreenActive())pairRender();
@@ -10790,7 +10804,10 @@ function gtAnHtml(acc, K, C){
     kpi(_gtNum(gtW(K.kg)) + ' ' + gtWU(), L('משקל', 'Weight', 'Peso') + ' · ' + _gtNum(K.weighed) + ' ' + L('נשקלו', 'weighed', 'pesados'), 'var(--blue)', dl(K.kg, k => k.kg, {})) +
     (K.price ? kpi(escapeHtml(gtMoney(K.cur, K.charge, 0)), L('חיוב', 'Charge', 'Cargo'), 'var(--gold)', dl(K.charge, k => k.charge, {})) : '') +
     '</div>';
-  const sec = (k, title, sum, inner) => `<details class="gt-acc" data-k="${k}"><summary><span class="gt-acc-t">${title}</span><span class="gt-acc-s">${sum}</span></summary><div class="gt-acc-b">${inner}</div></details>`;
+  // (owner) the same 10 sections as before, arranged in 4 groups like the settings (each section is kept and
+  // placed in its group at the end)
+  const S = {};
+  const sec = (k, title, sum, inner) => { S[k] = `<details class="gt-acc gt-acc-in" data-k="${k}"><summary><span class="gt-acc-t">${title}</span><span class="gt-acc-s">${sum}</span></summary><div class="gt-acc-b">${inner}</div></details>`; return ''; };
   // 0. v10.38 (owner): a pie of your choice — by what, count or weight, and slices joined together (weighted)
   h += sec('pie', '🥧 ' + L('עוגה ושקלול — לפי בחירה', 'Pie and combining — your choice', 'Gráfico y combinación — a elección'),
     L('בוחרים לפי מה, ומחברים כמה חלקים ביחד', 'Pick what by, and join slices together', 'Elija por qué y una porciones'), '<div id="gtPieBox"></div>');
@@ -10849,6 +10866,21 @@ function gtAnHtml(acc, K, C){
   const hrs = acc.hours.map((v, i) => v ? `<div style="display:flex;align-items:center;gap:6px;font-size:12px;margin:2px 0;"><span style="width:44px;color:var(--muted);direction:ltr;">${String(i).padStart(2, '0')}:00</span><div style="flex:1;background:var(--border);border-radius:4px;height:12px;"><div style="width:${v / mx * 100}%;background:var(--blue);height:100%;border-radius:4px;"></div></div><b style="width:36px;text-align:end;">${v}</b></div>` : '').join('');
   const peak = acc.hours.indexOf(Math.max(...acc.hours));
   h += sec('hours', '🕐 ' + L('שחיטה לפי שעה', 'Slaughter by hour', 'Faena por hora'), acc.total ? L('שיא: ', 'Peak: ', 'Pico: ') + String(peak).padStart(2, '0') + ':00' : '—', hrs || '<div class="gt-hint">—</div>');
+  const nK = o => Object.keys(o || {}).length;
+  const G = [
+    ['g_kashrut', 'kashrut', '✅', L('כשרות', 'Kashrut', 'Kashrut'),
+     ruled ? L('גלאט ', 'glatt ', 'glatt ') + pct(acc.glatt / ruled * 100) + ' · ' + L('טרף ', 'treif ', 'treif ') + pct((acc.treif + acc.innerTreif) / ruled * 100) : '—',
+     ['pie', 'kashrut', 'focus']],
+    ['g_farms', 'farms', '🏡', L('משקים וזנים', 'Farms and breeds', 'Granjas y razas'),
+     _gtNum(nK(acc.byFarm)) + ' ' + L('משקים', 'farms', 'granjas') + ' · ' + _gtNum(nK(acc.byType)) + ' ' + L('זנים', 'breeds', 'razas'),
+     ['farm', 'type', 'farmtype']],
+    ['g_people', 'people', '👷', L('אנשים', 'People', 'Personas'),
+     _gtNum(nK(acc.byOuterInspector)) + ' ' + L('בודקים', 'inspectors', 'inspectores') + ' · ' + _gtNum(nK(acc.workerStats) || wsum) + ' ' + L('עובדים', 'workers', 'trabajadores'),
+     ['inspector', 'workers']],
+    ['g_weight', 'weight', '⚖️', L('משקל וזמנים', 'Weight and times', 'Peso y horarios'),
+     _gtNum(gtW(K.kg)) + ' ' + gtWU() + (acc.total ? ' · ' + L('שיא ', 'peak ', 'pico ') + String(peak).padStart(2, '0') + ':00' : ''),
+     ['weight', 'hours']]];
+  h += '<div id="gtAnGroups">' + G.map(([k, g, ic, t, sum, ks]) => `<details class="gt-acc gt-grp" data-k="${k}" data-g="${g}"><summary><span class="gt-acc-t">${ic} ${escapeHtml(t)}</span><span class="gt-acc-s">${sum}</span></summary><div class="gt-acc-b">${ks.map(x => S[x] || '').join('')}</div></details>`).join('') + '</div>';
   return h;
 }
 
@@ -11314,7 +11346,7 @@ function gtSettingsLabels(){
 function gtMoney(cur, n, dig){ cur = String(cur || '₪'); const v = _gtNum(n, dig == null ? 0 : dig); return /^[A-Z]{3}$/.test(cur) ? cur + ' ' + v : cur + v; }
 
 function gtMgrTabLabels(){
-  document.querySelectorAll('#scManager .gt-tablbl').forEach(e => { const t = e.getAttribute('data-' + (lang === 'he' ? 'he' : lang === 'es' ? 'es' : 'en')); if(t) e.textContent = t; });
+  document.querySelectorAll('.gt-tablbl').forEach(e => { const t = e.getAttribute('data-' + (lang === 'he' ? 'he' : lang === 'es' ? 'es' : 'en')); if(t) e.textContent = t; });
 }
 
 // summaries / reports / log: print only the open tab (team leader and owner alike —
