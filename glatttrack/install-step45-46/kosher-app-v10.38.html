@@ -12129,6 +12129,18 @@ function _gtScreenName(s){
     'קולר':['Cooler','Cámara'],'מנקר':['Nikur','Nikur'],'ניקור חלקים קטנים':['Small-parts nikur','Nikur de partes pequeñas'],'מליחה':['Salting','Salado'],'שיפינג':['Shipping','Envíos']};
   const m=M[s]; return m?L(s,m[0],m[1]):s;
 }
+// (owner) a problem report is written in the language of the station that sent it — shown in the language
+// of the one who reads it (the automatic parts; a worker's own note stays as written)
+function _gtProblemTr(t){
+  const P=[[/^(\d+) (?:ממתינים לשחיטה|pending slaughter|pendientes)$/, n=>L(n+' ממתינים לשחיטה', n+' pending slaughter', n+' pendientes de faena')],
+    [/^(\d+) (?:ממתינים לבדיקת פנים|pending inner|esperan inspección interna)$/, n=>L(n+' ממתינים לבדיקת פנים', n+' pending inner', n+' esperan inspección interna')],
+    [/^(\d+) (?:ממתינים לבדיקת חוץ|pending outer|esperan inspección externa)$/, n=>L(n+' ממתינים לבדיקת חוץ', n+' pending outer', n+' esperan inspección externa')],
+    [/^(?:לא זוהו בעיות אוטומטיות|No auto-issues detected|Sin problemas)$/, ()=>L('לא זוהו בעיות אוטומטיות','No auto-issues detected','Sin problemas detectados')]];
+  return String(t==null?'':t).split(' · ').map(seg=>{
+    const note=seg.match(/^(?:הערה|Note|Nota): ([\s\S]*)$/); if(note) return L('הערה: ','Note: ','Nota: ')+note[1];
+    return seg.split(' • ').map(x=>{ for(const [re,f] of P){ const m=x.trim().match(re); if(m) return f(m[1]); } return x; }).join(' • ');
+  }).join(' · ');
+}
 // errors caught on THIS device (gtLogError) — count + last 20 + clear
 function _gtRenderClientErrLog(anchor){
   let box=document.getElementById('mgrClientErrLog');
@@ -12153,7 +12165,7 @@ function mgrUpdateLog(){
   const pl=document.getElementById('mgrProblemsList');
   // p.summary — matches the shape _scanProblem() actually produces (screen/time/date/diagnostics/summary).
   // Was reading p.msg, a field that's never set, so every report showed "undefined" here.
-  if(pl){const probs=s.problemReports||[];pl.innerHTML=probs.length?probs.slice(-10).reverse().map(p=>`<div style="padding:3px 0;border-bottom:1px solid var(--border);font-size:11px;color:var(--red-light);">${escapeHtml(_gtScreenName(p.screen))}: ${escapeHtml(p.summary)} | ${escapeHtml(p.time)}</div>`).join(''):LK('mgrProblemsNone');}
+  if(pl){const probs=s.problemReports||[];pl.innerHTML=probs.length?probs.slice(-10).reverse().map(p=>`<div style="padding:3px 0;border-bottom:1px solid var(--border);font-size:11px;color:var(--red-light);">${escapeHtml(_gtScreenName(p.screen))}: ${escapeHtml(_gtProblemTr(p.summary))} | ${escapeHtml(p.time)}</div>`).join(''):LK('mgrProblemsNone');}
 }
 
 // ── BACKUP / RESTORE (UI GLUE) ──
@@ -16436,11 +16448,11 @@ function _kioskInit(sb){
     if(!_devToken() && !_kioskLoadLocal()) return;          // nothing to check
     sb.rpc('device_whoami').then(({data,error})=>{
       if(error || !data) return;                            // network trouble: try again later
-      if(data.key_sent && data.device_id && Object.prototype.hasOwnProperty.call(data,'assigned_role')){
-        // the server says which station this device is (when it can)
-        _kioskSaveLocal(data.assigned_role || null, data.assigned_index);
+      if(data.key_sent && data.device_id && Object.prototype.hasOwnProperty.call(data,'role')){
+        // the server says which station this device is (when it can) — (owner, pairing fix) it answers role / index
+        _kioskSaveLocal(data.role || null, data.index);
         _kioskHoldEnd();
-        _kioskApplyAssignment(data.assigned_role || null, data.assigned_index);
+        _kioskApplyAssignment(data.role || null, data.index);
       }
       if(data.key_sent && !data.device_id){ _kioskWipeDevice(); return; }        // key revoked
       if(!data.key_sent && data.enforced && _kioskLoadLocal()){ _kioskWipeDevice(); }  // locked to a station with no key
@@ -16468,6 +16480,7 @@ function _kioskInit(sb){
       _ownKnown=true;
       if(data){
         const role = data.assigned_role || null;
+        if(!role && _devToken()){ _kioskHoldEnd(); _kioskCheckKey(); return; }   // (owner, pairing fix) the server decides with the key
         _kioskSaveLocal(role, data.assigned_index);
         _kioskHoldEnd();
         _kioskApplyAssignment(role, data.assigned_index);
@@ -16481,9 +16494,15 @@ function _kioskInit(sb){
     .on('postgres_changes', { event:'*', schema:'public', table:'devices_pilot' }, (payload)=>{
       if(!payload.new) return;
       if(payload.new.id === deviceId){
+        // (owner: "paired, connected for a second, then a new code — and the team leader saw it paired") a live
+        // update without the station (a partial row, or one that came late) must not unpair the tablet:
+        // "no station" is checked with the server, with this device's own key, before anything is forgotten
         const role = payload.new.assigned_role || null;
-        _kioskSaveLocal(role, payload.new.assigned_index);
-        _kioskApplyAssignment(role, payload.new.assigned_index);
+        if(!role && _devToken()){ _kioskCheckKey(); }
+        else if(Object.prototype.hasOwnProperty.call(payload.new, 'assigned_role')){
+          _kioskSaveLocal(role, payload.new.assigned_index);
+          _kioskApplyAssignment(role, payload.new.assigned_index);
+        }
       }
       // Manager devices/stations panels, if currently open, re-render on ANY
       // device row change — but not on every heartbeat of every device.
@@ -17415,9 +17434,9 @@ async function gtSupportRefresh(){
         + rows.map(i=>{ const st=GT_SUP_ST[i.status]||['⚪','ממתין לשליחה','Waiting to be sent','Pendiente de envío'];
             return '<div style="border-top:1px solid var(--border);padding:5px 0;font-size:12px;">'
               +'<div style="display:flex;justify-content:space-between;gap:6px;"><span>'+st[0]+' <b>'+escapeHtml(L(st[1],st[2],st[3]))+'</b>'
-              +(i.source==='station'?' · '+escapeHtml(L('מסך','Screen','Pantalla'))+' '+escapeHtml(GT_SUP_SCR[i.screen]?L(...GT_SUP_SCR[i.screen]):(i.screen||'')):' · '+escapeHtml(L('ראש צוות','Team leader','Jefe de equipo')))+'</span>'
+              +(i.source==='station'?' · '+escapeHtml(L('מסך','Screen','Pantalla'))+' '+escapeHtml(GT_SUP_SCR[i.screen]?L(...GT_SUP_SCR[i.screen]):_gtScreenName(i.screen||'')):' · '+escapeHtml(L('ראש צוות','Team leader','Jefe de equipo')))+'</span>'
               +'<span style="color:var(--muted);direction:ltr;">'+escapeHtml(fmt(i.at))+'</span></div>'
-              +'<div style="color:var(--text);">'+escapeHtml(String(i.message||'').slice(0,200))+'</div>'
+              +'<div style="color:var(--text);">'+escapeHtml(_gtProblemTr(String(i.message||'').slice(0,200)))+'</div>'
               +(i.reply?'<div style="color:var(--green);">↩ '+escapeHtml(L('היצרן: ','Manufacturer: ','Fabricante: '))+escapeHtml(i.reply)+'</div>':'')+'</div>'; }).join('')
         : '';
     }
