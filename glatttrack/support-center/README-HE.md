@@ -10,7 +10,7 @@
 ## 1. מסד הנתונים המרכזי (פעם אחת)
 1. פותחים פרויקט Supabase **נפרד** של היצרן. זה לא מסד של מפעל.
 2. ב-SQL Editor מריצים את `central-setup.sql`. ההרצה בטוחה גם יותר מפעם אחת.
-3. מריצים את `central-selftest.sql`. בתוצאה (שורה אחת בטבלה למטה) צריך להיות `PASSED — 32 of 32`.
+3. מריצים את `central-selftest.sql`. בתוצאה (שורה אחת בטבלה למטה) צריך להיות `PASSED — 33 of 33`.
 4. יוצרים את המנהל הראשון (את השאר מוסיפים אחר כך מהדף, בלשונית "צוות"):
    ```sql
    insert into sc_staff (name, code_hash, role) values ('שם המנהל', extensions.crypt('<קוד ארוך>', extensions.gen_salt('bf', 8)), 'admin');
@@ -18,7 +18,7 @@
 
 ## 1א. עדכון מרכז שכבר מותקן
 1. ב-SQL Editor של פרויקט היצרן מריצים שוב את `central-setup.sql` (כל הקובץ). זה בטוח: שום מפעל, איש צוות או חיוב לא נמחק.
-2. מריצים את `central-selftest.sql` → `PASSED — 32 of 32`. הבדיקה לא משנה כלום.
+2. מריצים את `central-selftest.sql` → `PASSED — 33 of 33`. הבדיקה לא משנה כלום.
 3. הדף (`index.html`) צריך החלפה רק כשהוא השתנה. בעדכון של 19.10 (סבב 3) הוא לא השתנה.
 
 ## 1ב. שכחתי את הקוד · I forgot my code
@@ -31,6 +31,12 @@
   ```
 - **שדה הקוד** כתוב משמאל לימין. 👁 מציג את הקוד ל-30 שניות. אם המקלדת בעברית, מופיעה אזהרה. · The code field is left-to-right; 👁 shows it for 30 s; a warning appears if the keyboard is Hebrew.
 - **שפה:** הכפתור "עב | EN" למעלה. · **Language:** the "עב | EN" button at the top.
+
+## 1ג. קוד יצרן חדש למפעל (כפתור "Maker" באפליקציה של המפעל) · A new manufacturer code for a plant
+1. בדף: מפעל ← **🔑 קוד יצרן חדש למפעל הזה**. כותבים את הקוד פעמיים ← **⬇ הכן בקשה**. יורד קובץ `maker-code-<מספר>.json`. הקוד עצמו לא נמצא בקובץ, יש בו רק "טביעת אצבע" מוצפנת. · In the page: plant → **🔑 New manufacturer code** → type it twice → **Make the request**. A file downloads. The code itself is not in it.
+2. במחשב של היצרן, שבו המפתח הסודי: `bash maker-code-sign.sh maker-code-<מספר>.json`. נוצר `maker-code-<מספר>.signed.json`. · On the manufacturer's computer: sign it.
+3. בדף: בוחרים את הקובץ החתום ← **שלח למפעל**. · In the page: choose the signed file → **Send to the plant**.
+4. המפעל בודק את החתימה, את מספר המפעל ואת הזמן (עד 7 ימים), ומחליף את הקוד בדיווח הבא (עד 5 דקות). התוצאה מופיעה ב"פקודות". · The plant checks the signature, plant number and time, and changes the code at its next report.
 
 ## 2. דף מרכז השירות
 1. מעלים את `index.html` לאתר של היצרן. מומלץ להגן עליו ב-https.

@@ -8864,6 +8864,32 @@ language sql stable security definer set search_path = public, extensions, pg_te
 $$;
 revoke execute on function _ticket_refusal(bigint, integer, text, integer, text) from public, anon, authenticated;
 
+-- ── v10.38 (owner): a new manufacturer code from the support center — signed by the manufacturer ──────────
+-- The code is never sent: the support-center page makes its bcrypt hash in the browser, the manufacturer signs
+-- the request on its own computer (maker-code-sign.sh, the release key), and the plant server checks the
+-- signature, the plant number and the time (report-to-center.sh) before it calls this. Server only.
+create or replace function manufacturer_set_code_hash(p_hash text, p_signed_at timestamptz) returns jsonb
+language plpgsql security definer set search_path = public, extensions, pg_temp as $$
+declare v_id uuid; v_last timestamptz;
+begin
+  if _is_api_request() and not _request_is_service_role() then raise exception 'server only' using errcode = '42501'; end if;
+  if p_hash is null or p_hash !~ '^\$2[ab]\$1[0-2]\$[./A-Za-z0-9]{53}$' then return jsonb_build_object('ok', false, 'error', 'bad_hash'); end if;
+  if p_signed_at is null or p_signed_at > now() + interval '10 minutes' or p_signed_at < now() - interval '7 days' then
+    return jsonb_build_object('ok', false, 'error', 'too_old');
+  end if;
+  perform pg_advisory_xact_lock(hashtext('gt_maker_code'));
+  v_last := (select case when value ~ '^\d{4}-' then value::timestamptz end from plant_state where key = 'makerCodeSignedAt');
+  if v_last is not null and p_signed_at <= v_last then return jsonb_build_object('ok', false, 'error', 'already_used'); end if;   -- the same signed request twice: once
+  delete from manager_sessions where manager_id in (select id from plant_managers where role = 'manufacturer');
+  update plant_managers set active = false where role = 'manufacturer' and active;
+  insert into plant_managers (name, code_hash, role) values ('Manufacturer', p_hash, 'manufacturer') returning id into v_id;
+  insert into plant_state (key, value) values ('makerCodeSignedAt', p_signed_at::text)
+  on conflict (key) do update set value = excluded.value, updated_at = now();
+  perform _security_event(null, 'maker_code_changed', jsonb_build_object('signedAt', p_signed_at), 'support center', null);
+  return jsonb_build_object('ok', true, 'id', v_id);
+end $$;
+revoke execute on function manufacturer_set_code_hash(text, timestamptz) from public, anon, authenticated;
+
 -- ── self-check ──────────────────────────────────────────────────────────────
 do $$
 declare problems text[] := '{}';

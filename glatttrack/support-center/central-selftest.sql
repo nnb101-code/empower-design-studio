@@ -1,5 +1,5 @@
 -- GlattTrack support center — self-test. Changes nothing (every change is undone inside it).
--- Expected result (one row): PASSED — 32 of 32 support-center checks (nothing was changed)
+-- Expected result (one row): PASSED — 33 of 33 support-center checks (nothing was changed)
 -- ONE statement (one DO block), no temporary table: the Supabase SQL Editor runs it like psql does
 -- (the same way as the plant's 03). Works on an empty center and on one that already has plants and staff.
 do $$
@@ -130,6 +130,21 @@ begin
         (rr ->> 'recovery') ~ '^[A-Z2-9]{4}(-[A-Z2-9]{4}){3}$' and (sc_recovery_status(tok) ->> 'has')::boolean
         and sc_recovery_new(tsup) ->> 'error' = 'unauthorized' and sc_recovery_new(tfin) ->> 'error' = 'unauthorized'
         and not has_function_privilege('anon', '_sc_recovery_code()', 'execute'), rr::text);
+    end;
+    -- (owner) a new manufacturer code: only an admin; only a signed request for this plant (a hash, never the code);
+    -- it goes to the plant with the next report; the plant page does not show it
+    declare mf text := '{"v":1,"kind":"maker_code","plant":"9001","hash":"$2a$10$yIWFlYtX2vIJPcclhRiYneREz2Wk2KOWqsdZnr5uEZOXzveRKEHbG","at":"2026-10-22T10:00:00Z"}';
+            sg text := repeat('A', 86) || '=='; rr jsonb; rp jsonb;
+    begin
+      rr := sc_maker_code_send(tok, '9001', mf, sg);
+      rp := sc_report('9001', sec, '{"attention":[]}');
+      perform pg_temp.rec('owner: a new manufacturer code — admin only, a signed request for this plant only (no plain code), delivered with the next report, not shown on the plant page',
+        (rr ->> 'ok')::boolean and sc_maker_code_send(tsup, '9001', mf, sg) ->> 'error' = 'unauthorized'
+        and sc_maker_code_send(tok, '9001', replace(mf, '"plant":"9001"', '"plant":"9002"'), sg) ->> 'error' = 'not_signed'
+        and sc_maker_code_send(tok, '9001', replace(mf, '$2a$10$yIWFlYtX2vIJPcclhRiYneREz2Wk2KOWqsdZnr5uEZOXzveRKEHbG', 'MyCode123456'), sg) ->> 'error' = 'not_signed'
+        and sc_maker_code_send(tok, '9001', mf, 'x') ->> 'error' = 'not_signed'
+        and exists (select 1 from jsonb_array_elements(rp -> 'commands') c where c ->> 'cmd' = 'set_maker_code' and c #>> '{payload,manifest}' = mf and c #>> '{payload,sig}' = sg)
+        and not (sc_plant(tok, '9001')::text like '%yIWFlYtX%'), left(rr::text, 100) || ' | ' || left(rp::text, 200));
     end;
     -- the plant's problem reports become tickets (once); the plant gets their status back
     r := sc_report('9001', sec, '{"attention":[],"issues":[{"key":"E17","at":"2026-10-15T10:00:00Z","source":"station","screen":"legs","message":"printer stuck"},{"key":"L3","source":"leader","message":"tablet 2 slow"}],"usage":[{"day":"2026-09-01","animals":100,"kg":30000},{"day":"2026-09-02","animals":50,"kg":15000.5}]}');

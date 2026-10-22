@@ -75,3 +75,19 @@ gt_release_verify(){
   done
   rm -rf "$t"; return $rc
 }
+# v10.38 (owner): a new manufacturer code from the support center. $1 = the signed text, $2 = the signature.
+# Only a request signed with the manufacturer's release key, for THIS plant, not older than 7 days (the database
+# also refuses one not newer than the last); only the bcrypt hash of the code arrives. Prints the result.
+gt_maker_code_apply(){
+  local m="$1" sig="$2" out
+  if ! gt_release_verify "$m" "$sig"; then echo "refused: not signed by the manufacturer"; return 1; fi
+  out="$(gt_psql -v m="$m" -v plant="${GT_PLANT_CODE:-}" <<'SQL' 2>&1
+select case
+  when (x ->> 'kind') is distinct from 'maker_code' or (x ->> 'plant') is distinct from :'plant' then jsonb_build_object('ok', false, 'error', 'not_this_plant')
+  when coalesce(x ->> 'at', '') !~ '^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$' then jsonb_build_object('ok', false, 'error', 'bad_time')
+  else manufacturer_set_code_hash(x ->> 'hash', (x ->> 'at')::timestamptz) end
+from (select :'m'::jsonb as x) q;
+SQL
+)"
+  case "$out" in *'"ok": true'*) echo "manufacturer code changed"; return 0;; *) echo "refused: ${out:0:160}"; return 1;; esac
+}

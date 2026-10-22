@@ -212,7 +212,7 @@ begin
   return jsonb_build_object('ok', true, 'code', p.code, 'name', p.name, 'level', s.level, 'problems', s.problems,
     'report', s.report, 'reportedAt', s.reported_at,
     'alerts', coalesce((select jsonb_agg(to_jsonb(a) - 'sent' order by a.id desc) from (select * from sc_alerts where code = p_code order by id desc limit 30) a), '[]'::jsonb),
-    'commands', coalesce((select jsonb_agg(to_jsonb(c) order by c.id desc) from (select * from sc_commands where code = p_code order by id desc limit 10) c), '[]'::jsonb));
+    'commands', coalesce((select jsonb_agg(to_jsonb(c) - 'payload' order by c.id desc) from (select * from sc_commands where code = p_code order by id desc limit 10) c), '[]'::jsonb));
 end $$;
 revoke execute on function sc_plant(text, text) from public;
 grant execute on function sc_plant(text, text) to anon, authenticated;
@@ -457,7 +457,7 @@ begin
   update sc_alerts set resolved_at = now() where code = p_code and resolved_at is null and not (lv.problems ? text) and text <> 'no_report';
   update sc_alerts set resolved_at = now() where code = p_code and resolved_at is null and text = 'no_report';
   v_tickets := _sc_take_report_extras(p_code, p_report);
-  select coalesce(jsonb_agg(jsonb_build_object('id', id, 'cmd', cmd) order by id), '[]'::jsonb) into v_cmds
+  select coalesce(jsonb_agg(jsonb_build_object('id', id, 'cmd', cmd) || case when payload is not null then jsonb_build_object('payload', payload) else '{}'::jsonb end order by id), '[]'::jsonb) into v_cmds
     from sc_commands where code = p_code and done_at is null
                        and (delivered_at is null or delivered_at < now() - interval '15 minutes');   -- (round-2 review C-cmd1) an answer lost on the way: sent again
   update sc_commands set delivered_at = now() where code = p_code and done_at is null
@@ -560,7 +560,7 @@ begin
   return jsonb_build_object('ok', true, 'code', p.code, 'name', p.name, 'level', s.level, 'problems', s.problems,
     'report', s.report, 'reportedAt', s.reported_at,
     'alerts', coalesce((select jsonb_agg(to_jsonb(a) - 'sent' order by a.id desc) from (select * from sc_alerts where code = p_code order by id desc limit 30) a), '[]'::jsonb),
-    'commands', coalesce((select jsonb_agg(to_jsonb(c) order by c.id desc) from (select * from sc_commands where code = p_code order by id desc limit 10) c), '[]'::jsonb),
+    'commands', coalesce((select jsonb_agg(to_jsonb(c) - 'payload' order by c.id desc) from (select * from sc_commands where code = p_code order by id desc limit 10) c), '[]'::jsonb),
     'openTickets', (select count(*) from sc_tickets t where t.code = p_code and t.status <> 'closed'),
     'holdUpdates', p.hold_updates,
     'bill', case when _sc_can(p_token, 'billing') then _sc_bill(p_code, to_char(now(), 'YYYY-MM')) end);
@@ -862,6 +862,36 @@ begin
 end $$;
 revoke execute on function sc_staff_add(text, text, text, text) from public;
 grant execute on function sc_staff_add(text, text, text, text) to anon, authenticated;
+
+-- ── v10.38 (owner): a new manufacturer code for one plant, signed by the manufacturer ──────────────────────
+-- The page makes the bcrypt hash of the new code in the browser (the code never leaves it), the manufacturer signs
+-- the request with the release key on its own computer (maker-code-sign.sh). The center only carries it: it can
+-- not make or change one — the plant server checks the signature, the plant number and the time.
+alter table sc_commands add column if not exists payload jsonb;
+alter table sc_commands drop constraint if exists sc_commands_cmd_check;
+alter table sc_commands add constraint sc_commands_cmd_check
+  check (cmd in ('restart_standby', 'reload_tablets', 'update_now', 'run_nightly_check', 'set_maker_code'));
+create or replace function sc_maker_code_send(p_token text, p_code text, p_manifest text, p_sig text) returns jsonb
+language plpgsql security definer set search_path = public, extensions, pg_temp as $$
+declare w text := _sc_staff(p_token); m jsonb; v_id bigint;
+begin
+  if w is null or _sc_role(p_token) is distinct from 'admin' then return jsonb_build_object('ok', false, 'error', 'unauthorized'); end if;
+  if not exists (select 1 from sc_plants where code = p_code) then return jsonb_build_object('ok', false, 'error', 'bad_id'); end if;
+  begin m := p_manifest::jsonb; exception when others then return jsonb_build_object('ok', false, 'error', 'bad_value'); end;
+  if length(p_manifest) > 1000 or jsonb_typeof(m) <> 'object' or m ->> 'kind' is distinct from 'maker_code' or m ->> 'plant' is distinct from p_code
+     or coalesce(m ->> 'hash', '') !~ '^\$2[ab]\$1[0-2]\$[./A-Za-z0-9]{53}$' or coalesce(m ->> 'at', '') !~ '^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$'
+     or coalesce(p_sig, '') !~ '^[A-Za-z0-9+/]{86}==$' then
+    return jsonb_build_object('ok', false, 'error', 'not_signed');
+  end if;
+  -- one open request per plant: a newer one replaces the one not yet carried out
+  update sc_commands set done_at = now(), result = 'replaced by a newer request' where code = p_code and cmd = 'set_maker_code' and done_at is null;
+  insert into sc_commands (code, cmd, created_by, payload) values (p_code, 'set_maker_code', w, jsonb_build_object('manifest', p_manifest, 'sig', p_sig))
+  returning id into v_id;
+  insert into sc_audit (who, action, detail) values (w, 'maker_code_send', jsonb_build_object('code', p_code, 'at', m ->> 'at'));
+  return jsonb_build_object('ok', true, 'id', v_id);
+end $$;
+revoke execute on function sc_maker_code_send(text, text, text, text) from public;
+grant execute on function sc_maker_code_send(text, text, text, text) to anon, authenticated;
 
 -- the first staff member (run once by the manufacturer in the SQL editor):
 --   insert into sc_staff (name, code_hash, role) values ('Admin 1', extensions.crypt('<a long code>', extensions.gen_salt('bf', 8)), 'admin');

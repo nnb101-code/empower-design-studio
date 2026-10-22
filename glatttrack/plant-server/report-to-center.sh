@@ -3,7 +3,7 @@
 # gt-report.timer). Sends the plant's health (_plant_report: no kashrut data, no names, no codes;
 # v10.38: + the problem reports and the daily totals for billing),
 # gets back the support center's commands and the current release, and carries them out:
-#   restart_standby · reload_tablets · run_nightly_check · update_now
+#   restart_standby · reload_tablets · run_nightly_check · update_now · set_maker_code (signed by the manufacturer)
 #   a new release → only when signed by the manufacturer (round-2 review P-up1: its public key in
 #   /etc/glatttrack/release-public.pem), downloaded over https, sha256 checked against what was signed, installed
 #   with update-app.sh (02 + the security self-test first; a release with a server part waits until nobody works).
@@ -98,7 +98,7 @@ SQL
   return $rc
 }
 
-# the support center's commands (only these four)
+# the support center's commands (only these five)
 while read -r id cmd; do
   [ -n "$id" ] || continue
   case "$cmd" in
@@ -106,6 +106,12 @@ while read -r id cmd; do
     reload_tablets)    J -c "update settings_pilot set settings = settings || jsonb_build_object('forceReloadAt', now()::text), updated_at = now(), device_id = 'server' where id = 1" >/dev/null && done_cmd "$id" "sent (tablets update when not in use)" ;;
     run_nightly_check) bash "$D/nightly-check.sh" >/dev/null 2>&1; done_cmd "$id" "ran" ;;
     update_now)        install_release force && done_cmd "$id" "installed" || done_cmd "$id" "failed — see the plant log" ;;
+    set_maker_code)    # v10.38: signed by the manufacturer (checked here with its public key) — gt_maker_code_apply
+                       mc="$(J -v r="$resp" -v id="$id" <<'SQL'
+select concat_ws(E'\t', c #>> '{payload,manifest}', c #>> '{payload,sig}') from jsonb_array_elements(coalesce(nullif(:'r', '')::jsonb -> 'commands', '[]'::jsonb)) c where c ->> 'id' = :'id';
+SQL
+)"
+                       res="$(gt_maker_code_apply "${mc%%$'\t'*}" "${mc#*$'\t'}")"; gt_log "manufacturer code: $res"; done_cmd "$id" "$res" ;;
   esac
 done < <(J -v r="$resp" <<'SQL'
 select (c ->> 'id') || ' ' || (c ->> 'cmd') from jsonb_array_elements(coalesce(nullif(:'r', '')::jsonb -> 'commands', '[]'::jsonb)) c;
