@@ -1,0 +1,83 @@
+<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8"><style>
+:root{--bg:#07090F;--panel:#0F1521;--panel2:#161E2E;--border:#1F2D45;--text:#E8EDF5;--muted:#6B7D99;--gold:#D4A843;--green:#2ECC71;--amber:#F0A030;--red:#FF5555;--blue:#4A9BFF}
+*{box-sizing:border-box;margin:0;padding:0}body{background:var(--bg);color:var(--text);font-family:Arial,sans-serif;width:1280px}
+.top{height:56px;display:flex;align-items:center;justify-content:space-between;padding:0 18px;border-bottom:1px solid var(--border)}
+.top b{color:var(--gold)}.tabs{display:flex;gap:26px;padding:12px 18px;border-bottom:1px solid var(--border);color:var(--muted);font-size:15px}.tabs .on{color:var(--gold);border-bottom:2px solid var(--gold);padding-bottom:8px}
+.wrap{padding:16px 18px}.grid{display:grid;grid-template-columns:1.25fr 1fr 0.8fr;gap:14px}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:14px 16px}
+.card h3{font-size:14px;color:var(--muted);letter-spacing:.5px;margin-bottom:10px}
+.big{font-size:54px;font-weight:900;line-height:1}.sub{color:var(--muted);font-size:13px;margin-top:4px}
+.sts{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:14px}.st{background:var(--panel2);border-radius:10px;padding:8px 10px}.st .n{font-size:24px;font-weight:800}.st .l{font-size:12px;color:var(--muted)}
+.row{display:flex;align-items:center;justify-content:space-between;padding:9px 10px;border-radius:9px;background:var(--panel2);margin-bottom:6px;font-size:15px}
+.dot{width:12px;height:12px;border-radius:50%;display:inline-block;margin-left:8px}.g{background:var(--green)}.y{background:var(--amber)}.r{background:var(--red)}
+.k{color:var(--muted);font-size:13px}
+.att{margin-top:14px;background:#2a1a08;border:1px solid var(--amber);border-radius:12px;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;font-size:17px;color:#FFD08A;font-weight:700}
+.btn{background:transparent;border:1px solid var(--gold);color:var(--gold);border-radius:9px;padding:7px 14px;font-weight:700;font-size:14px}
+.note{color:var(--muted);font-size:13px;margin-top:10px}
+.lbl{position:absolute;top:8px;left:8px;background:#E8B84A;color:#000;font-weight:800;padding:4px 10px;border-radius:8px;font-size:13px}
+.chk{display:grid;grid-template-columns:30px 1fr auto;align-items:center;gap:8px;padding:10px 12px;border-radius:10px;background:var(--panel2);margin-bottom:7px;font-size:16px}
+.ok{color:var(--green);font-size:20px;font-weight:900}.wa{color:var(--amber);font-size:20px;font-weight:900}.no{color:var(--red);font-size:20px;font-weight:900}
+.res{border-radius:14px;padding:16px 18px;margin-bottom:14px;font-size:22px;font-weight:900}
+</style></head><body>
+<!-- ============ 1. TEAM LEADER DASHBOARD ============ -->
+<section id="dash" style="position:relative">
+<div class="top"><span>🌐</span><b>כ״ז בתשרי תשפ״ז · 09:41</b><span>🚪</span></div>
+<div class="tabs"><span class="on">🏠 היום</span><span>🔍 חיפוש</span><span>📊 סיכומים</span><span>⚙️ הגדרות</span><span>📋 תקלות</span></div>
+<div class="wrap">
+ <div class="grid">
+  <div class="card"><h3>היום</h3>
+   <div style="display:flex;gap:26px;align-items:flex-end"><div><div class="big">427</div><div class="sub">נשחטו</div></div>
+     <div><div style="font-size:30px;font-weight:800;color:var(--blue)">392</div><div class="sub">נפסקו בחוץ</div></div>
+     <div><div style="font-size:30px;font-weight:800;color:var(--amber)">35</div><div class="sub">עוד בדרך</div></div></div>
+   <div class="sts">
+    <div class="st"><div class="n" style="color:#2ECC71">341</div><div class="l">גלאט</div></div>
+    <div class="st"><div class="n" style="color:#4A9BFF">24</div><div class="l">בית יוסף</div></div>
+    <div class="st"><div class="n" style="color:#E05050">11</div><div class="l">MK</div></div>
+    <div class="st"><div class="n" style="color:#C9A0FF">9</div><div class="l">רבנות כשר / חלק</div></div>
+    <div class="st"><div class="n" style="color:#FF5555">6</div><div class="l">טרף</div></div>
+    <div class="st"><div class="n" style="color:#999">12</div><div class="l">נבלה / ירוי</div></div>
+   </div></div>
+  <div class="card"><h3>תחנות — איפה כל אחת עומדת</h3>
+   <div class="row"><span><span class="dot g"></span>שחיטה</span><span class="k">במספר 428</span></div>
+   <div class="row"><span><span class="dot g"></span>וושט</span><span class="k">426 · מחכים 2</span></div>
+   <div class="row"><span><span class="dot y"></span>פנים</span><span class="k">410 · מחכים 16 · ❓2</span></div>
+   <div class="row"><span><span class="dot g"></span>חוץ</span><span class="k">403 · מחכים 7</span></div>
+   <div class="row"><span><span class="dot g"></span>רגלים / ראש</span><span class="k">427 · מיון 390</span></div>
+   <div class="row"><span><span class="dot g"></span>חלקים</span><span class="k">388 · USDA 1</span></div>
+   <div class="row"><span><span class="dot r"></span>חותמות</span><span class="k">לא מחובר 4 דק׳</span></div>
+  </div>
+  <div class="card"><h3>שרת</h3>
+   <div class="row"><span><span class="dot g"></span>שרת ראשי</span></div>
+   <div class="row"><span><span class="dot g"></span>שרת גיבוי</span></div>
+   <div class="row"><span><span class="dot g"></span>גיבוי לילי</span><span class="k">03:10</span></div>
+   <div class="row"><span><span class="dot g"></span>יומן אירועים</span><span class="k">תקין</span></div>
+   <div class="row"><span><span class="dot g"></span>UPS</span><span class="k">חשמל רגיל</span></div>
+  </div>
+ </div>
+ <div class="att"><span>⚠ 3 דברים דורשים טיפול: טאבלט חותמות לא מחובר · 2 "?" בפנים · USDA על לשון 214</span><button class="btn">פתח ←</button></div>
+ <div class="note">הרשימה הטכנית המלאה (בריאות המערכת) נשארת — מתחת, מקופלת. נפתחת בלחיצה, או לבד כשיש בה אדום.</div>
+</div><div class="lbl">עיצוב 1 — לוח בקרה לראש הצוות (טאב "היום")</div>
+</section>
+<div style="height:30px"></div>
+<!-- ============ 2. INSTALLATION CHECK ============ -->
+<section id="inst" style="position:relative">
+<div class="top"><span>🌐</span><b>התקנה ראשונה · שלב אחרון</b><span></span></div>
+<div class="wrap" style="max-width:900px;margin:0 auto">
+ <div style="font-size:26px;font-weight:900;margin:6px 0 4px">✔ בדיקת התקנה</div>
+ <div class="k" style="font-size:15px;margin-bottom:14px">המערכת בודקת לבד שהכול מוכן לפני יום העבודה הראשון. אפשר להריץ שוב בכל זמן: הגדרות ← מערכת.</div>
+ <div class="res" style="background:#2a1a08;border:1px solid var(--amber);color:#FFD08A">⚠ המפעל עוד לא מוכן — 3 דברים לתקן</div>
+ <div class="chk"><span class="ok">✓</span><span>מכשיר ראש צוות רשום</span><span class="k"></span></div>
+ <div class="chk"><span class="ok">✓</span><span>קוד שחזור לראש הצוות</span><span class="k"></span></div>
+ <div class="chk"><span class="ok">✓</span><span>מסכים שנבחרו: שחיטה, וושט, פנים, חוץ, רגלים, חלקים, חותמות</span><span class="k"></span></div>
+ <div class="chk"><span class="no">✗</span><span>טאבלט מצומד לכל מסך — <b style="color:#FF8A8A">חסר: חותמות</b></span><button class="btn">צמד ←</button></div>
+ <div class="chk"><span class="no">✗</span><span>עובדים לכל מסך שעובד עם קוד — <b style="color:#FF8A8A">אין עובדים: פנים</b></span><button class="btn">הוסף ←</button></div>
+ <div class="chk"><span class="ok">✓</span><span>שרת המפעל עונה · שלב 46 · בדיקת אבטחה עברה</span><span class="k"></span></div>
+ <div class="chk"><span class="wa">!</span><span>גיבוי לילי — עוד לא רץ (ירוץ הלילה ב-03:00)</span><span class="k">לא חוסם</span></div>
+ <div class="chk"><span class="no">✗</span><span>מדפסת לכל מסך מדפיס — <b style="color:#FF8A8A">חסר: חלקים</b></span><button class="btn">שייך ←</button></div>
+ <div class="chk"><span class="ok">✓</span><span>תמונת סימן כשרות לכל סטטוס כשר (גלאט, בית יוסף, MK, כשר)</span><span class="k"></span></div>
+ <div class="chk"><span class="ok">✓</span><span>שפות: עברית, English, Español</span><span class="k"></span></div>
+ <div style="display:flex;gap:10px;margin-top:14px"><button class="btn" style="font-size:16px;padding:10px 18px">🔄 בדוק שוב</button><button class="btn" style="font-size:16px;padding:10px 18px;border-color:var(--muted);color:var(--muted)">סיים בכל זאת — אתקן אחר כך</button></div>
+ <div class="res" style="margin-top:18px;background:#0d2a17;border:1px solid var(--green);color:#9BE7B0;font-size:18px">(כשהכול ירוק:) ✓ המפעל מוכן לעבודה</div>
+</div><div class="lbl">עיצוב 2 — בדיקת התקנה (סוף אשף ההתקנה, וגם מההגדרות)</div>
+</section>
+</body></html>

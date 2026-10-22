@@ -1,0 +1,6 @@
+B4 browser says offline, server answers — 10 s: {"locked":false,"text":null}
+B4 browser says offline, server answers — 25 s: {"locked":false,"text":null}
+B4 errors: none
+A7 (plant-config-missing.test.js) bound tablet, gt-config.js blocked — 24 s:
+  {"missing":true,"locked":true,"txt":"📡 No connection to the plant server / The plant server settings file (gt-config.js) did not load — this tablet does not switch to another server. Call the installer. / Work is stopped"}
+  requests to the cloud project: none

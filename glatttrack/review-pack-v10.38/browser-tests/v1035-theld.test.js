@@ -1,0 +1,11 @@
+const { chromium } = require('/opt/node22/lib/node_modules/playwright'); const {open}=require('./explore.js');
+const {execSync}=require('child_process'); const q=s=>execSync(`psql -h /tmp -p 5433 -U postgres -d gtapp -At`,{input:s}).toString().trim();
+const loc=(p,i)=>p.evaluate(i=>{const a=KS.getAnimal(i);return (a.legsStickers?'L':'-')+(a.headStickers?'H':'-');},i);
+(async()=>{ const b=await chromium.launch({executablePath:'/opt/pw-browsers/chromium'});
+ const L=await open(b,'legs'); await L.p.waitForTimeout(1500);
+ q(`insert into animal_holds (board_epoch, animal_id, station, kind, part, created_by_device) select _board_epoch(), 2, 'outer', 'usda', 'whole', 'e2e_outer_0001'`);
+ await L.p.evaluate(()=>{ window.gtHeldAt=()=>null; KS.setLegsStickers(2); KS.setHeadStickers(2); });
+ console.log('right after tap → tablet:', await loc(L.p,2));
+ await L.p.waitForTimeout(6000);
+ console.log('after answer   → tablet:', await loc(L.p,2), '| server:', q("select legs_stickers||'/'||head_stickers from animals_pilot where id=2"));
+ q(`delete from animal_holds`); await b.close(); })();

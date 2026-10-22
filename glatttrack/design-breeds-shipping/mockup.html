@@ -1,0 +1,101 @@
+<!doctype html><html dir="rtl" lang="he"><head><meta charset="utf-8"><style>
+:root{--bg:#07090F;--panel:#11151F;--panel2:#181D2A;--border:#2A3142;--gold:#D4A843;--text:#E8ECF4;--muted:#8A93A6;--glatt:#1F9D55;--red:#E03030}
+body{margin:0;background:var(--bg);color:var(--text);font-family:Arial,Helvetica,sans-serif}
+.pg{width:1024px;height:700px;box-sizing:border-box;padding:18px;display:flex;flex-direction:column;gap:12px}
+h1{font-size:20px;margin:0;color:var(--gold)} .sub{font-size:13px;color:var(--muted)}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:14px}
+.sec{font-size:14px;font-weight:700;color:var(--gold);margin-bottom:8px}
+.row{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border);font-size:14px}
+.pill{background:var(--panel2);border:1px solid var(--border);border-radius:20px;padding:3px 10px;font-size:12px}
+.btn{background:var(--gold);color:#07090F;border:none;border-radius:8px;padding:9px 14px;font-weight:700;font-size:14px}
+.in{background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:9px;color:var(--text);font-size:14px}
+.new{outline:2px dashed var(--gold);outline-offset:3px}
+.big{font-size:44px;font-weight:800} .ok{color:var(--glatt)} .tag{font-size:11px;color:var(--gold);font-weight:700}
+table{width:100%;border-collapse:collapse;font-size:15px} td,th{padding:8px;border-bottom:1px solid var(--border);text-align:right} th{color:var(--muted);font-weight:600;font-size:13px}
+.num{font-variant-numeric:tabular-nums;font-weight:700}
+</style></head><body>
+
+<div class="pg" id="p1">
+ <h1>1 · הגדרות ← עבודה יומית: "זני בקר" במקום "סוגי בקר"</h1>
+ <div class="sub">אותה רשימה ואותה קליטה יומית. רק השם משתנה ל"זן". כל בהמה מקבלת את הזן לפי טווח המספרים של הקליטה.</div>
+ <div style="display:flex;gap:12px;flex:1">
+  <div class="card" style="flex:1">
+   <div class="sec new">🐂 זני בקר (5)</div>
+   <div class="row"><span>אנגוס</span><span class="pill">✕</span></div>
+   <div class="row"><span>הרפורד</span><span class="pill">✕</span></div>
+   <div class="row"><span>שרולה</span><span class="pill">✕</span></div>
+   <div class="row"><span>הולשטיין</span><span class="pill">✕</span></div>
+   <div class="row"><span>מעורב</span><span class="pill">✕</span></div>
+   <div style="display:flex;gap:6px;margin-top:10px"><input class="in" style="flex:1" placeholder="זן חדש..."><button class="btn">הוסף</button></div>
+  </div>
+  <div class="card" style="flex:1.4">
+   <div class="sec">📥 קליטה היום — משק · זן · כמות</div>
+   <div class="row"><span><b>משק כהן</b> · אנגוס · 40</span><span class="pill">מס׳ 1–40</span></div>
+   <div class="row"><span><b>משק כהן</b> · הרפורד · 25</span><span class="pill">מס׳ 41–65</span></div>
+   <div class="row"><span><b>משק לוי</b> · שרולה · 35</span><span class="pill">מס׳ 66–100</span></div>
+   <div style="display:flex;gap:6px;margin-top:10px"><select class="in"><option>משק...</option></select><select class="in new"><option>זן...</option></select><input class="in" style="width:70px" placeholder="כמות"><button class="btn">הוסף</button></div>
+   <div class="sec" style="margin-top:16px">איפה רואים את הזן</div>
+   <div class="row new"><span>כרטיס בהמה (חיפוש מספר)</span><span class="ok">זן: אנגוס</span></div>
+   <div class="row new"><span>דוחות: כשרות ומשקל לפי זן, ולפי משק × זן</span><span class="ok">✓</span></div>
+   <div class="row new"><span>מדבקת חותמות (אופציה)</span><span class="ok">ANGUS</span></div>
+  </div>
+ </div>
+</div>
+
+<div class="pg" id="p2">
+ <h1>2 · מסך משלוח — סורקים ארגז, המערכת יודעת איזה בשר ומה המשקל</h1>
+ <div class="sub">כל ארגז שיוצא נסרק. מהברקוד המערכת קוראת רק: סוג הבשר + משקל. בלי בהמה, בלי לקוח. הסיכום של היום מתעדכן מיד.</div>
+ <div style="display:flex;gap:12px;flex:1">
+  <div class="card" style="flex:1;display:flex;flex-direction:column;gap:10px">
+   <div class="sec">📦 משלוח היום · 11.10.2026</div>
+   <div class="card" style="background:var(--panel2);text-align:center">
+     <div class="tag">נסרק עכשיו</div>
+     <div style="font-size:24px;font-weight:800;margin:6px 0">ריב (Rib)</div>
+     <div class="big ok num">18.40 ק״ג</div>
+     <div class="sub">ארגז מס׳ 422 היום · 10:42</div>
+   </div>
+   <input class="in" placeholder="📷 סורק / מצלמה / הקלדת ברקוד..." style="font-size:16px">
+   <div class="sub">אותו ארגז פעמיים (אותו ברקוד בדיוק) — המסך שואל לפני שסופר שוב</div>
+   <div style="display:flex;gap:8px"><button class="btn" style="flex:1">📊 דוח היום / ייצוא Excel</button><button class="btn" style="background:transparent;color:var(--red);border:1px solid var(--red)">↩ בטל סריקה אחרונה</button></div>
+  </div>
+  <div class="card" style="flex:1.2">
+   <div class="sec">סיכום היום לפי סוג בשר</div>
+   <table><tr><th>סוג בשר</th><th>ארגזים</th><th>משקל</th></tr>
+   <tr><td>ריב</td><td class="num">112</td><td class="num">2,000.0 ק״ג</td></tr>
+   <tr><td>לשונות</td><td class="num">175</td><td class="num">350.0 ק״ג</td></tr>
+   <tr><td>צלעות</td><td class="num">64</td><td class="num">1,120.5 ק״ג</td></tr>
+   <tr><td>פילה</td><td class="num">40</td><td class="num">186.2 ק״ג</td></tr>
+   <tr><td>כבד</td><td class="num">30</td><td class="num">210.0 ק״ג</td></tr>
+   <tr style="color:var(--gold)"><td><b>סה״כ</b></td><td class="num">421</td><td class="num">3,866.7 ק״ג</td></tr></table>
+  </div>
+ </div>
+</div>
+
+<div class="pg" id="p3">
+ <h1>3 · הגדרות ← משלוח: סוגי הבשר + בדיקת הברקוד של הארגז</h1>
+ <div class="sub">המפעל מגדיר את סוגי הבשר ובודק מה כתוב בברקוד של הארגז (תווית מחדר הפירוק).</div>
+ <div style="display:flex;gap:12px;flex:1">
+  <div class="card" style="flex:1">
+   <div class="sec">🥩 סוגי בשר</div>
+   <table><tr><th>שם</th><th>קוד מוצר בברקוד</th><th>English</th></tr>
+   <tr><td>ריב</td><td class="num">1001</td><td>Rib</td></tr>
+   <tr><td>לשונות</td><td class="num">2001</td><td>Tongue</td></tr>
+   <tr><td>צלעות</td><td class="num">1002</td><td>Short ribs</td></tr>
+   <tr><td>פילה</td><td class="num">1003</td><td>Tenderloin</td></tr>
+   <tr><td>כבד</td><td class="num">2002</td><td>Liver</td></tr></table>
+   <div class="sub" style="margin-top:8px">החלקים הקטנים שכבר מוגדרים (לשון, לחי, כבד...) נכנסים לרשימה אוטומטית.</div>
+  </div>
+  <div class="card" style="flex:1">
+   <div class="sec">🔍 בדיקת ברקוד — סורקים ארגז אמיתי ורואים מה כתוב בו</div>
+   <input dir="ltr" class="in" style="width:100%;box-sizing:border-box;text-align:left" value="(01)07290012345678(3102)001840(13)261011">
+   <div class="row"><span>מה כתוב (גולמי)</span><span class="pill num">0107290012345678310200184013261011</span></div>
+   <div class="row"><span>תקן שזוהה</span><span class="ok">GS1-128</span></div>
+   <div class="row"><span>קוד מוצר</span><span class="num">07290012345678</span></div>
+   <div class="row"><span>משקל נטו</span><span class="ok num">18.40 ק״ג</span></div>
+   <div class="row"><span>תאריך אריזה</span><span class="num">11.10.2026</span></div>
+   <div class="row"><span>סוג בשר</span><span><select class="in"><option>ריב ← שייך לקוד הזה</option></select></span></div>
+   <div class="sub" style="margin-top:8px">אם הברקוד לא בתקן — המסך מציג את מה שנקרא, ומסמנים איפה הקוד ואיפה המשקל (או שהמשקל מגיע מהמאזניים).</div>
+  </div>
+ </div>
+</div>
+</body></html>

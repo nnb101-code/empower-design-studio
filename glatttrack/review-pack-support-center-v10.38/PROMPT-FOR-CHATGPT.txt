@@ -1,0 +1,16 @@
+מצורפת חבילת בדיקה של מרכז השירות של היצרן ב-GlattTrack (גרסה v10.38) — מסד Supabase נפרד של היצרן, שאליו מדווחים כל שרתי המפעלים.
+זה סבב שני של מרכז השירות: בסבב הקודם נמצא (B3) שדיווח עם ערך מסוג לא נכון נכשל כולו — תוקן ב-_sc_ts / _sc_level / _sc_take_report_extras; בדוק שהתיקון נכון.
+קודם תקרא את README-REVIEW.md: הקבצים, המודל (מפעלים, צוות ותפקידים, דיווח, פקודות, עדכונים, חיובים) ומה לבדוק במיוחד.
+
+הקוד לבדיקה: central-setup.sql (ההגדרה האחרונה של כל פונקציה היא הפעילה), index.html, report-to-center.sh + update-app.sh (רצים כ-root בכל שרת מפעל), plant-side-functions.sql (צד המפעל).
+תוצאת הבדיקה האוטומטית: central-selftest-result.txt (24/24).
+
+Rules for the review:
+1. Read the actual code of each function — do not rely on the README's description. Before reporting, check whether central-selftest.sql already covers it; if it does, say why you still think it is exploitable.
+2. Separate your findings into:
+   A. Real, exploitable problems (who: which role / a plant / anyone with the public key; which call / which value; what wrong result).
+   B. Defense-in-depth improvements (not exploitable today).
+   C. Things that are already fine.
+3. For each finding: the function / file and line (short quote), a concrete scenario, and a fix.
+4. If you are not sure — say "not sure" and why. Do not write "fully safe" about code you did not read.
+5. Answer in Hebrew, simply.

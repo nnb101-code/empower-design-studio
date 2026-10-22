@@ -1,0 +1,129 @@
+<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8"><title>Paper emergency — design</title>
+<style>
+:root{--bg:#07090F;--panel:#0F1521;--panel2:#161E2E;--border:#1F2D45;--text:#E8EDF5;--muted:#6B7D99;--gold:#D4A843;--blue:#2A7FFF;--red:#E03030;--red-light:#FF5555;--amber:#F0A030;--green:#28C76F;--glatt:#28C76F;--beit:#4DA6FF;--kosher:#D4A843;--mk:#A080F0;}
+body{margin:0;background:#222;font-family:Arial,Helvetica,sans-serif;color:var(--text);}
+.frame{width:430px;min-height:900px;background:var(--bg);position:relative;overflow:hidden;margin:10px;display:inline-block;vertical-align:top;}
+.bar{background:var(--panel);border-bottom:1px solid var(--border);padding:14px 16px;display:flex;justify-content:space-between;align-items:center;font-weight:800;}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:14px;margin:12px;}
+.btn{display:block;width:100%;padding:13px;border-radius:12px;border:none;font-size:16px;font-weight:800;margin-top:10px;}
+.gold{background:var(--gold);color:#111}.ghost{background:transparent;border:1px solid var(--border);color:var(--text)}
+.muted{color:var(--muted);font-size:12px;line-height:1.6}
+.chip{display:inline-block;padding:6px 9px;border-radius:8px;border:1px solid var(--border);font-size:13px;font-weight:700;margin:2px;}
+.row{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border);}
+.num{width:44px;font-size:20px;font-weight:900;text-align:center;}
+.tag{font-size:11px;font-weight:800;padding:2px 7px;border-radius:6px;background:rgba(240,160,48,.15);color:var(--amber);border:1px solid var(--amber);}
+.paper{width:794px;min-height:1000px;background:#fff;color:#000;margin:10px;display:inline-block;vertical-align:top;padding:36px;box-sizing:border-box;font-family:Arial;}
+.paper table{width:100%;border-collapse:collapse;font-size:15px}.paper td,.paper th{border:1.5px solid #000;padding:7px 4px;text-align:center}
+.box{display:inline-block;width:16px;height:16px;border:1.5px solid #000;vertical-align:middle;margin-left:3px}
+.cap{position:absolute;bottom:0;left:0;right:0;background:#000c;color:#ffd76a;font-size:13px;padding:8px 12px;text-align:center}
+</style></head><body>
+
+<!-- A: lock screen with the paper procedure -->
+<div class="frame" id="fA" style="background:rgba(40,4,4,1);display:inline-flex;align-items:center;justify-content:center;text-align:center;">
+ <div style="max-width:390px;padding:20px;">
+  <div style="font-size:64px">📡</div>
+  <div style="font-size:28px;font-weight:800;color:#FF6B6B;margin:14px 0 8px;">אין חיבור לשרת המפעל</div>
+  <div style="font-size:20px;font-weight:700;margin-bottom:14px;">העבודה בטאבלט נעצרה</div>
+  <div style="background:#fff1;border:2px solid var(--amber);border-radius:14px;padding:14px;margin-top:10px;text-align:right;">
+   <div style="font-size:18px;font-weight:900;color:var(--amber);margin-bottom:6px;">📝 נוהל חירום על נייר</div>
+   <div style="font-size:15px;line-height:1.8;">
+    1. לוקחים את <b>דף החירום</b> של התחנה (בתיק האדום)<br>
+    2. המספר האחרון שנרשם כאן: <b style="font-size:22px;color:#fff">37</b><br>
+    &nbsp;&nbsp;&nbsp;בנייר מתחילים מ־<b style="font-size:22px;color:#fff">38</b><br>
+    3. כותבים כל בהמה: מספר · פסיקה · ראשי תיבות<br>
+    4. מסמנים על הבהמה כרגיל (תג / חותמת)
+   </div>
+  </div>
+  <div style="font-size:12px;color:#aaa;margin-top:12px;">בודק חיבור… · 3 דק׳ · כשהשרת יחזור, הטאבלט יבקש להזין את הדף</div>
+ </div>
+ <div class="cap">1. מסך הנעילה (אחרי כ־2 דקות בלי שרת) — מוסיף את הנוהל ואת המספר שממנו מתחילים</div>
+</div>
+
+<!-- B: back online -->
+<div class="frame" id="fB">
+ <div class="bar"><span>בדיקת חוץ</span><span style="color:var(--green)">● מחובר</span></div>
+ <div class="card" style="border:2px solid var(--amber);">
+  <div style="font-size:20px;font-weight:900;color:var(--amber);">השרת חזר ✓</div>
+  <div style="font-size:15px;line-height:1.7;margin-top:6px;">עבדת על נייר בזמן הניתוק (10:12–10:41)?<br>קודם מזינים את הדף, אחר כך ממשיכים.</div>
+  <button class="btn gold">📝 הזן את דף החירום</button>
+  <button class="btn ghost">לא עבדתי בנייר — המשך</button>
+ </div>
+ <div class="card"><div style="font-weight:800;margin-bottom:6px;">סדר ההזנה (כמו סדר השלבים)</div>
+  <div class="row"><span>🔪 שחיטה</span><span style="margin-right:auto;color:var(--green)">✓ הוזן 38–61</span></div>
+  <div class="row"><span>🫁 בדיקת פנים</span><span style="margin-right:auto;color:var(--green)">✓ הוזן 38–61</span></div>
+  <div class="row" style="border:0"><span>⚖ בדיקת חוץ</span><span style="margin-right:auto;color:var(--amber)">← עכשיו</span></div>
+  <div class="muted">תחנה לא יכולה להזין בהמה שהשלב שלפניה עוד לא הוזן — אותו כלל כמו בעבודה רגילה.</div>
+ </div>
+ <div class="cap">2. כשהשרת חוזר — הטאבלט מבקש להזין את הדף לפני שממשיכים</div>
+</div>
+
+<!-- C: late entry grid -->
+<div class="frame" id="fC">
+ <div class="bar"><span>📝 הזנה מנייר · בדיקת חוץ</span><span style="font-size:13px;color:var(--muted)">יוסי כ.</span></div>
+ <div class="card">
+  <div style="display:flex;gap:8px;align-items:center;font-size:15px;">מבהמה <span class="chip" style="font-size:18px">38</span> עד <span class="chip" style="font-size:18px">61</span> <span class="muted">(24 בהמות)</span></div>
+  <div style="margin-top:10px;font-size:14px;font-weight:700;">רוב הבהמות בדף:</div>
+  <span class="chip" style="background:var(--glatt);color:#111;border-color:var(--glatt)">✓ גלאט</span><span class="chip" style="color:var(--beit)">בית יוסף</span><span class="chip" style="color:var(--kosher)">כשר</span><span class="chip" style="color:var(--mk)">מ״כ</span><span class="chip" style="color:var(--red-light)">טרף</span>
+  <div class="muted" style="margin-top:6px">אחר כך נוגעים רק בבהמות שבדף כתוב להן משהו אחר.</div>
+ </div>
+ <div class="card" style="padding:6px 14px;">
+  <div class="row"><span class="num">44</span><span class="chip" style="background:var(--glatt);color:#111">גלאט</span></div>
+  <div class="row"><span class="num">45</span><span class="chip" style="background:var(--kosher);color:#111;border:2px solid #fff">כשר</span><span class="tag">שונה</span></div>
+  <div class="row"><span class="num">46</span><span class="chip" style="background:var(--glatt);color:#111">גלאט</span></div>
+  <div class="row"><span class="num">47</span><span class="chip" style="color:var(--muted)">— פנים טרף, לא לבדיקת חוץ</span></div>
+  <div class="row"><span class="num">48</span><span class="chip" style="background:var(--glatt);color:#111">גלאט</span></div>
+  <div class="row"><span class="num">49</span><span class="chip" style="background:var(--glatt);color:#111">גלאט</span></div>
+  <div class="row"><span class="num">50</span><span class="chip" style="background:var(--red);color:#fff;border:2px solid #fff">טרף</span><span class="tag">שונה</span></div>
+  <div class="row" style="border:0"><span class="num">51</span><span class="chip" style="background:var(--glatt);color:#111">גלאט</span></div>
+ </div>
+ <div class="card" style="padding:10px 14px;"><span style="font-size:14px;">📷 צילום הדף (רשות)</span> <span class="muted">— נשמר עם הרישום</span></div>
+ <div style="padding:0 12px"><button class="btn gold">המשך לבדיקה ←</button></div>
+ <div class="cap">3. ההזנה — טווח, "רוב הבהמות", ורק החריגים בלחיצה</div>
+</div>
+
+<!-- D: confirm -->
+<div class="frame" id="fD">
+ <div class="bar"><span>📝 בדיקה לפני שמירה</span><span></span></div>
+ <div class="card">
+  <div style="font-size:15px;line-height:1.9;">בהמות <b>38–61</b> · בדיקת חוץ · <b>יוסי כ.</b></div>
+  <div style="font-size:22px;font-weight:900;margin:8px 0;"><span style="color:var(--glatt)">21 גלאט</span> · <span style="color:var(--kosher)">1 כשר</span> · <span style="color:var(--red-light)">1 טרף</span></div>
+  <div style="font-size:15px;line-height:1.8">כשר: <b>45</b><br>טרף: <b>50</b><br>לא לבדיקת חוץ (פנים טרף): <b>47</b></div>
+ </div>
+ <div class="card" style="border-color:var(--amber)">
+  <div style="font-size:15px;font-weight:800;color:var(--amber)">להשוות לדף לפני שמירה</div>
+  <div class="muted" style="font-size:13px">כל פסיקה תסומן <span class="tag">📝 מנייר</span> בכל מקום (ארכיון, דוחות, יומן), עם שעת ההזנה ושעות הנוהל. אחרי השמירה תיקון — כמו תיקון רגיל, עם סיבה.</div>
+ </div>
+ <div style="padding:0 12px"><button class="btn gold">✓ שמור את הדף</button><button class="btn ghost">חזרה לתיקון</button></div>
+ <div class="cap">4. סיכום — העובד משווה לדף ומאשר</div>
+</div>
+
+<!-- E: team leader -->
+<div class="frame" id="fE">
+ <div class="bar"><span>ראש צוות · היום</span><span></span></div>
+ <div class="card" style="border:2px solid var(--amber)">
+  <div style="font-size:18px;font-weight:900;color:var(--amber)">📝 נוהל חירום 10:12–10:41</div>
+  <div class="muted" style="font-size:13px">השרת לא ענה 29 דק׳. בהמות 38–61 נרשמו על נייר.</div>
+  <div class="row"><span>שחיטה</span><span style="margin-right:auto;color:var(--green)">✓ הוזן</span></div>
+  <div class="row"><span>בדיקת פנים</span><span style="margin-right:auto;color:var(--green)">✓ הוזן</span></div>
+  <div class="row"><span>בדיקת חוץ</span><span style="margin-right:auto;color:var(--amber)">18 / 23</span></div>
+  <div class="row"><span>רגלים</span><span style="margin-right:auto;color:var(--muted)">ממתין</span></div>
+  <div class="row" style="border:0"><span>חלקים · חותמות</span><span style="margin-right:auto;color:var(--muted)">ממתין</span></div>
+  <div class="muted">ראש הצוות רק רואה — הוא לא מזין פסיקות. כל תחנה מזינה את הדף שלה.</div>
+ </div>
+ <div class="card"><div style="font-weight:800">🖨 דפי חירום</div><div class="muted">הגדרות ← מערכת ← "הדפס דפי חירום": דף לכל מסך שבשימוש. להדפיס מראש ולשים בתיק אדום ליד כל תחנה.</div></div>
+ <div class="cap">5. מסך ראש הצוות — רואה מה הוזן ומה חסר</div>
+</div>
+
+<!-- F: paper form -->
+<div class="paper" id="fF">
+ <div style="display:flex;justify-content:space-between;align-items:flex-end;border-bottom:3px solid #000;padding-bottom:8px;">
+  <div><div style="font-size:26px;font-weight:900">דף חירום — בדיקת חוץ</div><div style="font-size:14px">GlattTrack · משתמשים בו רק כשהטאבלט נעול "אין חיבור לשרת"</div></div>
+  <div style="font-size:15px;line-height:1.8">תאריך: ________ &nbsp; דף __ מתוך __<br>שעת התחלה: ______ &nbsp; סיום: ______</div>
+ </div>
+ <div style="font-size:14px;margin:10px 0;line-height:1.7">מתחילים מהמספר שמופיע במסך הנעול. בהמה שבפנים יצאה טרף — לא כותבים כאן. סימון על הבהמה (תג / חותמת) — כרגיל.</div>
+ <table><tr><th style="width:70px">מספר</th><th>גלאט</th><th>בית יוסף</th><th>כשר</th><th>מ״כ</th><th>טרף</th><th style="width:90px">ראשי תיבות</th><th style="width:70px">שעה</th></tr>
+ <tbody id="rows"></tbody></table>
+ <div style="margin-top:14px;font-size:14px">שם הבודק: ____________________ &nbsp; חתימה: ____________ &nbsp; הוזן למערכת ✓ בשעה: ______</div>
+</div>
+<script>let h='';for(let i=0;i<22;i++)h+='<tr><td style="height:24px"></td>'+'<td><span class=box></span></td>'.repeat(5)+'<td></td><td></td></tr>';document.getElementById('rows').innerHTML=h;</script>
+</body></html>

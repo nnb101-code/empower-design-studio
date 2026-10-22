@@ -1,0 +1,28 @@
+מצורפת חבילת הבדיקה העדכנית של GlattTrack (אפליקציה v10.17, שרת שלב 46).
+זה סבב עשירי. אם עוד לא שלחת תשובה על סבב 9 (v10.16) — אפשר לענות על שניהם יחד.
+קודם תקרא את README-REVIEW.md, החלק "Changed in v10.17". אלה החלטות של בעל המערכת:
+- סטטוס כשרות מופיע תמיד בשם שבו נכתב, בכל שפה (MK נשאר MK בעברית, גלאט נשאר גלאט באנגלית ובספרדית).
+- אפשר להוסיף ולהסיר סטטוסים, ולהחזיר סטטוס שהוסר.
+- "שליחה לרבנות" היא שליחה ממסך הגלאט למסך הרבנות, לא סטטוס. סטטוסי הרבנות: רבנות חלק, רבנות כשר.
+- במדבקות הסטטוס מודפס בעברית ובאנגלית יחד.
+בדוק במיוחד:
+(1) הכלל החדש בשרת (_nc_outer_value_ok): בהמה שרק נשלחה למסך הרבנות — מותר רבנות חלק; בהמה שסומנה "לא חלק רבנות" בשחיטה או בבית הכוסות — רק רבנות כשר או טרף. האם יש מסלול כתיבה שעוקף אותו? האם _kosher_ready נכון עכשיו (מדבקות וחותמות לבהמה ברבנות חלק)?
+(2) האם יש מקום באפליקציה שעדיין מתרגם שם של סטטוס, או מציג שם אחר מזה שנכתב.
+(3) הסרה והחזרה של סטטוס: האם זה יכול לשנות פסיקה שכבר ניתנה (השרת חוסם שינוי "כשר/לא כשר" ומחיקה כשבהמה על הלוח נושאת את הסטטוס — status_in_use).
+(4) מה שנשאר פתוח מסבב 9 (B1, B3, B5) — האם ההחלטות סבירות.
+בדיקת האבטחה: 134/134 (מסד נקי מ-glatttrack-schema-full.sql, וגם בלי superuser).
+
+Please review this pack according to README-REVIEW.md.
+
+Rules for the review:
+1. Audit the ACTIVE state in active-schema-snapshot.sql (one definition per function). Do not audit older step files or the history inside glatttrack-schema-full.sql as if it were active.
+2. Use SECURITY-MANIFEST.md and security-selftest-result.txt (134/134) to see what is already enforced and tested. Before reporting a vulnerability, check whether a self-test already covers it; if it does, say so and explain why you still think it is exploitable (with the exact function name and line from the snapshot).
+3. Separate your findings into:
+   A. Real, exploitable problems (with a concrete attack: which role, which call, which parameters, what wrong result).
+   B. Defense-in-depth improvements (not exploitable today).
+   C. Things that are already fine.
+4. For every A-finding give: the function name as it appears in the snapshot, the exact problem, and a minimal fix (SQL or JS) that keeps the existing function signatures.
+5. Check the business rules listed in README-REVIEW.md one by one against the code, and say for each: enforced on the server (where) / only in the app / not enforced.
+6. Do not propose rewriting the architecture. Do not invent tables, columns, roles or RPCs that are not in the snapshot.
+
+Answer in Hebrew, with code blocks in English.

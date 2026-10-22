@@ -1,0 +1,10 @@
+const { chromium } = require('/opt/node22/lib/node_modules/playwright'); const {open}=require('./explore.js');
+const W=(p,ms)=>p.waitForTimeout(ms);
+(async()=>{ const b=await chromium.launch({executablePath:'/opt/pw-browsers/chromium'}); const x=await open(b,'inner'), p=x.p; await W(p,4000);
+ console.log('cell 12:', await p.evaluate(()=>document.querySelector('.screen.active .num-cell[data-idx="11"]').innerText.replace(/\s+/g,' ')));
+ console.log('top buttons:', await p.evaluate(()=>[...document.querySelectorAll('.screen.active .gt-tbb')].filter(b=>b.offsetParent).map(b=>b.innerText).join(' | ')));
+ await p.click('.screen.active .num-cell[data-idx="11"]'); await W(p,1200);
+ console.log('notice:', await p.evaluate(()=>[...document.querySelectorAll('#gtStatusBar .gt-srow')].map(r=>r.textContent).join(' / ')));
+ console.log('open:', await p.evaluate(()=>[...document.querySelectorAll('.overlay.open,[id$=Modal].open,.gt-sheet.open,#gtSheet.open')].map(e=>e.id||e.className).join(',')+' screen='+document.querySelector('.screen.active').id));
+ await p.screenshot({path:'shots/inner12.png'});
+ await x.ctx.close(); await b.close(); })();

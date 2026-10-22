@@ -1,0 +1,12 @@
+const { chromium } = require('/opt/node22/lib/node_modules/playwright'); const {open}=require('./explore.js');
+const W=(p,ms)=>p.waitForTimeout(ms);
+(async()=>{ const b=await chromium.launch({executablePath:'/opt/pw-browsers/chromium'});
+ let x=await open(b,'esophagus'), p=x.p; await W(p,1500);
+ console.log('eso: zone #14 =', await p.evaluate(()=>_gtUsdaZone(13)));
+ await p.click('.screen.active .num-cell[data-idx="13"]'); await W(p,800);
+ console.log('eso: #14 window USDA button:', await p.evaluate(()=>{const m=document.getElementById('esoWarnModal');return m.classList.contains('open')+' / '+m.querySelector('.gt-usda-chg').style.display;}));
+ await x.ctx.close();
+ x=await open(b,'inner'); p=x.p; await W(p,1500);
+ console.log('inner: cells shown (number:label) 1-16:', await p.evaluate(()=>[...document.querySelectorAll('.screen.active .num-cell')].slice(0,16).map(c=>c.innerText.replace(/\s+/g,' ').trim()).join(' | ')));
+ await p.screenshot({path:'shots/inner-legs.png'});
+ await x.ctx.close(); await b.close(); })();

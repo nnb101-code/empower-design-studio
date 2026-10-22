@@ -1,0 +1,103 @@
+#!/bin/bash
+# GlattTrack — sticker printing through the plant server (v10.38). Runs all the time (gt-print-relay.service),
+# on the main server only. (1) Sends each new print job (ZPL from a station tablet, print_job_add) to its
+# network printer, IP:9100, and marks it sent / failed. (2) When the team leader asks to search
+# (printer_scan_request), looks on the plant's own network for label printers (port 9100) and leaves the list
+# in plant_state 'printersFound'. Sends only to the plant's own network and a printer port — the same rule
+# as the server (_printer_addr_ok).
+. "$(dirname "$0")/gt-lib.sh"
+set +e
+ADDR_RE='^(10\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}|172\.(1[6-9]|2[0-9]|3[01])\.[0-9]{1,3}\.[0-9]{1,3}|192\.168\.[0-9]{1,3}\.[0-9]{1,3}):(9100|9101|9102|6101)$'
+[ -n "${GT_PRINT_TEST_ADDR_RE:-}" ] && ADDR_RE="$GT_PRINT_TEST_ADDR_RE"   # tests only (a fake printer on this machine)
+send_job(){   # $1 = id, $2 = ip:port
+  local id="$1" ip="${2%:*}" port="${2##*:}" f rc err=""
+  [[ "$2" =~ $ADDR_RE ]] || { gt_psql -c "update print_jobs set status = 'failed', error = 'address not allowed' where id = $id" >/dev/null; return; }
+  # (review) take the job first: after a restart it is never sent twice
+  [ -n "$(gt_psql -c "update print_jobs set status = 'sending' where id = $id and status = 'new' returning id")" ] || return
+  f="$(mktemp)"
+  gt_psql -c "select data from print_jobs where id = $id" | base64 -d > "$f" 2>/dev/null
+  if [ ! -s "$f" ]; then err="empty job"
+  else timeout 15 bash -c 'exec 3<>"/dev/tcp/$1/$2" && cat "$3" >&3' _ "$ip" "$port" "$f" 2>/dev/null; rc=$?
+       [ $rc -eq 0 ] || err="printer $ip:$port does not answer (code $rc)"; fi
+  rm -f "$f"
+  if [ -z "$err" ]; then gt_psql -c "update print_jobs set status = 'sent', sent_at = now(), error = null where id = $id" >/dev/null
+  else gt_psql -c "update print_jobs set status = 'failed', error = \$e\$$err\$e\$ where id = $id" >/dev/null; gt_log "print job $id: $err"; fi
+}
+scan(){
+  local nets n ip found="" model
+  nets="$( { ip -o -4 addr show scope global 2>/dev/null | awk '{print $4}' | cut -d/ -f1; hostname -I 2>/dev/null | tr ' ' '\n'; } | grep -E '^(10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.)' | sed 's/\.[0-9]*$//' | sort -u)"
+  [ -n "${GT_PRINTER_NETS:-}" ] && nets="$GT_PRINTER_NETS"      # e.g. "192.168.10 192.168.11" (the first three numbers)
+  for n in $nets; do
+    found="$found $(seq 1 254 | xargs -P 64 -I{} bash -c 'timeout 0.5 bash -c "exec 3<>/dev/tcp/$0.{}/9100" 2>/dev/null && echo "$0.{}"' "$n")"
+  done
+  local lines=""
+  for ip in $found; do
+    # (full review P4) nothing is sent to the devices found — an ordinary office printer would print it as a page.
+    # Only a plant whose network has label printers only may ask for the model (GT_PRINTER_ASK_MODEL=1: ~HI).
+    model=""
+    if [ "${GT_PRINTER_ASK_MODEL:-0}" = "1" ]; then
+      model="$(timeout 3 bash -c 'exec 3<>"/dev/tcp/$0/9100"; printf "~HI\r\n" >&3; timeout 2 head -c 120 <&3' "$ip" 2>/dev/null | tr -cd '[:alnum:] ._,-' | cut -c1-60)"
+    fi
+    lines="$lines$ip|$model"$'\n'
+  done
+  # (psql substitutes :'l' only in what it reads, not in -c)
+  gt_psql -v l="$lines" >/dev/null <<'SQL'
+insert into plant_state (key, value)
+select 'printersFound', jsonb_build_object('at', now(), 'printers', coalesce(jsonb_agg(jsonb_build_object('ip', split_part(x, '|', 1), 'port', 9100,
+       'model', nullif(split_part(x, '|', 2), '')) order by x), '[]'::jsonb))::text
+  from unnest(string_to_array(trim(:'l', E'\n'), E'\n')) x where x <> ''
+on conflict (key) do update set value = excluded.value, updated_at = now();
+SQL
+  gt_log "printer search: $(echo $found | wc -w) found on: $nets"
+}
+# (v10.38, owner) is each network printer of the list there? Only a connection is opened — nothing is sent.
+# → plant_state 'printersOnline' {at, printers: {"ip:port": {ok, at, since}}} (since = when it last changed)
+probe_printers(){
+  local list p ok prev now out="" since
+  list="$(gt_psql -c "select string_agg(distinct (x ->> 'ip') || ':' || coalesce(nullif(x ->> 'port', ''), '9100'), ' ')
+                        from settings_pilot, jsonb_array_elements(case when jsonb_typeof(settings -> 'printers') = 'array' then settings -> 'printers' else '[]'::jsonb end) x
+                       where id = 1 and x ->> 'conn' = 'network'")"
+  prev="$(gt_psql -c "select coalesce((select value from plant_state where key = 'printersOnline'), '{}')")"
+  now="$(date -Is)"
+  for p in $list; do
+    [[ "$p" =~ $ADDR_RE ]] || continue
+    if timeout 2 bash -c 'exec 3<>"/dev/tcp/$0/$1"' "${p%:*}" "${p##*:}" 2>/dev/null; then ok=true; else ok=false; fi
+    since="$(printf '%s' "$prev" | python3 -c 'import json,sys
+try:
+  d=json.load(sys.stdin)["printers"][sys.argv[1]]; print(d["since"] if str(d.get("ok")).lower()==sys.argv[2] else "")
+except Exception: print("")' "$p" "$ok" 2>/dev/null)"
+    out="$out${out:+,}\"$p\":{\"ok\":$ok,\"at\":\"$now\",\"since\":\"${since:-$now}\"}"
+  done
+  gt_state printersOnline "{\"at\":\"$now\",\"printers\":{$out}}" >/dev/null
+}
+# (round-2 review P-pr1) each printer has its own sender in the background: a printer that does not answer (15 s
+# a job) never holds up the stickers of the other printers; the search runs in the background too
+send_printer(){   # $1 = ip:port — every new job of this printer, oldest first, until none is left
+  local id last=""
+  while id="$(gt_psql -v p="$1" <<'SQL'
+select id from print_jobs where status = 'new' and printer = :'p' and at >= now() - interval '20 seconds' order by id limit 1;
+SQL
+)" && [ -n "$id" ] && [ "$id" != "$last" ]; do send_job "$id" "$1"; last="$id"; done
+}
+declare -A SENDER=(); scan_pid=""
+last_beat=0; last_probe=0
+while true; do
+  if [ "$(gt_self_role)" != "primary" ]; then sleep 5; continue; fi
+  now=$(date +%s)
+  if [ $((now - last_beat)) -ge 30 ]; then gt_state printRelayAt "$(date -Is)" >/dev/null; last_beat=$now; fi
+  if [ $((now - last_probe)) -ge "${GT_PRINTER_PROBE_EVERY:-30}" ]; then ( probe_printers ) & last_probe=$now; fi   # in the background: printing never waits for it
+  # (review) a sticker the station already reported as not printed is never printed later; a send cut off by a restart is failed
+  gt_psql -c "update print_jobs set status = 'failed', error = 'too old — not printed (the station said so; print again)' where status = 'new' and at < now() - interval '20 seconds';
+              update print_jobs set status = 'failed', error = 'interrupted' where status = 'sending' and at < now() - interval '2 minutes'" >/dev/null
+  while read -r printer; do
+    [ -n "$printer" ] || continue
+    pid="${SENDER[$printer]:-}"
+    if [ -z "$pid" ] || ! kill -0 "$pid" 2>/dev/null; then ( send_printer "$printer" ) & SENDER[$printer]=$!; fi
+  done < <(gt_psql -c "select distinct printer from print_jobs where status = 'new' and at >= now() - interval '20 seconds'")
+  if { [ -z "$scan_pid" ] || ! kill -0 "$scan_pid" 2>/dev/null; } \
+     && [ "$(gt_psql -c "select coalesce((select value::timestamptz from plant_state where key = 'printerScanRequestedAt')
+                        > coalesce((select (value::jsonb ->> 'at')::timestamptz from plant_state where key = 'printersFound'), '-infinity'), false)")" = "t" ]; then
+    ( scan ) & scan_pid=$!
+  fi
+  sleep "${GT_PRINT_POLL:-0.5}"
+done

@@ -1,0 +1,9 @@
+NC button: לא חלק visible=true
+server: 0:slaughtered:שוחט 1:notChalak:שוחט 2:nevela:שוחט 3:slaughtered:שוחט
+legs QR payload #1: BH|N:1|D:2026-10-07|HD:כ״ו בתשרי תשפ״ז|W:יום רביעי / Wed|TM:21:00|SH:שוחט|S:slaughtered
+sticker 1: 1 | כ״ו בתשרי תשפ״ז | 07.10.2026 | 21:00
+sticker 2: 2 | כ״ו בתשרי תשפ״ז | 07.10.2026 | 21:00 | לא חלק | Non-Chalak
+sticker 3: 3 | כ״ו בתשרי תשפ״ז | 07.10.2026 | 21:00 | נבלה | Nevela
+version: v10.19
+server #1 outer: glatt
+sort result for printed payload: #1 גלאט
