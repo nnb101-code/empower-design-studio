@@ -99,7 +99,9 @@ SQL
 }
 
 # the support center's commands (only these five)
-while read -r id cmd; do
+# (round-4 review) the list is read from its own descriptor (3): a command run inside the loop that reads standard
+# input (a restart command, the nightly check, an update) can no longer swallow the commands after it
+while read -r id cmd <&3; do
   [ -n "$id" ] || continue
   case "$cmd" in
     restart_standby)   if [ -n "${GT_STANDBY_RESTART_CMD:-}" ]; then eval "$GT_STANDBY_RESTART_CMD" >/dev/null 2>&1 && done_cmd "$id" "restarted" || done_cmd "$id" "failed"; else done_cmd "$id" "GT_STANDBY_RESTART_CMD not set"; fi ;;
@@ -113,7 +115,7 @@ SQL
 )"
                        res="$(gt_maker_code_apply "${mc%%$'\t'*}" "${mc#*$'\t'}")"; gt_log "manufacturer code: $res"; done_cmd "$id" "$res" ;;
   esac
-done < <(J -v r="$resp" <<'SQL'
+done 3< <(J -v r="$resp" <<'SQL'
 select (c ->> 'id') || ' ' || (c ->> 'cmd') from jsonb_array_elements(coalesce(nullif(:'r', '')::jsonb -> 'commands', '[]'::jsonb)) c;
 SQL
 )

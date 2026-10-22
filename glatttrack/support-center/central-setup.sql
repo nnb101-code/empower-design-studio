@@ -879,7 +879,7 @@ begin
   if not exists (select 1 from sc_plants where code = p_code) then return jsonb_build_object('ok', false, 'error', 'bad_id'); end if;
   begin m := p_manifest::jsonb; exception when others then return jsonb_build_object('ok', false, 'error', 'bad_value'); end;
   if length(p_manifest) > 1000 or jsonb_typeof(m) <> 'object' or m ->> 'kind' is distinct from 'maker_code' or m ->> 'plant' is distinct from p_code
-     or coalesce(m ->> 'hash', '') !~ '^\$2[ab]\$1[0-2]\$[./A-Za-z0-9]{53}$' or coalesce(m ->> 'at', '') !~ '^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$'
+     or coalesce(m ->> 'hash', '') !~ '^\$2a\$1[0-2]\$[./A-Za-z0-9]{53}$' or coalesce(m ->> 'at', '') !~ '^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$'
      or coalesce(p_sig, '') !~ '^[A-Za-z0-9+/]{86}==$' then
     return jsonb_build_object('ok', false, 'error', 'not_signed');
   end if;

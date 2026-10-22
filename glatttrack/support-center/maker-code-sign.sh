@@ -17,7 +17,7 @@ M="$(python3 -I - "$REQ" <<'PY'
 import json, re, sys
 r = json.load(open(sys.argv[1], encoding='utf-8'))
 plant, h = str(r.get('plant', '')), str(r.get('hash', ''))
-if r.get('kind') != 'maker_code' or not re.fullmatch(r'[0-9]{3,8}', plant) or not re.fullmatch(r'\$2[ab]\$1[0-2]\$[./A-Za-z0-9]{53}', h):
+if r.get('kind') != 'maker_code' or not re.fullmatch(r'[0-9]{3,8}', plant) or not re.fullmatch(r'\$2a\$1[0-2]\$[./A-Za-z0-9]{53}', h):
     sys.exit('this is not a manufacturer-code request from the support-center page')
 import datetime
 at = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')

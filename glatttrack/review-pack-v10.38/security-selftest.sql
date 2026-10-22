@@ -3767,6 +3767,25 @@ begin
       where n.nspname = 'public' and p.proname in ('manager_login', 'worker_login'))
     and (select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
           where n.nspname = 'public' and p.proname in ('manager_login', 'worker_login')) >= 2);
+  -- (owner) a new manufacturer code from the support center: only a bcrypt hash arrives, only from the server
+  -- (after the plant server checked the manufacturer's signature), once per signed request, not older than 7 days
+  declare h text := crypt('selftest-maker-code-9', gen_salt('bf', 10)); t timestamptz := now() - interval '1 minute';
+          r3 jsonb; r4 jsonb; r5 jsonb; r6 jsonb; denied boolean := false;
+  begin
+    r  := manufacturer_set_code_hash(h, t);
+    r2 := manufacturer_set_code_hash(h, t);                                   -- the same request again
+    r3 := manufacturer_set_code_hash('plain-text-code', now());
+    r4 := manufacturer_set_code_hash(h, now() - interval '8 days');
+    begin perform pg_temp.api('{}', format('select manufacturer_set_code_hash(%L, now())', h)); exception when others then denied := true; end;
+    r5 := pg_temp.api('{}', 'select manager_login(''selftest-maker-code-9'')');
+    perform pg_temp.rec('owner: a new manufacturer code from the support center — a hash only, from the server only, once per signed request, not older than 7 days; the new code logs in as the manufacturer',
+      pg_temp.ok(r) and r2 ->> 'error' = 'already_used' and r3 ->> 'error' = 'bad_hash' and r4 ->> 'error' = 'too_old'
+      and manufacturer_set_code_hash(replace(h, '$2a$', '$2b$'), now()) ->> 'error' = 'bad_hash'   -- (round 4) a $2b$ hash cannot be checked here: refused
+      and (denied or not has_function_privilege('anon', 'manufacturer_set_code_hash(text,timestamptz)', 'execute'))
+      and (select count(*) from plant_managers where role = 'manufacturer' and active) = 1
+      and (r5 ->> 'role' = 'manufacturer' or r5 ->> 'reason' in ('station_device', 'locked')),
+      concat_ws(' | ', r::text, r2::text, r3::text, r4::text, left(r5::text, 120)));
+  end;
 end $$;
 $gt86$;
     v_step := 'the ACTIVE security surface against the expected manifest';

@@ -1,9 +1,9 @@
 == 1. plant state =======================================================
     key     |     value     |          updated_at           
 ------------+---------------+-------------------------------
- boardEpoch | 1792466646155 | 2026-10-20 03:24:06.155161+00
- schemaStep | 46            | 2026-10-20 03:24:07.915692+00
- testMode   | off           | 2026-10-20 03:24:06.875637+00
+ boardEpoch | 1792688328287 | 2026-10-22 16:58:48.286553+00
+ schemaStep | 46            | 2026-10-22 16:58:50.27643+00
+ testMode   | off           | 2026-10-22 16:58:49.044834+00
 (3 rows)
 
 == 2. functions (public, gt_rls) ========================================
@@ -304,7 +304,8 @@
  public | leader_account_remove(text)                                                        | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | leader_device_recovery(text)                                                       | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | manufacturer_set_code(text,text)                                                   | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
-(295 rows)
+ public | manufacturer_set_code_hash(text,timestamp with time zone)                          | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+(296 rows)
 
 == 2b. API surface: functions the app roles can run ======================
                        callable_by_app                       | security_definer 

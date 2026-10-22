@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict aHwsClUXZQCzXfOSbfrfhxB7PrARcTI2dh6QeBlsNK9LExfUygBiFwpTuUCXoeB
+\restrict Xdb4qYiRaWjuxsHYAqWrc5GpMLUI2Mkxy71eWBlAJDUXZqzTgPukav84cYLonaJ
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -7528,6 +7528,36 @@ end $$;
 ALTER FUNCTION public.manufacturer_set_code(p_name text, p_code text) OWNER TO postgres;
 
 --
+-- Name: manufacturer_set_code_hash(text, timestamp with time zone); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.manufacturer_set_code_hash(p_hash text, p_signed_at timestamp with time zone) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $_$
+declare v_id uuid; v_last timestamptz;
+begin
+  if _is_api_request() and not _request_is_service_role() then raise exception 'server only' using errcode = '42501'; end if;
+  if p_hash is null or p_hash !~ '^\$2a\$1[0-2]\$[./A-Za-z0-9]{53}$' then return jsonb_build_object('ok', false, 'error', 'bad_hash'); end if;
+  if p_signed_at is null or p_signed_at > now() + interval '10 minutes' or p_signed_at < now() - interval '7 days' then
+    return jsonb_build_object('ok', false, 'error', 'too_old');
+  end if;
+  perform pg_advisory_xact_lock(hashtext('gt_maker_code'));
+  v_last := (select case when value ~ '^\d{4}-' then value::timestamptz end from plant_state where key = 'makerCodeSignedAt');
+  if v_last is not null and p_signed_at <= v_last then return jsonb_build_object('ok', false, 'error', 'already_used'); end if;   -- the same signed request twice: once
+  delete from manager_sessions where manager_id in (select id from plant_managers where role = 'manufacturer');
+  update plant_managers set active = false where role = 'manufacturer' and active;
+  insert into plant_managers (name, code_hash, role) values ('Manufacturer', p_hash, 'manufacturer') returning id into v_id;
+  insert into plant_state (key, value) values ('makerCodeSignedAt', p_signed_at::text)
+  on conflict (key) do update set value = excluded.value, updated_at = now();
+  perform _security_event(null, 'maker_code_changed', jsonb_build_object('signedAt', p_signed_at), 'support center', null);
+  return jsonb_build_object('ok', true, 'id', v_id);
+end $_$;
+
+
+ALTER FUNCTION public.manufacturer_set_code_hash(p_hash text, p_signed_at timestamp with time zone) OWNER TO postgres;
+
+--
 -- Name: nikur_board(); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -14058,6 +14088,13 @@ REVOKE ALL ON FUNCTION public.manufacturer_set_code(p_name text, p_code text) FR
 
 
 --
+-- Name: FUNCTION manufacturer_set_code_hash(p_hash text, p_signed_at timestamp with time zone); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public.manufacturer_set_code_hash(p_hash text, p_signed_at timestamp with time zone) FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION nikur_board(); Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -14637,5 +14674,5 @@ GRANT ALL ON TABLE public.system_flags TO service_role;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict aHwsClUXZQCzXfOSbfrfhxB7PrARcTI2dh6QeBlsNK9LExfUygBiFwpTuUCXoeB
+\unrestrict Xdb4qYiRaWjuxsHYAqWrc5GpMLUI2Mkxy71eWBlAJDUXZqzTgPukav84cYLonaJ
 

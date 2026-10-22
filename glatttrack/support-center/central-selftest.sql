@@ -143,6 +143,7 @@ begin
         and sc_maker_code_send(tok, '9001', replace(mf, '"plant":"9001"', '"plant":"9002"'), sg) ->> 'error' = 'not_signed'
         and sc_maker_code_send(tok, '9001', replace(mf, '$2a$10$yIWFlYtX2vIJPcclhRiYneREz2Wk2KOWqsdZnr5uEZOXzveRKEHbG', 'MyCode123456'), sg) ->> 'error' = 'not_signed'
         and sc_maker_code_send(tok, '9001', mf, 'x') ->> 'error' = 'not_signed'
+        and sc_maker_code_send(tok, '9001', replace(mf, '$2a$10$', '$2b$10$'), sg) ->> 'error' = 'not_signed'   -- (round 4) Postgres cannot check a $2b$ hash
         and exists (select 1 from jsonb_array_elements(rp -> 'commands') c where c ->> 'cmd' = 'set_maker_code' and c #>> '{payload,manifest}' = mf and c #>> '{payload,sig}' = sg)
         and not (sc_plant(tok, '9001')::text like '%yIWFlYtX%'), left(rr::text, 100) || ' | ' || left(rp::text, 200));
     end;

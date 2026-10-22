@@ -8873,7 +8873,7 @@ language plpgsql security definer set search_path = public, extensions, pg_temp 
 declare v_id uuid; v_last timestamptz;
 begin
   if _is_api_request() and not _request_is_service_role() then raise exception 'server only' using errcode = '42501'; end if;
-  if p_hash is null or p_hash !~ '^\$2[ab]\$1[0-2]\$[./A-Za-z0-9]{53}$' then return jsonb_build_object('ok', false, 'error', 'bad_hash'); end if;
+  if p_hash is null or p_hash !~ '^\$2a\$1[0-2]\$[./A-Za-z0-9]{53}$' then return jsonb_build_object('ok', false, 'error', 'bad_hash'); end if;
   if p_signed_at is null or p_signed_at > now() + interval '10 minutes' or p_signed_at < now() - interval '7 days' then
     return jsonb_build_object('ok', false, 'error', 'too_old');
   end if;

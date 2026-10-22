@@ -3780,6 +3780,7 @@ begin
     r5 := pg_temp.api('{}', 'select manager_login(''selftest-maker-code-9'')');
     perform pg_temp.rec('owner: a new manufacturer code from the support center — a hash only, from the server only, once per signed request, not older than 7 days; the new code logs in as the manufacturer',
       pg_temp.ok(r) and r2 ->> 'error' = 'already_used' and r3 ->> 'error' = 'bad_hash' and r4 ->> 'error' = 'too_old'
+      and manufacturer_set_code_hash(replace(h, '$2a$', '$2b$'), now()) ->> 'error' = 'bad_hash'   -- (round 4) a $2b$ hash cannot be checked here: refused
       and (denied or not has_function_privilege('anon', 'manufacturer_set_code_hash(text,timestamptz)', 'execute'))
       and (select count(*) from plant_managers where role = 'manufacturer' and active) = 1
       and (r5 ->> 'role' = 'manufacturer' or r5 ->> 'reason' in ('station_device', 'locked')),

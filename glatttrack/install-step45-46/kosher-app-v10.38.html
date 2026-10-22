@@ -19573,7 +19573,9 @@ function _gtCodeField(inp){
 (function(){
   try{ const st=document.createElement('style'); st.textContent=_GT_CF_CSS; document.head.appendChild(st); }catch(e){}
   const run=()=>{ try{ document.querySelectorAll('input[type="password"]:not([data-gtcf])').forEach(_gtCodeField); }catch(e){} };
-  run(); try{ new MutationObserver(run).observe(document.body, { childList:true, subtree:true }); }catch(e){}
+  // (round-4 review) the screens change many times a second (clock, grids): look at most once per frame
+  let q=false; const soon=()=>{ if(q) return; q=true; (window.requestAnimationFrame||setTimeout)(()=>{ q=false; run(); }); };
+  run(); try{ new MutationObserver(soon).observe(document.body, { childList:true, subtree:true }); }catch(e){}
 })();
 </script>
 <!-- ZXing (@zxing/library 0.21.3, Apache License 2.0, https://github.com/zxing-js/library) — the built-in barcode / QR
