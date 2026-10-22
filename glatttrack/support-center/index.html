@@ -143,7 +143,9 @@ const TXT = {
   test_mode_on:['מצב בדיקה פעיל','Test mode is on'], one_leader_device:['רק מכשיר ראש צוות אחד','Only one team-leader device'],
   leader_recovery_missing:['אין קוד שחזור לראש צוות','No team-leader recovery code'], standby_async:['השרת הראשי מאשר לבד','The main server confirms alone'],
   failover_recent:['השרת הוחלף השבוע','The server was switched this week'], processing_days_open:['ימי עיבוד פתוחים','Processing days open'],
-  worker_lists_check:['לבדוק רשימות עובדים','Check the worker lists'] };
+  worker_lists_check:['לבדוק רשימות עובדים','Check the worker lists'],
+  license_14:['הרישיון נגמר בעוד 14 ימים','The license ends in 14 days'], license_7:['הרישיון נגמר בעוד 7 ימים','The license ends in 7 days'],
+  license_1:['הרישיון נגמר מחר','The license ends tomorrow'], license_expired:['הרישיון נגמר — 2 ימי חסד, ואז יום שחיטה חדש לא נפתח','The license ended — 2 grace days, then no new slaughter day'] };
 const tx = c => TXT[c] ? L(TXT[c][0], TXT[c][1]) : c;
 const ROLE_ = { slaughter:['שחיטה','Slaughter'], esophagus:['וושט','Esophagus'], legs:['רגליים','Legs'], inner:['פנים','Inner'], outer:['חוץ','Outer'],
   parts:['חלקים','Parts'], stamps:['חותמות','Stamps'], display:['ספירה','Count display'], leader:['ראש צוות','Team leader'], cooler:['קולר','Cooler'],
@@ -162,10 +164,11 @@ async function rpc(fn, args){
 }
 // a screen that could not load says why — unless the session ended (the login screen is shown, it stays)
 const fail = d => { if(d.error !== 'logged_out') main().innerHTML = '<div class="err">' + E(er(d.error)) + '</div>'; };
-const RN_ = { admin:['מנהל','Admin'], support:['תמיכה טכנית','Technical support'], finance:['כספים','Finance'], viewer:['צפייה בלבד','View only'] };
+const RN_ = { admin:['מנהל','Admin'], support:['תמיכה טכנית','Technical support'], finance:['כספים','Finance'], licenses:['רישיונות ומכירות','Licenses and sales'], viewer:['צפייה בלבד','View only'] };
 const RN = r => RN_[r] ? L(RN_[r][0], RN_[r][1]) : r;
 const CAN = { plants: r => ['admin','support','viewer'].includes(r), plantsW: r => ['admin','support'].includes(r), billing: r => ['admin','finance','viewer'].includes(r),
-              billingW: r => ['admin','finance'].includes(r), staff: r => r === 'admin', admin: r => r === 'admin' };
+              billingW: r => ['admin','finance'].includes(r), staff: r => r === 'admin', admin: r => r === 'admin',
+              licenses: r => ['admin','licenses','viewer'].includes(r), licensesW: r => ['admin','licenses'].includes(r) };
 const can = k => CAN[k](ME.role);
 const ERR = { no_permission:['אין הרשאה לפעולה הזאת','No permission for this'], network:['אין חיבור לשרת','No connection to the server'], bad_value:['ערך לא תקין','Invalid value'],
   code_too_short:['קוד קצר מדי (לפחות 10 תווים)','Code too short (at least 10 characters)'], code_taken:['הקוד / המספר תפוס','The code / number is taken'],
@@ -184,12 +187,12 @@ function chrome(on){
   document.body.classList.toggle('ro', on && ME.role === 'viewer');
   if(!on) return;
   const T = [['overview',L('🏭 מפעלים','🏭 Plants'),'plants'],['tickets',L('🛠 תקלות','🛠 Issues'),'plants'],['billing',L('💰 חיובים','💰 Billing'),'billing'],
-             ['staff',L('👥 צוות','👥 Staff'),'staff'],['settings',L('⬆ עדכונים והגדרות','⬆ Updates & settings'),'plants']];
+             ['licenses',L('🔑 רישיונות','🔑 Licenses'),'licenses'],['staff',L('👥 צוות','👥 Staff'),'staff'],['settings',L('⬆ עדכונים והגדרות','⬆ Updates & settings'),'plants']];
   t.innerHTML = T.filter(x => can(x[2])).map(x => `<button id="tab_${x[0]}" class="${VIEW===x[0]||(VIEW==='plant'&&x[0]==='overview')?'on':''}" onclick="go('${x[0]}')">${x[1]}<span class="bd" id="bd_${x[0]}" style="display:none"></span></button>`).join('');
 }
-function go(v){ ({ overview:showOverview, tickets:showTickets, billing:showBilling, staff:showStaff, settings:showSettings, plant:showOverview })[v](); }
+function go(v){ ({ overview:showOverview, tickets:showTickets, billing:showBilling, licenses:showLicenses, staff:showStaff, settings:showSettings, plant:showOverview })[v](); }
 function mark(v){ VIEW = v; document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.id === 'tab_' + (v === 'plant' ? 'overview' : v))); }
-function home(){ if(can('plants')) showOverview(); else if(can('billing')) showBilling(); }
+function home(){ if(can('plants')) showOverview(); else if(can('billing')) showBilling(); else if(can('licenses')) showLicenses(); }
 function logout(){ TOK=''; ME={ name:'', role:'' }; SS.del('sc_tok'); chrome(false); showLogin(); }
 function showLogin(msg){
   main().innerHTML = `<div class="card" style="max-width:380px;margin:60px auto;text-align:center"><div class="t" style="margin-bottom:12px">${E(L('כניסה למרכז השירות','Service center login'))}</div>
@@ -387,6 +390,63 @@ function csv(){
   const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['﻿' + lines.join('\r\n')], { type:'text/csv;charset=utf-8' }));
   a.download = 'glatttrack-billing-' + BM + '.csv'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 }
+// ── (owner) licenses: every plant's license, a new one, the plant's key, the history ──
+const PLAN_ = { demo14:['דמו 14 יום','Demo 14 days'], demo30:['דמו 30 יום','Demo 30 days'], m1:['חודש','1 month'], m2:['חודשיים','2 months'],
+  m6:['חצי שנה','6 months'], y1:['שנה','1 year'], date:['עד תאריך','Until a date'] };
+const planName = p => PLAN_[p] ? L(PLAN_[p][0], PLAN_[p][1]) : p;
+let LIC = null, LICKEY = null, LICOUT = null;    // the plant getting a new license; a key line / a new code to show once
+const daysTo = d => { if(!d) return null; const t = new Date(); t.setHours(0,0,0,0); return Math.round((new Date(d + 'T00:00:00') - t) / 86400000); };
+async function showLicenses(){
+  mark('licenses');
+  const d = await rpc('sc_licenses_list', { p_token: TOK }); if(!d.ok){ fail(d); return; }
+  const P = d.plants || [], w = !!d.write, out = LICOUT, key = LICKEY; LICOUT = null; LICKEY = null;
+  const cur = p => (p.licenses || [])[0] || null;
+  const st = p => { const c = cur(p); if(!c) return 'none'; const n = daysTo(c.ends); return n < -2 ? 'locked' : n < 0 ? 'grace' : n <= 14 ? 'warn' : 'ok'; };
+  const cnt = k => P.filter(p => st(p) === k).length;
+  const ST2 = { ok:['g', L('🟢 פעיל','🟢 Active')], warn:['a', L('🟡 נגמר בקרוב','🟡 Ends soon')], grace:['r', L('🔴 ימי חסד','🔴 Grace days')],
+                locked:['r', L('🔴 נגמר — יום חדש לא נפתח','🔴 Ended — no new day')], none:['n', L('⚪ אין רישיון (דמו 30 יום מההתקנה)','⚪ No license (30-day demo from installation)')] };
+  const row1 = p => { const c = cur(p), s2 = ST2[st(p)], n = c ? daysTo(c.ends) : null, pl = p.plant;
+    return `<tr><td>#${E(p.code)} ${E(p.name)}</td><td class="${s2[0]}">${E(s2[1])}</td><td>${c ? E(planName(c.plan)) : '—'}</td>
+      <td style="white-space:nowrap">${c ? E(c.ends) + ' · ' + (n >= 0 ? E(n) + ' ' + L('ימים','days') : E(-n) + ' ' + L('ימים אחרי','days after')) : '—'}</td>
+      <td>${c ? (c.max ? E(c.max) : L('ללא הגבלה','no limit')) : '—'}</td>
+      <td class="n">${pl ? E(L('המפעל: ','plant: ') + (pl.demo ? L('דמו','demo') + ' · ' : '') + (pl.ends || '') + (pl.keyInstalled === false ? ' · ' + L('בלי מפתח','no key') : '')) : L('לא דיווח','not reported')}</td>
+      <td class="w" style="white-space:nowrap">${w ? `<button class="btn" onclick="LIC='${E(p.code)}';showLicenses()">${L('רישיון חדש','New license')}</button>
+        <button class="ghost" onclick="licKey('${E(p.code)}')">${L('🔑 מפתח למפעל','🔑 Plant key')}</button>` : ''}
+        ${(p.licenses || []).length ? `<details><summary class="n" style="cursor:pointer">${L('היסטוריה','History')} (${p.licenses.length})</summary>${p.licenses.map(l =>
+          `<div class="n">#${E(l.serial)} · ${E(planName(l.plan))} · ${E(l.starts)} → ${E(l.ends)}${l.max ? ' · ' + E(l.max) + ' ' + L('טאבלטים','tablets') : ''} · ${E(l.by || '')} ${E(dt(l.at))}${l.note ? ' · ' + E(l.note) : ''}${l.code ? `<br><code dir="ltr">${E(l.code)}</code>` : ''}</div>`).join('')}</details>` : ''}</td></tr>`; };
+  const lp = LIC && P.find(p => p.code === LIC);
+  main().innerHTML = `<div class="tiles"><div class="tile"><b class="g">${cnt('ok')}</b><span class="n">${L('פעיל','Active')}</span></div>
+      <div class="tile"><b class="a">${cnt('warn')}</b><span class="n">${L('נגמר תוך 14 יום','Ends within 14 days')}</span></div>
+      <div class="tile"><b class="r">${cnt('grace') + cnt('locked')}</b><span class="n">${L('נגמר','Ended')}</span></div>
+      <div class="tile"><b>${cnt('none')}</b><span class="n">${L('בלי רישיון','No license')}</span></div></div>
+    ${out ? `<div class="card" style="border-color:var(--gold);max-width:640px"><div class="t">🔑 ${E(L('רישיון חדש ל-','A new license for ') + out.plant)}</div><span class="rec" style="font-size:18px">${E(out.code)}</span>
+       <div class="n">${E(L('בתוקף עד ','Valid until ') + out.ends + '. ' + L('נשלח לבד לשרת המפעל בדיווח הבא (עד 5 דקות). מפעל בלי שרת: ראש הצוות מקליד את הקוד בהגדרות ← מערכת ← רישיון.','It goes to the plant server by itself at the next report (up to 5 minutes). A plant without a server: the team leader types the code in Settings → System → License.'))}</div></div>` : ''}
+    ${key ? `<div class="card" style="border-color:var(--gold);max-width:760px"><div class="t">🔑 ${E(L('מפתח הרישיון של מפעל ','The license key of plant ') + key.plant)}</div>
+       <div class="n" style="margin:6px 0">${E(L('פעם אחת לכל מפעל: מריצים את השורה הזאת ב-SQL Editor של ה-Supabase של המפעל (לא של היצרן). אחרי זה המפעל מקבל רישיונות.','Once per plant: run this line in the SQL Editor of the PLANT\'s Supabase (not the manufacturer\'s). After that the plant takes licenses.'))}</div>
+       <code dir="ltr" style="display:block;text-align:left;word-break:break-all;font-size:13px">${E(key.sql)}</code></div>` : ''}
+    ${lp ? `<div class="card" style="max-width:640px;border-color:var(--gold)"><div class="t" style="margin-bottom:8px">${E(L('רישיון חדש ל-','A new license for ') + '#' + lp.code + ' ' + lp.name)}</div>
+       <div class="row"><span>${L('תקופה','Period')}</span><select id="lplan" onchange="document.getElementById('ldate').style.display=this.value==='date'?'':'none'">${Object.keys(PLAN_).map(k => `<option value="${k}" ${k==='y1'?'selected':''}>${E(planName(k))}</option>`).join('')}</select>
+         <input id="ldate" type="date" style="display:none"></div>
+       <div class="row"><span>${L('מקסימום טאבלטים (ריק = ללא הגבלה)','Most tablets (empty = no limit)')}</span><input id="lmax" type="number" min="1" max="999" style="width:90px"></div>
+       <div class="row"><input id="lnote" placeholder="${E(L('הערה (לא חובה)','Note (optional)'))}" style="flex:1" maxlength="200"></div>
+       <div style="display:flex;gap:8px;margin-top:8px"><button class="btn" onclick="licIssue()">${L('צור רישיון','Make the license')}</button><button class="ghost" onclick="LIC=null;showLicenses()">${L('ביטול','Cancel')}</button></div>
+       <div id="lerr2" class="err"></div></div>` : ''}
+    <div class="card wrap"><table><tr><th>${L('מפעל','Plant')}</th><th>${L('מצב','Status')}</th><th>${L('סוג','Type')}</th><th>${L('עד','Until')}</th><th>${L('טאבלטים','Tablets')}</th><th>${L('מה המפעל מדווח','What the plant reports')}</th><th class="w"></th></tr>
+      ${P.map(row1).join('') || `<tr><td colspan="7" class="n">${L('אין מפעלים','No plants')}</td></tr>`}</table></div>
+    <div class="n">${L('כשרישיון נגמר: אזהרה במסכים 14 יום לפני; אחרי הסוף 2 ימי חסד; אחר כך יום שחיטה חדש לא נפתח — אף פעם לא באמצע יום. התראות אליך: 14, 7 ויום לפני, ובסוף.','When a license ends: a warning on the screens 14 days before; after the end 2 grace days; then a new slaughter day does not open — never in the middle of a day. Alerts to you: 14, 7 and 1 day before, and at the end.')}</div>`;
+}
+async function licIssue(){
+  const plan = document.getElementById('lplan').value, ends = document.getElementById('ldate').value || null, mx = document.getElementById('lmax').value;
+  const d = await rpc('sc_license_issue', { p_token: TOK, p_code: LIC, p_plan: plan, p_ends: plan === 'date' ? ends : null,
+                                            p_max_devices: mx ? Number(mx) : null, p_note: document.getElementById('lnote').value.trim() || null });
+  if(!d.ok){ document.getElementById('lerr2').textContent = L('לא נוצר — ','Not made — ') + (d.error === 'bad_value' ? L('תאריך / מספר לא תקין','invalid date / number') : er(d.error)); return; }
+  LICOUT = { plant: LIC, code: d.license, ends: d.ends }; LIC = null; showLicenses();
+}
+async function licKey(code){
+  const d = await rpc('sc_license_key', { p_token: TOK, p_code: code });
+  if(!d.ok){ alert(L('נכשל: ','Failed: ') + er(d.error)); return; }
+  LICKEY = { plant: code, sql: d.sql }; showLicenses();
+}
 // ── the staff: who works in the support center, with what role; everything they do is recorded ──
 let NEWC = null, SHOWN = null;   // NEWC: the member getting a new code; SHOWN: a recovery code to show once
 async function showStaff(){
@@ -408,7 +468,7 @@ async function showStaff(){
          <div style="display:flex;gap:8px;margin-top:10px"><button class="btn" onclick="setCode()">${L('שמור את הקוד החדש','Save the new code')}</button><button class="ghost" onclick="NEWC=null;showStaff()">${L('ביטול','Cancel')}</button></div>
          <div id="ncerr" class="err"></div><div class="n" style="margin-top:6px">${L('הקוד הישן מפסיק לעבוד מיד, וכל כניסה פתוחה של האדם הזה נסגרת.','The old code stops at once, and every open session of this person is closed.')}</div></div>` : ''}
       <div id="serr" class="err"></div>
-      <div class="n" style="margin-top:8px">${L('מנהל — הכל · תמיכה טכנית — מפעלים, תקלות, פקודות, עדכונים (בלי חיובים וצוות) · כספים — חיובים בלבד · צפייה בלבד — רואה הכל, לא משנה כלום.','Admin — everything · Technical support — plants, issues, commands, updates (no billing or staff) · Finance — billing only · View only — sees everything, changes nothing.')}</div></div>
+      <div class="n" style="margin-top:8px">${L('מנהל — הכל · תמיכה טכנית — מפעלים, תקלות, פקודות, עדכונים (בלי חיובים וצוות) · כספים — חיובים בלבד · רישיונות ומכירות — רישיונות בלבד (גם יוצרים) · צפייה בלבד — רואה הכל, לא משנה כלום.','Admin — everything · Technical support — plants, issues, commands, updates (no billing or staff) · Finance — billing only · Licenses and sales — licenses only (makes them) · View only — sees everything, changes nothing.')}</div></div>
     <div class="card"><div class="t" style="color:var(--gold);margin-bottom:6px">${L('➕ איש צוות חדש','➕ New staff member')}</div>
       <div class="row"><input id="sn" placeholder="${E(L('שם','Name'))}" style="flex:1"><select id="sr">${ro('support')}</select></div>
       <div style="padding:6px 0">${codeField('sc', L('קוד כניסה (לפחות 10 תווים)','Login code (at least 10 characters)'))}</div>

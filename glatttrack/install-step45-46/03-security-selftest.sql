@@ -3788,6 +3788,60 @@ begin
   end;
 end $$;
 $gt86$;
+    v_step := '§49 the license';
+    execute $gt87$
+-- ── §49 (owner) the license: a code made with the plant's key; warning, 2 grace days, then no NEW slaughter day ──
+do $$
+declare r jsonb; r2 jsonb; r3 jsonb; r4 jsonb; r5 jsonb; ok boolean; k text := repeat('ab', 32);
+        mk text; ends text; v_lock bigint; v_code text; v_dev text := 'gtselftest_lic_dev';
+begin
+  -- a code: GT-<plant>-<last day>-<tablets>-<number>-<signs made with the key>
+  perform license_key_install('1001', k);
+  ends := to_char((now() at time zone _plant_tz())::date + 100, 'YYYYMMDD');
+  mk := 'GT-1001-' || ends || '-0-1-' || upper(left(encode(hmac('GT|1001|' || ends || '|0|1', k, 'sha256'), 'hex'), 12));
+  r  := pg_temp.api(pg_temp.mgr(), format('select license_apply(%L, %L)', pg_temp.v('mgr'), lower(mk)));            -- any case
+  r2 := pg_temp.api(pg_temp.mgr(), format('select license_apply(%L, %L)', pg_temp.v('mgr'), mk));                   -- the same again
+  r3 := pg_temp.api(pg_temp.mgr(), format('select license_apply(%L, %L)', pg_temp.v('mgr'), replace(mk, '-0-1-', '-0-2-')));   -- changed
+  r4 := pg_temp.api(pg_temp.dev('SL1'), format('select license_apply(null, %L)', mk));                              -- a station
+  r5 := pg_temp.api(pg_temp.dev('SL1'), 'select license_status()');
+  perform pg_temp.rec('§49 a license code is taken only when made with this plant''s key (any case), once, by the team leader; every screen sees the status (no key in it)',
+    pg_temp.ok(r) and r ->> 'state' = 'ok' and r2 ->> 'error' = 'already_used' and r3 ->> 'error' = 'bad_code' and r4 ->> 'error' = 'unauthorized'
+    and pg_temp.ok(r5) and r5 ->> 'state' = 'ok' and (r5 ->> 'daysLeft')::int = 100 and not (r5::text like '%abab%') and r5 ->> 'blocked' = 'false'
+    and not has_table_privilege('anon', 'gt_license', 'select'),
+    concat_ws(' | ', r::text, r2::text, r3::text, r4::text, left(r5::text, 200)));
+  -- another plant's code: refused
+  mk := 'GT-1002-' || ends || '-0-5-' || upper(left(encode(hmac('GT|1002|' || ends || '|0|5', k, 'sha256'), 'hex'), 12));
+  perform pg_temp.rec('§49 a code of another plant is refused', (license_apply(null, mk)) ->> 'error' = 'not_this_plant');
+  -- the end: 14 days → warn; ended → grace (2 days); then locked — but the day in progress goes on
+  update gt_license set applied = applied || jsonb_build_object('ends', (now() at time zone _plant_tz())::date + 10) where id = 1;
+  ok := _license_info() ->> 'state' = 'warn';
+  update gt_license set applied = applied || jsonb_build_object('ends', (now() at time zone _plant_tz())::date - 1) where id = 1;
+  ok := ok and _license_info() ->> 'state' = 'grace' and not _license_blocks_new_day();
+  update gt_license set applied = applied || jsonb_build_object('ends', (now() at time zone _plant_tz())::date - 4) where id = 1;
+  v_lock := (extract(epoch from (_license_info() ->> 'lockAt')::timestamptz) * 1000)::bigint;
+  ok := ok and _license_info() ->> 'state' = 'locked';
+  -- the board began before the lock: the day goes on
+  update plant_state set value = (v_lock - 1000)::text where key = 'boardEpoch';
+  ok := ok and not _license_blocks_new_day();
+  -- a new day after the lock: no new animal — by a claim (a clear answer) or by a push (refused)
+  update plant_state set value = (v_lock + 1000)::text where key = 'boardEpoch';
+  perform set_config('gt.reset_in_progress', 'true', true);
+  update animals_pilot set slaughter = null, slaughter_time = null where id = 960;
+  perform set_config('gt.reset_in_progress', 'false', true);
+  r  := pg_temp.api(pg_temp.dev('SL1'), pg_temp.q_claim(960, 'slaughter', 'slaughtered', 'x', pg_temp.devid('SL1')));
+  r2 := pg_temp.api(pg_temp.dev('SL1'), pg_temp.q_push(960, '{"slaughter":"slaughtered","slaughter_time":1}'));
+  perform pg_temp.rec('§49 (owner) license ended: 14 days before — a warning; then 2 grace days; then a NEW slaughter day takes no animal (claim or push) — the day in progress goes on',
+    ok and _license_blocks_new_day() and r ->> 'error' = 'license_expired' and not pg_temp.claimed(r)
+    and (r2 ->> 'error') = 'license_expired' and (pg_temp.ar(960)).slaughter is null,
+    concat_ws(' | ', ok, left(r::text, 120), left(r2::text, 120)));
+  -- the tablets: a new device over the license's number is refused; a replacement in its own slot is not one more
+  update gt_license set applied = applied || jsonb_build_object('ends', (now() at time zone _plant_tz())::date + 100,
+           'max', (select count(*) from devices_pilot where assigned_role is not null and coalesce(device_status, 'active') <> 'retired')) where id = 1;
+  v_code := device_request_pairing(v_dev, repeat('s', 20), 'lic test') ->> 'code';
+  r := pg_temp.api(pg_temp.mgr(), format('select device_pair(%L, %L, ''display'', 3, false, ''x'', null)', pg_temp.v('mgr'), v_code));
+  perform pg_temp.rec('§49 a new tablet over the license''s number is refused (license_devices)', r ->> 'error' = 'license_devices', r::text);
+end $$;
+$gt87$;
     v_step := 'the ACTIVE security surface against the expected manifest';
     execute $gt70$
 -- ── the ACTIVE security surface against the expected manifest ───────────────
@@ -3890,7 +3944,7 @@ begin
                 'eso_change(integer,text,text,bigint)', 'eso_change(integer,text,text,bigint,uuid)', 'event_append(jsonb)',
                 'lung_drawing_get(integer)', 'lung_drawing_set(integer,bigint,text)', 'manager_add(text,text,text)',
                 'manager_add_owner(text,text,text)', 'manager_deactivate(text,uuid)', 'manager_list(text)', 'manager_login(text)',
-                'manager_logout(text)', 'manager_session_check(text)', 'leader_recovery_code_new(text)', 'leader_recovery_status(text)', 'leader_device_replace(text,text)', 'plant_server_status(text)', 'animal_card(text,date,integer)', 'seal_set(text,text,text)', 'seals_get(text,bigint)', 'hold_set(integer,text,text,text,bigint,uuid)', 'hold_resolve(bigint,text,uuid)', 'nikur_scan(integer,text,integer,bigint,uuid,text)', 'nikur_board()', 'nikur_hold(integer,bigint,text,uuid)', 'cooler_scan(integer,text,integer,bigint,uuid,text)', 'cooler_hold(integer,bigint,text,uuid)', 'cooler_board()', 'nikur_passed(integer)', 'nikur_day_close(text,bigint,text)', 'support_issue_add(text,text)', 'support_tickets(text)', 'maker_changes(text)', 'print_job_add(text,text,text,integer,jsonb,text,uuid)', 'print_marks_needed(text)', 'print_mark_set(text,text,text,integer,integer,text)', 'print_tickets_take(integer,jsonb,integer,uuid)', 'print_kosher_add(text,text[],text[],uuid)', 'print_job_status(bigint)', 'printer_scan_request(text)', 'printers_found(text)', 'printers_status(text)', 'scanners_heard(text,integer)', 'scanner_scans_since(text,bigint)', 'board_flags(text)', 'change_ack(text,bigint)', 'manufacturer_set_billing(text,boolean,numeric,text,text)',
+                'manager_logout(text)', 'manager_session_check(text)', 'leader_recovery_code_new(text)', 'leader_recovery_status(text)', 'leader_device_replace(text,text)', 'plant_server_status(text)', 'animal_card(text,date,integer)', 'seal_set(text,text,text)', 'seals_get(text,bigint)', 'hold_set(integer,text,text,text,bigint,uuid)', 'hold_resolve(bigint,text,uuid)', 'nikur_scan(integer,text,integer,bigint,uuid,text)', 'nikur_board()', 'nikur_hold(integer,bigint,text,uuid)', 'cooler_scan(integer,text,integer,bigint,uuid,text)', 'cooler_hold(integer,bigint,text,uuid)', 'cooler_board()', 'nikur_passed(integer)', 'nikur_day_close(text,bigint,text)', 'support_issue_add(text,text)', 'support_tickets(text)', 'maker_changes(text)', 'print_job_add(text,text,text,integer,jsonb,text,uuid)', 'print_marks_needed(text)', 'print_mark_set(text,text,text,integer,integer,text)', 'print_tickets_take(integer,jsonb,integer,uuid)', 'print_kosher_add(text,text[],text[],uuid)', 'license_status()', 'license_apply(text,text)', 'print_job_status(bigint)', 'printer_scan_request(text)', 'printers_found(text)', 'printers_status(text)', 'scanners_heard(text,integer)', 'scanner_scans_since(text,bigint)', 'board_flags(text)', 'change_ack(text,bigint)', 'manufacturer_set_billing(text,boolean,numeric,text,text)',
                 'outer_open(integer,bigint,boolean,text)', 'outer_open(integer,bigint,boolean,text,uuid)', 'plant_status_snapshot()', 'plant_setup_needed()',
                 'push_settings(jsonb,text,text,text)', 'request_daily_rollover()', 'reset_daily_board(text,text)', 'security_summary(text)',
                 'processing_board(text)', 'carry_push(bigint,jsonb,uuid)', 'carry_claim(bigint,integer,text,uuid)',

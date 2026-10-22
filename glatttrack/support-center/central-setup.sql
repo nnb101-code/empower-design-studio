@@ -893,6 +893,166 @@ end $$;
 revoke execute on function sc_maker_code_send(text, text, text, text) from public;
 grant execute on function sc_maker_code_send(text, text, text, text) to anon, authenticated;
 
+-- ── v10.38 (owner): licenses — a department of their own, every plant's license, its history and alerts ──
+-- A license code: GT-<plant>-<last day YYYYMMDD>-<tablets, 0 = no limit>-<number>-<12 signs>, the signs made with
+-- the plant's own license key (made here once per plant; installed in the plant's database once, by SQL). The
+-- plant takes it from its server (the next report) or the team leader types it. 14 / 7 / 1 days before the end and
+-- at the end: an alert (e-mail / SMS / WhatsApp, as set). The plant: a warning, 2 grace days, then no NEW day.
+alter table sc_staff drop constraint if exists sc_staff_role_ok;
+alter table sc_staff add constraint sc_staff_role_ok check (role in ('admin', 'support', 'finance', 'viewer', 'licenses'));
+alter table sc_plants add column if not exists license_key text;
+create table if not exists sc_licenses (
+  id bigserial primary key,
+  code text not null references sc_plants(code) on delete cascade,
+  plan text not null check (plan in ('demo14', 'demo30', 'm1', 'm2', 'm6', 'y1', 'date')),
+  starts date not null, ends date not null, max_devices int check (max_devices is null or max_devices between 1 and 999),
+  serial int not null, license_code text not null, note text,
+  created_by text, created_at timestamptz not null default now(),
+  unique (code, serial)
+);
+do $$ begin
+  alter table sc_licenses enable row level security;
+  revoke all on sc_licenses from public, anon, authenticated;
+  alter table sc_commands drop constraint if exists sc_commands_cmd_check;
+  alter table sc_commands add constraint sc_commands_cmd_check
+    check (cmd in ('restart_standby', 'reload_tablets', 'update_now', 'run_nightly_check', 'set_maker_code', 'set_license'));
+end $$;
+
+-- may this role do this? + licenses (see) · licenses_write (make a license, the plant's key)
+create or replace function _sc_can(p_token text, p_what text) returns boolean
+language sql stable security definer set search_path = public, extensions, pg_temp as $$
+  select coalesce(case p_what
+    when 'plants'         then _sc_role(p_token) in ('admin', 'support', 'viewer')
+    when 'plants_write'   then _sc_role(p_token) in ('admin', 'support')
+    when 'plant_add'      then _sc_role(p_token) = 'admin'
+    when 'billing'        then _sc_role(p_token) in ('admin', 'finance', 'viewer')
+    when 'billing_write'  then _sc_role(p_token) in ('admin', 'finance')
+    when 'staff'          then _sc_role(p_token) = 'admin'
+    when 'licenses'       then _sc_role(p_token) in ('admin', 'licenses', 'viewer')
+    when 'licenses_write' then _sc_role(p_token) in ('admin', 'licenses')
+  end, false);
+$$;
+revoke execute on function _sc_can(text, text) from public, anon, authenticated;
+
+create or replace function sc_staff_add(p_token text, p_name text, p_code text, p_role text) returns jsonb
+language plpgsql security definer set search_path = public, extensions, pg_temp as $$
+declare w text := _sc_staff(p_token); v_id uuid; v_rec text;
+begin
+  if not _sc_can(p_token, 'staff') then return jsonb_build_object('ok', false, 'error', 'unauthorized'); end if;
+  if coalesce(trim(p_name), '') = '' or length(p_name) > 60 or p_role not in ('admin', 'support', 'finance', 'viewer', 'licenses') then
+    return jsonb_build_object('ok', false, 'error', 'bad_value');
+  end if;
+  if p_code is null or length(p_code) < 10 then return jsonb_build_object('ok', false, 'error', 'code_too_short'); end if;
+  if exists (select 1 from sc_staff where active and crypt(p_code, code_hash) = code_hash) then return jsonb_build_object('ok', false, 'error', 'code_taken'); end if;
+  if p_role = 'admin' then v_rec := _sc_recovery_code(); end if;
+  insert into sc_staff (name, code_hash, role, recovery_hash)
+  values (trim(p_name), crypt(p_code, gen_salt('bf', 8)), p_role, case when v_rec is not null then crypt(_sc_recovery_norm(v_rec), gen_salt('bf', 8)) end)
+  returning id into v_id;
+  insert into sc_audit (who, action, detail) values (w, 'staff_add', jsonb_build_object('name', trim(p_name), 'role', p_role));
+  return jsonb_build_object('ok', true, 'id', v_id) || case when v_rec is not null then jsonb_build_object('recovery', v_rec) else '{}'::jsonb end;
+end $$;
+revoke execute on function sc_staff_add(text, text, text, text) from public;
+grant execute on function sc_staff_add(text, text, text, text) to anon, authenticated;
+
+create or replace function sc_staff_set(p_token text, p_id uuid, p_role text default null, p_active boolean default null) returns jsonb
+language plpgsql security definer set search_path = public, extensions, pg_temp as $$
+declare w text := _sc_staff(p_token); s sc_staff;
+begin
+  if not _sc_can(p_token, 'staff') then return jsonb_build_object('ok', false, 'error', 'unauthorized'); end if;
+  if p_role is not null and p_role not in ('admin', 'support', 'finance', 'viewer', 'licenses') then return jsonb_build_object('ok', false, 'error', 'bad_value'); end if;
+  perform pg_advisory_xact_lock(hashtext('sc_staff_admins'));
+  select * into s from sc_staff where id = p_id for update;
+  if s.id is null then return jsonb_build_object('ok', false, 'error', 'bad_id'); end if;
+  if s.role = 'admin' and s.active and (coalesce(p_role, 'admin') <> 'admin' or p_active is false)
+     and (select count(*) from sc_staff where role = 'admin' and active) <= 1 then
+    return jsonb_build_object('ok', false, 'error', 'last_admin');
+  end if;
+  update sc_staff set role = coalesce(p_role, role), active = coalesce(p_active, active) where id = p_id;
+  if p_active is false or (p_role is not null and p_role <> s.role) then delete from sc_sessions where staff_id = p_id; end if;   -- (round 4) a new role starts a new session
+  insert into sc_audit (who, action, detail) values (w, 'staff_set', jsonb_build_object('name', s.name, 'role', p_role, 'active', p_active));
+  return jsonb_build_object('ok', true);
+end $$;
+revoke execute on function sc_staff_set(text, uuid, text, boolean) from public;
+grant execute on function sc_staff_set(text, uuid, text, boolean) to anon, authenticated;
+
+-- the plant's license key: made once; shown to admin / licenses as the one SQL line to run in the plant's database
+create or replace function sc_license_key(p_token text, p_code text) returns jsonb
+language plpgsql security definer set search_path = public, extensions, pg_temp as $$
+declare w text := _sc_staff(p_token); k text;
+begin
+  if not _sc_can(p_token, 'licenses_write') then return jsonb_build_object('ok', false, 'error', 'unauthorized'); end if;
+  update sc_plants set license_key = coalesce(license_key, encode(gen_random_bytes(32), 'hex')) where code = p_code returning license_key into k;
+  if k is null then return jsonb_build_object('ok', false, 'error', 'bad_id'); end if;
+  insert into sc_audit (who, action, detail) values (w, 'license_key_shown', jsonb_build_object('code', p_code));
+  return jsonb_build_object('ok', true, 'sql', format('select license_key_install(%L, %L);', p_code, k));
+end $$;
+revoke execute on function sc_license_key(text, text) from public;
+grant execute on function sc_license_key(text, text) to anon, authenticated;
+
+-- a new license: demo 14 / 30 days, 1 / 2 / 6 months, a year, or until a date; how many tablets (none = no limit)
+create or replace function sc_license_issue(p_token text, p_code text, p_plan text, p_ends date default null,
+                                            p_max_devices integer default null, p_note text default null) returns jsonb
+language plpgsql security definer set search_path = public, extensions, pg_temp as $$
+declare w text := _sc_staff(p_token); k text; v_today date := current_date; v_ends date; v_serial int; v_code text; v_id bigint;
+begin
+  if not _sc_can(p_token, 'licenses_write') then return jsonb_build_object('ok', false, 'error', 'unauthorized'); end if;
+  perform pg_advisory_xact_lock(hashtext('sc_license:' || coalesce(p_code, '')));
+  update sc_plants set license_key = coalesce(license_key, encode(gen_random_bytes(32), 'hex')) where code = p_code returning license_key into k;
+  if k is null then return jsonb_build_object('ok', false, 'error', 'bad_id'); end if;
+  v_ends := case p_plan when 'demo14' then v_today + 14 when 'demo30' then v_today + 30 when 'm1' then (v_today + interval '1 month')::date
+                        when 'm2' then (v_today + interval '2 months')::date when 'm6' then (v_today + interval '6 months')::date
+                        when 'y1' then (v_today + interval '1 year')::date when 'date' then p_ends end;
+  if v_ends is null or v_ends <= v_today or v_ends > v_today + 3660 or (p_max_devices is not null and p_max_devices not between 1 and 999)
+     or length(coalesce(p_note, '')) > 200 or coalesce(p_note, '') ~ '[[:cntrl:]]' then
+    return jsonb_build_object('ok', false, 'error', 'bad_value');
+  end if;
+  v_serial := coalesce((select max(serial) from sc_licenses where code = p_code), 0) + 1;
+  v_code := format('GT-%s-%s-%s-%s-', p_code, to_char(v_ends, 'YYYYMMDD'), coalesce(p_max_devices, 0), v_serial)
+            || upper(left(encode(hmac(format('GT|%s|%s|%s|%s', p_code, to_char(v_ends, 'YYYYMMDD'), coalesce(p_max_devices, 0), v_serial), k, 'sha256'), 'hex'), 12));
+  insert into sc_licenses (code, plan, starts, ends, max_devices, serial, license_code, note, created_by)
+  values (p_code, p_plan, v_today, v_ends, p_max_devices, v_serial, v_code, nullif(trim(p_note), ''), w) returning id into v_id;
+  -- to the plant with its next report (a newer one replaces one not yet taken); the license alerts start again
+  update sc_commands set done_at = now(), result = 'replaced by a newer license' where code = p_code and cmd = 'set_license' and done_at is null;
+  insert into sc_commands (code, cmd, created_by, payload) values (p_code, 'set_license', w, jsonb_build_object('code', v_code));
+  update sc_alerts set resolved_at = now() where code = p_code and resolved_at is null and text like 'license\_%';
+  insert into sc_audit (who, action, detail) values (w, 'license_issue', jsonb_build_object('code', p_code, 'plan', p_plan, 'ends', v_ends, 'max', p_max_devices));
+  return jsonb_build_object('ok', true, 'id', v_id, 'license', v_code, 'ends', v_ends);
+end $$;
+revoke execute on function sc_license_issue(text, text, text, date, integer, text) from public;
+grant execute on function sc_license_issue(text, text, text, date, integer, text) to anon, authenticated;
+
+-- every plant: its license now, what the plant itself says (its last report), and the history
+create or replace function sc_licenses_list(p_token text) returns jsonb
+language plpgsql stable security definer set search_path = public, extensions, pg_temp as $$
+begin
+  if not _sc_can(p_token, 'licenses') then return jsonb_build_object('ok', false, 'error', 'unauthorized'); end if;
+  return jsonb_build_object('ok', true, 'write', _sc_can(p_token, 'licenses_write'), 'plants', coalesce((
+    select jsonb_agg(jsonb_build_object('code', p.code, 'name', p.name, 'keyMade', p.license_key is not null,
+             'plant', st.report -> 'license', 'reportedAt', st.reported_at,
+             'licenses', coalesce((select jsonb_agg(jsonb_build_object('plan', l.plan, 'starts', l.starts, 'ends', l.ends, 'max', l.max_devices,
+                                     'serial', l.serial, 'code', case when _sc_can(p_token, 'licenses_write') then l.license_code end,
+                                     'note', l.note, 'by', l.created_by, 'at', l.created_at) order by l.serial desc)
+                                   from sc_licenses l where l.code = p.code), '[]'::jsonb))
+           order by p.code)
+    from sc_plants p left join sc_status st on st.code = p.code), '[]'::jsonb));
+end $$;
+revoke execute on function sc_licenses_list(text) from public;
+grant execute on function sc_licenses_list(text) to anon, authenticated;
+
+-- alerts 14 / 7 / 1 days before the end, and at the end (once each; run by notify.sh every minute)
+create or replace function _sc_check_licenses() returns integer language plpgsql security definer set search_path = public, extensions, pg_temp as $$
+declare n int := 0; x record; v_t text;
+begin
+  for x in select distinct on (l.code) l.code, l.ends from sc_licenses l order by l.code, l.serial desc loop
+    v_t := case when x.ends < current_date then 'license_expired' when x.ends - current_date <= 1 then 'license_1'
+                when x.ends - current_date <= 7 then 'license_7' when x.ends - current_date <= 14 then 'license_14' end;
+    continue when v_t is null or exists (select 1 from sc_alerts a where a.code = x.code and a.text = v_t and a.created_at > now() - interval '60 days');
+    insert into sc_alerts (code, level, text) values (x.code, 'bad', v_t); n := n + 1;
+  end loop;
+  return n;
+end $$;
+revoke execute on function _sc_check_licenses() from public, anon, authenticated;
+
 -- the first staff member (run once by the manufacturer in the SQL editor):
 --   insert into sc_staff (name, code_hash, role) values ('Admin 1', extensions.crypt('<a long code>', extensions.gen_salt('bf', 8)), 'admin');
 notify pgrst, 'reload schema';

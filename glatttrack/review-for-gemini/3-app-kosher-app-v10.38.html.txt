@@ -3681,6 +3681,7 @@ const KS = (function(){
       _renderStations();
       return done(d);
     }
+    if(d.error === 'license_expired'){ _showRuleNotice(gtErrText('license_expired')); try{ gtLicenseCheck(); }catch(e){} if(d.row) _revertToServer(idx, d.row, _RULING_COLS); else _sbRefetchAnimal(idx); return done(d); }   // §49
     if(d.error === 'out_of_order' || d.error === 'earlier_day_open'){   // step 46
       _clearAnimalDirty(idx);
       if(d.row) _applyRemoteAnimal(d.row, true); else _sbRefetchAnimal(idx);
@@ -6224,6 +6225,9 @@ var _GT_ERR = {
   worker_login_required:['צריך להיכנס עם הקוד לפני פסיקה. מה שנלחץ נשמר ויישלח אחרי הכניסה.','Log in with your code before ruling. What you pressed is kept and sent after the login.','Ingrese con su código antes de dictaminar.'],
   wrong_station:['מכשיר זה לא משויך לתחנה הזו — השינוי לא נרשם.','This device is not paired to this station — the change was not recorded.','Este dispositivo no está emparejado a esta estación — el cambio no se registró.'],
   stale_board:['השינוי שייך ללוח של יום עבודה קודם — הוא לא נרשם.','This change belongs to an earlier work day\'s board — it was not recorded.','Este cambio pertenece al tablero de un día anterior — no se registró.'],
+  // §49 (owner) the license
+  license_expired:['הרישיון נגמר — יום שחיטה חדש לא נפתח. ראש הצוות פונה ליצרן לחידוש.','The license ended — a new slaughter day does not open. The team leader contacts the manufacturer to renew.','La licencia terminó — no se abre un nuevo día de faena. El jefe de equipo contacta al fabricante.'],
+  license_devices:['הרישיון לא מאפשר עוד טאבלט — פונים ליצרן להגדלה.','The license does not allow another tablet — contact the manufacturer.','La licencia no permite otra tableta — contacte al fabricante.'],
   device_not_paired:['המכשיר לא מצומד לשרת — ראש הצוות צריך לצמד אותו.','This device is not paired with the server — the team leader needs to pair it.','Este dispositivo no está emparejado con el servidor — el jefe de equipo debe emparejarlo.'],
   unauthorized:['הכניסה פגה או שאין הרשאה — היכנס שוב ונסה שוב.','The login expired or is not allowed — log in again and retry.','La sesión caducó o no tiene permiso — inicie sesión de nuevo e intente otra vez.'],
   code_invalid:['קוד שגוי','Wrong code','Código incorrecto'],
@@ -6267,7 +6271,7 @@ function gtErrCode(e){
   if(c==='PGRST202' || c==='42883') return 'missing_fn';
   const k = s.trim().toLowerCase();
   if(Object.prototype.hasOwnProperty.call(_GT_ERR, k)) return k;
-  const w = s.match(/\b(wrong_station|stale_board|device_not_paired|unauthorized|code_invalid|rate_limited|moved_on|correction_not_allowed|bad_id|bad_picture|no_device|setup_code_required|eso_locked|nc_kosher_or_treif_only|already_ruled|held|bad_settings|invalid_value|not_checked|reason_required|worker_login_required|outer_ruled|wrong_zone|next_station_done)\b/);
+  const w = s.match(/\b(wrong_station|stale_board|device_not_paired|unauthorized|code_invalid|rate_limited|moved_on|correction_not_allowed|bad_id|bad_picture|no_device|setup_code_required|eso_locked|nc_kosher_or_treif_only|already_ruled|held|bad_settings|invalid_value|not_checked|reason_required|worker_login_required|outer_ruled|wrong_zone|next_station_done|license_expired|license_devices)\b/);
   if(w) return w[1];
   if(c==='42501') return 'permission_denied';
   if(typeof e==='object' && !c && /fetch|network|timeout|load failed|offline/i.test(s)) return 'network';
@@ -17361,63 +17365,56 @@ function _getInstallationCode(){
   return code;
 }
 
-async function mgrActivateLicense(){
-  const central = _getCentralClient();
-  if(!central){ alert(L('החיבור לשרת המרכזי עוד לא הוגדר. פנה ליצרן.','Central server connection not configured yet. Contact the manufacturer.','La conexión al servidor central aún no está configurada. Contacte al fabricante.')); return; }
-  const input = document.getElementById('licenseActivationInput');
-  const code = (input?.value||'').trim();
-  if(!code){ alert(L('הכנס קוד הפעלה','Please enter an activation code','Ingrese un código de activación')); return; }
-  const installationCode = _getInstallationCode();
-  try{
-    const { data, error } = await central.rpc('activate_installation', {
-      p_installation_code: installationCode, p_activation_code: code,
-    });
-    if(error){ alert(L('ההפעלה נכשלה: ','Activation failed: ','La activación falló: ') + error.message); return; }
-    KS.updateSettings({ license: {
-      plantId: data.plant_id, apiKey: data.api_key, validUntil: data.valid_until,
-      maxDevices: data.max_devices, activatedAt: new Date().toISOString(),
-    }});
-    alert(L('✅ ההפעלה הצליחה!','✅ Activated successfully!','✅ ¡Activación exitosa!') + (data.valid_until ? L(' בתוקף עד ',' Valid until ',' Válida hasta ') + data.valid_until : L(' ללא הגבלת זמן',' No time limit',' Sin límite de tiempo')));
-    mgrRenderLicensePanel();
-  }catch(e){ alert(L('ההפעלה נכשלה: ','Activation failed: ','La activación falló: ') + e.message); }
-}
 
-function mgrRenderLicensePanel(){
+// §49 (owner) the license: what the server says, and a code from the manufacturer to type
+async function mgrRenderLicensePanel(){
   const el = document.getElementById('mgrLicenseCard');
   if(!el) return;
-  const s = KS.getSettings();
-  const lic = s.license;
-  // (full review A11) no licensing server set (the usual plant): the plant server reports to the manufacturer's
-  // support center by itself — nothing to activate here
-  if(!_getCentralClient() && !(lic && lic.apiKey)){
-    el.innerHTML = `<div style="font-size:12px;color:var(--muted);line-height:1.6;">${L('הרישיון והחיוב מנוהלים במרכז השירות של היצרן. שרת המפעל מדווח לבד — אין כאן מה להפעיל.','The licence and billing are handled by the manufacturer\'s support center. The plant server reports by itself — nothing to activate here.','La licencia y la facturación se gestionan en el centro de soporte del fabricante. El servidor de la planta informa solo.')}</div>
-      <button class="secondary" style="margin-top:10px;" onclick="mgrReportSupportIssue()">${L('דווח על תקלה ליצרן','Report an issue to the manufacturer','Reportar un problema al fabricante')}</button>`;
-    return;
-  }
-  const installationCode = _getInstallationCode();
-  if(!lic || !lic.apiKey){
-    el.innerHTML = `
-      <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">${L('האפליקציה עוד לא הופעלה. שלח ליצרן את קוד ההתקנה הזה:','The app has not been activated yet. Send this installation code to the manufacturer:','La aplicación aún no fue activada. Envíe este código de instalación al fabricante:')}</div>
-      <div style="font-size:18px;font-weight:800;color:var(--gold);text-align:center;letter-spacing:1px;padding:10px;background:var(--panel2);border-radius:8px;margin-bottom:12px;direction:ltr;">${escapeHtml(installationCode)}</div>
-      <div style="font-size:12px;color:var(--muted);margin-bottom:6px;">${L('קיבלת קוד הפעלה מהיצרן? הכנס אותו כאן:','Got an activation code from the manufacturer? Enter it here:','¿Recibió un código de activación del fabricante? Ingréselo aquí:')}</div>
-      <div style="display:flex;gap:6px;">
-        <input id="licenseActivationInput" autocapitalize="characters" autocomplete="off" autocorrect="off" spellcheck="false" placeholder="XXXX-XXXX-XXXX-XXXX" style="flex:1;background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:9px;color:var(--text);font-size:14px;direction:ltr;text-align:center;">
-        <button onclick="mgrActivateLicense()" style="padding:9px 16px;border-radius:8px;background:var(--gold);border:none;color:#07090F;font-weight:700;font-size:13px;cursor:pointer;">${L('הפעל','Activate','Activar')}</button>
-      </div>`;
-    return;
-  }
-  const expired = lic.validUntil && new Date(lic.validUntil) < new Date();
-  const daysLeft = lic.validUntil ? Math.ceil((new Date(lic.validUntil) - new Date())/86400000) : null;
-  el.innerHTML = `
-    <div style="display:flex;justify-content:space-between;align-items:center;">
-      <span style="font-size:13px;font-weight:700;color:${expired?'var(--red-light)':'var(--green)'};">${expired?L('🔴 פג תוקף','🔴 Expired','🔴 Vencida'):L('🟢 פעיל','🟢 Active','🟢 Activa')}</span>
-      <span style="font-size:12px;color:var(--muted);">${lic.validUntil ? (L('בתוקף עד: ','Valid until: ','Válida hasta: ')+escapeHtml(lic.validUntil)+(daysLeft>=0?' ('+daysLeft+' '+L('ימים','days','días')+')':'')) : L('ללא הגבלת זמן','No time limit','Sin límite de tiempo')}</span>
-    </div>
-    <div style="font-size:11px;color:var(--muted);margin-top:6px;">${L('מקסימום מכשירים: ','Max devices: ','Máx. dispositivos: ')}${escapeHtml(lic.maxDevices||'—')}</div>
-    ${expired?'<div style="font-size:11px;color:var(--red-light);margin-top:8px;">'+L('האפליקציה ממשיכה לעבוד, אבל יש לפנות ליצרן לחידוש.','The app keeps working, but please contact the manufacturer to renew.','La aplicación sigue funcionando, pero contacte al fabricante para renovar.')+'</div>':''}
-    <button class="secondary" style="margin-top:10px;" onclick="mgrReportSupportIssue()">${L('דווח על תקלה ליצרן','Report an issue to the manufacturer','Reportar un problema al fabricante')}</button>
-  `;
+  if(!window.sb){ el.textContent = L('אין חיבור לשרת','No server connection','Sin conexión al servidor'); return; }
+  let x = null; try{ x = (await window.sb.rpc('license_status')).data; }catch(e){}
+  if(!x || !x.ok){ el.innerHTML = `<div style="font-size:12px;color:var(--muted);">${L('השרת עוד לא מעודכן לרישיונות.','The server is not updated for licenses yet.','El servidor aún no está actualizado.')}</div>`; return; }
+  const C = { ok:'var(--green)', warn:'var(--amber)', grace:'var(--red-light)', locked:'var(--red-light)' };
+  const T = { ok:L('🟢 פעיל','🟢 Active','🟢 Activa'), warn:L('🟡 נגמר בקרוב','🟡 Ends soon','🟡 Termina pronto'), grace:L('🔴 נגמר — ימי חסד','🔴 Ended — grace days','🔴 Terminó — días de gracia'),
+              locked:L('🔴 נגמר — יום שחיטה חדש לא נפתח','🔴 Ended — no new slaughter day','🔴 Terminó — no se abre un nuevo día') };
+  const n = Number(x.daysLeft);
+  el.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+      <span style="font-size:14px;font-weight:800;color:${C[x.state]||'var(--muted)'};">${escapeHtml(T[x.state]||x.state)}${x.demo ? ' · ' + escapeHtml(L('דמו','Demo','Demo')) : ''}</span>
+      <span style="font-size:12px;color:var(--muted);">${escapeHtml(L('עד ','Until ','Hasta ') + x.ends + (n >= 0 ? ' (' + n + ' ' + L('ימים','days','días') + ')' : ''))}</span></div>
+    <div style="font-size:12px;color:var(--muted);margin-top:6px;">${escapeHtml(L('טאבלטים: ','Tablets: ','Tabletas: ') + x.devices + (x.maxDevices ? ' / ' + x.maxDevices : ' · ' + L('ללא הגבלה','no limit','sin límite')))}</div>
+    <div style="font-size:12px;color:var(--muted);margin-top:10px;">${escapeHtml(L('קוד רישיון מהיצרן (בדרך כלל מגיע לבד דרך שרת המפעל):','A license code from the manufacturer (usually it comes by itself through the plant server):','Código de licencia del fabricante:'))}</div>
+    <div style="display:flex;gap:6px;margin-top:6px;">
+      <input id="licenseActivationInput" dir="ltr" autocapitalize="characters" autocomplete="off" autocorrect="off" spellcheck="false" placeholder="GT-1001-20271231-0-1-XXXXXXXXXXXX" style="flex:1;background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:9px;color:var(--text);font-size:13px;font-family:monospace;">
+      <button onclick="mgrActivateLicense()" style="padding:9px 16px;border-radius:8px;background:var(--gold);border:none;color:#07090F;font-weight:700;font-size:13px;cursor:pointer;">${escapeHtml(L('הפעל','Activate','Activar'))}</button></div>
+    <div id="licErr" style="font-size:12px;margin-top:6px;"></div>
+    <div style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.5;">${escapeHtml(L('כשהרישיון נגמר: 2 ימי חסד, ואז יום שחיטה חדש לא נפתח — אף פעם לא באמצע יום. הנתונים והסיכומים נשארים פתוחים.','When the license ends: 2 grace days, then a new slaughter day does not open — never in the middle of a day. The data and summaries stay open.','Al terminar: 2 días de gracia, luego no se abre un nuevo día — nunca en medio de un día.'))}</div>`;
 }
+async function mgrActivateLicense(){
+  const inp = document.getElementById('licenseActivationInput'), out = document.getElementById('licErr');
+  const code = (inp && inp.value || '').trim(); if(!code || !window.sb) return;
+  const r = await window.sb.rpc('license_apply', { p_token: KS.getManagerToken ? KS.getManagerToken() : null, p_code: code });
+  const x = r.data || {};
+  const M = { bad_code:L('הקוד לא נכון','The code is not right','El código no es correcto'), not_this_plant:L('הקוד של מפעל אחר','The code is for another plant','El código es de otra planta'),
+              already_used:L('הקוד הזה כבר הוזן (או שיש חדש יותר)','This code was entered already (or there is a newer one)','Este código ya se ingresó'),
+              no_key:L('המפעל עוד לא קיבל מפתח רישיון מהיצרן','The plant has no license key from the manufacturer yet','La planta aún no tiene clave'),
+              rate_limited:L('יותר מדי ניסיונות — לנסות בעוד שעה','Too many tries — try again in an hour','Demasiados intentos'), unauthorized:L('רק ראש הצוות','Team leader only','Solo el jefe de equipo') };
+  if(r.error || !x.ok){ out.style.color = 'var(--red-light)'; out.textContent = M[x.error] || gtErrText(r.error || x.error || 'server_error'); return; }
+  out.style.color = 'var(--green)'; out.textContent = L('✅ הרישיון הופעל — עד ','✅ The license is on — until ','✅ Licencia activada — hasta ') + x.ends;
+  setTimeout(() => { mgrRenderLicensePanel(); gtLicenseCheck(); }, 1500);
+}
+// §49 a row on every screen: 14 days before the end, the grace days, and after
+async function gtLicenseCheck(){
+  if(!window.sb || !window.gtStatusSet) return;
+  let x = null; try{ x = (await window.sb.rpc('license_status')).data; }catch(e){ return; }
+  if(!x || !x.ok){ return; }
+  const n = Number(x.daysLeft);
+  if(x.state === 'ok'){ window.gtStatusClear && window.gtStatusClear('license'); return; }
+  const t = x.state === 'warn' ? L('⚠ הרישיון נגמר בעוד ','⚠ The license ends in ','⚠ La licencia termina en ') + n + L(' ימים — לפנות ליצרן',' days — contact the manufacturer',' días — contacte al fabricante')
+          : x.state === 'grace' ? L('🔴 הרישיון נגמר — ימי חסד. אחריהם יום שחיטה חדש לא ייפתח','🔴 The license ended — grace days. After them a new slaughter day will not open','🔴 La licencia terminó — días de gracia')
+          : L('🔴 הרישיון נגמר — יום שחיטה חדש לא נפתח. לפנות ליצרן','🔴 The license ended — a new slaughter day does not open. Contact the manufacturer','🔴 La licencia terminó — no se abre un nuevo día');
+  window.gtStatusSet('license', (x.demo ? L('(דמו) ','(demo) ','(demo) ') : '') + t, { color: x.state === 'warn' ? 'amber' : 'red' });
+}
+setTimeout(() => { try{ gtLicenseCheck(); }catch(e){} }, 8000);
+setInterval(() => { try{ gtLicenseCheck(); }catch(e){} }, 30 * 60 * 1000);
 
 /** Manual support-log report — the manager describes a problem and it's sent
  *  to the manufacturer's central project (support_logs), same api_key-gated

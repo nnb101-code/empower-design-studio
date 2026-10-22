@@ -1,9 +1,9 @@
 == 1. plant state =======================================================
     key     |     value     |          updated_at           
 ------------+---------------+-------------------------------
- boardEpoch | 1792688328287 | 2026-10-22 16:58:48.286553+00
- schemaStep | 46            | 2026-10-22 16:58:50.27643+00
- testMode   | off           | 2026-10-22 16:58:49.044834+00
+ boardEpoch | 1792711174325 | 2026-10-22 23:19:34.325157+00
+ schemaStep | 46            | 2026-10-22 23:19:35.803666+00
+ testMode   | off           | 2026-10-22 23:19:35.115325+00
 (3 rows)
 
 == 2. functions (public, gt_rls) ========================================
@@ -43,6 +43,8 @@
  public | leader_device_replace(text,text)                                                   | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
  public | leader_recovery_code_new(text)                                                     | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
  public | leader_recovery_status(text)                                                       | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
+ public | license_apply(text,text)                                                           | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
+ public | license_status()                                                                   | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
  public | lung_drawing_get(integer)                                                          | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
  public | lung_drawing_set(integer,bigint,text)                                              | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
  public | maker_changes(text)                                                                | function | t                | public, extensions, pg_temp | postgres | t    | t             | f           | f
@@ -108,6 +110,7 @@
  public | _animal_pieces_track()                                                             | trigger  | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _animals_close_questions()                                                         | trigger  | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _animals_hold_guard()                                                              | trigger  | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _animals_license_guard()                                                           | trigger  | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _animals_merge()                                                                   | trigger  | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _animals_nc_outer_guard()                                                          | trigger  | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _animals_nc_outer_value()                                                          | trigger  | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
@@ -186,6 +189,8 @@
  public | _legs_slot_error(boolean,boolean,boolean)                                          | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _legs_sort_pending(animals_pilot)                                                  | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _legs_sort_station()                                                               | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _license_blocks_new_day()                                                          | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | _license_info()                                                                    | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _list_tail(jsonb,integer)                                                          | function | f                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _log_correction_rejected(text,integer,text,text,jsonb)                             | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | _log_device_event(text,text,text,integer,text,text)                                | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
@@ -303,9 +308,10 @@
  public | leader_account_add(text,text)                                                      | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | leader_account_remove(text)                                                        | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | leader_device_recovery(text)                                                       | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
+ public | license_key_install(text,text)                                                     | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | manufacturer_set_code(text,text)                                                   | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
  public | manufacturer_set_code_hash(text,timestamp with time zone)                          | function | t                | public, extensions, pg_temp | postgres | f    | f             | f           | f
-(296 rows)
+(302 rows)
 
 == 2b. API surface: functions the app roles can run ======================
                        callable_by_app                       | security_definer 
@@ -344,6 +350,8 @@
  leader_device_replace(text,text)                            | t
  leader_recovery_code_new(text)                              | t
  leader_recovery_status(text)                                | t
+ license_apply(text,text)                                    | t
+ license_status()                                            | t
  lung_drawing_get(integer)                                   | t
  lung_drawing_set(integer,bigint,text)                       | t
  maker_changes(text)                                         | t
@@ -401,7 +409,7 @@
  worker_login(text,text,text)                                | t
  worker_logout(text)                                         | t
  worker_session_check()                                      | t
-(91 rows)
+(93 rows)
 
 == 3. triggers on the key tables ========================================
         table        |               trigger               |               function                |                 fires                 |  state  | security_definer 
@@ -410,6 +418,7 @@
  animals_pilot       | a_animals_merge_ins                 | _animals_merge                        | BEFORE INSERT ROW                     | enabled | t
  animals_pilot       | a_animals_nc_plain                  | _animals_nc_plain                     | BEFORE INSERT/UPDATE ROW              | enabled | t
  animals_pilot       | b_animals_hold_guard                | _animals_hold_guard                   | BEFORE UPDATE ROW                     | enabled | t
+ animals_pilot       | b_animals_license_guard             | _animals_license_guard                | BEFORE INSERT/UPDATE ROW              | enabled | t
  animals_pilot       | b_animals_stage_guard               | _animals_stage_guard                  | BEFORE UPDATE ROW                     | enabled | t
  animals_pilot       | trg_animals_pilot_advance_cursor    | animals_pilot_advance_cursor          | AFTER INSERT/UPDATE ROW               | enabled | t
  animals_pilot       | trg_animals_pilot_guard_corrections | animals_pilot_guard_corrections       | BEFORE UPDATE ROW                     | enabled | t
@@ -439,7 +448,7 @@
  settings_pilot      | zz_settings_pieces_fill             | _settings_pieces_fill                 | AFTER UPDATE ROW                      | enabled | t
  settings_pilot      | zz_settings_snapshot_change         | _settings_snapshot_change             | AFTER UPDATE ROW                      | enabled | t
  settings_pilot      | zz_worker_lists_saved               | _worker_lists_saved                   | AFTER UPDATE ROW                      | enabled | t
-(33 rows)
+(34 rows)
 
 == 4. row security and policies =========================================
           table          | rls_on | rls_forced | policies 
@@ -463,6 +472,7 @@
  devices_pilot           | t      | f          |        1
  events_chain_head       | t      | f          |        0
  events_pilot            | t      | f          |        1
+ gt_license              | t      | f          |        0
  kashrut_seals           | t      | f          |        0
  login_attempts          | t      | f          |        0
  lung_drawings           | t      | f          |        0
@@ -494,7 +504,7 @@
  system_flags            | t      | f          |        0
  worker_codes            | t      | f          |        0
  worker_sessions         | t      | f          |        0
-(50 rows)
+(51 rows)
 
           table          |            policy            |  cmd   | permissive |        roles         |                                                                    using_expr                                                                     |                          check_expr                           
 -------------------------+------------------------------+--------+------------+----------------------+---------------------------------------------------------------------------------------------------------------------------------------------------+---------------------------------------------------------------

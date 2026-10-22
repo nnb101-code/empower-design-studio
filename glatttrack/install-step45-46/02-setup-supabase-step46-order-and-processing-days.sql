@@ -5863,6 +5863,10 @@ begin
      or (p_stage = 'eso' and coalesce(p_value, '') not in ('ok', 'nevela')) then
     return jsonb_build_object('claimed', false, 'error', 'bad_value');
   end if;
+  -- §49 (owner) a slaughter day that began after the license ended (+ 2 grace days) takes no new animal
+  if p_stage = 'slaughter' and _license_blocks_new_day() then
+    return jsonb_build_object('claimed', false, 'error', 'license_expired');
+  end if;
   -- v10.33: 'kosherPlain' = plain כשר for a "not chalak" animal (outer_status 'kosher' + nc_plain)
   v_plain := (p_stage = 'outer' and p_value = 'kosherPlain');
   if v_plain then p_value := 'kosher'; end if;
@@ -6379,6 +6383,13 @@ begin
    where code = trim(p_code) and paired_at is null and expires_at > now()
    for update;
   if r.code is null then return jsonb_build_object('ok', false, 'error', 'code_invalid'); end if;
+  -- §49 (owner) the license's number of tablets (a device replaced in its own slot is not one more)
+  if (_license_info() ->> 'maxDevices') is not null
+     and (select count(*) from devices_pilot where assigned_role is not null and coalesce(device_status, 'active') <> 'retired'
+            and id <> r.device_id and not (coalesce(p_replace, false) and assigned_role = p_role and coalesce(assigned_index, 0) = v_idx))
+         >= (_license_info() ->> 'maxDevices')::int then
+    return jsonb_build_object('ok', false, 'error', 'license_devices', 'max', (_license_info() ->> 'maxDevices')::int);
+  end if;
 
   v_actor := coalesce(_session_name(p_token), 'manager');
   perform set_config('gt.audit_actor', v_actor, true);
@@ -8863,6 +8874,146 @@ language sql stable security definer set search_path = public, extensions, pg_te
   end;
 $$;
 revoke execute on function _ticket_refusal(bigint, integer, text, integer, text) from public, anon, authenticated;
+
+-- ── §49 v10.38 (owner): the license ───────────────────────────────────────────────────────────────────
+-- The manufacturer's center gives each plant a license (demo / months / a year / until a date, and how many
+-- tablets). A license is a code: GT-<plant>-<last day YYYYMMDD>-<tablets, 0 = no limit>-<number>-<12 signs>, the
+-- signs made with this plant's own license key (installed once, by SQL, from the center: license_key_install).
+-- It comes by itself through the plant server, or the team leader types it (Settings → System → License).
+-- (owner) when it ends: a warning, 2 grace days — then a NEW slaughter day does not open (never in the middle of a
+-- day; the data, the summaries and the other stations stay open). 14 days before the end: a warning on the screens.
+-- A plant with no license yet: a 30-day demo from the first time this ran.
+-- (Honestly: whoever controls the plant's own database could change anything — the license keeps the honest
+-- user honest and the team leader out; the contract and the center's record do the rest.)
+create table if not exists gt_license (
+  id int primary key default 1 check (id = 1),
+  plant_code text, lkey text,
+  applied jsonb,                       -- {ends, max, serial, code, at}
+  first_seen timestamptz not null default now(),
+  fails int not null default 0, fail_at timestamptz
+);
+alter table gt_license enable row level security;          -- no policy: nothing through the API
+revoke all on gt_license from public, anon, authenticated;
+insert into gt_license (id) values (1) on conflict (id) do nothing;
+
+create or replace function license_key_install(p_plant_code text, p_key text) returns jsonb
+language plpgsql security definer set search_path = public, extensions, pg_temp as $$
+begin
+  if _is_api_request() and not _request_is_service_role() then raise exception 'server only' using errcode = '42501'; end if;
+  if coalesce(p_plant_code, '') !~ '^[0-9]{3,8}$' or coalesce(p_key, '') !~ '^[0-9a-f]{64}$' then
+    return jsonb_build_object('ok', false, 'error', 'bad_value');
+  end if;
+  update gt_license set plant_code = p_plant_code, lkey = p_key where id = 1;
+  return jsonb_build_object('ok', true, 'plant', p_plant_code);
+end $$;
+revoke execute on function license_key_install(text, text) from public, anon, authenticated;
+
+-- the license as it stands: state ok / warn (14 days or less) / grace (ended, up to 2 days) / locked
+create or replace function _license_info() returns jsonb
+language plpgsql stable security definer set search_path = public, extensions, pg_temp as $$
+declare g gt_license; v_ends date; v_today date := (now() at time zone _plant_tz())::date; v_lock timestamptz; v_state text; v_demo boolean;
+begin
+  select * into g from gt_license where id = 1;
+  v_demo := g.applied is null;
+  v_ends := case when v_demo then (g.first_seen at time zone _plant_tz())::date + 30 else (g.applied ->> 'ends')::date end;
+  v_lock := ((v_ends + 3)::timestamp) at time zone _plant_tz();      -- after the last day and 2 grace days
+  v_state := case when v_today <= v_ends - 15 then 'ok' when v_today <= v_ends then 'warn'
+                  when now() < v_lock then 'grace' else 'locked' end;
+  return jsonb_build_object('state', v_state, 'demo', v_demo, 'ends', v_ends, 'daysLeft', v_ends - v_today,
+                            'lockAt', v_lock, 'maxDevices', nullif((g.applied ->> 'max')::int, 0),
+                            'serial', coalesce((g.applied ->> 'serial')::int, 0), 'plant', g.plant_code, 'keyInstalled', g.lkey is not null);
+end $$;
+revoke execute on function _license_info() from public, anon, authenticated;
+
+-- a slaughter day that began after the license locked does not take new animals (the day in progress always ends)
+create or replace function _license_blocks_new_day() returns boolean
+language sql stable security definer set search_path = public, extensions, pg_temp as $$
+  select i ->> 'state' = 'locked'
+     and coalesce(_board_epoch(), 0) >= (extract(epoch from (i ->> 'lockAt')::timestamptz) * 1000)::bigint
+  from (select _license_info() as i) x;
+$$;
+revoke execute on function _license_blocks_new_day() from public, anon, authenticated;
+
+-- every screen may ask (no secret in it)
+create or replace function license_status() returns jsonb
+language plpgsql stable security definer set search_path = public, extensions, pg_temp as $$
+declare i jsonb := _license_info();
+begin
+  if not _reader_ok() then return jsonb_build_object('ok', false, 'error', 'unauthorized'); end if;
+  return jsonb_build_object('ok', true, 'blocked', _license_blocks_new_day(),
+           'devices', (select count(*) from devices_pilot where assigned_role is not null and coalesce(device_status, 'active') <> 'retired'))
+         || (i - 'serial' - 'keyInstalled');
+end $$;
+revoke execute on function license_status() from public;
+grant execute on function license_status() to anon, authenticated;
+
+-- the team leader types a license code (or the plant server brings it): only a code made with this plant's key,
+-- for this plant, newer than the one in use
+create or replace function license_apply(p_token text, p_code text) returns jsonb
+language plpgsql security definer set search_path = public, extensions, pg_temp as $$
+declare g gt_license; c text := upper(regexp_replace(coalesce(p_code, ''), '\s', '', 'g')); m text[]; v_sig text; v_ends date;
+begin
+  if (_is_api_request() and not _request_is_service_role()) and not _is_real_manager(p_token) then
+    return jsonb_build_object('ok', false, 'error', 'unauthorized');
+  end if;
+  select * into g from gt_license where id = 1 for update;
+  if g.fail_at > now() - interval '1 hour' and g.fails >= 10 then return jsonb_build_object('ok', false, 'error', 'rate_limited'); end if;
+  if g.lkey is null then return jsonb_build_object('ok', false, 'error', 'no_key'); end if;
+  m := regexp_match(c, '^GT-([0-9]{3,8})-([0-9]{8})-([0-9]{1,3})-([0-9]{1,6})-([0-9A-F]{12})$');
+  if m is not null then
+    v_sig := upper(left(encode(hmac('GT|' || m[1] || '|' || m[2] || '|' || m[3] || '|' || m[4], g.lkey, 'sha256'), 'hex'), 12));
+    begin v_ends := to_date(m[2], 'YYYYMMDD'); exception when others then v_ends := null; end;
+  end if;
+  if m is null or v_sig is distinct from m[5] or v_ends is null or to_char(v_ends, 'YYYYMMDD') <> m[2] then
+    update gt_license set fails = case when fail_at > now() - interval '1 hour' then fails + 1 else 1 end, fail_at = now() where id = 1;
+    return jsonb_build_object('ok', false, 'error', 'bad_code');
+  end if;
+  if m[1] is distinct from g.plant_code then return jsonb_build_object('ok', false, 'error', 'not_this_plant'); end if;
+  if m[4]::int <= coalesce((g.applied ->> 'serial')::int, 0) then return jsonb_build_object('ok', false, 'error', 'already_used'); end if;
+  update gt_license set applied = jsonb_build_object('ends', v_ends, 'max', m[3]::int, 'serial', m[4]::int, 'code', c, 'at', now()),
+                        fails = 0 where id = 1;
+  perform _security_event(null, 'license_applied', jsonb_build_object('ends', v_ends, 'max', m[3]::int, 'serial', m[4]::int),
+                          coalesce(_session_name(p_token), 'plant server'), null);
+  return jsonb_build_object('ok', true) || (_license_info() - 'serial' - 'keyInstalled');
+end $$;
+revoke execute on function license_apply(text, text) from public;
+grant execute on function license_apply(text, text) to anon, authenticated;
+
+-- no new animal on a day that began after the license locked — whichever way it is sent
+create or replace function _animals_license_guard() returns trigger
+language plpgsql security definer set search_path = public, extensions, pg_temp as $$
+begin
+  if new.slaughter is not null and (tg_op = 'INSERT' or old.slaughter is null)
+     and _is_api_request() and not _request_is_service_role()
+     and coalesce(current_setting('gt.reset_in_progress', true), '') <> 'true'
+     and _license_blocks_new_day() then
+    raise exception 'GT:LICENSE_EXPIRED license_expired' using errcode = 'P0001';
+  end if;
+  return new;
+end $$;
+revoke execute on function _animals_license_guard() from public, anon, authenticated;
+drop trigger if exists b_animals_license_guard on animals_pilot;
+create trigger b_animals_license_guard before insert or update on animals_pilot
+  for each row execute function _animals_license_guard();
+
+-- the plant's report to the center carries the license as the plant sees it
+create or replace function _plant_report() returns jsonb
+language sql stable security definer set search_path = public, extensions, pg_temp as $$
+  select _system_health_data() || jsonb_build_object(
+    'appVersion', (select value from plant_state where key = 'appVersion'),
+    'appUpdatedAt', (select value from plant_state where key = 'appUpdatedAt'),
+    'working', exists (select 1 from animals_pilot where updated_at > now() - interval '10 minutes'),
+    'tablets', coalesce((select jsonb_agg(jsonb_build_object(
+                  'role', d.assigned_role, 'index', coalesce(d.assigned_index, 0), 'name', left(coalesce(d.device_name, ''), 40),
+                  'online', d.last_seen > now() - interval '3 minutes', 'lastSeen', d.last_seen,
+                  'version', d.app_info ->> 'v', 'screen', d.app_info ->> 'screen')
+                  order by d.assigned_role, d.assigned_index)
+                from devices_pilot d where d.assigned_role is not null and coalesce(d.device_status, 'active') <> 'retired'), '[]'::jsonb),
+    'issues', _plant_issues(),
+    'usage', _plant_usage(),
+    'license', _license_info() - 'plant');
+$$;
+revoke execute on function _plant_report() from public, anon, authenticated;
 
 -- ── v10.38 (owner): a new manufacturer code from the support center — signed by the manufacturer ──────────
 -- The code is never sent: the support-center page makes its bcrypt hash in the browser, the manufacturer signs

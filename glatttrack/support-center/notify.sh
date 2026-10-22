@@ -11,11 +11,13 @@ set -u
 ENV="${NOTIFY_ENV:-$(dirname "$0")/notify.env}"; [ -f "$ENV" ] && . "$ENV"
 Q(){ psql "$CENTER_DB_URL" -X -q -t -A "$@"; }
 Q -c "select _sc_check_silent()" >/dev/null                       # a plant that stopped reporting
+Q -c "select _sc_check_licenses()" >/dev/null 2>&1 || true        # v10.38: a license that ends in 14 / 7 / 1 days, or ended
 declare -A HE=( [no_report]="המפעל לא מדווח (אין אינטרנט / השרת כבוי)" [standby_down]="שרת הגיבוי לא מחובר" [standby_lag]="שרת הגיבוי מפגר"
   [backup_stale]="אין גיבוי מאומת" [chain_broken]="יומן האירועים שבור" [nightly_check_problems]="בדיקת הלילה מצאה בעיות"
   [nightly_check_missing]="בדיקת הלילה לא רצה" [ups_on_battery]="אין חשמל — על סוללה" [ups_low_battery]="סוללת UPS כמעט ריקה"
   [devices_offline]="טאבלטים לא מחוברים" [tablet_offline_while_working]="טאבלט מנותק בזמן עבודה" [failed_logins]="הרבה כניסות שגויות"
-  [revoked_device_writes]="מכשיר מנותק ניסה לכתוב" [rollover_waiting]="האיפוס היומי ממתין" [label_mismatch]="מדבקה שלא תואמת פסיקה" )
+  [revoked_device_writes]="מכשיר מנותק ניסה לכתוב" [rollover_waiting]="האיפוס היומי ממתין" [label_mismatch]="מדבקה שלא תואמת פסיקה"
+  [license_14]="הרישיון נגמר בעוד 14 ימים" [license_7]="הרישיון נגמר בעוד 7 ימים" [license_1]="הרישיון נגמר מחר" [license_expired]="הרישיון נגמר — 2 ימי חסד, ואז יום שחיטה חדש לא נפתח" )
 send_email(){ # $1 to, $2 text
   [ "${DRY_RUN:-}" = 1 ] && { echo "EMAIL → $1: $2"; return 0; }
   local mf; mf="$(mktemp)" || return 1                   # (round-2 review C-ntf1) a private temporary file

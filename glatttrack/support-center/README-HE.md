@@ -10,7 +10,7 @@
 ## 1. מסד הנתונים המרכזי (פעם אחת)
 1. פותחים פרויקט Supabase **נפרד** של היצרן. זה לא מסד של מפעל.
 2. ב-SQL Editor מריצים את `central-setup.sql`. ההרצה בטוחה גם יותר מפעם אחת.
-3. מריצים את `central-selftest.sql`. בתוצאה (שורה אחת בטבלה למטה) צריך להיות `PASSED — 33 of 33`.
+3. מריצים את `central-selftest.sql`. בתוצאה (שורה אחת בטבלה למטה) צריך להיות `PASSED — 35 of 35`.
 4. יוצרים את המנהל הראשון (את השאר מוסיפים אחר כך מהדף, בלשונית "צוות"):
    ```sql
    insert into sc_staff (name, code_hash, role) values ('שם המנהל', extensions.crypt('<קוד ארוך>', extensions.gen_salt('bf', 8)), 'admin');
@@ -18,7 +18,7 @@
 
 ## 1א. עדכון מרכז שכבר מותקן
 1. ב-SQL Editor של פרויקט היצרן מריצים שוב את `central-setup.sql` (כל הקובץ). זה בטוח: שום מפעל, איש צוות או חיוב לא נמחק.
-2. מריצים את `central-selftest.sql` → `PASSED — 33 of 33`. הבדיקה לא משנה כלום.
+2. מריצים את `central-selftest.sql` → `PASSED — 35 of 35`. הבדיקה לא משנה כלום.
 3. הדף (`index.html`) צריך החלפה רק כשהוא השתנה. בעדכון של 19.10 (סבב 3) הוא לא השתנה.
 
 ## 1ב. שכחתי את הקוד · I forgot my code
@@ -37,6 +37,18 @@
 2. במחשב של היצרן, שבו המפתח הסודי: `bash maker-code-sign.sh maker-code-<מספר>.json`. נוצר `maker-code-<מספר>.signed.json`. · On the manufacturer's computer: sign it.
 3. בדף: בוחרים את הקובץ החתום ← **שלח למפעל**. · In the page: choose the signed file → **Send to the plant**.
 4. המפעל בודק את החתימה, את מספר המפעל ואת הזמן (עד 7 ימים), ומחליף את הקוד בדיווח הבא (עד 5 דקות). התוצאה מופיעה ב"פקודות". · The plant checks the signature, plant number and time, and changes the code at its next report.
+
+## 1ד. רישיונות · Licenses
+- **מחלקה:** "רישיונות ומכירות" רואה ויוצרת רישיונות, ותו לא. בלי מפעלים, בלי כספים ובלי צוות. · **Department:** "Licenses and sales" sees and creates licenses only.
+- **פעם אחת לכל מפעל:** לשונית 🔑 רישיונות ← **🔑 מפתח למפעל**. מקבלים שורת SQL אחת, ומריצים אותה ב-SQL Editor של ה-Supabase **של המפעל**. · **Once per plant:** 🔑 Licenses → **Plant key** → run the SQL line in the **plant's** Supabase.
+- **רישיון חדש:** בוחרים תקופה (דמו 14 / 30 יום, חודש, חודשיים, חצי שנה, שנה, או עד תאריך) ומספר טאבלטים. נוצר קוד `GT-…`. · **New license:** choose the period and number of tablets; a `GT-…` code is made.
+  - יש שרת מפעל: הקוד מגיע לבד בדיווח הבא. · With a plant server: it arrives by itself at the next report.
+  - אין שרת מפעל: ראש הצוות מקליד את הקוד בהגדרות ← מערכת ← רישיון. · Without one: the team leader types it in Settings → System → License.
+- **כשרישיון נגמר:** · **When a license ends:**
+  - 14 יום לפני: אזהרה במסכים, והתראה אליך (גם 7 ימים ויום אחד לפני, ובסוף). · 14 days before: a warning on the screens and alerts to you (also 7 days and 1 day before, and at the end).
+  - אחרי הסוף: **2 ימי חסד.** · After the end: **2 grace days.**
+  - אחר כך יום שחיטה **חדש** לא נפתח. אף פעם לא באמצע יום, והנתונים והסיכומים נשארים פתוחים. · Then a **new** slaughter day doesn't open — never mid-day; data and summaries stay open.
+- **מפעל בלי רישיון:** דמו של 30 יום מההתקנה. · **A plant without a license:** a 30-day demo from installation.
 
 ## 2. דף מרכז השירות
 1. מעלים את `index.html` לאתר של היצרן. מומלץ להגן עליו ב-https.

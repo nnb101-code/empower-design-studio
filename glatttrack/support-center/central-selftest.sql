@@ -1,5 +1,5 @@
 -- GlattTrack support center — self-test. Changes nothing (every change is undone inside it).
--- Expected result (one row): PASSED — 33 of 33 support-center checks (nothing was changed)
+-- Expected result (one row): PASSED — 35 of 35 support-center checks (nothing was changed)
 -- ONE statement (one DO block), no temporary table: the Supabase SQL Editor runs it like psql does
 -- (the same way as the plant's 03). Works on an empty center and on one that already has plants and staff.
 do $$
@@ -146,6 +146,33 @@ begin
         and sc_maker_code_send(tok, '9001', replace(mf, '$2a$10$', '$2b$10$'), sg) ->> 'error' = 'not_signed'   -- (round 4) Postgres cannot check a $2b$ hash
         and exists (select 1 from jsonb_array_elements(rp -> 'commands') c where c ->> 'cmd' = 'set_maker_code' and c #>> '{payload,manifest}' = mf and c #>> '{payload,sig}' = sg)
         and not (sc_plant(tok, '9001')::text like '%yIWFlYtX%'), left(rr::text, 100) || ' | ' || left(rp::text, 200));
+    end;
+    -- (owner) licenses: their own department (makes and sees licenses only); a code made with the plant's key;
+    -- it goes to the plant with the next report; alerts 14 / 7 / 1 days before the end and at the end
+    declare tlic text; rr jsonb; rr2 jsonb; rp jsonb; k text; n int;
+    begin
+      perform sc_staff_add(tok, 'Selftest licenses', 'selftest-licenses-code-1', 'licenses');
+      tlic := sc_login('selftest-licenses-code-1') ->> 'token';
+      rr := sc_license_issue(tlic, '9001', 'y1', null, 12, 'first year');
+      rr2 := sc_license_issue(tlic, '9001', 'date', current_date - 1);                                     -- a day that passed
+      k := (select license_key from sc_plants where code = '9001');
+      rp := sc_report('9001', sec, '{"attention":[]}');
+      perform pg_temp.rec('owner: the licenses department makes a license (a code made with the plant''s key, sent with the next report) and sees licenses only — no plants, no billing, no staff; support / finance make none',
+        (rr ->> 'ok')::boolean and rr ->> 'license' = format('GT-9001-%s-12-1-', to_char((current_date + interval '1 year')::date, 'YYYYMMDD'))
+                                   || upper(left(encode(hmac(format('GT|9001|%s|12|1', to_char((current_date + interval '1 year')::date, 'YYYYMMDD')), k, 'sha256'), 'hex'), 12))
+        and rr2 ->> 'error' = 'bad_value'
+        and exists (select 1 from jsonb_array_elements(rp -> 'commands') c where c ->> 'cmd' = 'set_license' and c #>> '{payload,code}' = rr ->> 'license')
+        and (sc_licenses_list(tlic) ->> 'ok')::boolean and sc_overview(tlic) ->> 'error' = 'unauthorized' and sc_billing(tlic) ->> 'error' = 'unauthorized'
+        and sc_staff_list(tlic) ->> 'error' = 'unauthorized' and sc_license_issue(tsup, '9001', 'm1') ->> 'error' = 'unauthorized'
+        and sc_license_issue(tfin, '9001', 'm1') ->> 'error' = 'unauthorized' and (sc_license_key(tlic, '9001') ->> 'sql') like 'select license_key_install(''9001'', ''%'');',
+        left(rr::text, 160));
+      -- the alerts: a license that ends in 5 days → "7 days" once
+      update sc_licenses set ends = current_date + 5 where code = '9001';
+      n := _sc_check_licenses() + _sc_check_licenses();
+      ok := n = 1 and exists (select 1 from sc_alerts where code = '9001' and text = 'license_7' and resolved_at is null);
+      ok := ok and (sc_license_issue(tlic, '9001', 'm6') ->> 'ok')::boolean;
+      ok := ok and not exists (select 1 from sc_alerts where code = '9001' and text like 'license\_%' and resolved_at is null);
+      perform pg_temp.rec('owner: a license that ends soon raises one alert (14 / 7 / 1 days, ended) — a new license closes it', ok, n::text);
     end;
     -- the plant's problem reports become tickets (once); the plant gets their status back
     r := sc_report('9001', sec, '{"attention":[],"issues":[{"key":"E17","at":"2026-10-15T10:00:00Z","source":"station","screen":"legs","message":"printer stuck"},{"key":"L3","source":"leader","message":"tablet 2 slow"}],"usage":[{"day":"2026-09-01","animals":100,"kg":30000},{"day":"2026-09-02","animals":50,"kg":15000.5}]}');

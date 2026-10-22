@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict Xdb4qYiRaWjuxsHYAqWrc5GpMLUI2Mkxy71eWBlAJDUXZqzTgPukav84cYLonaJ
+\restrict lIvci5Nyg5PUatqKcM1nAEa3mxTvtgg46bJvPupqimdnLcpMYSxMnWrwi0S8WM6
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -425,6 +425,27 @@ end $$;
 
 
 ALTER FUNCTION public._animals_hold_guard() OWNER TO postgres;
+
+--
+-- Name: _animals_license_guard(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public._animals_license_guard() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $$
+begin
+  if new.slaughter is not null and (tg_op = 'INSERT' or old.slaughter is null)
+     and _is_api_request() and not _request_is_service_role()
+     and coalesce(current_setting('gt.reset_in_progress', true), '') <> 'true'
+     and _license_blocks_new_day() then
+    raise exception 'GT:LICENSE_EXPIRED license_expired' using errcode = 'P0001';
+  end if;
+  return new;
+end $$;
+
+
+ALTER FUNCTION public._animals_license_guard() OWNER TO postgres;
 
 --
 -- Name: _animals_merge(); Type: FUNCTION; Schema: public; Owner: postgres
@@ -2475,6 +2496,46 @@ $$;
 ALTER FUNCTION public._legs_sort_station() OWNER TO postgres;
 
 --
+-- Name: _license_blocks_new_day(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public._license_blocks_new_day() RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $$
+  select i ->> 'state' = 'locked'
+     and coalesce(_board_epoch(), 0) >= (extract(epoch from (i ->> 'lockAt')::timestamptz) * 1000)::bigint
+  from (select _license_info() as i) x;
+$$;
+
+
+ALTER FUNCTION public._license_blocks_new_day() OWNER TO postgres;
+
+--
+-- Name: _license_info(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public._license_info() RETURNS jsonb
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $$
+declare g gt_license; v_ends date; v_today date := (now() at time zone _plant_tz())::date; v_lock timestamptz; v_state text; v_demo boolean;
+begin
+  select * into g from gt_license where id = 1;
+  v_demo := g.applied is null;
+  v_ends := case when v_demo then (g.first_seen at time zone _plant_tz())::date + 30 else (g.applied ->> 'ends')::date end;
+  v_lock := ((v_ends + 3)::timestamp) at time zone _plant_tz();      -- after the last day and 2 grace days
+  v_state := case when v_today <= v_ends - 15 then 'ok' when v_today <= v_ends then 'warn'
+                  when now() < v_lock then 'grace' else 'locked' end;
+  return jsonb_build_object('state', v_state, 'demo', v_demo, 'ends', v_ends, 'daysLeft', v_ends - v_today,
+                            'lockAt', v_lock, 'maxDevices', nullif((g.applied ->> 'max')::int, 0),
+                            'serial', coalesce((g.applied ->> 'serial')::int, 0), 'plant', g.plant_code, 'keyInstalled', g.lkey is not null);
+end $$;
+
+
+ALTER FUNCTION public._license_info() OWNER TO postgres;
+
+--
 -- Name: _list_tail(jsonb, integer); Type: FUNCTION; Schema: public; Owner: postgres
 --
 
@@ -3021,7 +3082,8 @@ CREATE FUNCTION public._plant_report() RETURNS jsonb
                   order by d.assigned_role, d.assigned_index)
                 from devices_pilot d where d.assigned_role is not null and coalesce(d.device_status, 'active') <> 'retired'), '[]'::jsonb),
     'issues', _plant_issues(),
-    'usage', _plant_usage());
+    'usage', _plant_usage(),
+    'license', _license_info() - 'plant');
 $$;
 
 
@@ -5783,6 +5845,10 @@ begin
      or (p_stage = 'eso' and coalesce(p_value, '') not in ('ok', 'nevela')) then
     return jsonb_build_object('claimed', false, 'error', 'bad_value');
   end if;
+  -- §49 (owner) a slaughter day that began after the license ended (+ 2 grace days) takes no new animal
+  if p_stage = 'slaughter' and _license_blocks_new_day() then
+    return jsonb_build_object('claimed', false, 'error', 'license_expired');
+  end if;
   -- v10.33: 'kosherPlain' = plain כשר for a "not chalak" animal (outer_status 'kosher' + nc_plain)
   v_plain := (p_stage = 'outer' and p_value = 'kosherPlain');
   if v_plain then p_value := 'kosher'; end if;
@@ -6327,6 +6393,13 @@ begin
    where code = trim(p_code) and paired_at is null and expires_at > now()
    for update;
   if r.code is null then return jsonb_build_object('ok', false, 'error', 'code_invalid'); end if;
+  -- §49 (owner) the license's number of tablets (a device replaced in its own slot is not one more)
+  if (_license_info() ->> 'maxDevices') is not null
+     and (select count(*) from devices_pilot where assigned_role is not null and coalesce(device_status, 'active') <> 'retired'
+            and id <> r.device_id and not (coalesce(p_replace, false) and assigned_role = p_role and coalesce(assigned_index, 0) = v_idx))
+         >= (_license_info() ->> 'maxDevices')::int then
+    return jsonb_build_object('ok', false, 'error', 'license_devices', 'max', (_license_info() ->> 'maxDevices')::int);
+  end if;
 
   v_actor := coalesce(_session_name(p_token), 'manager');
   perform set_config('gt.audit_actor', v_actor, true);
@@ -7145,6 +7218,82 @@ end $$;
 
 
 ALTER FUNCTION public.leader_recovery_status(p_token text) OWNER TO postgres;
+
+--
+-- Name: license_apply(text, text); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.license_apply(p_token text, p_code text) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $_$
+declare g gt_license; c text := upper(regexp_replace(coalesce(p_code, ''), '\s', '', 'g')); m text[]; v_sig text; v_ends date;
+begin
+  if (_is_api_request() and not _request_is_service_role()) and not _is_real_manager(p_token) then
+    return jsonb_build_object('ok', false, 'error', 'unauthorized');
+  end if;
+  select * into g from gt_license where id = 1 for update;
+  if g.fail_at > now() - interval '1 hour' and g.fails >= 10 then return jsonb_build_object('ok', false, 'error', 'rate_limited'); end if;
+  if g.lkey is null then return jsonb_build_object('ok', false, 'error', 'no_key'); end if;
+  m := regexp_match(c, '^GT-([0-9]{3,8})-([0-9]{8})-([0-9]{1,3})-([0-9]{1,6})-([0-9A-F]{12})$');
+  if m is not null then
+    v_sig := upper(left(encode(hmac('GT|' || m[1] || '|' || m[2] || '|' || m[3] || '|' || m[4], g.lkey, 'sha256'), 'hex'), 12));
+    begin v_ends := to_date(m[2], 'YYYYMMDD'); exception when others then v_ends := null; end;
+  end if;
+  if m is null or v_sig is distinct from m[5] or v_ends is null or to_char(v_ends, 'YYYYMMDD') <> m[2] then
+    update gt_license set fails = case when fail_at > now() - interval '1 hour' then fails + 1 else 1 end, fail_at = now() where id = 1;
+    return jsonb_build_object('ok', false, 'error', 'bad_code');
+  end if;
+  if m[1] is distinct from g.plant_code then return jsonb_build_object('ok', false, 'error', 'not_this_plant'); end if;
+  if m[4]::int <= coalesce((g.applied ->> 'serial')::int, 0) then return jsonb_build_object('ok', false, 'error', 'already_used'); end if;
+  update gt_license set applied = jsonb_build_object('ends', v_ends, 'max', m[3]::int, 'serial', m[4]::int, 'code', c, 'at', now()),
+                        fails = 0 where id = 1;
+  perform _security_event(null, 'license_applied', jsonb_build_object('ends', v_ends, 'max', m[3]::int, 'serial', m[4]::int),
+                          coalesce(_session_name(p_token), 'plant server'), null);
+  return jsonb_build_object('ok', true) || (_license_info() - 'serial' - 'keyInstalled');
+end $_$;
+
+
+ALTER FUNCTION public.license_apply(p_token text, p_code text) OWNER TO postgres;
+
+--
+-- Name: license_key_install(text, text); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.license_key_install(p_plant_code text, p_key text) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $_$
+begin
+  if _is_api_request() and not _request_is_service_role() then raise exception 'server only' using errcode = '42501'; end if;
+  if coalesce(p_plant_code, '') !~ '^[0-9]{3,8}$' or coalesce(p_key, '') !~ '^[0-9a-f]{64}$' then
+    return jsonb_build_object('ok', false, 'error', 'bad_value');
+  end if;
+  update gt_license set plant_code = p_plant_code, lkey = p_key where id = 1;
+  return jsonb_build_object('ok', true, 'plant', p_plant_code);
+end $_$;
+
+
+ALTER FUNCTION public.license_key_install(p_plant_code text, p_key text) OWNER TO postgres;
+
+--
+-- Name: license_status(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.license_status() RETURNS jsonb
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'extensions', 'pg_temp'
+    AS $$
+declare i jsonb := _license_info();
+begin
+  if not _reader_ok() then return jsonb_build_object('ok', false, 'error', 'unauthorized'); end if;
+  return jsonb_build_object('ok', true, 'blocked', _license_blocks_new_day(),
+           'devices', (select count(*) from devices_pilot where assigned_role is not null and coalesce(device_status, 'active') <> 'retired'))
+         || (i - 'serial' - 'keyInstalled');
+end $$;
+
+
+ALTER FUNCTION public.license_status() OWNER TO postgres;
 
 --
 -- Name: lung_drawing_get(integer); Type: FUNCTION; Schema: public; Owner: postgres
@@ -9883,6 +10032,24 @@ ALTER TABLE public.events_pilot ALTER COLUMN server_seq ADD GENERATED ALWAYS AS 
 
 
 --
+-- Name: gt_license; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.gt_license (
+    id integer DEFAULT 1 NOT NULL,
+    plant_code text,
+    lkey text,
+    applied jsonb,
+    first_seen timestamp with time zone DEFAULT now() NOT NULL,
+    fails integer DEFAULT 0 NOT NULL,
+    fail_at timestamp with time zone,
+    CONSTRAINT gt_license_id_check CHECK ((id = 1))
+);
+
+
+ALTER TABLE public.gt_license OWNER TO postgres;
+
+--
 -- Name: kashrut_seals; Type: TABLE; Schema: public; Owner: postgres
 --
 
@@ -10822,6 +10989,14 @@ ALTER TABLE ONLY public.events_pilot
 
 
 --
+-- Name: gt_license gt_license_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.gt_license
+    ADD CONSTRAINT gt_license_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: kashrut_seals kashrut_seals_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
 --
 
@@ -11371,6 +11546,13 @@ CREATE TRIGGER b_animals_hold_guard BEFORE UPDATE ON public.animals_pilot FOR EA
 
 
 --
+-- Name: animals_pilot b_animals_license_guard; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE TRIGGER b_animals_license_guard BEFORE INSERT OR UPDATE ON public.animals_pilot FOR EACH ROW EXECUTE FUNCTION public._animals_license_guard();
+
+
+--
 -- Name: animals_pilot b_animals_stage_guard; Type: TRIGGER; Schema: public; Owner: postgres
 --
 
@@ -11915,6 +12097,12 @@ CREATE POLICY farms_write ON public.source_farms USING (((plant_id = public._my_
 
 
 --
+-- Name: gt_license; Type: ROW SECURITY; Schema: public; Owner: postgres
+--
+
+ALTER TABLE public.gt_license ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: kashrut_seals; Type: ROW SECURITY; Schema: public; Owner: postgres
 --
 
@@ -12314,6 +12502,13 @@ REVOKE ALL ON FUNCTION public._animals_close_questions() FROM PUBLIC;
 --
 
 REVOKE ALL ON FUNCTION public._animals_hold_guard() FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION _animals_license_guard(); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public._animals_license_guard() FROM PUBLIC;
 
 
 --
@@ -12866,6 +13061,20 @@ REVOKE ALL ON FUNCTION public._legs_sort_pending(a public.animals_pilot) FROM PU
 --
 
 REVOKE ALL ON FUNCTION public._legs_sort_station() FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION _license_blocks_new_day(); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public._license_blocks_new_day() FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION _license_info(); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public._license_info() FROM PUBLIC;
 
 
 --
@@ -13980,6 +14189,31 @@ GRANT ALL ON FUNCTION public.leader_recovery_status(p_token text) TO authenticat
 
 
 --
+-- Name: FUNCTION license_apply(p_token text, p_code text); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public.license_apply(p_token text, p_code text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.license_apply(p_token text, p_code text) TO anon;
+GRANT ALL ON FUNCTION public.license_apply(p_token text, p_code text) TO authenticated;
+
+
+--
+-- Name: FUNCTION license_key_install(p_plant_code text, p_key text); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public.license_key_install(p_plant_code text, p_key text) FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION license_status(); Type: ACL; Schema: public; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION public.license_status() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.license_status() TO anon;
+GRANT ALL ON FUNCTION public.license_status() TO authenticated;
+
+
+--
 -- Name: FUNCTION lung_drawing_get(p_id integer); Type: ACL; Schema: public; Owner: postgres
 --
 
@@ -14674,5 +14908,5 @@ GRANT ALL ON TABLE public.system_flags TO service_role;
 -- PostgreSQL database dump complete
 --
 
-\unrestrict Xdb4qYiRaWjuxsHYAqWrc5GpMLUI2Mkxy71eWBlAJDUXZqzTgPukav84cYLonaJ
+\unrestrict lIvci5Nyg5PUatqKcM1nAEa3mxTvtgg46bJvPupqimdnLcpMYSxMnWrwi0S8WM6
 
