@@ -21,7 +21,7 @@
 | שלב | קובץ | מה רואים בסוף ב־Supabase |
 |---|---|---|
 | 1 | `01-setup-supabase-step45-health-and-reasons.sql` | `Success. No rows returned` |
-| 2 | `02-setup-supabase-step46-order-and-processing-days.sql` | `Success. No rows returned` |
+| 2 | `02-setup-supabase-step46-order-and-processing-days.sql` | טבלה קטנה: `_animal_pieces_fill` עם מספר (למשל `0`), או `Success. No rows returned` — שניהם תקין |
 | 3 (בדיקה) | `03-security-selftest.sql` | שורה אחת: `PASSED — 197 of 197 security checks (nothing was changed)` |
 
 - **אחרי שלב 2** אפשר לוודא: `select value from plant_state where key = 'schemaStep';` חייב להחזיר **46**.
