@@ -44,7 +44,9 @@ while IFS=$'\x1f' read -r id code name level text; do
   # (full review C1) each recipient once: a channel / address that failed is tried again next minute,
   # the ones that already got it are not sent it again
   sent="$(Q -c "select sent::text from sc_alerts where id = $id")"; all=1
-  mark(){ Q -c "update sc_alerts set sent = sent || jsonb_build_object('$1', now()::text) where id = $id" >/dev/null; }
+  # (v10.38 review) the key goes as a psql variable: an address with a ' (o'connor@…) never breaks the
+  # update — otherwise it stayed "not sent" and the same alert went out again every minute
+  mark(){ Q -v k="$1" <<< "update sc_alerts set sent = sent || jsonb_build_object(:'k'::text, now()::text) where id = $id" >/dev/null; }
   got(){ printf '%s' "$sent" | grep -qF "\"$1\""; }
   if [ "$EON" = true ]; then for t in "${ETO[@]}"; do k="email:$t"; got "$k" && continue; if send_email "$t" "$msg"; then mark "$k"; else all=0; fi; done; fi
   if [ "$SON" = true ]; then for t in "${STO[@]}"; do k="sms:$t"; got "$k" && continue; if send_twilio "$t" "${SMS_FROM:-}" "$msg"; then mark "$k"; else all=0; fi; done; fi

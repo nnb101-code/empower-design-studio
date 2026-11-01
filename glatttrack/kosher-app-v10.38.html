@@ -2342,8 +2342,8 @@ const KS = (function(){
       return;
     }
     const TIMED = [['slaughter','slaughterTime',['slaughteredBy','slaughterByDevice','esoResult']],
-                   ['innerStatus','innerTime',['innerBy','innerByDevice']],
-                   ['outerStatus','outerTime',['outerBy','outerByDevice']]];
+                   ['innerStatus','innerTime',['innerBy','innerByDevice','notChalakInner']],   // (v10.38 review) these two go with
+                   ['outerStatus','outerTime',['outerBy','outerByDevice','ncPlain']]];        // their group, so a cleared value comes too
     incoming.animals.forEach((a, i) => {
       if(!a) return;
       const cur = _state.animals[i];

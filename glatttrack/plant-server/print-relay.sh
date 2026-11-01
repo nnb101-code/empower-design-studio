@@ -17,7 +17,17 @@ send_job(){   # $1 = id, $2 = ip:port
   f="$(mktemp)"
   gt_psql -c "select data from print_jobs where id = $id" | base64 -d > "$f" 2>/dev/null
   if [ ! -s "$f" ]; then err="empty job"
-  else timeout 15 bash -c 'exec 3<>"/dev/tcp/$1/$2" && cat "$3" >&3' _ "$ip" "$port" "$f" 2>/dev/null; rc=$?
+  # (v10.38 review) sent, then closed the polite way (the write side first, then wait a moment for the printer):
+  # a hard close with bytes from the printer still unread sends a reset, and some printers drop the label
+  else timeout 15 python3 -I -c '
+import socket, sys, time
+s = socket.create_connection((sys.argv[1], int(sys.argv[2])), timeout=10)
+with open(sys.argv[3], "rb") as fh: s.sendall(fh.read())
+s.shutdown(socket.SHUT_WR); s.settimeout(0.3); end = time.time() + 0.5
+try:
+    while time.time() < end and s.recv(4096): pass
+except OSError: pass
+s.close()' "$ip" "$port" "$f" 2>/dev/null; rc=$?
        [ $rc -eq 0 ] || err="printer $ip:$port does not answer (code $rc)"; fi
   rm -f "$f"
   if [ -z "$err" ]; then gt_psql -c "update print_jobs set status = 'sent', sent_at = now(), error = null where id = $id" >/dev/null
@@ -79,22 +89,24 @@ select id from print_jobs where status = 'new' and printer = :'p' and at >= now(
 SQL
 )" && [ -n "$id" ] && [ "$id" != "$last" ]; do send_job "$id" "$1"; last="$id"; done
 }
-declare -A SENDER=(); scan_pid=""
+declare -A SENDER=(); scan_pid=""; probe_pid=""
+# (v10.38 review) still running = alive AND our own child (a process number can be given again to another program)
+mine(){ [ -n "$1" ] && kill -0 "$1" 2>/dev/null && [ "$(awk '{print $4}' "/proc/$1/stat" 2>/dev/null)" = "$$" ]; }
 last_beat=0; last_probe=0
 while true; do
   if [ "$(gt_self_role)" != "primary" ]; then sleep 5; continue; fi
   now=$(date +%s)
   if [ $((now - last_beat)) -ge 30 ]; then gt_state printRelayAt "$(date -Is)" >/dev/null; last_beat=$now; fi
-  if [ $((now - last_probe)) -ge "${GT_PRINTER_PROBE_EVERY:-30}" ]; then ( probe_printers ) & last_probe=$now; fi   # in the background: printing never waits for it
+  if [ $((now - last_probe)) -ge "${GT_PRINTER_PROBE_EVERY:-30}" ] && ! mine "$probe_pid"; then ( probe_printers ) & probe_pid=$!; last_probe=$now; fi   # in the background: printing never waits for it; never two at once
   # (review) a sticker the station already reported as not printed is never printed later; a send cut off by a restart is failed
   gt_psql -c "update print_jobs set status = 'failed', error = 'too old — not printed (the station said so; print again)' where status = 'new' and at < now() - interval '20 seconds';
               update print_jobs set status = 'failed', error = 'interrupted' where status = 'sending' and at < now() - interval '2 minutes'" >/dev/null
   while read -r printer; do
     [ -n "$printer" ] || continue
     pid="${SENDER[$printer]:-}"
-    if [ -z "$pid" ] || ! kill -0 "$pid" 2>/dev/null; then ( send_printer "$printer" ) & SENDER[$printer]=$!; fi
+    if ! mine "$pid"; then ( send_printer "$printer" ) & SENDER[$printer]=$!; fi
   done < <(gt_psql -c "select distinct printer from print_jobs where status = 'new' and at >= now() - interval '20 seconds'")
-  if { [ -z "$scan_pid" ] || ! kill -0 "$scan_pid" 2>/dev/null; } \
+  if ! mine "$scan_pid" \
      && [ "$(gt_psql -c "select coalesce((select value::timestamptz from plant_state where key = 'printerScanRequestedAt')
                         > coalesce((select (value::jsonb ->> 'at')::timestamptz from plant_state where key = 'printersFound'), '-infinity'), false)")" = "t" ]; then
     ( scan ) & scan_pid=$!

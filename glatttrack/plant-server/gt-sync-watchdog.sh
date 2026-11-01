@@ -35,6 +35,15 @@ while true; do
       [ "${GT_ONCE:-}" = "1" ] && break
       sleep "$STEP"; continue
     fi
+    # (v10.38 review) both main servers on the SAME timeline (only after a wrong install): nobody is "newer",
+    # so the tie is broken by name — server B stops and waits for a person; A keeps the line working
+    if [ "$GT_SELF" = "B" ] && [ "$(gt_peer_role)" = "primary" ] && [ "$(gt_peer_tli)" -eq "$(gt_self_tli)" ]; then
+      gt_log "FENCE: both servers are main servers on the same timeline — stopping Postgres on B; check the install, then run rejoin-as-standby.sh --yes"
+      mkdir -p /var/lib/glatttrack && date -Iseconds > /var/lib/glatttrack/needs-rejoin
+      gt_pg_stop || true
+      [ "${GT_ONCE:-}" = "1" ] && break
+      sleep "$STEP"; continue
+    fi
     cur="$(gt_psql -c "show synchronous_standby_names" 2>/dev/null || echo '?')"
     streaming="$(gt_psql -c "select count(*) from pg_stat_replication where application_name = '$GT_STANDBY_APP' and state = 'streaming'" 2>/dev/null || echo 0)"
     expected="$(gt_psql -c "select coalesce((select value from plant_state where key = 'standbyExpected'), '')" 2>/dev/null || echo '')"

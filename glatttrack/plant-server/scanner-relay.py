@@ -30,12 +30,12 @@ def allowed(ip):
 def save(ip, code):
     code = ''.join(ch for ch in code if ch.isprintable())[:200].strip()
     if not code: return
-    sql("""insert into scanner_scans (ip, code) select :'ip', :'code' where not pg_is_in_recovery();
-           delete from scanner_scans where at < now() - interval '1 day' and not pg_is_in_recovery();""", ip=ip, code=code)
+    sql("""insert into scanner_scans (ip, code) select :'ip', :'code' where not pg_is_in_recovery();""", ip=ip, code=code)
 
 def client(conn, ip):
     buf = b''
     conn.settimeout(3600)
+    conn.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)   # (v10.38 review) a scanner that vanished is noticed
     try:
         while True:
             data = conn.recv(1024)
@@ -56,7 +56,8 @@ def client(conn, ip):
 def beat():
     while True:
         sql("""insert into plant_state (key, value) select 'scannerRelayAt', now()::text where not pg_is_in_recovery()
-               on conflict (key) do update set value = excluded.value, updated_at = now();""")
+               on conflict (key) do update set value = excluded.value, updated_at = now();
+               delete from scanner_scans where at < now() - interval '1 day' and not pg_is_in_recovery();""")   # (v10.38 review) here, not at every scan
         time.sleep(30)
 
 threading.Thread(target=beat, daemon=True).start()

@@ -11,10 +11,16 @@ gt_owner_ok(){ local f u a; for f in "$@"; do
 done; }
 if [ "$(id -u)" = "0" ]; then
   _gt_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-  gt_owner_ok "$GT_CONF" "$(dirname "$GT_CONF")" "$_gt_dir" $(compgen -G "$_gt_dir/*.sh") $(compgen -G "$_gt_dir/*.py") || exit 2
+  gt_owner_ok "$GT_CONF" "$(dirname "$GT_CONF")" "$_gt_dir" $(compgen -G "$_gt_dir/*.sh") $(compgen -G "$_gt_dir/*.py") \
+              $( [ -d "$_gt_dir/keepalived" ] && echo "$_gt_dir/keepalived" ) $(compgen -G "$_gt_dir/keepalived/*.sh") || exit 2
 fi
 # shellcheck disable=SC1090
 . "$GT_CONF"
+# (v10.38 review) the security self-test runs with the database's full rights (nightly check, update):
+# it and its folder must belong to root too
+if [ "$(id -u)" = "0" ] && [ -n "${GT_SELFTEST_SQL:-}" ] && [ -f "$GT_SELFTEST_SQL" ]; then
+  gt_owner_ok "$GT_SELFTEST_SQL" "$(dirname "$GT_SELFTEST_SQL")" || exit 2
+fi
 GT_PGHOST="${GT_PGHOST:-/var/run/postgresql}"
 GT_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # (full review P1) root → the Postgres tools run as the "postgres" system user (Ubuntu / Debian peer authentication)

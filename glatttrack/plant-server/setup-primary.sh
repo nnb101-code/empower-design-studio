@@ -6,14 +6,11 @@
 . "$(dirname "$0")/gt-lib.sh"
 gt_check_secrets
 gt_log "preparing $GT_SELF ($GT_SELF_IP) as the main server; standby at $GT_PEER_IP"
-gt_psql <<SQL
-do \$\$ begin
-  if not exists (select 1 from pg_roles where rolname = '$GT_REPL_USER') then
-    create role $GT_REPL_USER with replication login password '$GT_REPL_PASS';
-  else
-    alter role $GT_REPL_USER with replication login password '$GT_REPL_PASS';
-  end if;
-end \$\$;
+# (v10.38 review) the password goes as a psql variable (quoted by psql), never pasted into the SQL text
+gt_psql -v pass="$GT_REPL_PASS" <<SQL
+select format('create role %I with replication login password %L', '$GT_REPL_USER', :'pass')
+ where not exists (select 1 from pg_roles where rolname = '$GT_REPL_USER') \gexec
+select format('alter role %I with replication login password %L', '$GT_REPL_USER', :'pass') \gexec
 grant connect on database $GT_DB to $GT_REPL_USER;
 alter system set wal_level = 'replica';
 alter system set max_wal_senders = 5;

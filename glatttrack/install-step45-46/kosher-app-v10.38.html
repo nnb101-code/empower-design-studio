@@ -2342,8 +2342,8 @@ const KS = (function(){
       return;
     }
     const TIMED = [['slaughter','slaughterTime',['slaughteredBy','slaughterByDevice','esoResult']],
-                   ['innerStatus','innerTime',['innerBy','innerByDevice']],
-                   ['outerStatus','outerTime',['outerBy','outerByDevice']]];
+                   ['innerStatus','innerTime',['innerBy','innerByDevice','notChalakInner']],   // (v10.38 review) these two go with
+                   ['outerStatus','outerTime',['outerBy','outerByDevice','ncPlain']]];        // their group, so a cleared value comes too
     incoming.animals.forEach((a, i) => {
       if(!a) return;
       const cur = _state.animals[i];
@@ -7438,7 +7438,7 @@ function _doLoginProceed(loginScreenId){
 // instead of jumping straight to scManager with no check.
 // Manager logs out of THIS device: forget the manager session here, so the
 // device goes back to what it really is (its station, or — if it isn't
-// paired — the pairing code screen). Otherwise the session lasts 12 hours.
+// paired — the pairing code screen). Otherwise the session ends when the server says (expires_at, 10 hours).
 async function mgrLogout(){
   if(_isMakerSession()) return mgrMakerLogout();
   if(!await ATconfirm(L('לצאת מהחשבון? בכניסה הבאה יידרש הקוד שוב.','Log out? The code will be needed again next time.','¿Cerrar sesión? La próxima vez se pedirá el código otra vez.'))) return;

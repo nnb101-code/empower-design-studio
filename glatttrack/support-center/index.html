@@ -563,7 +563,11 @@ async function release(){
 }
 // the screens refresh every 30 s — but never under someone typing or choosing a file (it would be wiped)
 const busyHere = () => { const a = document.activeElement; if(a && /^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName) && main().contains(a)) return true;
-  return [...main().querySelectorAll('input')].some(i => (i.type === 'file' && i.files && i.files.length) || ((i.type === 'password' || i.type === 'text') && i.value)); };
+  // (v10.38 review) also a number / date the user changed, a list choice changed, or an opened <details> (license history)
+  if(main().querySelector('details[open]')) return true;
+  if([...main().querySelectorAll('select')].some(s => s.selectedIndex !== Math.max(0, [...s.options].findIndex(o => o.defaultSelected)))) return true;
+  return [...main().querySelectorAll('input')].some(i => (i.type === 'file' && i.files && i.files.length) || ((i.type === 'password' || i.type === 'text') && i.value)
+    || ((i.type === 'number' || i.type === 'date') && i.value !== i.defaultValue) || ((i.type === 'checkbox' || i.type === 'radio') && i.checked !== i.defaultChecked)); };
 setInterval(() => { if(!TOK || busyHere()) return; if(VIEW === 'overview') showOverview(); else if(VIEW === 'plant' && CUR) showPlant(CUR); else if(VIEW === 'tickets') showTickets(); }, 30000);
 applyLang();
 (async () => { if(!TOK) return showLogin(); const w = await raw('sc_whoami', { p_token: TOK }); if(!w.ok) return logout(); ME = { name: w.name, role: w.role }; chrome(true); home(); })();
