@@ -40,7 +40,9 @@ th{color:var(--muted);font-weight:700;font-size:12px}.wrap{overflow-x:auto}
 .lang{display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden}.lang button{background:transparent;border:none;color:var(--muted);padding:6px 10px;font-weight:700;font-size:13px}
 .lang button.on{background:var(--gold);color:#07090F}.rec{display:block;direction:ltr;text-align:center;font:800 22px Consolas,Menlo,monospace;letter-spacing:2px;color:var(--gold);margin:10px 0}
 a.lk{color:var(--gold);font-size:13px}
-@media (max-width:600px){main{padding:12px}header h1{font-size:16px}nav{top:49px}}
+/* (owner, phone) nothing is wider than the screen: a box in a row may shrink, a row of boxes wraps, a wide table scrolls inside its card */
+.row>input,.row>select{min-width:0}header>*:not(h1){flex:none}header h1{min-width:0}html,body{overflow-x:clip}.card{overflow-x:auto}
+@media (max-width:600px){main{padding:12px}header h1{font-size:16px}nav{top:49px}.row{flex-wrap:wrap}.cols>.card{min-width:0;flex-basis:100%}}
 </style></head><body>
 <header><h1 id="ttl">🛰️ GlattTrack — מרכז השירות</h1><span id="who" class="n"></span>
  <span class="lang"><button id="lg_he" onclick="setLang('he')">עב</button><button id="lg_en" onclick="setLang('en')">EN</button></span>
