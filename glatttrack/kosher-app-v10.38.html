@@ -5996,6 +5996,7 @@ function _gtInnerStepDecided(i, step){
   _gtQStepDone(i, step);
   const h=gtOwnQ(i,'inner');
   if(h && !h.local && h.id && (was===step || was===null)){
+    h.open=false;   // (owner bug 01.11) answered here and now — the next window does not wait for the server's reply
     window.sb.rpc('hold_resolve',{p_hold:h.id,p_resolution:'answered',p_command_id:_gtUuid()})
       .then(()=>{ _gtFlags.sig=''; return gtFlagsPull(); }).then(()=>{ try{ gtRerenderAll(); }catch(e){} }).catch(()=>{});
     try{ KS.addAuditLog({type:'question_answered', stage:'inner', step, animal:i+1}); }catch(e){}
@@ -10165,7 +10166,9 @@ function lungDone(result){
   if(result==="treif"){ try{ _gtQStepsSet(confirmedIdx, []); }catch(e){} }
   else {
     try{ _gtQStepDone(confirmedIdx,'lung'); }catch(e){}
-    if(gtInnerQSteps(confirmedIdx).length){ _gtInnerWait(confirmedIdx); return; }   // v10.29: a "?" is still open
+    // v10.29: a "?" still open in ANOTHER window waits. (owner bug 01.11) the lung's own "?" is answered by this
+    // ruling — the server's still-open lung "?" used to count here, so "approve" closed the number again and again
+    if(gtInnerQSteps(confirmedIdx).filter(x=>x!=='lung').length){ _gtInnerWait(confirmedIdx); return; }
   }
   if(result==="treif")KS.setInnerTreif(confirmedIdx,activeUserName("inner","בודק פנים"));
   else KS.setInnerConfirmed(confirmedIdx,activeUserName("inner","בודק פנים"));
