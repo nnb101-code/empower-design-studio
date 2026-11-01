@@ -1,0 +1,39 @@
+plant-server kit v10.16 on two real PostgreSQL 16 servers (A=5441, B=5442), see plant-server/PLANT-RESILIENCE-HE.md §8
+=== 0 no password in the settings → refused
+ERROR: set GT_REPL_PASS in .../Anopass.conf (openssl rand -hex 24)
+=== 1 healthy: only the main server holds the address
+A may hold the address: YES
+B may hold the address: no
+=== 2 A↔B cut, both see the plant (split-brain case): B does NOT take over
+[promote.sh] not promoting by itself (GT_AUTO_PROMOTE=0) — check the main server is off, then run takeover.sh
+B role: standby
+B may hold the address: no
+=== 3 strict mode: B gone → a ruling waits (no ruling on one server only)
+write with B gone (strict): WAITED (not confirmed) after 8s; sync=[ANY 1 (gt_standby)]
+B back → the waiting write: x
+=== 4 available mode: B gone → A goes on alone after ~3 s
+write confirmed after 3s
+["backup_stale", "devices_offline", "rollover_waiting", "standby_down"] info=["processing_days_open", "standby_async"]
+[gt-sync-watchdog.sh] standby back — rulings confirmed after the standby has them
+=== 5 A dies; nobody confirmed → B stays the backup, nobody holds the address (tablets stop)
+[promote.sh] not promoting by itself (GT_AUTO_PROMOTE=0) — check the main server is off, then run takeover.sh
+A may hold the address: no
+B may hold the address: no
+=== 6 a person confirms A is off → takeover
+[promote.sh] B is the main server now
+B may hold the address: YES
+=== 7 old A starts as main → fenced, never holds the address
+server stopped
+A may hold the address: no
+=== 8 A rejoins as backup
+[setup-standby.sh] standby A: standby
+[gt-sync-watchdog.sh] standby back — rulings confirmed after the standby has them
+A may hold the address: no
+B may hold the address: YES
+=== 9 backup checked by a full restore
+[backup.sh] backup ok and checked: glatttrack-B-….dump (496K; 343 events, chain ok)
+=== 10 a backup whose event chain is broken → FAILED, not green
+[backup.sh] BACKUP FAILED: event chain in the restored copy: false
+{"status": "failed", "ageHours": 0.0}
+=== 11 pg_restore fails part-way (simulated) → FAILED, not green
+[backup.sh] BACKUP FAILED: pg_restore failed (see ….restore.log)

@@ -1,0 +1,282 @@
+<!doctype html><html dir="rtl" lang="he"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>GlattTrack — מרכז שירות</title>
+<script src="sc-config.js"></script>
+<style>
+:root{--bg:#07090F;--panel:#11151F;--panel2:#181D2A;--border:#2A3142;--gold:#D4A843;--text:#E8ECF4;--muted:#8A93A6;--green:#28C76F;--red:#E03030;--amber:#F0A030}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:Arial,Helvetica,sans-serif}
+header{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--bg);z-index:5}
+header h1{font-size:18px;margin:0;color:var(--gold);flex:1}
+button{font-family:inherit;cursor:pointer}
+.btn{background:var(--gold);color:#07090F;border:none;border-radius:8px;padding:9px 14px;font-weight:700;font-size:14px}
+.ghost{background:transparent;color:var(--gold);border:1px solid var(--gold);border-radius:8px;padding:8px 12px;font-weight:700;font-size:13px}
+main{padding:16px;max-width:1300px;margin:0 auto}
+.tiles{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap}.tile{flex:1;min-width:140px;background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:12px;text-align:center}
+.tile b{display:block;font-size:30px}.n{font-size:12px;color:var(--muted)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}
+.pl{background:var(--panel);border:2px solid var(--border);border-radius:12px;padding:12px;cursor:pointer}
+.pl.warn{border-color:var(--amber)}.pl.bad{border-color:var(--red);background:#2a0e10;animation:blink 1s infinite}
+@keyframes blink{50%{background:#4a1015}}
+.dot{width:14px;height:14px;border-radius:50%;display:inline-block;margin-inline-start:6px;vertical-align:middle}
+.ok .dot,.dot.ok{background:var(--green)}.warn .dot,.dot.warn{background:var(--amber)}.bad .dot,.dot.bad{background:var(--red);box-shadow:0 0 12px var(--red)}
+.t{font-size:16px;font-weight:800}.card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:12px}
+.row{display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px solid var(--border);font-size:14px}
+.g{color:var(--green)}.r{color:var(--red)}.a{color:var(--amber)}
+input,select{background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:8px;color:var(--text);font-size:14px;font-family:inherit}
+.cols{display:flex;gap:12px;flex-wrap:wrap}.cols>.card{flex:1;min-width:300px}
+.err{color:var(--red);font-size:13px;margin-top:6px}
+nav{display:flex;gap:6px;padding:8px 16px;border-bottom:1px solid var(--border);flex-wrap:wrap;background:var(--bg);position:sticky;top:53px;z-index:4}
+nav button{background:var(--panel);color:var(--muted);border:1px solid var(--border);border-radius:10px;padding:9px 14px;font-weight:700;font-size:14px}
+nav button.on{color:#07090F;background:var(--gold);border-color:var(--gold)}
+nav button .bd{display:inline-block;min-width:20px;padding:0 6px;margin-inline-start:6px;border-radius:10px;background:var(--red);color:#fff;font-size:12px}
+table{width:100%;border-collapse:collapse;font-size:14px}th,td{padding:7px 6px;border-bottom:1px solid var(--border);text-align:start;vertical-align:top}
+th{color:var(--muted);font-weight:700;font-size:12px}.wrap{overflow-x:auto}
+.chip{display:inline-block;padding:2px 9px;border-radius:10px;font-size:12px;font-weight:700}
+.st-new{background:#3a2a08;color:var(--amber)}.st-working{background:#0c2340;color:#5aa8ff}.st-closed{background:#0c2a18;color:var(--green)}
+.ro .w{display:none}
+@media (max-width:600px){main{padding:12px}header h1{font-size:16px}nav{top:49px}}
+</style></head><body>
+<header><h1>🛰️ GlattTrack — מרכז השירות</h1><span id="who" class="n"></span>
+ <button class="ghost" id="bOut" style="display:none" onclick="logout()">יציאה</button></header>
+<nav id="tabs" style="display:none"></nav>
+<main id="main"></main>
+<script>
+const SC = window.SC_SERVER || {};
+let TOK = sessionStorage.getItem('sc_tok') || '', ME = { name:'', role:'' }, VIEW = 'overview', CUR = null, lastBad = new Set(), TF = 'open';
+const E = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const TXT = { no_report:'המפעל לא מדווח (אין אינטרנט / השרת כבוי)', standby_down:'שרת הגיבוי לא מחובר', standby_lag:'שרת הגיבוי מפגר',
+  backup_stale:'אין גיבוי מאומת', backup_unknown:'אין מידע על גיבוי', chain_broken:'יומן האירועים שבור', nightly_check_problems:'בדיקת הלילה מצאה בעיות',
+  nightly_check_fixed:'בדיקת הלילה תיקנה לבד', nightly_check_missing:'בדיקת הלילה לא רצה', ups_on_battery:'אין חשמל — על סוללה', ups_low_battery:'סוללת UPS כמעט ריקה',
+  devices_offline:'טאבלטים לא מחוברים', tablet_offline_while_working:'טאבלט מנותק בזמן עבודה', failed_logins:'הרבה כניסות שגויות',
+  revoked_device_writes:'מכשיר מנותק ניסה לכתוב', rollover_waiting:'האיפוס היומי ממתין', label_mismatch:'מדבקה שלא תואמת פסיקה',
+  test_mode_on:'מצב בדיקה פעיל', one_leader_device:'רק מכשיר ראש צוות אחד', leader_recovery_missing:'אין קוד שחזור לראש צוות',
+  standby_async:'השרת הראשי מאשר לבד', failover_recent:'השרת הוחלף השבוע', processing_days_open:'ימי עיבוד פתוחים', worker_lists_check:'לבדוק רשימות עובדים' };
+const tx = c => TXT[c] || c;
+const ROLE = { slaughter:'שחיטה', esophagus:'וושט', legs:'רגליים', inner:'פנים', outer:'חוץ', parts:'חלקים', stamps:'חותמות', display:'ספירה', leader:'ראש צוות',
+  cooler:'קולר', nikur:'מנקר', salting:'מליחה', shipping:'שיפינג' };
+async function raw(fn, args){
+  try{ const r = await fetch(SC.url + '/rest/v1/rpc/' + fn, { method:'POST', headers:Object.assign({ 'Content-Type':'application/json', apikey:SC.anonKey }, /^eyJ/.test(SC.anonKey||'') ? { Authorization:'Bearer ' + SC.anonKey } : {}), body: JSON.stringify(args || {}) });
+       return (await r.json()) || { ok:false, error:'network' }; }catch(e){ return { ok:false, error:'network' }; }
+}
+// "unauthorized" is either an expired session (→ the login) or a role that may not do this (→ stay, say so)
+async function rpc(fn, args){
+  const d = await raw(fn, args);
+  if(d && d.ok === false && d.error === 'unauthorized' && fn !== 'sc_login'){ const w = await raw('sc_whoami', { p_token: TOK }); if(!w.ok) logout(); else d.error = 'no_permission'; }
+  return d;
+}
+const RN = { admin:'מנהל', support:'תמיכה טכנית', finance:'כספים', viewer:'צפייה בלבד' };
+const CAN = { plants: r => ['admin','support','viewer'].includes(r), plantsW: r => ['admin','support'].includes(r), billing: r => ['admin','finance','viewer'].includes(r),
+              billingW: r => ['admin','finance'].includes(r), staff: r => r === 'admin', admin: r => r === 'admin' };
+const can = k => CAN[k](ME.role);
+const ERR = { no_permission:'אין הרשאה לפעולה הזאת', network:'אין חיבור לשרת', bad_value:'ערך לא תקין', code_too_short:'קוד קצר מדי (לפחות 10 תווים)',
+  code_taken:'הקוד / המספר תפוס', last_admin:'אי אפשר — זה המנהל האחרון', bad_id:'לא נמצא' };
+const er = e => ERR[e] || e;
+const dt = t => t ? new Date(t).toLocaleString('he-IL', { day:'2-digit', month:'2-digit', year:'2-digit', hour:'2-digit', minute:'2-digit' }) : '—';
+const money = (n, c) => (c || '₪') + ' ' + Number(n || 0).toLocaleString('he-IL', { maximumFractionDigits:2 });
+const main = () => document.getElementById('main');
+function chrome(on){
+  document.getElementById('bOut').style.display = on ? '' : 'none';
+  const t = document.getElementById('tabs'); t.style.display = on ? '' : 'none';
+  document.getElementById('who').textContent = on ? (ME.name + ' · ' + (RN[ME.role] || ME.role)) : '';
+  document.body.classList.toggle('ro', on && ME.role === 'viewer');
+  if(!on) return;
+  const T = [['overview','🏭 מפעלים','plants'],['tickets','🛠 תקלות','plants'],['billing','💰 חיובים','billing'],['staff','👥 צוות','staff'],['settings','⬆ עדכונים והגדרות','plants']];
+  t.innerHTML = T.filter(x => can(x[2])).map(x => `<button id="tab_${x[0]}" class="${VIEW===x[0]||(VIEW==='plant'&&x[0]==='overview')?'on':''}" onclick="go('${x[0]}')">${x[1]}<span class="bd" id="bd_${x[0]}" style="display:none"></span></button>`).join('');
+}
+function go(v){ ({ overview:showOverview, tickets:showTickets, billing:showBilling, staff:showStaff, settings:showSettings })[v](); }
+function mark(v){ VIEW = v; document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.id === 'tab_' + (v === 'plant' ? 'overview' : v))); }
+function home(){ if(can('plants')) showOverview(); else if(can('billing')) showBilling(); }
+function logout(){ TOK=''; ME={ name:'', role:'' }; sessionStorage.removeItem('sc_tok'); chrome(false); showLogin(); }
+function showLogin(){
+  main().innerHTML = `<div class="card" style="max-width:380px;margin:60px auto;text-align:center"><div class="t" style="margin-bottom:12px">כניסה לשירות לקוחות</div>
+    <input id="code" type="password" placeholder="קוד" style="width:100%" onkeydown="if(event.key==='Enter')doLogin()"><button class="btn" style="width:100%;margin-top:10px" onclick="doLogin()">כניסה</button><div id="lerr" class="err"></div></div>`;
+  setTimeout(()=>document.getElementById('code')?.focus(), 50);
+}
+async function doLogin(){
+  const d = await rpc('sc_login', { p_code: document.getElementById('code').value });
+  if(!d.ok){ document.getElementById('lerr').textContent = d.error === 'rate_limited' ? 'יותר מדי ניסיונות — לחכות 15 דקות' : 'קוד שגוי'; return; }
+  TOK = d.token; sessionStorage.setItem('sc_tok', TOK); ME = { name: d.name, role: d.role || 'admin' }; chrome(true); home();
+}
+function beep(){ try{ const c=new (window.AudioContext||window.webkitAudioContext)(), o=c.createOscillator(), g=c.createGain(); o.frequency.value=880; o.connect(g); g.connect(c.destination); g.gain.value=.2; o.start(); setTimeout(()=>{o.stop(); c.close();}, 600); }catch(e){} }
+async function showOverview(){
+  mark('overview'); CUR=null;
+  const d = await rpc('sc_overview', { p_token: TOK }); if(!d.ok){ main().innerHTML = '<div class="err">' + E(er(d.error)) + '</div>'; return; }
+  const openT = P => P.reduce((n, p) => n + (p.openTickets|0), 0);
+  const P = d.plants || [], c = { ok:0, warn:0, bad:0 }; P.forEach(p => c[p.level] = (c[p.level]||0) + 1);
+  const upToDate = d.release ? P.filter(p => p.appVersion === d.release).length : null;
+  const bad = new Set(P.filter(p => p.level === 'bad').map(p => p.code)); if([...bad].some(x => !lastBad.has(x))) beep(); lastBad = bad;
+  main().innerHTML = `<div class="tiles"><div class="tile"><b class="g">${c.ok}</b><span class="n">תקין</span></div><div class="tile"><b class="a">${c.warn}</b><span class="n">לטפל היום</span></div>
+    <div class="tile"><b class="r">${c.bad}</b><span class="n">בעיה עכשיו</span></div><div class="tile"><b>${E(d.release || '—')}</b><span class="n">גרסה אחרונה${upToDate!=null?' · '+upToDate+'/'+P.length+' מעודכנים':''}</span></div></div>
+    <div class="grid">${P.map(p => `<div class="pl ${p.level}" onclick="showPlant('${E(p.code)}')"><div class="t">#${E(p.code)} · ${E(p.name)}<span class="dot"></span></div>
+      <div class="n">${p.problems && p.problems.length ? '⚠ ' + p.problems.map(tx).map(E).join(' · ') : 'תקין'}</div>
+      <div class="n">עובד עכשיו: ${p.working ? 'כן' : 'לא'} · ${E(p.appVersion || '?')} · ${p.reportedAt ? new Date(p.reportedAt).toLocaleTimeString('he-IL') : 'לא דיווח'}</div>
+      ${p.openTickets ? `<div class="n a">🛠 ${p.openTickets} תקלות פתוחות</div>` : ''}</div>`).join('') || '<div class="n">אין מפעלים — מוסיפים ב"עדכונים והגדרות"</div>'}</div>`;
+  badge('tickets', openT(P));
+}
+const row = (k, v, cls) => `<div class="row"><span>${E(k)}</span><span class="${cls||''}">${E(v)}</span></div>`;
+async function showPlant(code){
+  mark('plant'); CUR=code;
+  const d = await rpc('sc_plant', { p_token: TOK, p_code: code }); if(!d.ok){ main().innerHTML = '<div class="err">' + E(er(d.error)) + '</div>'; return; }
+  const tk = await rpc('sc_tickets', { p_token: TOK }); const myT = ((tk && tk.tickets) || []).filter(t => t.code === code);
+  const r = d.report || {}, sv = r.server || {}, bk = r.backup || {}, ng = r.nightly || null, ch = r.eventChain || {}, sec = r.security || {};
+  const st = (sv.standbys || []).find(s => s.state === 'streaming');
+  let h = `<div class="t" style="font-size:20px;margin-bottom:10px">#${E(d.code)} · ${E(d.name)} <span class="dot ${E(d.level||'bad')}"></span>
+     <span class="n">דיווח אחרון: ${d.reportedAt ? new Date(d.reportedAt).toLocaleString('he-IL') : '—'}</span></div><div class="cols"><div class="card"><div class="t" style="color:var(--gold);margin-bottom:6px">מצב השרת</div>`;
+  h += row('שרת ראשי', sv.role === 'primary' ? '✓ עונה' : (sv.role || '?'), sv.role === 'primary' ? 'g' : 'a');
+  h += row('שרת גיבוי', (r.attention||[]).includes('standby_down') ? '✕ לא מחובר' : st ? '✓ מחובר' : 'אין', (r.attention||[]).includes('standby_down') ? 'r' : 'g');
+  const BK = { unknown:'אין מידע', stale:'ישן — ' + bk.ageHours + ' שעות', failed:'הבדיקה האחרונה נכשלה', never:'אין גיבוי מאומת' };
+  h += row('גיבוי', bk.status === 'ok' ? '✓ לפני ' + bk.ageHours + ' שעות' : (BK[bk.status] || bk.status || '?'), bk.status === 'ok' ? 'g' : (bk.status === 'unknown' ? 'a' : 'r'));
+  h += row('בדיקת לילה', ng ? ((ng.problems||[]).length ? (ng.problems.length + ' בעיות') : '✓ תקין') : 'לא רצה', ng && !(ng.problems||[]).length ? 'g' : 'r');
+  if(ng && (ng.problems||[]).length) h += '<div class="n r" style="padding:4px 0">' + ng.problems.map(E).join('<br>') + '</div>';
+  h += row('יומן האירועים', ch.ok ? '✓' : '✕ שבור', ch.ok ? 'g' : 'r');
+  h += row('כניסות שגויות (24 ש׳)', sec.failedLogins24h|0, (sec.failedLogins24h|0) >= 10 ? 'r' : 'g');
+  h += row('גרסת המפעל', r.appVersion || '?'); h += row('עובד עכשיו', r.working ? 'כן' : 'לא');
+  h += `</div><div class="card"><div class="t" style="color:var(--gold);margin-bottom:6px">טאבלטים</div>`;
+  (r.tablets || []).forEach(t => { h += row((ROLE[t.role] || t.role) + (t.index ? ' ' + (t.index+1) : ''), (t.online ? '● מחובר' : '○ מנותק') + ' · ' + (t.version || '?'), t.online ? 'g' : 'r'); });
+  h += `<div class="w" style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+      <button class="btn" onclick="cmd('restart_standby')">🔄 הפעל מחדש את שרת הגיבוי</button><button class="ghost" onclick="cmd('reload_tablets')">♻ רענן טאבלטים</button>
+      <button class="ghost" onclick="cmd('update_now')">⬆ עדכן מפעל זה</button><button class="ghost" onclick="cmd('run_nightly_check')">🩺 הרץ בדיקת לילה</button></div>
+      <div class="n w" style="margin-top:6px">הפקודה מתבצעת בדיווח הבא של המפעל (עד 5 דקות). רענון / עדכון של טאבלט לא מפריע לעבודה — טאבלט בשימוש שואל את העובד.</div></div></div>`;
+  h += `<div class="cols"><div class="card"><div class="t" style="color:var(--gold);margin-bottom:6px">התראות</div>${(d.alerts||[]).map(a => row(new Date(a.created_at).toLocaleString('he-IL') + ' · ' + tx(a.text), a.resolved_at ? '✓ נסגר' : 'פתוח', a.resolved_at ? 'g' : (a.level === 'bad' ? 'r' : 'a'))).join('') || '<div class="n">אין</div>'}</div>
+     <div class="card"><div class="t" style="color:var(--gold);margin-bottom:6px">פקודות</div>${(d.commands||[]).map(c => row(new Date(c.created_at).toLocaleString('he-IL') + ' · ' + c.cmd, c.done_at ? (c.result || '✓') : (c.delivered_at ? 'נשלח למפעל' : 'ממתין'))).join('') || '<div class="n">אין</div>'}</div></div>`;
+  const b = d.bill;
+  h += `<div class="cols"><div class="card"><div class="t" style="color:var(--gold);margin-bottom:6px">🛠 תקלות של המפעל (${myT.filter(t => t.status !== 'closed').length} פתוחות)</div>${ticketRows(myT, false)}</div>
+     ${b ? `<div class="card"><div class="t" style="color:var(--gold);margin-bottom:6px">💰 החודש (${E(b.month)})</div>
+       ${row('בהמות', Number(b.animals).toLocaleString('he-IL'))}${row('ק"ג', Number(b.kg).toLocaleString('he-IL'))}
+       ${row('שיטת חיוב', MODE[b.mode] + ' · ' + money(b.rate, b.currency) + (b.monthlyMin ? ' · מינימום ' + money(b.monthlyMin, b.currency) : ''))}
+       ${row('לתשלום', money(b.amount, b.currency), 'a')}${row('שולם', b.paid ? '✓ כן' : 'עדיין לא', b.paid ? 'g' : 'r')}</div>` : ''}</div>`;
+  main().innerHTML = h;
+}
+// ── the tickets: every problem report of every plant (a station's "report a problem" or the team leader's) ──
+const ST = { new:'חדש', working:'בטיפול', closed:'טופל' };
+const SRC = t => t.source === 'leader' ? 'ראש צוות' : ('מסך ' + (ROLE[t.screen] || t.screen || ''));
+function ticketRows(T, withPlant){
+  if(!T.length) return '<div class="n">אין</div>';
+  return `<div class="wrap"><table><tr>${withPlant ? '<th>מפעל</th>' : ''}<th>מתי</th><th>מי</th><th>התקלה</th><th>מצב</th><th>מטפל</th><th class="w"></th></tr>` + T.map(t => {
+    const id = E(t.code) + '|' + E(t.key), notes = (t.notes || []).map(n => `<div class="n">↩ ${E(dt(n.at))} · ${E(n.by)}: ${E(n.text)}</div>`).join('');
+    return `<tr>${withPlant ? `<td><a href="#" onclick="showPlant('${E(t.code)}');return false" style="color:var(--gold)">#${E(t.code)} ${E(t.plant)}</a></td>` : ''}
+      <td style="white-space:nowrap">${E(dt(t.at))}</td><td>${E(SRC(t))}</td><td>${E(t.message)}${notes}</td>
+      <td><span class="chip st-${E(t.status)}">${E(ST[t.status] || t.status)}</span></td><td>${E(t.assignee || '—')}</td>
+      <td class="w" style="white-space:nowrap">${t.status !== 'working' ? `<button class="ghost" onclick="tset('${id}','working')">קח לטיפול</button> ` : ''}
+        ${t.status !== 'closed' ? `<button class="ghost" onclick="tset('${id}','closed')">✓ טופל</button> ` : ''}<button class="ghost" onclick="tset('${id}',null)">✎ תשובה</button></td></tr>`; }).join('') + '</table></div>';
+}
+async function tset(id, status){
+  const [code, key] = id.split('|');
+  const note = prompt(status === 'closed' ? 'מה עשית? (המפעל רואה את התשובה)' : status ? 'הערה (לא חובה — המפעל רואה אותה)' : 'תשובה למפעל:', '');
+  if(note === null) return; if(!status && !note.trim()) return;
+  const d = await rpc('sc_ticket_set', { p_token: TOK, p_code: code, p_key: key, p_status: status, p_note: note.trim() || null, p_assignee: status === 'working' ? ME.name : null });
+  if(!d.ok) alert('נכשל: ' + er(d.error));
+  if(VIEW === 'plant') showPlant(CUR); else showTickets();
+}
+async function showTickets(){
+  mark('tickets');
+  const d = await rpc('sc_tickets', { p_token: TOK }); if(!d.ok){ main().innerHTML = '<div class="err">' + E(er(d.error)) + '</div>'; return; }
+  const T = d.tickets || [], f = { open: t => t.status !== 'closed', new: t => t.status === 'new', working: t => t.status === 'working', closed: t => t.status === 'closed', all: () => true };
+  const n = k => T.filter(f[k]).length; badge('tickets', n('open'));
+  const fb = (k, l) => `<button class="${TF===k?'btn':'ghost'}" onclick="TF='${k}';showTickets()">${l} (${n(k)})</button>`;
+  main().innerHTML = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">${fb('open','פתוחות')}${fb('new','חדשות')}${fb('working','בטיפול')}${fb('closed','טופלו (30 יום)')}${fb('all','הכל')}</div>
+    <div class="card">${ticketRows(T.filter(f[TF]), true)}</div>
+    <div class="n">כל דיווח בעיה ממסך במפעל וכל דיווח של ראש צוות מגיע לכאן בדיווח הבא של המפעל (עד 5 דקות). המפעל רואה את המצב ואת התשובה במסך ראש הצוות → תקלות.</div>`;
+}
+function badge(v, n){ const b = document.getElementById('bd_' + v); if(b){ b.textContent = n; b.style.display = n ? '' : 'none'; } }
+// ── billing: per plant, chosen per plant — by kg / by animal / a fixed monthly sum; a monthly minimum ──
+const MODE = { kg:'לפי ק"ג', animal:'לפי בהמה', monthly:'סכום חודשי קבוע' };
+let BM = new Date().toISOString().slice(0, 7), BROWS = [];
+async function showBilling(){
+  mark('billing');
+  const d = await rpc('sc_billing', { p_token: TOK, p_month: BM }); if(!d.ok){ main().innerHTML = '<div class="err">' + E(er(d.error)) + '</div>'; return; }
+  BROWS = d.rows || []; const w = can('billingW');
+  const tot = {}; BROWS.forEach(r => { tot[r.currency] = (tot[r.currency] || 0) + Number(r.amount || 0); });
+  const unpaid = BROWS.filter(r => !r.paid && Number(r.amount) > 0).length;
+  main().innerHTML = `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px"><span class="t">חודש</span>
+      <input type="month" value="${E(BM)}" onchange="BM=this.value;showBilling()"><button class="ghost" onclick="csv()">⬇ ייצוא ל-Excel (CSV)</button></div>
+    <div class="tiles"><div class="tile"><b>${Object.keys(tot).map(c => E(money(tot[c], c))).join('<br>') || '—'}</b><span class="n">סה"כ לחודש</span></div>
+      <div class="tile"><b class="${unpaid ? 'r' : 'g'}">${unpaid}</b><span class="n">מפעלים שלא שילמו</span></div></div>
+    <div class="card wrap"><table><tr><th>מפעל</th><th>בהמות</th><th>ק"ג</th><th>שיטת חיוב</th><th>תעריף</th><th>מינימום חודשי</th><th>מטבע</th><th>לתשלום</th><th>שולם</th>${w ? '<th></th>' : ''}</tr>
+    ${BROWS.map((r, i) => `<tr><td>#${E(r.code)} ${E(r.name)}</td><td>${Number(r.animals).toLocaleString('he-IL')}</td><td>${Number(r.kg).toLocaleString('he-IL')}</td>
+      <td>${w ? `<select id="bm${i}">${Object.keys(MODE).map(k => `<option value="${k}" ${r.mode===k?'selected':''}>${MODE[k]}</option>`).join('')}</select>` : E(MODE[r.mode])}</td>
+      <td>${w ? `<input id="br${i}" type="number" step="0.001" min="0" value="${E(r.rate)}" style="width:90px">` : E(r.rate)}</td>
+      <td>${w ? `<input id="bn${i}" type="number" step="1" min="0" value="${E(r.monthlyMin)}" style="width:90px">` : E(r.monthlyMin)}</td>
+      <td>${w ? `<select id="bc${i}">${['₪','$','€','£'].map(c => `<option ${r.currency===c?'selected':''}>${c}</option>`).join('')}</select>` : E(r.currency)}</td>
+      <td><b>${E(money(r.amount, r.currency))}</b></td>
+      <td>${w ? `<label><input type="checkbox" ${r.paid?'checked':''} onchange="paid(${i},this.checked)"> ${r.paid?'✓':'לא'}</label>` : (r.paid ? '<span class="g">✓</span>' : '<span class="r">לא</span>')}</td>
+      ${w ? `<td><button class="ghost" onclick="bset(${i})">שמור</button></td>` : ''}</tr>`).join('') || '<tr><td colspan="10" class="n">אין מפעלים</td></tr>'}</table>
+    <div id="berr" class="err"></div></div>
+    <div class="n">הכמויות מגיעות מהמפעל עצמו (בהמות שנשחטו וק"ג שנשקלו בכל יום). לפי ק"ג: ק"ג × תעריף · לפי בהמה: בהמות × תעריף · חודשי: התעריף הוא הסכום. אם יצא פחות מהמינימום — משלמים את המינימום.</div>`;
+}
+async function bset(i){
+  const r = BROWS[i], v = id => document.getElementById(id + i).value;
+  const d = await rpc('sc_billing_set', { p_token: TOK, p_code: r.code, p_mode: v('bm'), p_rate: Number(v('br')), p_monthly_min: Number(v('bn') || 0), p_currency: v('bc') });
+  if(!d.ok){ document.getElementById('berr').textContent = 'לא נשמר — ' + er(d.error); return; } showBilling();
+}
+async function paid(i, on){ const d = await rpc('sc_paid_set', { p_token: TOK, p_code: BROWS[i].code, p_month: BM, p_paid: on }); if(!d.ok) alert('נכשל: ' + er(d.error)); showBilling(); }
+function csv(){
+  const q = x => '"' + String(x == null ? '' : x).replace(/"/g, '""') + '"';
+  const lines = [['מפעל','שם','חודש','בהמות','ק"ג','שיטה','תעריף','מינימום','מטבע','לתשלום','שולם'].map(q).join(',')]
+    .concat(BROWS.map(r => [r.code, r.name, BM, r.animals, r.kg, MODE[r.mode], r.rate, r.monthlyMin, r.currency, r.amount, r.paid ? 'כן' : 'לא'].map(q).join(',')));
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['\ufeff' + lines.join('\r\n')], { type:'text/csv;charset=utf-8' }));
+  a.download = 'glatttrack-billing-' + BM + '.csv'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+// ── the staff: who works in the support center, with what role; everything they do is recorded ──
+async function showStaff(){
+  mark('staff');
+  const d = await rpc('sc_staff_list', { p_token: TOK }); if(!d.ok){ main().innerHTML = '<div class="err">' + E(er(d.error)) + '</div>'; return; }
+  const ro = r => Object.keys(RN).map(k => `<option value="${k}" ${r===k?'selected':''}>${RN[k]}</option>`).join('');
+  main().innerHTML = `<div class="cols"><div class="card"><div class="t" style="color:var(--gold);margin-bottom:6px">👥 הצוות</div><div class="wrap"><table><tr><th>שם</th><th>תפקיד</th><th>פעיל</th><th>נוסף</th></tr>
+      ${(d.staff || []).map(s => `<tr><td>${E(s.name)}</td><td><select onchange="sset('${E(s.id)}',this.value,null)">${ro(s.role)}</select></td>
+        <td><label><input type="checkbox" ${s.active?'checked':''} onchange="sset('${E(s.id)}',null,this.checked)"> ${s.active?'כן':'לא'}</label></td><td>${E(dt(s.createdAt))}</td></tr>`).join('')}</table></div>
+      <div id="serr" class="err"></div>
+      <div class="n" style="margin-top:8px">מנהל — הכל · תמיכה טכנית — מפעלים, תקלות, פקודות, עדכונים (בלי חיובים וצוות) · כספים — חיובים בלבד · צפייה בלבד — רואה הכל, לא משנה כלום.</div></div>
+    <div class="card"><div class="t" style="color:var(--gold);margin-bottom:6px">➕ איש צוות חדש</div>
+      <div class="row"><input id="sn" placeholder="שם" style="flex:1"><select id="sr">${ro('support')}</select></div>
+      <div class="row"><input id="sc" type="password" placeholder="קוד כניסה (לפחות 10 תווים)" style="flex:1" autocomplete="new-password"></div>
+      <button class="btn" style="margin-top:10px" onclick="sadd()">הוסף</button><div id="aerr" class="err"></div></div></div>
+    <div class="card"><div class="t" style="color:var(--gold);margin-bottom:6px">📜 מי עשה מה (100 אחרונים)</div><div class="wrap"><table><tr><th>מתי</th><th>מי</th><th>מה</th><th>פרטים</th></tr>
+      ${(d.audit || []).map(a => `<tr><td style="white-space:nowrap">${E(dt(a.at || a.created_at))}</td><td>${E(a.who)}</td><td>${E(a.action)}</td><td class="n" style="direction:ltr;text-align:left">${E(a.code ? '#' + a.code + ' ' : '')}${E(JSON.stringify(a.detail || {}).slice(0, 160))}</td></tr>`).join('') || '<tr><td colspan="4" class="n">אין</td></tr>'}</table></div></div>`;
+}
+async function sadd(){
+  const d = await rpc('sc_staff_add', { p_token: TOK, p_name: document.getElementById('sn').value.trim(), p_code: document.getElementById('sc').value, p_role: document.getElementById('sr').value });
+  if(!d.ok){ document.getElementById('aerr').textContent = 'לא נוסף — ' + er(d.error); return; } showStaff();
+}
+async function sset(id, role, active){ const d = await rpc('sc_staff_set', { p_token: TOK, p_id: id, p_role: role, p_active: active }); if(!d.ok) alert('נכשל: ' + er(d.error)); showStaff(); }
+async function cmd(c){ const d = await rpc('sc_command_add', { p_token: TOK, p_code: CUR, p_cmd: c }); if(!d.ok) alert('נכשל: ' + er(d.error)); showPlant(CUR); }
+async function showSettings(){
+  mark('settings');
+  const n = await rpc('sc_notify_get', { p_token: TOK }); const s = (n && n.settings) || {};
+  const ch = (k, name, ph) => `<div class="row"><label><input type="checkbox" id="on_${k}" ${s[k]&&s[k].on?'checked':''}> ${name}</label>
+     <input id="to_${k}" style="flex:1;max-width:420px" placeholder="${ph}" value="${E(((s[k]&&s[k].to)||[]).join(', '))}"></div>`;
+  main().innerHTML = `<div class="cols"><div class="card"><div class="t" style="color:var(--gold);margin-bottom:6px">🔔 התראות — לבחור ערוצים</div>
+      ${ch('email','מייל','support@company.com, ...')}${ch('sms','SMS','+972501234567, ...')}${ch('whatsapp','וואטסאפ','+972501234567, ...')}
+      <div class="row"><span>מאיזו רמה</span><select id="minLevel"><option value="bad" ${s.minLevel!=='warn'?'selected':''}>רק אדום (בעיה עכשיו)</option><option value="warn" ${s.minLevel==='warn'?'selected':''}>גם כתום (לטפל היום)</option></select></div>
+      <button class="btn w" style="margin-top:10px" onclick="saveNotify()">שמור</button><div id="nerr" class="err"></div>
+      <div class="n" style="margin-top:6px">השליחה עצמה: notify.sh (פרטי שרת המייל ו-Twilio בקובץ notify.env).</div></div>
+    <div class="card" style="${can('admin')?'':'display:none'}"><div class="t" style="color:var(--gold);margin-bottom:6px">➕ מפעל חדש</div>
+      <div class="row"><input id="pc" placeholder="מספר (3–8 ספרות)"><input id="pn" placeholder="שם המפעל" style="flex:1"></div>
+      <button class="btn" style="margin-top:10px" onclick="addPlant()">הוסף</button><div id="perr" class="err"></div><div id="psec"></div></div></div>
+    <div class="card w"><div class="t" style="color:var(--gold);margin-bottom:6px">⬆ שלח עדכון לכל המפעלים</div>
+      <div class="row"><input id="rv" placeholder="גרסה, למשל v10.36"><input id="ru" placeholder="https://.../kosher-app.html" style="flex:1"><input id="rs" placeholder="sha256 של הקובץ" style="flex:1"></div>
+      <div class="row"><span class="n">חלק שרת (02, לא חובה)</span><input id="qu" placeholder="https://.../02.sql" style="flex:1"><input id="qs" placeholder="sha256" style="flex:1"></div>
+      <button class="btn" style="margin-top:10px" onclick="release()">שלח לכל המפעלים</button><div id="rerr" class="err"></div>
+      <div class="n" style="margin-top:6px">כל מפעל מוריד, בודק את ה-sha256, מריץ את 02 ואת בדיקת האבטחה (03) — ורק אם עברה, הטאבלטים מקבלים את הגרסה. חלק שרת מותקן רק כשאף אחד לא עובד. בלי אישור ראש צוות.</div></div>`;
+}
+const list = id => document.getElementById(id).value.split(',').map(x => x.trim()).filter(Boolean);
+async function saveNotify(){
+  const p = { minLevel: document.getElementById('minLevel').value };
+  ['email','sms','whatsapp'].forEach(k => p[k] = { on: document.getElementById('on_'+k).checked, to: list('to_'+k) });
+  const d = await rpc('sc_notify_set', { p_token: TOK, p_settings: p });
+  document.getElementById('nerr').textContent = d.ok ? '✓ נשמר' : ('לא נשמר — ' + (d.channel ? ({email:'מייל',sms:'SMS',whatsapp:'וואטסאפ'})[d.channel] + ': כתובת לא תקינה' : er(d.error)));
+}
+async function addPlant(){
+  const d = await rpc('sc_plant_add', { p_token: TOK, p_code: document.getElementById('pc').value.trim(), p_name: document.getElementById('pn').value.trim() });
+  document.getElementById('perr').textContent = d.ok ? '' : (d.error === 'code_taken' ? 'המספר תפוס' : d.error === 'no_permission' ? er(d.error) : 'מספר 3–8 ספרות ושם');
+  if(d.ok) document.getElementById('psec').innerHTML = `<div class="card" style="margin-top:10px;border-color:var(--gold)">הסוד של מפעל #${E(d.code)} — <b>מוצג פעם אחת בלבד</b>. להעתיק לקובץ gt-plant.conf של שרת המפעל:<br>
+     <code dir="ltr" style="display:block;margin-top:6px;font-size:14px">GT_PLANT_CODE=${E(d.code)}<br>GT_PLANT_SECRET=${E(d.secret)}</code></div>`;
+}
+async function release(){
+  const g = id => document.getElementById(id).value.trim() || null;
+  if(!confirm('לשלוח את הגרסה ' + (g('rv')||'') + ' לכל המפעלים?')) return;
+  const d = await rpc('sc_release_set', { p_token: TOK, p_version: g('rv'), p_app_url: g('ru'), p_app_sha256: g('rs'), p_sql_url: g('qu'), p_sql_sha256: g('qs') });
+  document.getElementById('rerr').textContent = d.ok ? '✓ נשלח — המפעלים יתעדכנו בדיווח הבא' : 'לא נשלח — צריך גרסה, כתובת https ו-sha256 (64 תווים)';
+}
+setInterval(() => { if(!TOK) return; if(VIEW === 'overview') showOverview(); else if(VIEW === 'plant' && CUR) showPlant(CUR); else if(VIEW === 'tickets') showTickets(); }, 30000);
+(async () => { if(!TOK) return showLogin(); const w = await raw('sc_whoami', { p_token: TOK }); if(!w.ok) return logout(); ME = { name: w.name, role: w.role }; chrome(true); home(); })();
+</script></body></html>

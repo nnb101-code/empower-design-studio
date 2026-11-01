@@ -1,0 +1,6 @@
+[Unit]
+Description=GlattTrack nightly check before work (fixes what is safe, reports the rest)
+After=postgresql.service
+[Service]
+Type=oneshot
+ExecStart=/opt/glatttrack/plant-server/nightly-check.sh

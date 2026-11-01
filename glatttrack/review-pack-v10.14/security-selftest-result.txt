@@ -1,0 +1,203 @@
+BEGIN
+SET
+SET
+CREATE TABLE
+CREATE TABLE
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+DO
+DO
+DO
+DO
+DO
+DO
+DO
+DO
+DO
+DO
+DO
+DO
+DO
+DO
+DO
+DO
+DO
+DO
+DO
+DO
+DO
+DO
+DO
+DO
+DO
+DO
+DO
+DO
+DO
+DO
+DO
+DO
+DO
+DO
+DO
+DO
+DO
+DO
+DO
+DO
+DO
+DO
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  ====================================================================================================
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  GlattTrack security self-test  (schema step 46)
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  ====================================================================================================
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  switch: test mode is OFF (default)
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  protection cannot be switched off (flags ignored)
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  server_test_mode(): anyone may read it, answers the SQL-only flag (off/on/off)
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  retired tablet cannot mutate
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  unpaired tablet / counter screen cannot mutate
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  invalid device key rejected (device_not_paired)
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  revoked device key rejected
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  forged device id cannot authorize (device_not_paired); a tablet is always itself
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  wrong station cannot mutate
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  direct INSERT/UPDATE on animals_pilot, INSERT on events_pilot, UPDATE devices_pilot: permission denied
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  animal_push applies whitelisted columns and reports the others
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  animal_push: bad id / bad rows / bad value; a failing batch applies nothing
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  expired team-leader session rejected
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  fake team-leader session rejected
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  team-leader login: 10 hours, device + app session recorded
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  team-leader session from another device / no device / another app session: rejected
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  team-leader session: bound to the first app session, not re-bound by another
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  fail closed: protection switches in system_flags are ignored
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  team leader, test mode OFF: no ruling anywhere (claim/push/eso/rabbinate/open/lung)
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  owner / manufacturer sessions: no ruling rights
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  test mode cannot be switched on through the API
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  team leader, test mode ON: acts as a station (own rulings only, no override)
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  conflicting claims from two devices: exactly one wins
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  same-device same-value retry → claimed:true duplicate; another value → not claimed
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  duplicate retry with the same command id: stored answer, not executed again; other device: conflict
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  stale board day refused; a future day is stored as today's
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  correction by the same tablet right away: allowed
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  correction after the tablet moved on: refused (moved_on, server row returned)
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  moved on is judged by time: a late animal can be ruled and corrected right away; the higher one is locked
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  correction by another tablet / station: refused (correction_not_allowed)
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  refused corrections are logged (event log + brake counter)
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  correction after a later stage acted: refused
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  outer correction after print / stamp / legs sort: refused (stickers only: allowed)
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  lung check: abandon by its tablet only; 10-minute takeover works
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  inner takeover: the tablet that lost the check is refused (claim + push), B's state kept, refusal recorded
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  rabbinate send by inner / slaughter / team leader / a plain push: refused
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  rabbinate send by an outer station: allowed (command id replay, stale day, bad id)
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  a "not chalak" animal (slaughter / inner / outer) can only be ruled kosher or treif; ruled → can't be sent
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  pairing into a taken slot without replace: slot_taken
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  replacement: the old key is dead; old + new device events share one replacement_id
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  device_pair with p_replace still works (new device holds the slot)
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  one device per station slot (unique index)
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  event_append: device + worker from the server, duplicate event id = ok, bad event refused
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  reads: a station sees only its own device row and no events; team leader all; manufacturer only with support access
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  reads: owner sees devices / events / device log; a station still sees the whole board
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  live updates: a station's app session sees only its own device row; anonymous nothing
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  legacy tables: no access (plants: an empty answer for the start-up probe)
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  push_settings rejects wrong value shapes (bad_settings + key)
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  push_settings accepts the value shapes the app writes
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  a station's own keys (problem reports / reprint log) still go through
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  device lifecycle audited: rename / retire / reactivate / unpair / key revoke (with who)
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  device audit write fails → the operation fails (unpair / rename undone)
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  manufacturer / support actions write an audit row (who, action, target, time)
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  refused corrections: logged and braked per device (10 in 10 min → rate_limited)
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  manufacturer login: braked (6 per hour) and audited; team-leader login unaffected
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  invalid slaughter / inner / outer / eso / role / weight values rejected
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  worker codes are stored only as hashes
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  push_settings stores a worker code hashed
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  worker login: wrong code rejected
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  worker login: wrong station / unpaired tablet rejected
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  worker login through a team-leader session: only in test mode
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  worker login: right code gives a session
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  ruling records the verified worker name (another name → marked (?))
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  unverified names are marked (?) / default name when no login
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  worker logout ends the session
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  unpairing a tablet ends its worker sessions
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  worker login: guessing is rate-limited
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  event chain intact before the test
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  event log: a tablet cannot change an event
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  event log: a tablet cannot run the full chain check
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  event chain: a modified event is detected
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  event chain: a deleted event is detected
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  event chain: reordered events are detected
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  archive_days: nci / nco apart, nc = either
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  chaos (a): after an inner takeover, the old tablet's queued commands (old command ids) are refused, B's check kept
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  chaos (b): the old tablet resending a command id it already used gets the stored answer; nothing changes
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  test mode ON: switch-on time recorded + audited; info answers 8 hours left
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  chaos (f): test mode switched on 9 hours ago → off: the team leader cannot rule, server_test_mode false, flag set off + audited
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  reason_required: device replace / retire / reactivate / unpair without a reason are refused (normal pairing + rename need none); the reason is logged
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  reason_required: support access open / billing / force reload / manufacturer settings without a reason are refused (closing access needs none); the reason is audited
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  system_health: team leader / owner only; all sections; no backup ever on this server = info backup_unknown (not attention)
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  system_health: backup never / verified / older than 26 h / failed after the last good one
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  system_health: test mode on / writes with a revoked or retired key (counted) / a changed event → attention
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  daily reset twice: each ok, new day each time, board + cursors empty, old day refused
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  automatic rollover runs at most once per plant day
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  a tablet cannot reset the day
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  chaos (c): the daily reset after a takeover: board, cursors, takeover state and outer locks are gone
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  chaos (e): commands queued with the previous day (claim / push / eso / open / rabbinate) → stale_board; an old command id changes nothing
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  chaos (d): two automatic rollovers for one plant date → one new day; two manual resets → two new days, each archives its board
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  step 46 order: a number not slaughtered reaches no station (inner / outer / esophagus / rabbinate / stamps / legs)
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  step 46 order: slaughter → inner confirmed → outer; treif inside / nevela / shot go no further (claim + push)
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  step 46 order: esophagus on → lungs wait for it; a nevela from the esophagus after the lungs is refused (claim + offline push)
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  step 46 stations: inner tablet → inner only, outer tablet → outer only; rabbinate send only after the lungs
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  step 46 team leader: a status an animal carries keeps its kosher mark and cannot be deleted; names / colors / unused statuses change
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  step 46 manufacturer: printers yes; statuses / workers / login modes / kashrut switches ignored
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  step 46 days: the reset empties the screens and keeps day A's unfinished processing (board, archive link, audit)
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  step 46 days: no skipping — today waits until day A is done for that station; each station moves on by itself
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  step 46 days: two kept days in order; a day done for every station goes back into its archive row
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  step 46 days: the team leader closes a kept day for a station only with a reason (audited); a tablet cannot
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  step 46 rollover: never during work, never with a slaughtered animal short of its last ruling (health: rollover_waiting)
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  step 46 manual reset: stops while slaughtered animals lack their last ruling (numbers given); only with a written reason, audited
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  step 46 worker login: a code kept as plain text is not accepted (hashes only)
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  step 46 kept boards: write / claim / close / archive all take the per-board lock
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  step 46 time-only: moving a ruling's time keeps it and the "last animal" cursor — the correction after moving on stays refused
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  step 46 time-only: outer after print, from another station, slaughter after the lungs, inner after outer — time kept; a real correction right away still works
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  step 46 archive: each archived day keeps the status definitions it was ruled with
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  step 46 first team leader: through the app only with the setup code (none configured → refused; dashes / case do not matter); 6 characters; one time
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  step 46 team-leader / owner codes: fewer than 6 characters refused
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  step 46 statuses: two statuses with the same key are refused
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  step 46 reset lock: every writer of today's board takes the shared reset lock; the reset takes it exclusively
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  step 46 team-leader device: before the first one any device may log in; the first is paired from that session, which moves onto it
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  step 46 team-leader device: a team leader logs in only on a team-leader device (unpaired / station refused, counted, recorded); the session works only there
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  step 46 team-leader device: no ruling, no station writes, no worker login on its own
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  step 46 team-leader device: more than one may be paired; unpairing one ends the sessions made on it
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  step 46 team-leader device: removing every one does not reopen the door; the last one lost → only leader_device_recovery() from the server, which disconnects it (key, sessions)
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  step 46 accounts: no team leader is added or removed through the app (team leader, owner, manufacturer)
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  step 46 accounts: team leaders added / removed only on the server (recorded); never the last one
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  step 46 accounts: the team leader adds / removes owner accounts; the owner cannot (he only sees the list)
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  step 46 owner: view only — every changing function refuses an owner session (settings, reset, processing day, support access, devices, accounts, rulings)
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  step 46 worker lists per screen: an inner inspector cannot log in at the outer screen, a legs worker not at stamps; the same person on two lists can
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  step 46 worker lists: the old shared lists (inspector / supervisor) are refused
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  step 46 owner / view-only manufacturer on every station tablet: no ruling, no station write, no settings (the tablet alone still works)
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  step 46 the owner / manufacturer cannot log in from a station tablet (elsewhere the owner can)
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  step 46 a pairing request alone makes no station; recovery disconnects every team-leader device (keys, sessions, flag)
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  PASS  ACTIVE security surface matches the expected manifest (triggers, policies, grants, definer settings)
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  ----------------------------------------------------------------------------------------------------
+psql:/tmp/claude-0/-home-user-empower-design-studio/06c4aedb-db52-572d-8138-c8b7bb75ea95/scratchpad/glatttrack-review-pack-v10.14/security-selftest.sql:2181: NOTICE:  125 checks, 125 passed, 0 failed  (nothing was changed — all rolled back)
+DO
+ROLLBACK

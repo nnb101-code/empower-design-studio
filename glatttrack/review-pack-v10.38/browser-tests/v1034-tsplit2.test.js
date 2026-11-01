@@ -1,0 +1,10 @@
+const { chromium } = require('/opt/node22/lib/node_modules/playwright'); const fs=require('fs');
+const APP='/home/user/empower-design-studio/glatttrack/kosher-app-v10.34.html';
+(async()=>{ const b=await chromium.launch({executablePath:'/opt/pw-browsers/chromium'}); const p=await b.newPage();
+ await p.route(u=>new URL(u).pathname==='/', r=>r.fulfill({status:200,contentType:'text/html; charset=utf-8',body:fs.readFileSync(APP)}));
+ p.on('pageerror',e=>console.log('ERR',e.message)); await p.goto('http://localhost:8083/'); await p.waitForTimeout(4000);
+ console.log(await p.evaluate(()=>{ lang='he'; const g=KS.getSettings; KS.getSettings=()=>Object.assign({},g(),{legsHeadSplit:true,legsMode:true,screensPlan:{decided:true,screens:['slaughter','esophagus','legs','inner','outer']}});
+   const slots=gtPlanSlots().map(x=>x.join('-')).join(','); const lb=_kioskRoleLabels(); buildNavCards();
+   const hc=document.getElementById('navHeadCard'); return slots+' | labels: '+lb.legs+' / '+lb['legs-1']+' | nav: '+document.getElementById('tNLg').textContent+' + '+(hc?hc.querySelector('.nav-card-name').textContent+' '+hc.style.display:'none'); }));
+ console.log('plan option:', await p.evaluate(async()=>{ gtSettingsBuild(); _gtPlanDraft=null; try{ await mgrRenderPlan(); }catch(e){ return 'ERR '+e.message; } const t=document.getElementById('mgrPlanCard').textContent; const i=t.indexOf('רגליים וראש'); return i<0?t.slice(0,200):t.slice(i,i+80); }));
+ await b.close(); })();

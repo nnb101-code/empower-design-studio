@@ -1,0 +1,14 @@
+const { chromium } = require('/opt/node22/lib/node_modules/playwright'); const {open}=require('./explore.js');
+const W=(p,ms)=>p.waitForTimeout(ms);
+const bars=p=>p.evaluate(()=>[...document.querySelectorAll('#gtStatusBar .gt-srow')].map(r=>r.textContent).filter(t=>!/📅/.test(t)).join(' / '));
+(async()=>{ const b=await chromium.launch({executablePath:'/opt/pw-browsers/chromium'});
+ let x=await open(b,'inner'), p=x.p; await W(p,2500);
+ console.log('inner marks #3:', await p.evaluate(()=>gtHoldPut(2,'inner','usda','whole'))); await W(p,2500);
+ await x.ctx.close();
+ x=await open(b,'legs'); p=x.p; await W(p,3000);
+ console.log('legs cell #3:', await p.evaluate(()=>document.querySelector('.screen.active .num-cell[data-idx="2"]').innerText.replace(/\s+/g,' ')));
+ console.log('legs marks #3:', await p.evaluate(()=>gtHoldPut(2,'legs','usda','whole')), await bars(p)); await W(p,500);
+ await p.evaluate(()=>{ try{ gtStatusClear('rule'); }catch(e){} });
+ await p.click('.screen.active .num-cell[data-idx="2"]'); await W(p,700);
+ console.log('legs taps #3:', await bars(p));
+ await x.ctx.close(); await b.close(); })();

@@ -1,0 +1,22 @@
+const { chromium } = require('/opt/node22/lib/node_modules/playwright'); const {open}=require('./explore.js'); const {execFileSync}=require('child_process');
+const Q=q=>execFileSync('psql',['-h','/tmp','-p','5433','-U','postgres','-d','gtapp','-Atc',q]).toString().trim();
+const W=(p,ms)=>p.waitForTimeout(ms); const cell=n=>`.screen.active .num-cell[data-idx="${n-1}"]`;
+(async()=>{ const b=await chromium.launch({executablePath:'/opt/pw-browsers/chromium'});
+ let x=await open(b,'esophagus'), p=x.p; p.on('pageerror',e=>console.log('ERR',e.message));
+ for(const n of [1,2,3,4,5]){ await p.click(cell(n)); await W(p,700); await p.click(`[onclick="esoDecide('ok')"]`); await W(p,900); }
+ await p.click(cell(2)); await W(p,900);
+ console.log('tap #2 (already checked) → window:', await p.evaluate(()=>[...document.querySelectorAll('.overlay.open')].map(o=>o.id).join(',')), '| USDA button visible:', await p.evaluate(()=>{const b=document.querySelector('#esoWarnModal .gt-usda-chg');return !!(b&&b.offsetParent);}));
+ await p.click('#esoWarnModal .gt-usda-chg'); await W(p,700);
+ console.log('USDA window: number =', await p.inputValue('#gtHoldNum'), '| choices:', await p.evaluate(()=>[...document.querySelectorAll('#gtSheet .gt-up')].map(b=>b.innerText+(b.classList.contains('on')?'[✓]':'')).join(',')));
+ await p.click('#gtUsdaOk'); await W(p,2500);
+ console.log('server:', Q("select (animal_id+1)||':'||station||':'||part from animal_holds where resolved_at is null"), '| cell #2:', await p.evaluate(()=>{const c=document.querySelector('.screen.active .num-cell[data-idx="1"]');return c.className+' anim='+getComputedStyle(c).animationName;}));
+ await p.screenshot({path:__dirname+'/shots/usda-blink.png'});
+ await x.ctx.close();
+ x=await open(b,'legs'); p=x.p; await W(p,1500);
+ await p.click(cell(1)); await W(p,1500); await p.evaluate(()=>document.querySelectorAll('.overlay.open').forEach(o=>o.classList.remove('open')));
+ await p.click(cell(1)); await W(p,1500); await p.evaluate(()=>document.querySelectorAll('.overlay.open').forEach(o=>o.classList.remove('open')));
+ await p.click(cell(1)); await W(p,900);
+ console.log('legs: tap printed #1 → window:', await p.evaluate(()=>[...document.querySelectorAll('.overlay.open')].map(o=>o.id).join(',')));
+ await p.click('#lgRpModal .gt-usda-chg'); await W(p,700);
+ console.log('  USDA window number =', await p.inputValue('#gtHoldNum'));
+ await x.ctx.close(); await b.close(); })();
