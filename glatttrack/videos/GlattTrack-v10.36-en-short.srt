@@ -1,0 +1,95 @@
+1
+00:00:00,530 --> 00:00:08,845
+GlattTrack. Kashrut tracking in the slaughterhouse, from slaughter to the stamp. Every animal gets one number, and every station sees it.
+
+2
+00:00:10,800 --> 00:00:18,384
+In the settings: kashrut statuses. Every plant has its own kashrut: Glatt, Beit Yosef, kosher, or any other name.
+
+3
+00:00:20,428 --> 00:00:24,668
+Add a status: a name, and a group. Chalak, or not chalak.
+
+4
+00:00:24,668 --> 00:00:31,009
+A name for the stickers, in Hebrew and in English, is optional. And a colour, from a large palette.
+
+5
+00:00:33,600 --> 00:00:40,186
+The slaughter tablet. The shochet presses one button per animal, and the next number fills in by itself.
+
+6
+00:00:44,000 --> 00:00:50,065
+Animal eight: not chalak. At the outer ruling it gets only a not chalak status, or treif.
+
+7
+00:00:51,280 --> 00:01:00,098
+The legs and head tablet. Stickers are printed right after slaughter, before the ruling. It can also be split: one tablet for legs, one for the head.
+
+8
+00:01:00,098 --> 00:01:03,249
+The first tap prints the leg stickers.
+
+9
+00:01:03,712 --> 00:01:11,076
+The legs sticker. Printed: the number, the Hebrew and Gregorian dates, and the time. In the QR code: everything.
+
+10
+00:01:12,320 --> 00:01:16,303
+The inner inspector's tablet. Tap the next animal in line.
+
+11
+00:01:16,303 --> 00:01:19,129
+Rumen check: kosher.
+
+12
+00:01:19,129 --> 00:01:22,129
+Maw: kosher.
+
+13
+00:01:22,166 --> 00:01:25,171
+The lung drawing: mark it with a finger.
+
+14
+00:01:28,020 --> 00:01:32,724
+Approve for the outer inspector. The animal moves on with its drawing.
+
+15
+00:01:42,360 --> 00:01:47,570
+The outer inspector's tablet. The lung drawing is shown, and the inspector rules.
+
+16
+00:01:47,570 --> 00:01:50,480
+Animal one: Glatt.
+
+17
+00:01:51,680 --> 00:01:57,139
+Animal eight, not chalak: only the plant's not chalak statuses appear, and treif.
+
+18
+00:01:59,251 --> 00:02:01,240
+Ruled: kosher.
+
+19
+00:02:02,440 --> 00:02:06,991
+Animal one: both cheeks print. The tongue is held, so it does not print.
+
+20
+00:02:06,991 --> 00:02:12,038
+The parts sticker: the ruling in Hebrew and English, and the kashrut mark.
+
+21
+00:02:13,240 --> 00:02:21,149
+The summaries: every kashrut status, treif by kind, maw, rumen and lungs, and nevela and shot, each on its own.
+
+22
+00:02:22,400 --> 00:02:24,927
+Sample stickers, every kind.
+
+23
+00:02:24,927 --> 00:02:34,328
+Top row: legs and head, before the ruling. Bottom row: parts and stamps, with the name in Hebrew and English on one line, and the plant's kashrut marks.
+
+24
+00:02:35,497 --> 00:02:40,351
+GlattTrack. Every animal, every kashrut mark, in one place.

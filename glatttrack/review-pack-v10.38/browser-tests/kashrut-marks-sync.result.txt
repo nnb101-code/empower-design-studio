@@ -1,0 +1,7 @@
+1) parts tablet marks: beit,glatt,kosher,kosherRab,mk,rabChalak
+   sticker has mark image: true
+2) without MK mark: 1 | כ״ז בתשרי תשפ״ז | 08.10.2026 | MK | חסר סימן כשרות | No kashrut mark
+3) health row: 🔴 סימני כשרות למדבקות חסר: MK
+   server mk after upload: 25454
+   health row now: 🟢 סימני כשרות למדבקות יש לכל הסטטוסים
+4) parts tablet has MK again: true

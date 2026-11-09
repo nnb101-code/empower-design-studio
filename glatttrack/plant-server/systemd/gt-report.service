@@ -1,0 +1,6 @@
+[Unit]
+Description=GlattTrack report to the manufacturer's support center (health, commands, updates)
+After=postgresql.service network-online.target
+[Service]
+Type=oneshot
+ExecStart=/opt/glatttrack/plant-server/report-to-center.sh

@@ -1,0 +1,10 @@
+const { chromium } = require('/opt/node22/lib/node_modules/playwright'); const {open}=require('./explore.js');
+const {execSync}=require('child_process'); const q=s=>execSync(`psql -h /tmp -p 5433 -U postgres -d gtapp -At`,{input:s}).toString().trim();
+const W=(p,ms)=>p.waitForTimeout(ms);
+(async()=>{ const b=await chromium.launch({executablePath:'/opt/pw-browsers/chromium'}); const x=await open(b,'inner'), p=x.p; await W(p,2500);
+ await p.evaluate(()=>{ window.confirm=()=>true; KS.setInnerTreif(0,'x'); KS.setInnerTreif(2,'x'); });
+ await W(p,9000);
+ console.log('server #1:', q("select inner_status from animals_pilot where id=0"), '| #3:', q("select inner_status from animals_pilot where id=2"));
+ console.log('bars:', await p.evaluate(()=>[...document.querySelectorAll('#gtStatusBar .gt-srow')].map(r=>r.textContent).join(' / ')));
+ console.log('pending:', await p.evaluate(()=>KS.pendingCount()));
+ await x.ctx.close(); await b.close(); })();

@@ -1,0 +1,57 @@
+<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8"><title>Legs and head split</title>
+<style>
+:root{--bg:#07090F;--panel:#0F1626;--panel2:#16213A;--border:#2A3D5C;--text:#E8EDF5;--muted:#8A9BB5;--gold:#D4A843;--green:#28C76F;--red:#E03030}
+body{margin:0;background:#000;font-family:Arial,Helvetica,sans-serif;color:var(--text)}
+.frame{width:760px;background:var(--bg);margin:20px;border-radius:14px;overflow:hidden;border:1px solid var(--border)}
+.cap{background:#1b2338;color:var(--gold);font-weight:800;padding:10px 14px;font-size:17px}
+.note{color:var(--muted);font-size:13px;padding:8px 14px 12px;line-height:1.6}
+.opt{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;margin:8px 14px;border-radius:10px;border:1px solid var(--border)}
+.opt.on{border-color:var(--gold);background:rgba(212,168,67,.12)}
+.rad{width:18px;height:18px;border-radius:50%;border:2px solid var(--border);flex-shrink:0;margin-top:2px}.on .rad{border-color:var(--gold);background:radial-gradient(var(--gold) 40%,transparent 45%)}
+.chk{display:flex;gap:10px;align-items:center;padding:8px 14px;font-size:15px}.box{width:22px;height:22px;border-radius:5px;background:var(--gold);color:#000;text-align:center;font-weight:900}
+.top{display:flex;gap:8px;align-items:center;padding:10px 12px;border-bottom:1px solid var(--border)}
+.title{font-weight:800;font-size:18px;color:var(--gold)}
+.btn{border-radius:12px;padding:10px 16px;font-weight:800;font-size:16px;border:2px solid}
+.grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;padding:12px}
+.c{border:2px solid #3B82F6;background:#0B3A86;border-radius:12px;text-align:center;padding:8px 0;min-height:58px}
+.c b{display:block;font-size:24px}.c span{font-size:12px}
+.done{border-color:var(--green);background:#0E4A2A}.next{background:#00E676;color:#000;border-color:#fff;box-shadow:0 0 16px #00E676}.dim{border-color:#1F2A3F;background:#0B1120;color:#33415C}
+.flow{display:flex;align-items:center;gap:6px;padding:16px;flex-wrap:wrap;justify-content:center}
+.st{padding:10px 14px;border-radius:10px;border:2px solid var(--border);font-weight:800}
+.ar{color:var(--muted);font-size:20px}
+.side{border-style:dashed;color:var(--muted)}
+</style></head><body>
+
+<div class="frame" id="p1">
+ <div class="cap">1 · בחירת מסכים — רגליים וראש</div>
+ <div class="chk"><div class="box">✓</div><b>רגליים / ראש</b></div>
+ <div class="opt on"><div class="rad"></div><div><b>מסך אחד — רגליים + ראש</b><div style="font-size:12px;color:var(--muted)">כמו היום</div></div></div>
+ <div class="opt"><div class="rad"></div><div><b>שני מסכים נפרדים — מסך רגליים · מסך ראש</b><div style="font-size:12px;color:var(--muted)">כל מסך מדפיס את המדבקות שלו, עם עובד ורשימת עובדים משלו</div></div></div>
+ <div class="note">בחירה של "שני מסכים" מוסיפה תחנה חדשה לצימוד מכשיר: "ראש". מיון רגליים נשאר במסך הרגליים.</div>
+</div>
+
+<div class="frame" id="p2">
+ <div class="cap">2 · מסך ראש (חדש)</div>
+ <div class="top"><span class="title">ראש</span><span class="btn" style="background:#D4A843;border-color:#D4A843;color:#000;margin-inline-start:auto">🖨 הדפסה</span></div>
+ <div class="grid">
+  <div class="c done"><b>1</b><span>הודפס</span></div><div class="c done"><b>2</b><span>הודפס</span></div><div class="c next"><b>3</b><span>נבדק בוושט</span></div><div class="c"><b>4</b><span>נבדק בוושט</span></div><div class="c dim"><b>5</b></div>
+ </div>
+ <div class="note">מדפיס את מדבקות הראש: 3 לראש + 1 לריאה + 1 לבית הכוסות (הכמות בהגדרות). רק אחרי ההדפסה כאן המספר עובר לבודק הפנים.</div>
+</div>
+
+<div class="frame" id="p3">
+ <div class="cap">3 · מסך רגליים (כשמפוצל)</div>
+ <div class="top"><span class="title">רגליים</span><span class="btn" style="background:#D4A843;border-color:#D4A843;color:#000;margin-inline-start:auto">🖨 הדפסה</span><span class="btn" style="border-color:var(--border);color:var(--muted)">📷 מיון</span></div>
+ <div class="grid">
+  <div class="c done"><b>1</b><span>הודפס</span></div><div class="c next"><b>2</b><span>נבדק בוושט</span></div><div class="c"><b>3</b><span>נבדק בוושט</span></div><div class="c"><b>4</b><span>נבדק בוושט</span></div><div class="c dim"><b>5</b></div>
+ </div>
+ <div class="note">מדפיס את מדבקות הרגליים / הצדדים (2). לא מעכב את בדיקת הפנים. מיון רגליים — כמו היום, אחרי פסיקת החוץ.</div>
+</div>
+
+<div class="frame" id="p4">
+ <div class="cap">4 · סדר הקו כשהמסכים מפוצלים</div>
+ <div class="flow"><span class="st">שחיטה</span><span class="ar">←</span><span class="st">וושט</span><span class="ar">←</span><span class="st" style="border-color:var(--gold);color:var(--gold)">ראש</span><span class="ar">←</span><span class="st">פנים</span><span class="ar">←</span><span class="st">חוץ</span><span class="ar">←</span><span class="st">חותמות / חלקים</span></div>
+ <div class="flow"><span class="st side">רגליים — במקביל, אחרי הוושט</span></div>
+ <div class="note">שינוי הוושט ננעל כשאחד מהם (ראש או רגליים) הדפיס. USDA — כל מסך (חוץ משחיטה), רק המסך שסימן משחרר.</div>
+</div>
+</body></html>

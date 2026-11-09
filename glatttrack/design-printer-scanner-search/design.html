@@ -1,0 +1,46 @@
+<!doctype html><html dir="rtl" lang="he"><head><meta charset="utf-8"><style>
+body{margin:0;background:#07090F;color:#E8ECF4;font-family:Arial,sans-serif;padding:18px}
+.wrap{display:flex;gap:18px;align-items:flex-start}
+.col{flex:1;background:#11151F;border:1px solid #2A3142;border-radius:14px;padding:14px}
+h2{margin:0 0 4px;color:#D4A843;font-size:19px}.cap{font-size:12px;color:#8A93A6;margin-bottom:10px;direction:ltr;text-align:left}
+.btn{width:100%;padding:11px;border-radius:10px;font-weight:800;font-size:14px;text-align:start;margin-bottom:8px;box-sizing:border-box}
+.blue{background:rgba(42,127,255,.15);border:1px solid #2A7FFF;color:#5aa8ff}
+.searching{border:1px solid #2A7FFF;border-radius:10px;padding:10px;margin-bottom:10px;background:rgba(42,127,255,.07)}
+.spin{display:inline-block;width:16px;height:16px;border:3px solid #2A3142;border-top-color:#5aa8ff;border-radius:50%;vertical-align:middle;margin-inline-end:8px}
+.bar{height:6px;background:#2A3142;border-radius:3px;margin-top:8px;overflow:hidden}.bar i{display:block;height:100%;width:55%;background:#5aa8ff}
+.row{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid #2A3142}
+.n{font-size:13px;font-weight:700}.m{font-size:11px;color:#8A93A6}
+.dot{display:inline-block;width:11px;height:11px;border-radius:50%;margin-inline-end:6px;vertical-align:middle}
+.g{background:#28C76F;box-shadow:0 0 8px #28C76F}.r{background:#E03030}.a{background:#F0A030}.x{background:#6B7D99}
+.add{padding:7px 12px;border-radius:7px;border:none;background:#D4A843;color:#07090F;font-weight:700}
+.t{padding:6px 10px;border-radius:8px;border:1px solid #D4A843;color:#D4A843;background:transparent;font-size:12px;font-weight:700}
+.sec{font-size:13px;font-weight:800;color:#D4A843;margin:14px 0 4px}
+.chip{display:inline-block;border:1px solid #28C76F66;background:#28C76F1A;color:#28C76F;border-radius:20px;padding:5px 12px;font-size:12px;font-weight:700;margin:3px}
+.chip.bad{border-color:#FF886666;background:#FF88661A;color:#FF8866}
+.note{font-size:11px;color:#8A93A6;line-height:1.5;margin-top:6px}
+</style></head><body>
+<div class="wrap">
+<div class="col"><h2>🖨 מדפסות</h2><div class="cap">Printers — Settings → Printers, scanners &amp; labels</div>
+<button class="btn blue">🔍 חפש מדפסות ברשת (Wi-Fi / כבל)</button>
+<div class="searching"><span class="spin"></span><b style="color:#5aa8ff">מחפש מדפסות ברשת…</b> <span class="m">12 שנ׳ · נמצאו 2</span><div class="bar"><i></i></div>
+<div class="row"><div><div class="n"><span class="dot g"></span>Zebra ZD421</div><div class="m" dir="ltr">192.168.1.50:9100</div></div><button class="add">הוסף</button></div>
+<div class="row" style="border:none"><div><div class="n"><span class="dot g"></span>מדפסת מדבקות</div><div class="m" dir="ltr">192.168.1.51:9100</div></div><span style="color:#28C76F;font-size:12px">✓ ברשימה</span></div></div>
+<div class="sec">המדפסות של המפעל</div>
+<div class="row"><div><div class="n"><span class="dot g"></span>Zebra רגליים</div><div class="m">🟢 אונליין · Wi-Fi · 192.168.1.51 · נבדק לפני 20 שנ׳</div></div><button class="t">🧪 ניסיון</button></div>
+<div class="row"><div><div class="n"><span class="dot r"></span>Zebra חותמות</div><div class="m" style="color:#FF8866">🔴 לא עונה ברשת מ-08:12 · Wi-Fi · 192.168.1.52</div></div><button class="t">🧪 ניסיון</button></div>
+<div class="row"><div><div class="n"><span class="dot x"></span>Bluetooth</div><div class="m">⚪ נבדק רק כשמדפיסים (Bluetooth)</div></div><button class="t">🧪 ניסיון</button></div>
+<div class="note">שרת המפעל בודק כל 30 שניות שכל מדפסת רשת עונה (בלי להדפיס כלום). החיפוש לא שולח שום דבר למדפסות — רק בודק מי עונה.</div>
+</div>
+<div class="col"><h2>📷 סורקים</h2><div class="cap">Scanners — same settings page</div>
+<button class="btn blue">🔍 חפש סורק Wi-Fi (רשת)</button>
+<div class="searching"><span class="spin"></span><b style="color:#5aa8ff">ממתין לסורק… סרקו עכשיו מדבקה כלשהי עם הסורק</b><div class="bar"><i style="width:35%"></i></div>
+<div class="row" style="border:none"><div><div class="n"><span class="dot g"></span>סורק <span dir="ltr">192.168.1.61</span></div><div class="m">נקרא עכשיו: בהמה #12</div></div><button class="add">הוסף</button></div></div>
+<button class="btn blue" style="background:rgba(122,174,255,.10)">🔍 סורק USB / Bluetooth בטאבלט הזה — סרקו מדבקה</button>
+<div class="sec">הסורקים של המפעל</div>
+<div class="row"><div><div class="n"><span class="dot g"></span>Honeywell חותמות</div><div class="m">🟢 פעיל · סריקה אחרונה לפני 2 דק׳ · Wi-Fi · 192.168.1.61</div></div><button class="t">🧪 בדיקה</button></div>
+<div class="row"><div><div class="n"><span class="dot a"></span>Zebra חלקים</div><div class="m" style="color:#F0A030">🟠 לא סרק מאז 07:40 · USB / Bluetooth</div></div><button class="t">🧪 בדיקה</button></div>
+<div class="note">סורק Wi-Fi: מגדירים בסורק "TCP client" לכתובת שרת המפעל, יציאה 9300 — ואז "חפש". סורק USB / Bluetooth עובד כמו מקלדת; "פעיל" = סרק בטאבלט בדקות האחרונות.</div>
+<div class="sec">בראש מסך התחנה (לדוגמה: חותמות)</div>
+<span class="chip">🖨 מדפסת: Zebra חותמות · 🟢 אונליין</span><span class="chip">📷 סורק: Honeywell · 🟢 פעיל</span><br>
+<span class="chip bad">🖨 מדפסת: Zebra חלקים — לא עונה</span><span class="chip bad">📷 סורק: לא סרק מאז 07:40</span>
+</div></div></body></html>

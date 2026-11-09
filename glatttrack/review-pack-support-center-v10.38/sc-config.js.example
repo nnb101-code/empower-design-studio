@@ -1,0 +1,2 @@
+// copy to sc-config.js next to index.html
+window.SC_SERVER = { url: 'https://<project>.supabase.co', anonKey: '<anon key>' };

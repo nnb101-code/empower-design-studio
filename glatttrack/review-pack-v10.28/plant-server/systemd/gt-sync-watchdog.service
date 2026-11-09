@@ -1,0 +1,9 @@
+[Unit]
+Description=GlattTrack — no data loss while the standby streams, no stop when it is gone
+After=postgresql.service
+[Service]
+ExecStart=/opt/glatttrack/plant-server/gt-sync-watchdog.sh
+Restart=always
+RestartSec=3
+[Install]
+WantedBy=multi-user.target
